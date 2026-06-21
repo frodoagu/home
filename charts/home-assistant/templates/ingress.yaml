@@ -22,24 +22,6 @@ spec:
       {{- end }}
   tls:
     certResolver: {{ .Values.ingress.certResolver }}
----
-# Redirect HTTP → HTTPS
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: {{ include "home-assistant.fullname" . }}-http
-  labels:
-    {{- include "home-assistant.labels" . | nindent 4 }}
-spec:
-  entryPoints:
-    - web
-  routes:
-    - match: Host(`{{ .Values.ingress.host }}`)
-      kind: Rule
-      services:
-        - name: {{ include "home-assistant.fullname" . }}
-          port: {{ .Values.service.port }}
-      middlewares:
-        - name: redirect-https
-          namespace: traefik
 {{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.

@@ -1,0 +1,22 @@
+Traefik configuration applied to the k3s-bundled Traefik (namespace: {{ .Values.traefikNamespace }}).
+
+1. The k3s helm-controller will redeploy Traefik with these overrides.
+   Watch the rollout:
+     kubectl -n {{ .Values.traefikNamespace }} rollout status deploy/traefik
+
+2. Let's Encrypt (HTTP-01) is configured for resolver `letsencrypt`.
+   Certs are stored at {{ .Values.acme.storage }} on a PersistentVolume.
+   HTTP-01 requires port 80 reachable from the internet.
+
+{{- if and .Values.dashboard.enabled .Values.dashboardAuth.enabled }}
+
+3. Dashboard: https://{{ .Values.dashboard.host }} (HTTP basic auth).
+{{- if not .Values.dashboardAuth.users }}
+   Create the credentials secret if you haven't yet:
+     htpasswd -nb admin 'your-password' | \
+       kubectl create secret generic {{ .Values.dashboardAuth.existingSecret | default "traefik-dashboard-auth" }} \
+         -n {{ .Values.traefikNamespace }} --from-file=users=/dev/stdin
+{{- end }}
+{{- end }}
+
+Happy routing! 🌐

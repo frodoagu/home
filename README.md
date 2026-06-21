@@ -6,7 +6,7 @@ Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for ser
 
 | Component | Role | Chart location |
 |---|---|---|
-| [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS | `charts/traefik/` |
+| [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 
@@ -15,7 +15,7 @@ Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for ser
 ```
 Internet → Router (port 80/443 forwarded) → RPi
                                               └─ k3s
-                                                  ├─ Traefik (LoadBalancer, port 80/443)
+                                                  ├─ Traefik (bundled, LoadBalancer 80/443)
                                                   │    └─ Let's Encrypt ACME HTTP-01
                                                   │    └─ Dashboard (https://traefik.home.agu.com.ar)
                                                   ├─ Argo CD  (https://argocd.home.agu.com.ar)
@@ -63,17 +63,19 @@ sudo sed -i '1 s/$/ cgroup_memory=1 cgroup_enable=memory/' /boot/firmware/cmdlin
 sudo reboot
 ```
 
-### 3 – Install k3s (without the bundled Traefik)
+### 3 – Install k3s
 
-k3s ships its own Traefik, but this repo deploys Traefik via Helm, so disable
-the built-in one. Keep the bundled ServiceLB (klipper) so the Traefik
-`LoadBalancer` service gets the Pi's IP.
+This repo uses the **Traefik bundled with k3s** (configured later via a
+`HelmChartConfig`), so install k3s with its defaults — no `--disable` needed.
+The bundled ServiceLB (klipper) gives Traefik's `LoadBalancer` service the
+Pi's IP.
 
 ```bash
-curl -sfL https://get.k3s.io | sh -s - --disable traefik --write-kubeconfig-mode 644
+curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
 
-# Verify the node is Ready
+# Verify the node is Ready and Traefik is running
 sudo k3s kubectl get nodes
+sudo k3s kubectl -n kube-system get deploy traefik
 ```
 
 ### 4 – Install kubectl & Helm and grab the kubeconfig
@@ -121,17 +123,19 @@ Edit the `repoURL` in `apps/root.yaml` (and other app manifests) to match your f
 kubectl apply -f apps/root.yaml
 ```
 
-ArgoCD will automatically deploy Traefik and Home Assistant.
+ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
+Let's Encrypt + the dashboard) and deploys Home Assistant.
 
 ### 3 – Create the Traefik dashboard credentials
 
 The Traefik dashboard (`traefik.home.agu.com.ar`) is protected by HTTP basic
-auth. Create the credentials secret (the password never lives in git):
+auth. Create the credentials secret in the bundled Traefik's namespace
+(`kube-system`) — the password never lives in git:
 
 ```bash
 htpasswd -nb admin 'your-password' | \
   kubectl create secret generic traefik-dashboard-auth \
-    -n traefik --from-file=users=/dev/stdin
+    -n kube-system --from-file=users=/dev/stdin
 ```
 
 > Need `htpasswd`? Install it with `sudo apt install -y apache2-utils`.
@@ -143,7 +147,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 
 | Chart | Key values to change |
 |---|---|
-| `charts/traefik/values.yaml` | `traefik.certResolvers.letsencrypt.email`, dashboard `matchRule` host |
+| `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `env` (e.g. timezone) |
 
@@ -157,24 +161,28 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 │   ├── argocd.yaml
 │   └── home-assistant.yaml
 └── charts/
-    ├── traefik/             # Traefik wrapper (upstream chart + Let's Encrypt config)
+    ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
     └── home-assistant/      # Home Assistant Helm chart
 ```
 
 ## Let's Encrypt notes
 
-Traefik is configured with the **HTTP-01** ACME challenge out of the box.  
-If your RPi is behind NAT and you cannot expose port 80, switch to the **DNS-01** challenge by editing `charts/traefik/values.yaml`:
+The bundled Traefik is configured with the **HTTP-01** ACME challenge via
+`charts/traefik-config`. This requires port 80 to be reachable from the
+internet. If your RPi is behind NAT and you cannot expose port 80, switch to
+the **DNS-01** challenge by editing the `certResolvers` block in
+`charts/traefik-config/templates/helmchartconfig.yaml` to use a `dnsChallenge`
+(plus the provider's API-token env vars) instead of `httpChallenge`:
 
 ```yaml
-traefik:
-  certResolvers:
-    letsencrypt:
-      email: you@example.com
-      dnsChallenge:
-        provider: cloudflare   # or route53, digitalocean, etc.
-      storage: /data/acme.json
+certResolvers:
+  letsencrypt:
+    email: you@example.com
+    storage: /data/acme.json
+    dnsChallenge:
+      provider: cloudflare   # or route53, digitalocean, etc.
 ```
 
-ACME certificates are stored in a PersistentVolume (`/data/acme.json`) so they survive pod restarts.
+ACME certificates are stored in a PersistentVolume (`/data/acme.json`) so they
+survive Traefik restarts.

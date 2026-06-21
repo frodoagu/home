@@ -1,5 +1,6 @@
 ---
-# ArgoCD Application – deploys the Traefik chart from this repository.
+# ArgoCD Application – configures the k3s-bundled Traefik (ACME, dashboard, auth)
+# via a HelmChartConfig. Traefik itself is installed by k3s, not this app.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,16 +13,15 @@ spec:
   source:
     repoURL: https://github.com/frodoagu/home
     targetRevision: HEAD
-    path: charts/traefik
+    path: charts/traefik-config
     helm:
       valueFiles:
         - values.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: traefik
+    # Must match the namespace where the k3s-bundled Traefik runs.
+    namespace: kube-system
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true

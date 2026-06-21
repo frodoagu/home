@@ -1,0 +1,43 @@
+# Configuration for the k3s-bundled Traefik.
+# This chart does NOT install Traefik – k3s already runs it via the
+# helm-controller. It deploys a `HelmChartConfig` that overrides the bundled
+# chart's values, plus the dashboard basic-auth middleware/secret.
+
+# Namespace where the bundled Traefik runs (k3s default: kube-system).
+# The ArgoCD Application must target this same namespace.
+traefikNamespace: kube-system
+
+# ── Let's Encrypt (ACME, HTTP-01 challenge) ──────────────────────────────────
+acme:
+  email: federico.nicolas.agu@gmail.com
+  storage: /data/acme.json
+  # HTTP-01 requires port 80 reachable from the internet (router port-forward).
+  httpChallenge:
+    entryPoint: web
+
+# ── Persistence for acme.json (survives Traefik restarts) ────────────────────
+persistence:
+  enabled: true
+  size: 128Mi
+  path: /data
+
+# ── Dashboard ────────────────────────────────────────────────────────────────
+dashboard:
+  enabled: true
+  host: traefik.home.agu.com.ar
+
+# ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
+dashboardAuth:
+  enabled: true
+  # Option A (default, recommended) – reference a Secret you create out-of-band
+  # so the password never lives in git. Create it once with:
+  #   htpasswd -nb admin 'your-password' | \
+  #     kubectl create secret generic traefik-dashboard-auth \
+  #       -n kube-system --from-file=users=/dev/stdin
+  existingSecret: "traefik-dashboard-auth"
+  # Option B (convenience) – inline htpasswd entries managed by this chart.
+  # To use, set existingSecret to "" and add entries below. NOTE: these are
+  # committed to git, so only use this with a throwaway password.
+  # Generate a hashed entry with: htpasswd -nb admin 'your-password'
+  users: []
+  # - "admin:$apr1$xxxxxxxx$yyyyyyyyyyyyyyyyyyyyyy"
