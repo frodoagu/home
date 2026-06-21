@@ -9,6 +9,7 @@ Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for ser
 | [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
+| [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 
 ## Architecture
 
@@ -19,7 +20,8 @@ Internet → Router (port 80/443 forwarded) → RPi
                                                   │    └─ Let's Encrypt ACME HTTP-01
                                                   │    └─ Dashboard (https://traefik.home.agu.com.ar)
                                                   ├─ Argo CD  (https://argocd.home.agu.com.ar)
-                                                  └─ Home Assistant (https://home.agu.com.ar)
+                                                  ├─ Home Assistant (https://home.agu.com.ar)
+                                                  └─ cloudflare-ddns → Cloudflare API (updates A records)
 ```
 
 ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) pattern – every chart in this repo is declared as an `Application` under `apps/`.
@@ -28,7 +30,9 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
 
 - Raspberry Pi (tested on RPi 4) running [k3s](https://k3s.io/)
 - `kubectl` and `helm` CLI configured to reach the cluster
-- DNS records pointing to the RPi's public IP:
+- The `agu.com.ar` zone hosted on [Cloudflare](https://www.cloudflare.com/) and
+  a Cloudflare API token with **Zone:DNS:Edit**. The `cloudflare-ddns` app
+  creates/updates these A records to track the home public IP:
   - `home.agu.com.ar` → Home Assistant
   - `argocd.home.agu.com.ar` → Argo CD
   - `traefik.home.agu.com.ar` → Traefik dashboard
@@ -126,11 +130,11 @@ kubectl apply -f apps/root.yaml
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
 Let's Encrypt + the dashboard) and deploys Home Assistant.
 
-### 3 – Create the Traefik dashboard credentials
+### 3 – Create the required secrets
 
-The Traefik dashboard (`traefik.home.agu.com.ar`) is protected by HTTP basic
-auth. Create the credentials secret in the bundled Traefik's namespace
-(`kube-system`) — the password never lives in git:
+These hold credentials that must never live in git.
+
+**Traefik dashboard** (HTTP basic auth, in the bundled Traefik's namespace):
 
 ```bash
 htpasswd -nb admin 'your-password' | \
@@ -139,6 +143,14 @@ htpasswd -nb admin 'your-password' | \
 ```
 
 > Need `htpasswd`? Install it with `sudo apt install -y apache2-utils`.
+
+**Cloudflare DDNS** (API token with Zone:DNS:Edit on `agu.com.ar`):
+
+```bash
+kubectl create namespace cloudflare-ddns
+kubectl create secret generic cloudflare-ddns-token \
+  -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-cloudflare-token'
+```
 
 ### 4 – Customise values
 
@@ -150,6 +162,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `env` (e.g. timezone) |
+| `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 
 ## Repository layout
 
@@ -159,11 +172,13 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 │   ├── root.yaml            # App-of-apps bootstrap entry point
 │   ├── traefik.yaml
 │   ├── argocd.yaml
-│   └── home-assistant.yaml
+│   ├── home-assistant.yaml
+│   └── cloudflare-ddns.yaml
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
-    └── home-assistant/      # Home Assistant Helm chart
+    ├── home-assistant/      # Home Assistant Helm chart
+    └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
 ```
 
 ## Let's Encrypt notes

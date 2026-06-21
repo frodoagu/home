@@ -1,0 +1,17 @@
+cloudflare-ddns is keeping these records in sync with your public IP:
+{{- range .Values.domains }}
+  - {{ . }}
+{{- end }}
+
+Proxied (orange cloud): {{ .Values.proxied }}
+Update interval: {{ .Values.updateCron }}
+
+{{- if .Values.cloudflare.existingSecret }}
+
+Make sure the API-token secret exists:
+  kubectl create secret generic {{ .Values.cloudflare.existingSecret }} \
+    -n {{ .Release.Namespace }} --from-literal=CLOUDFLARE_API_TOKEN='your-token'
+{{- end }}
+
+Check the logs:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "cloudflare-ddns.fullname" . }}

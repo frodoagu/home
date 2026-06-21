@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudflare-ddns.fullname" . }}
+  labels:
+    {{- include "cloudflare-ddns.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cloudflare-ddns.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudflare-ddns.selectorLabels" . | nindent 8 }}
+    spec:
+      # favonia/cloudflare-ddns recommends running fully unprivileged.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: cloudflare-ddns
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cloudflare-ddns.secretName" . }}
+                  key: CLOUDFLARE_API_TOKEN
+            - name: DOMAINS
+              value: {{ join "," .Values.domains | quote }}
+            - name: PROXIED
+              value: {{ .Values.proxied | quote }}
+            - name: IP4_PROVIDER
+              value: {{ .Values.ip4Provider | quote }}
+            - name: IP6_PROVIDER
+              value: {{ .Values.ip6Provider | quote }}
+            - name: UPDATE_CRON
+              value: {{ .Values.updateCron | quote }}
+            {{- if .Values.timezone }}
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
