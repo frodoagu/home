@@ -1,0 +1,16 @@
+Argo CD has been deployed!
+
+1. Get the initial admin password:
+   kubectl -n {{ .Release.Namespace }} get secret argocd-initial-admin-secret \
+     -o jsonpath="{.data.password}" | base64 -d
+
+2. Access the Argo CD UI at:
+   https://{{ .Values | toYaml | fromYaml | dig "argo-cd" "server" "ingress" "hostname" "argocd.example.com" }}
+
+3. Log in with:
+   Username: admin
+   Password: (from step 1)
+
+4. Change the password immediately after first login.
+
+Happy GitOps! 🚀

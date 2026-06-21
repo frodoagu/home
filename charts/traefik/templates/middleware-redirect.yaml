@@ -1,0 +1,11 @@
+# Traefik middleware that redirects HTTP → HTTPS.
+# Deploy this once in the traefik namespace so all IngressRoutes can reference it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: {{ .Release.Namespace }}
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
