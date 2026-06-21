@@ -20,9 +20,15 @@ argo-cd:
         traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
         traefik.ingress.kubernetes.io/router.entrypoints: websecure
 
-    # -- Disable TLS on the server when terminating TLS at the ingress layer
-    extraArgs:
-      - --insecure
+  # -- Terminate TLS at the Traefik ingress and run argocd-server in plain-HTTP
+  # mode. This MUST be set via configs.params (not server.extraArgs): the chart's
+  # ingress template reads `server.insecure` from here to decide whether the
+  # Ingress backend targets the service's http (80) or https (443) port. With
+  # extraArgs alone the server runs insecure but the Ingress still points at 443,
+  # so Traefik speaks plain HTTP to a TLS-expecting port and routing breaks.
+  configs:
+    params:
+      server.insecure: true
 
   # -- Use a single replica for a home / RPi environment
   controller:

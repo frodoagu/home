@@ -1,3 +1,7 @@
 # Helm dependency artifacts (fetched at sync time by ArgoCD / `helm dependency build`)
 charts/*/charts/
 charts/*/Chart.lock
+
+# Cluster credentials – never commit
+kubeconfig
+*.kubeconfig
