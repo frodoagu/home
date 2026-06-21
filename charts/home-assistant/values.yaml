@@ -29,8 +29,8 @@ persistence:
 # Ingress via Traefik IngressRoute
 ingress:
   enabled: true
-  # Hostname for the Home Assistant UI, e.g. homeassistant.example.com
-  host: homeassistant.example.com
+  # Hostname for the Home Assistant UI
+  host: home.agu.com.ar
   # TLS certificate resolver name configured in the Traefik chart (see charts/traefik)
   certResolver: letsencrypt
   # Additional Traefik middlewares to attach (e.g. auth, rate-limit)

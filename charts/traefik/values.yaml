@@ -31,7 +31,7 @@ traefik:
   certResolvers:
     letsencrypt:
       # REQUIRED – replace with your real email address
-      email: admin@example.com
+      email: federico.nicolas.agu@gmail.com
       # Store ACME certificates in a persistent volume
       storage: /data/acme.json
       httpChallenge:
@@ -67,10 +67,18 @@ traefik:
       cpu: 300m
       memory: 128Mi
 
-  # ── Dashboard (optional, disable in production) ────────────────────────────
+  # ── Dashboard – exposed at https://traefik.home.agu.com.ar ─────────────────
+  # Protected by HTTP basic auth (see dashboardAuth below).
   ingressRoute:
     dashboard:
-      enabled: false
+      enabled: true
+      matchRule: Host(`traefik.home.agu.com.ar`)
+      entryPoints:
+        - websecure
+      middlewares:
+        - name: dashboard-auth
+      tls:
+        certResolver: letsencrypt
 
   # ── Deployment ─────────────────────────────────────────────────────────────
   deployment:
@@ -82,3 +90,21 @@ traefik:
       level: INFO
     access:
       enabled: true
+
+# ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
+# Creates a Traefik `basicAuth` Middleware named `dashboard-auth` that the
+# dashboard IngressRoute references above.
+dashboardAuth:
+  enabled: true
+  # Option A (default, recommended) – reference a Secret you create out-of-band
+  # so the password never lives in git. Create it once with:
+  #   htpasswd -nb admin 'your-password' | \
+  #     kubectl create secret generic traefik-dashboard-auth \
+  #       -n traefik --from-file=users=/dev/stdin
+  existingSecret: "traefik-dashboard-auth"
+  # Option B (convenience) – inline htpasswd entries managed by this chart.
+  # To use, set existingSecret to "" and add entries below. NOTE: these are
+  # committed to git, so only use this with a throwaway password.
+  # Generate a hashed entry with: htpasswd -nb admin 'your-password'
+  users: []
+  # - "admin:$apr1$xxxxxxxx$yyyyyyyyyyyyyyyyyyyyyy"
