@@ -1,10 +1,9 @@
 ---
-# ArgoCD Application – configures the k3s-bundled Traefik (ACME, dashboard, auth)
-# via a HelmChartConfig. Traefik itself is installed by k3s, not this app.
+# ArgoCD Application – Cloudflare dynamic-DNS updater.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: traefik
+  name: cloudflare-ddns
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -13,15 +12,16 @@ spec:
   source:
     repoURL: https://github.com/frodoagu/home
     targetRevision: HEAD
-    path: charts/traefik-config
+    path: charts/cloudflare-ddns
     helm:
       valueFiles:
         - values.yaml
   destination:
     server: https://kubernetes.default.svc
-    # Must match the namespace where the k3s-bundled Traefik runs.
-    namespace: kube-system
+    namespace: cloudflare-ddns
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

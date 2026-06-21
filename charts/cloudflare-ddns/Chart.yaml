@@ -1,0 +1,17 @@
+apiVersion: v2
+name: cloudflare-ddns
+description: >-
+  Dynamic DNS updater that keeps Cloudflare A records pointed at the home's
+  public IP, using favonia/cloudflare-ddns.
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - cloudflare
+  - ddns
+  - dynamic-dns
+  - dns
+sources:
+  - https://github.com/favonia/cloudflare-ddns
+maintainers:
+  - name: frodoagu

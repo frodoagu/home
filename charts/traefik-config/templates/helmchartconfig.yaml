@@ -1,0 +1,61 @@
+# Overrides the values of the k3s-bundled Traefik HelmChart.
+# The k3s helm-controller merges this into the upstream traefik chart and
+# redeploys Traefik whenever it changes.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: {{ .Values.traefikNamespace }}
+spec:
+  valuesContent: |-
+    # Redirect all HTTP traffic to HTTPS at the entrypoint level.
+    # (ACME HTTP-01 challenges are still served on :80 — Traefik handles the
+    #  challenge before applying this redirect.)
+    ports:
+      web:
+        redirectTo:
+          port: websecure
+      websecure:
+        tls:
+          certResolver: letsencrypt
+    certResolvers:
+      letsencrypt:
+        email: {{ .Values.acme.email }}
+        storage: {{ .Values.acme.storage }}
+        httpChallenge:
+          entryPoint: {{ .Values.acme.httpChallenge.entryPoint }}
+    {{- if .Values.persistence.enabled }}
+    persistence:
+      enabled: true
+      name: data
+      accessMode: ReadWriteOnce
+      size: {{ .Values.persistence.size }}
+      path: {{ .Values.persistence.path }}
+    # acme.json must be mode 0600; create it with the right perms on startup.
+    deployment:
+      initContainers:
+        - name: volume-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "touch {{ .Values.acme.storage }} && chmod -v 600 {{ .Values.acme.storage }}"]
+          securityContext:
+            runAsNonRoot: true
+            runAsGroup: 65532
+            runAsUser: 65532
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.path }}
+    {{- end }}
+    {{- if .Values.dashboard.enabled }}
+    ingressRoute:
+      dashboard:
+        enabled: true
+        matchRule: Host(`{{ .Values.dashboard.host }}`)
+        entryPoints:
+          - websecure
+        {{- if .Values.dashboardAuth.enabled }}
+        middlewares:
+          - name: dashboard-auth
+        {{- end }}
+        tls:
+          certResolver: letsencrypt
+    {{- end }}

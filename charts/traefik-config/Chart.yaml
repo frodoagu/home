@@ -1,0 +1,17 @@
+apiVersion: v2
+name: traefik-config
+description: >-
+  Configuration for the k3s-bundled Traefik – Let's Encrypt ACME, persistence
+  for acme.json, and a basic-auth-protected dashboard. Deploys a HelmChartConfig
+  consumed by the k3s helm-controller plus the supporting middleware/secret.
+type: application
+version: 0.1.0
+appVersion: "bundled"
+keywords:
+  - traefik
+  - k3s
+  - ingress
+  - letsencrypt
+  - tls
+maintainers:
+  - name: frodoagu
