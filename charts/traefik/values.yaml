@@ -1,0 +1,84 @@
+# Default values for traefik wrapper chart.
+# All keys under traefik are forwarded to the upstream traefik chart.
+# Full reference: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+
+traefik:
+  # ── Entry points ──────────────────────────────────────────────────────────
+  ports:
+    web:
+      port: 8000
+      expose:
+        default: true
+      exposedPort: 80
+      protocol: TCP
+      # Redirect all HTTP traffic to HTTPS
+      redirectTo:
+        port: websecure
+    websecure:
+      port: 8443
+      expose:
+        default: true
+      exposedPort: 443
+      protocol: TCP
+      tls:
+        enabled: true
+        certResolver: letsencrypt
+
+  # ── Let's Encrypt (ACME) certificate resolver ──────────────────────────────
+  # Uses the HTTP-01 challenge: Traefik must be reachable on port 80 from the
+  # internet for domain validation.  For a home lab behind NAT you may need to
+  # forward port 80 & 443 on your router, or switch to dnsChallenge instead.
+  certResolvers:
+    letsencrypt:
+      # REQUIRED – replace with your real email address
+      email: admin@example.com
+      # Store ACME certificates in a persistent volume
+      storage: /data/acme.json
+      httpChallenge:
+        entryPoint: web
+      # Uncomment and remove httpChallenge to use DNS-01 instead:
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   delayBeforeCheck: 0
+
+  # ── Persistence for acme.json ──────────────────────────────────────────────
+  persistence:
+    enabled: true
+    name: data
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 128Mi
+    path: /data
+
+  # ── Service type – LoadBalancer exposes ports 80/443 on the RPi's IP ──────
+  service:
+    type: LoadBalancer
+
+  # ── RBAC & security ────────────────────────────────────────────────────────
+  rbac:
+    enabled: true
+
+  # ── Resource limits – tune for RPi ─────────────────────────────────────────
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 128Mi
+
+  # ── Dashboard (optional, disable in production) ────────────────────────────
+  ingressRoute:
+    dashboard:
+      enabled: false
+
+  # ── Deployment ─────────────────────────────────────────────────────────────
+  deployment:
+    replicas: 1
+
+  # ── Log level ──────────────────────────────────────────────────────────────
+  logs:
+    general:
+      level: INFO
+    access:
+      enabled: true

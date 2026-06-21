@@ -1,0 +1,20 @@
+apiVersion: v2
+name: traefik
+description: Wrapper Helm chart for Traefik on k3s with automatic Let's Encrypt TLS
+type: application
+version: 0.1.0
+appVersion: "3.1.2"
+keywords:
+  - traefik
+  - ingress
+  - load-balancer
+  - letsencrypt
+  - tls
+sources:
+  - https://github.com/traefik/traefik-helm-chart
+maintainers:
+  - name: frodoagu
+dependencies:
+  - name: traefik
+    version: "30.0.2"
+    repository: https://helm.traefik.io/traefik

@@ -1,0 +1,14 @@
+Home Assistant has been deployed!
+
+1. Access the UI at:
+   https://{{ .Values.ingress.host }}
+
+   (DNS must resolve {{ .Values.ingress.host }} to your RPi's public/local IP)
+
+2. First-time setup:
+   Open your browser and follow the on-boarding wizard.
+
+3. Configuration is persisted in:
+   PVC {{ include "home-assistant.fullname" . }}-config
+
+Enjoy your smart home! 🏠

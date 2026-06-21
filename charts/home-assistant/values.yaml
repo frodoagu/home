@@ -1,0 +1,65 @@
+# Default values for home-assistant.
+# Adjust these to match your environment.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/home-assistant/home-assistant
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Home Assistant runs on port 8123
+service:
+  type: ClusterIP
+  port: 8123
+
+# Persistent storage for /config
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  # Optionally set an existing PVC name to use
+  existingClaim: ""
+
+# Ingress via Traefik IngressRoute
+ingress:
+  enabled: true
+  # Hostname for the Home Assistant UI, e.g. homeassistant.example.com
+  host: homeassistant.example.com
+  # TLS certificate resolver name configured in the Traefik chart (see charts/traefik)
+  certResolver: letsencrypt
+  # Additional Traefik middlewares to attach (e.g. auth, rate-limit)
+  middlewares: []
+
+# Resource requests/limits – tune for RPi
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Allow Home Assistant to use the host network for device discovery (mDNS, etc.)
+hostNetwork: false
+
+# Node selector – useful to pin HA to a specific node
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Extra environment variables
+env: []
+# - name: TZ
+#   value: "Europe/Madrid"
+
+# Extra volume mounts (e.g. to expose USB/Z-Wave sticks)
+extraVolumes: []
+extraVolumeMounts: []

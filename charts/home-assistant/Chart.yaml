@@ -1,0 +1,14 @@
+apiVersion: v2
+name: home-assistant
+description: Helm chart for Home Assistant on k3s with Traefik ingress
+type: application
+version: 0.1.0
+appVersion: "stable"
+keywords:
+  - home-assistant
+  - home-automation
+  - iot
+sources:
+  - https://github.com/home-assistant/core
+maintainers:
+  - name: frodoagu
