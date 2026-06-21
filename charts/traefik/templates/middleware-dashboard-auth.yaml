@@ -1,0 +1,30 @@
+{{- if and .Values.traefik.ingressRoute.dashboard.enabled .Values.dashboardAuth.enabled }}
+{{- $secretName := .Values.dashboardAuth.existingSecret | default "traefik-dashboard-auth" }}
+{{- if not .Values.dashboardAuth.existingSecret }}
+{{- if not .Values.dashboardAuth.users }}
+{{- fail "dashboardAuth is enabled but no credentials provided: set dashboardAuth.existingSecret or dashboardAuth.users" }}
+{{- end }}
+# Basic-auth credentials for the Traefik dashboard.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  users: |
+    {{- range .Values.dashboardAuth.users }}
+    {{ . }}
+    {{- end }}
+---
+{{- end }}
+# Traefik basic-auth middleware guarding the dashboard IngressRoute.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dashboard-auth
+  namespace: {{ .Release.Namespace }}
+spec:
+  basicAuth:
+    secret: {{ $secretName }}
+{{- end }}

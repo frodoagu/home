@@ -13,6 +13,13 @@ Traefik has been deployed with automatic Let's Encrypt TLS!
      tls:
        certResolver: letsencrypt
 
+5. The dashboard is exposed at https://traefik.home.agu.com.ar behind HTTP
+   basic auth. Create the credentials secret before/just after first sync:
+     htpasswd -nb admin 'your-password' | \
+       kubectl create secret generic traefik-dashboard-auth \
+         -n {{ .Release.Namespace }} --from-file=users=/dev/stdin
+   (or set dashboardAuth.users in values.yaml for a throwaway password).
+
 NOTE: The HTTP-01 challenge requires that port 80 be reachable from the
 internet. For a home lab, configure port forwarding on your router for
 ports 80 and 443 to your RPi's local IP.

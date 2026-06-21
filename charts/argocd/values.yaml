@@ -8,7 +8,7 @@ argo-cd:
     ingress:
       enabled: true
       ingressClassName: traefik
-      hostname: argocd.example.com
+      hostname: argocd.home.agu.com.ar
       tls: true
       annotations:
         traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
