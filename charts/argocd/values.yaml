@@ -9,8 +9,14 @@ argo-cd:
       enabled: true
       ingressClassName: traefik
       hostname: argocd.home.agu.com.ar
-      tls: true
+      # Do NOT set `tls: true` here: that makes the upstream chart add a
+      # `tls.secretName: argocd-server-tls` block, and Traefik then looks for a
+      # (non-existent) Kubernetes secret to terminate TLS with instead of using
+      # the ACME certResolver below. TLS is enabled via the annotations instead,
+      # so Traefik obtains the certificate through Let's Encrypt.
+      tls: false
       annotations:
+        traefik.ingress.kubernetes.io/router.tls: "true"
         traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
         traefik.ingress.kubernetes.io/router.entrypoints: websecure
 
