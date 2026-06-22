@@ -43,7 +43,7 @@ spec:
               fi
 
               # Create initial config with reverse proxy settings and external URL
-              cat > "$CONFIG_FILE" <<'EOF'
+              cat > "$CONFIG_FILE" <<EOF
 homeassistant:
   name: Home
   unit_system: metric
