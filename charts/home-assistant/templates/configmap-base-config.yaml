@@ -7,6 +7,10 @@ metadata:
     {{- include "home-assistant.labels" . | nindent 4 }}
 data:
   configuration.yaml: |
+    http:
+      use_x_forwarded_for: true
+      trusted_proxies:
+      - 10.0.0.0/8
     homeassistant:
       name: Home
 {{- if .Values.externalUrl }}
