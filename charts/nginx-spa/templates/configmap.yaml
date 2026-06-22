@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nginx-spa.fullname" . }}-conf
+  labels:
+    {{- include "nginx-spa.labels" . | nindent 4 }}
+data:
+  # nginx server config tuned for a single-page application:
+  #  - try_files falls back to /index.html so client-side routes (deep links,
+  #    page refreshes) are served by the SPA instead of returning 404.
+  #  - hashed build assets are cached aggressively; index.html is never cached
+  #    so new deploys are picked up immediately.
+  default.conf: |
+    server {
+        listen       80;
+        listen       [::]:80;
+        server_name  _;
+
+        root   {{ .Values.content.root }};
+        index  index.html;
+
+        # Lightweight health endpoint for k8s probes (no SPA fallback needed).
+        location = /healthz {
+            access_log off;
+            add_header Content-Type text/plain;
+            return 200 "ok\n";
+        }
+
+        # SPA routing: serve the requested file if it exists, otherwise hand the
+        # request to index.html so the client-side router can resolve it.
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Never cache the entry point so deploys take effect immediately.
+        location = /index.html {
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+        }
+
+        # Content-hashed build assets are immutable – cache them hard.
+        location ~* \.(?:js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico|webp|avif)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            try_files $uri =404;
+        }
+
+        gzip            on;
+        gzip_vary       on;
+        gzip_min_length 1024;
+        gzip_types      text/plain text/css application/javascript application/json image/svg+xml;
+    }
+{{- if eq .Values.content.source "configMap" }}
+  # Placeholder served only when content.source == configMap.
+  index.html: |
+{{ .Values.content.placeholderHtml | indent 4 }}
+{{- end }}

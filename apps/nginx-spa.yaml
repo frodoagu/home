@@ -1,0 +1,27 @@
+---
+# ArgoCD Application – nginx serving a single-page application (SPA).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-spa
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/nginx-spa
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nginx-spa
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

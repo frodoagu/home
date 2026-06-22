@@ -1,0 +1,70 @@
+# Default values for nginx-spa.
+# Adjust these to match your environment.
+
+replicaCount: 1
+
+image:
+  # Default to the official nginx image and serve content from a ConfigMap /
+  # PVC (see `content` below). To ship a pre-built SPA baked into an image,
+  # point this at your own image (e.g. ghcr.io/you/my-spa) and set
+  # content.source: image.
+  repository: nginx
+  pullPolicy: IfNotPresent
+  # Pin to an explicit tag for reproducible deploys (also update Chart.yaml
+  # appVersion). Avoid floating tags like "latest".
+  tag: "1.27-alpine"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# nginx serves the SPA on port 80
+service:
+  type: ClusterIP
+  port: 80
+
+# Where the static files come from. Pick one:
+#   image    – the SPA is already baked into image.repository at contentRoot.
+#   configMap – render a tiny placeholder index.html from this chart (handy to
+#               validate the deploy before wiring up a real build/image).
+content:
+  source: image
+  # Filesystem path inside the container that nginx serves as the web root.
+  root: /usr/share/nginx/html
+  # Placeholder page used only when source == configMap.
+  placeholderHtml: |
+    <!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><title>nginx-spa</title></head>
+      <body style="font-family: system-ui; text-align: center; margin-top: 4rem">
+        <h1>nginx-spa is running 🎉</h1>
+        <p>Replace this by setting <code>content.source: image</code> and a real SPA image.</p>
+      </body>
+    </html>
+
+# Ingress via Traefik IngressRoute
+ingress:
+  enabled: true
+  # Hostname for the SPA
+  host: agu.com.ar
+  # TLS certificate resolver name configured in the Traefik chart (see charts/traefik-config)
+  certResolver: letsencrypt
+  # Additional Traefik middlewares to attach (e.g. auth, rate-limit)
+  middlewares: []
+
+# Resource requests/limits – tune for RPi. nginx serving static files is cheap.
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Extra environment variables for the nginx container
+env: []
