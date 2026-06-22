@@ -21,17 +21,37 @@ services running on a Raspberry Pi with k3s.
 
 ## Architecture
 
-```
-Internet → Router (port 80/443 forwarded) → RPi
-                                              └─ k3s
-                                                  ├─ Traefik (bundled, LoadBalancer 80/443)
-                                                  │    └─ Let's Encrypt ACME DNS-01 (Cloudflare)
-                                                  │    └─ Dashboard (https://traefik.agu.com.ar)
-                                                  ├─ Argo CD  (https://argocd.agu.com.ar)
-                                                  ├─ Home Assistant (https://home.agu.com.ar)
-                                                  │    └─ host network (mDNS/SSDP discovery) + Bluetooth + Google Assistant
-                                                  ├─ nginx-spa (https://agu.com.ar — static SPA)
-                                                  └─ cloudflare-ddns → Cloudflare API (updates A records)
+```mermaid
+flowchart TD
+    Internet([Internet])
+    CF[Cloudflare DNS<br/>agu.com.ar zone]
+    Router[Home Router<br/>forwards TCP 80/443]
+
+    Internet -->|DNS lookup| CF
+    Internet -->|HTTPS| Router
+
+    subgraph RPi["Raspberry Pi · k3s"]
+        Traefik[Traefik<br/>bundled · LoadBalancer 80/443<br/>Let's Encrypt DNS-01]
+        Argo[Argo CD]
+        HA[Home Assistant<br/>hostNetwork · Bluetooth]
+        SPA[nginx-spa<br/>static site]
+        DDNS[cloudflare-ddns]
+    end
+
+    Router --> Traefik
+    Traefik -->|argocd.agu.com.ar| Argo
+    Traefik -->|home.agu.com.ar| HA
+    Traefik -->|agu.com.ar| SPA
+    Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
+
+    Argo -.->|App of Apps sync| Traefik
+    Argo -.-> HA
+    Argo -.-> SPA
+    Argo -.-> DDNS
+
+    Traefik -->|ACME DNS-01| CF
+    DDNS -->|update A records| CF
+    HA -->|mDNS/SSDP discovery| LAN([LAN devices])
 ```
 
 ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) pattern – every chart in this repo is declared as an `Application` under `apps/`.
