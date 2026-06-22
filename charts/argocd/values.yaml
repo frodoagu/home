@@ -40,7 +40,5 @@ argo-cd:
   applicationSet:
     replicas: 1
 
-  # -- Restrict resource usage for RPi
-  global:
-    image:
-      tag: "v2.11.3"
+  # -- Pin to the argo-cd chart's bundled appVersion (v3.4.4) by not overriding
+  # the image tag. Bump the chart version in Chart.yaml to move to a newer ArgoCD.

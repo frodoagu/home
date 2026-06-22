@@ -8,22 +8,32 @@ metadata:
   namespace: {{ .Values.traefikNamespace }}
 spec:
   valuesContent: |-
-    # Redirect all HTTP traffic to HTTPS at the entrypoint level.
-    # (ACME HTTP-01 challenges are still served on :80 — Traefik handles the
-    #  challenge before applying this redirect.)
+    # Redirect ALL HTTP (:80/web) traffic to HTTPS (:443/websecure) at the
+    # entrypoint level, so every route is HTTPS-only regardless of its Ingress.
+    # NOTE: these are the correct keys for the Traefik chart shipped with this
+    # k3s (chart 39.x / Traefik v3.6): the redirect lives under
+    # `ports.web.http.redirections.entryPoint` (the older `ports.web.redirectTo`
+    # key is silently ignored), and ACME resolvers use `certificatesResolvers`
+    # (not `certResolvers`). ACME HTTP-01 challenges are still served on :80 —
+    # Traefik answers the challenge before applying this redirect.
     ports:
       web:
-        redirectTo:
-          port: websecure
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
       websecure:
         tls:
           certResolver: letsencrypt
-    certResolvers:
+    certificatesResolvers:
       letsencrypt:
-        email: {{ .Values.acme.email }}
-        storage: {{ .Values.acme.storage }}
-        httpChallenge:
-          entryPoint: {{ .Values.acme.httpChallenge.entryPoint }}
+        acme:
+          email: {{ .Values.acme.email }}
+          storage: {{ .Values.acme.storage }}
+          httpChallenge:
+            entryPoint: {{ .Values.acme.httpChallenge.entryPoint }}
     {{- if .Values.persistence.enabled }}
     persistence:
       enabled: true
