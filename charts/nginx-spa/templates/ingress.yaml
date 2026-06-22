@@ -1,0 +1,27 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "nginx-spa.fullname" . }}
+  labels:
+    {{- include "nginx-spa.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      services:
+        - name: {{ include "nginx-spa.fullname" . }}
+          port: {{ .Values.service.port }}
+      {{- if .Values.ingress.middlewares }}
+      middlewares:
+        {{- range .Values.ingress.middlewares }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.

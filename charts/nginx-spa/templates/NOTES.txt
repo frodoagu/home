@@ -1,0 +1,25 @@
+nginx-spa has been deployed!
+
+1. Access the app at:
+   https://{{ .Values.ingress.host }}
+
+   (DNS must resolve {{ .Values.ingress.host }} to your RPi's public/local IP)
+
+2. Serving content:
+{{- if eq .Values.content.source "configMap" }}
+   Currently serving the built-in placeholder page (content.source: configMap).
+   To ship your real SPA, build it into an image, push it, then set in values.yaml:
+     image.repository: <your-registry>/<your-spa>
+     image.tag:        <version>
+     content.source:   image
+   The image must place the built files (index.html, assets, ...) at:
+     {{ .Values.content.root }}
+{{- else }}
+   Serving files baked into image "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+   from {{ .Values.content.root }}.
+{{- end }}
+
+3. Client-side routing (deep links / refresh) falls back to /index.html, so
+   React Router / Vue Router / etc. work out of the box.
+
+Enjoy! 🚀
