@@ -5,8 +5,8 @@ description: >-
   for acme.json, and a basic-auth-protected dashboard. Deploys a HelmChartConfig
   consumed by the k3s helm-controller plus the supporting middleware/secret.
 type: application
-version: 0.1.0
-appVersion: "bundled"
+version: 0.2.0
+appVersion: "v3.7.5"
 keywords:
   - traefik
   - k3s

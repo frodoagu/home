@@ -7,6 +7,15 @@
 # The ArgoCD Application must target this same namespace.
 traefikNamespace: kube-system
 
+# ── Traefik image ────────────────────────────────────────────────────────────
+# This chart can't change the k3s-bundled Traefik *chart* version (that's pinned
+# by k3s' own HelmChart resource), but it can pin the container *image* via the
+# HelmChartConfig. This runs Traefik v3.7.5 on top of the bundled chart.
+# Bump deliberately and confirm the bundled chart still accepts these values.
+image:
+  repository: docker.io/traefik
+  tag: "v3.7.5"
+
 # ── Let's Encrypt (ACME, DNS-01 challenge via Cloudflare) ────────────────────
 # DNS-01 is used instead of HTTP-01 because the global HTTP→HTTPS redirect
 # (ports.web) bounces the HTTP-01 challenge to :443, which serves a 404 for the
