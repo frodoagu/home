@@ -17,6 +17,10 @@ spec:
         {{- include "home-assistant.selectorLabels" . | nindent 8 }}
     spec:
       hostNetwork: {{ .Values.hostNetwork }}
+      {{- if .Values.hostNetwork }}
+      # Keep cluster DNS working when sharing the host network namespace
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

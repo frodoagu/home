@@ -51,7 +51,9 @@ resources:
     memory: 512Mi
 
 # Allow Home Assistant to use the host network for device discovery (mDNS, etc.)
-hostNetwork: false
+# Required for Zeroconf/mDNS (224.0.0.251) and SSDP (239.255.255.250) multicast
+# discovery, which cannot cross the pod overlay network into the physical LAN.
+hostNetwork: true
 
 # Node selector – useful to pin HA to a specific node
 nodeSelector: {}
@@ -66,5 +68,15 @@ env:
     value: "UTC"
 
 # Extra volume mounts (e.g. to expose USB/Z-Wave sticks)
-extraVolumes: []
-extraVolumeMounts: []
+# The host D-Bus socket is mounted so Home Assistant's Bluetooth integration can
+# talk to the host BlueZ daemon. Requires hostNetwork: true and bluetooth/bluez
+# running on the node. Active scanning may additionally need NET_ADMIN/NET_RAW.
+extraVolumes:
+  - name: dbus
+    hostPath:
+      path: /run/dbus
+      type: Directory
+extraVolumeMounts:
+  - name: dbus
+    mountPath: /run/dbus
+    readOnly: true
