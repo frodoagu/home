@@ -27,50 +27,6 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.ingress.enabled }}
-      initContainers:
-        - name: init-config
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              CONFIG_FILE="/config/configuration.yaml"
-
-              # Only create config on first run; preserve user changes on restarts
-              if [ -f "$CONFIG_FILE" ]; then
-                exit 0
-              fi
-
-              # Create initial config with reverse proxy settings and external URL
-              cat > "$CONFIG_FILE" <<EOF
-homeassistant:
-  name: Home
-  unit_system: metric
-{{- if .Values.externalUrl }}
-  external_url: {{ .Values.externalUrl }}
-{{- end }}
-
-# Tells Home Assistant it's behind a reverse proxy (Traefik).
-# Trusts X-Forwarded-Proto header to recognize HTTPS. This prevents
-# redirect loops when HTTPS externally connects via HTTP internally.
-http:
-  trusted_proxies:
-    - 10.0.0.0/8
-    - 172.16.0.0/12
-    - 192.168.0.0/16
-    - 127.0.0.1
-    - ::1
-  use_x_forwarded_for: true
-
-automation: !include automations.yaml
-script: !include scripts.yaml
-scene: !include scenes.yaml
-EOF
-          volumeMounts:
-            - name: config
-              mountPath: /config
-      {{- end }}
       containers:
         - name: home-assistant
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
