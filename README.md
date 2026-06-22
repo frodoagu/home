@@ -1,6 +1,13 @@
+<div align="center">
+
+<img src="docs/logo.png" alt="Sierras Pi Lab" width="180" />
+
 # home 🏠
 
-Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for services running on a Raspberry Pi with k3s.
+**Agu's home-lab GitOps repository** — Helm charts and ArgoCD applications for
+services running on a Raspberry Pi with k3s.
+
+</div>
 
 ## Stack
 
@@ -9,6 +16,7 @@ Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for ser
 | [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
+| [nginx](https://nginx.org/) | Static single-page app served at the apex `agu.com.ar` | `charts/nginx-spa/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 
 ## Architecture
@@ -22,6 +30,7 @@ Internet → Router (port 80/443 forwarded) → RPi
                                                   ├─ Argo CD  (https://argocd.agu.com.ar)
                                                   ├─ Home Assistant (https://home.agu.com.ar)
                                                   │    └─ host network (mDNS/SSDP discovery) + Bluetooth + Google Assistant
+                                                  ├─ nginx-spa (https://agu.com.ar — static SPA)
                                                   └─ cloudflare-ddns → Cloudflare API (updates A records)
 ```
 
@@ -34,6 +43,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
 - The `agu.com.ar` zone hosted on [Cloudflare](https://www.cloudflare.com/) and
   a Cloudflare API token with **Zone:DNS:Edit**. The `cloudflare-ddns` app
   creates/updates these A records to track the home public IP:
+  - `agu.com.ar` → nginx-spa (apex static site)
   - `home.agu.com.ar` → Home Assistant
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard
@@ -129,7 +139,8 @@ kubectl apply -f apps/root.yaml
 ```
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
-Let's Encrypt + the dashboard) and deploys Home Assistant.
+Let's Encrypt + the dashboard) and deploys the remaining apps (Home Assistant,
+nginx-spa, cloudflare-ddns).
 
 ### 3 – Create the required secrets
 
@@ -175,6 +186,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant` |
+| `charts/nginx-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 
 ## Repository layout
@@ -187,11 +199,13 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 │   ├── traefik.yaml
 │   ├── argocd.yaml
 │   ├── home-assistant.yaml
+│   ├── nginx-spa.yaml
 │   └── cloudflare-ddns.yaml
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
     ├── home-assistant/      # Home Assistant Helm chart
+    ├── nginx-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
 ```
 
@@ -203,6 +217,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
+- [docs/nginx-spa.md](docs/nginx-spa.md) — static SPA chart: image vs. placeholder content, SPA routing fallback
 
 ## Let's Encrypt notes
 

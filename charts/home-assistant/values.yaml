@@ -43,9 +43,10 @@ ingress:
 externalUrl: "https://home.agu.com.ar"
 
 # Google Assistant / Google Home integration (manual `google_assistant`, not
-# Nabu Casa). Requires an "Actions on Google" smart-home project plus a HomeGraph
-# service-account key. See charts/home-assistant/README or the project README for
-# the one-time Google Console setup steps.
+# Nabu Casa). Set up as a Cloud-to-cloud integration in the Google Home Developer
+# Console (https://console.home.google.com), optionally with a HomeGraph
+# service-account key for report_state/request_sync. See docs/google-assistant.md
+# for the full one-time setup runbook.
 #
 # NOTE: the init container writes the `google_assistant:` block into
 # configuration.yaml only once (it won't rewrite an existing block). To change
@@ -53,7 +54,7 @@ externalUrl: "https://home.agu.com.ar"
 # (or delete it and let the init container regenerate it) and restart the pod.
 googleAssistant:
   enabled: true
-  # Project ID from the Actions on Google / Google Cloud project.
+  # Project ID from the Google Home Developer Console / Google Cloud project.
   projectId: "growserver"
   # Proactively push state changes to Google. Only takes effect when a service
   # account is configured below (report_state needs HomeGraph credentials).

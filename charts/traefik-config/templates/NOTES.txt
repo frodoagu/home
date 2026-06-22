@@ -4,9 +4,10 @@ Traefik configuration applied to the k3s-bundled Traefik (namespace: {{ .Values.
    Watch the rollout:
      kubectl -n {{ .Values.traefikNamespace }} rollout status deploy/traefik
 
-2. Let's Encrypt (HTTP-01) is configured for resolver `letsencrypt`.
+2. Let's Encrypt (DNS-01 via Cloudflare) is configured for resolver `letsencrypt`.
    Certs are stored at {{ .Values.acme.storage }} on a PersistentVolume.
-   HTTP-01 requires port 80 reachable from the internet.
+   DNS-01 needs no inbound port; it requires the Cloudflare API-token secret
+   `{{ .Values.acme.dnsChallenge.existingSecret }}` in namespace {{ .Values.traefikNamespace }}.
 
 {{- if and .Values.dashboard.enabled .Values.dashboardAuth.enabled }}
 
