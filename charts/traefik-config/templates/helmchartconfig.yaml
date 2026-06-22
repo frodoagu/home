@@ -32,8 +32,16 @@ spec:
         acme:
           email: {{ .Values.acme.email }}
           storage: {{ .Values.acme.storage }}
-          httpChallenge:
-            entryPoint: {{ .Values.acme.httpChallenge.entryPoint }}
+          dnsChallenge:
+            provider: {{ .Values.acme.dnsChallenge.provider }}
+    # Cloudflare API token for the lego DNS-01 provider. Sourced from a Secret
+    # in the Traefik namespace (see values.yaml) so it never lives in git.
+    env:
+      - name: {{ .Values.acme.dnsChallenge.tokenKey }}
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.acme.dnsChallenge.existingSecret }}
+            key: {{ .Values.acme.dnsChallenge.tokenKey }}
     {{- if .Values.persistence.enabled }}
     persistence:
       enabled: true

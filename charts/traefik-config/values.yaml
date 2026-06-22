@@ -7,13 +7,23 @@
 # The ArgoCD Application must target this same namespace.
 traefikNamespace: kube-system
 
-# ── Let's Encrypt (ACME, HTTP-01 challenge) ──────────────────────────────────
+# ── Let's Encrypt (ACME, DNS-01 challenge via Cloudflare) ────────────────────
+# DNS-01 is used instead of HTTP-01 because the global HTTP→HTTPS redirect
+# (ports.web) bounces the HTTP-01 challenge to :443, which serves a 404 for the
+# challenge path. DNS-01 needs no inbound ports and works for Cloudflare-proxied
+# records too.
 acme:
   email: federico.nicolas.agu@gmail.com
   storage: /data/acme.json
-  # HTTP-01 requires port 80 reachable from the internet (router port-forward).
-  httpChallenge:
-    entryPoint: web
+  dnsChallenge:
+    provider: cloudflare
+    # Secret in the Traefik namespace holding a Cloudflare API token
+    # (Zone:DNS:Edit on agu.com.ar) under the key below. Created out-of-band so
+    # the token never lives in git:
+    #   kubectl create secret generic traefik-cloudflare-token -n kube-system \
+    #     --from-literal=CF_DNS_API_TOKEN='your-token'
+    existingSecret: traefik-cloudflare-token
+    tokenKey: CF_DNS_API_TOKEN
 
 # ── Persistence for acme.json (survives Traefik restarts) ────────────────────
 persistence:
