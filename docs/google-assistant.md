@@ -1,15 +1,22 @@
 # Google Assistant / Google Home integration
 
 This uses Home Assistant's **manual `google_assistant`** integration (a custom
-"Actions on Google" smart-home Action linked to your own Google account), not
-Nabu Casa. It requires HA to be reachable over public HTTPS — which it is, at
-`https://home.agu.com.ar`.
+**Cloud-to-cloud integration** in the Google Home Developer Console, linked to
+your own Google account), not Nabu Casa. It requires HA to be reachable over
+public HTTPS — which it is, at `https://home.agu.com.ar`.
+
+> The old *Actions on Google* console (`console.actions.google.com`) has been
+> sunset — "Conversational Actions have been sunset. Changes can't be made to any
+> actions." Smart-home development moved to the **Google Home Developer Console**
+> (<https://console.home.google.com>), where the equivalent is a **Cloud-to-cloud
+> integration**. The OAuth/fulfillment values are unchanged; only the console and
+> the name differ.
 
 Current deployment:
 
 | Thing | Value |
 |---|---|
-| Actions on Google / GCP project | `growserver` |
+| Google Home Developer Console / GCP project | `growserver` |
 | HomeGraph service account | `ha-homegraph@growserver.iam.gserviceaccount.com` |
 | Kubernetes secret | `ha-google-sa` (namespace `home-assistant`, key `service_account.json`) |
 | Fulfillment URL | `https://home.agu.com.ar/api/google_assistant` |
@@ -19,9 +26,10 @@ Current deployment:
 - **Automatable via `gcloud`:** enabling the HomeGraph API, creating the service
   account + key, and creating the Kubernetes secret. (Done — steps recorded
   below for reproducibility.)
-- **Web console only (no CLI/API):** the *Actions on Google* project config —
-  fulfillment URL and OAuth **account linking** — and the final account link in
-  the **Google Home** mobile app. These need an interactive Google login.
+- **Web console only (no CLI/API):** the Google Home Developer Console
+  Cloud-to-cloud integration — fulfillment URL and OAuth **account linking** —
+  and the final account link in the **Google Home** mobile app. These need an
+  interactive Google login.
 
 ## 1. Google Cloud side (gcloud)
 
@@ -85,19 +93,28 @@ and the chart mounts the secret at `/config/google_assistant_sa.json`.
 > `/config/configuration.yaml` (or delete it and restart the pod). Per-entity
 > exposure is also adjustable in the HA UI once linked.
 
-## 4. Actions on Google console (manual)
+## 4. Google Home Developer Console (manual)
 
-At <https://console.actions.google.com>, in the `growserver` project:
+At <https://console.home.google.com>, create/open the project whose **Project ID
+is `growserver`** (the `project_id` in the chart must match this console's project
+— if you create a new project here instead, update `googleAssistant.projectId`
+and move the HomeGraph service account/API to that project).
 
-1. **Action type:** Smart Home.
-2. **Fulfillment URL** (Develop → ...): `https://home.agu.com.ar/api/google_assistant`
-3. **Account linking** (Develop → Account linking):
+1. **Create project** → optionally name it; note the Project ID is `growserver`.
+2. **Add integration → Cloud-to-cloud.**
+   - **Integration name:** e.g. `Home Assistant` (shows up as `[test] Home
+     Assistant` in the Google Home app).
+   - **Device type:** pick the types you expose (Light, Switch, etc.) — this is
+     just metadata; actual exposure is controlled by HA's `exposedDomains`.
+3. **Cloud fulfillment URL:** `https://home.agu.com.ar/api/google_assistant`
+4. **Account linking:**
    - Linking type: **OAuth** → **Authorization Code**
    - **Client ID:** `https://oauth-redirect.googleusercontent.com/r/growserver`
    - **Client Secret:** any non-empty string (HA does not validate it)
    - **Authorization URL:** `https://home.agu.com.ar/auth/authorize`
    - **Token URL:** `https://home.agu.com.ar/auth/token`
    - **Scopes:** `email`, `name`
+5. Use the integration's **Test** tab to activate test mode for your account.
 
 ## 5. Verify the HA side
 
@@ -118,18 +135,18 @@ serving. Also check `kubectl logs` has no `google_assistant` errors.
 ## 6. Link in the Google Home app (mobile)
 
 Google Home app → **+** → **Set up a device** → **Works with Google** → find your
-Action listed as **`[test] <your Action display name>`** → sign in with your HA
+integration listed as **`[test] <your integration name>`** → sign in with your HA
 account and authorize. Your exposed devices then appear in Google Home.
 
-The Action stays in **test mode** — that's fine for personal use; no public
+The integration stays in **test mode** — that's fine for personal use; no public
 review/publishing is needed as long as you link with the same Google account that
 owns the project.
 
 ## Troubleshooting
 
-- **Action not shown in Google Home app:** confirm you're signed into the app
-  with the same Google account that owns the `growserver` project, and that the
-  Action is in test mode.
+- **Integration not shown in Google Home app:** confirm you're signed into the
+  app with the same Google account that owns the `growserver` project, and that
+  the integration's test mode is active.
 - **`POST` returns 404:** the integration didn't load — check the
   `google_assistant:` block and `kubectl logs` for a config error.
 - **Linking fails at the HA login step:** check the Authorization/Token URLs and
