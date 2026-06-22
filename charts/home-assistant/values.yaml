@@ -52,10 +52,11 @@ externalUrl: "https://home.agu.com.ar"
 # these settings after first sync, edit the block in /config/configuration.yaml
 # (or delete it and let the init container regenerate it) and restart the pod.
 googleAssistant:
-  enabled: false
+  enabled: true
   # Project ID from the Actions on Google / Google Cloud project.
-  projectId: ""
-  # Proactively push state changes to Google (needs the service account below).
+  projectId: "growserver"
+  # Proactively push state changes to Google. Only takes effect when a service
+  # account is configured below (report_state needs HomeGraph credentials).
   reportState: true
   # Expose all supported entities by default. Narrow per-entity in the HA UI
   # (Settings → Voice assistants → Google Assistant) once linked.
@@ -74,12 +75,14 @@ googleAssistant:
   # Optional PIN Google must speak before actuating "secure" devices (locks,
   # garage doors, ...). Leave empty to disable.
   secureDevicesPin: ""
-  # HomeGraph service-account JSON. It is sensitive and must NOT live in git:
-  # create it as a Secret in this namespace out-of-band and reference it here.
+  # HomeGraph service-account JSON. OPTIONAL: leave secretName empty to run
+  # without it (account linking and device control still work; only report_state
+  # and request_sync are unavailable). To enable it, create the Secret in this
+  # namespace out-of-band (sensitive — never in git) and set secretName:
   #   kubectl create secret generic ha-google-sa -n home-assistant \
   #     --from-file=service_account.json=/path/to/homegraph-key.json
-  # The init container mounts this key at /config/google_assistant_sa.json and
-  # the generated config references it via `service_account: !include`.
+  # When set, the key is mounted at /config/google_assistant_sa.json and the
+  # generated config references it via `service_account: !include`.
   serviceAccount:
     secretName: "ha-google-sa"
     secretKey: "service_account.json"

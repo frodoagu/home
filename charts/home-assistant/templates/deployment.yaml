@@ -51,8 +51,12 @@ spec:
               value: |
                 google_assistant:
                   project_id: {{ .Values.googleAssistant.projectId | quote }}
+                  {{- if .Values.googleAssistant.serviceAccount.secretName }}
                   service_account: !include google_assistant_sa.json
                   report_state: {{ .Values.googleAssistant.reportState }}
+                  {{- else }}
+                  report_state: false
+                  {{- end }}
                   expose_by_default: {{ .Values.googleAssistant.exposeByDefault }}
                   exposed_domains:
                   {{- range .Values.googleAssistant.exposedDomains }}
@@ -146,7 +150,7 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
-            {{- if .Values.googleAssistant.enabled }}
+            {{- if and .Values.googleAssistant.enabled .Values.googleAssistant.serviceAccount.secretName }}
             # HomeGraph service-account key, referenced by `!include` in the
             # generated google_assistant config. subPath keeps it a single file
             # overlaid onto the /config PVC.
@@ -166,7 +170,7 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- if .Values.googleAssistant.enabled }}
+        {{- if and .Values.googleAssistant.enabled .Values.googleAssistant.serviceAccount.secretName }}
         - name: google-sa
           secret:
             secretName: {{ .Values.googleAssistant.serviceAccount.secretName }}
