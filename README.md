@@ -17,10 +17,11 @@ Agu's home-lab GitOps repository – Helm charts and ArgoCD applications for ser
 Internet → Router (port 80/443 forwarded) → RPi
                                               └─ k3s
                                                   ├─ Traefik (bundled, LoadBalancer 80/443)
-                                                  │    └─ Let's Encrypt ACME HTTP-01
+                                                  │    └─ Let's Encrypt ACME DNS-01 (Cloudflare)
                                                   │    └─ Dashboard (https://traefik.home.agu.com.ar)
                                                   ├─ Argo CD  (https://argocd.home.agu.com.ar)
                                                   ├─ Home Assistant (https://home.agu.com.ar)
+                                                  │    └─ host network (mDNS/SSDP discovery) + Bluetooth + Google Assistant
                                                   └─ cloudflare-ddns → Cloudflare API (updates A records)
 ```
 
@@ -132,7 +133,16 @@ Let's Encrypt + the dashboard) and deploys Home Assistant.
 
 ### 3 – Create the required secrets
 
-These hold credentials that must never live in git.
+These hold credentials that must never live in git. See [docs/secrets.md](docs/secrets.md)
+for the full list, keys, and rotation notes.
+
+**Traefik ACME — Cloudflare token** (Zone:DNS:Edit on `agu.com.ar`; used for the
+DNS-01 challenge — see [docs/tls.md](docs/tls.md)):
+
+```bash
+kubectl create secret generic traefik-cloudflare-token -n kube-system \
+  --from-literal=CF_DNS_API_TOKEN='your-cloudflare-token'
+```
 
 **Traefik dashboard** (HTTP basic auth, in the bundled Traefik's namespace):
 
@@ -152,6 +162,9 @@ kubectl create secret generic cloudflare-ddns-token \
   -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-cloudflare-token'
 ```
 
+> The Google Assistant integration needs an extra secret (`ha-google-sa`) only
+> if you enable it — see [docs/google-assistant.md](docs/google-assistant.md).
+
 ### 4 – Customise values
 
 Hosts and email are already set for `agu.com.ar`. If you fork to another
@@ -161,13 +174,14 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 |---|---|
 | `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
-| `charts/home-assistant/values.yaml` | `ingress.host`, `env` (e.g. timezone) |
+| `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant` |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 
 ## Repository layout
 
 ```
 .
+├── docs/                    # Per-topic guides (secrets, TLS, Home Assistant, Google Assistant)
 ├── apps/                    # ArgoCD Application manifests
 │   ├── root.yaml            # App-of-apps bootstrap entry point
 │   ├── traefik.yaml
@@ -181,23 +195,23 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
     └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
 ```
 
+## Documentation
+
+Per-topic guides live in [docs/](docs/):
+
+- [docs/secrets.md](docs/secrets.md) — all out-of-band secrets and how to create them
+- [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
+- [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
+- [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
+
 ## Let's Encrypt notes
 
-The bundled Traefik is configured with the **HTTP-01** ACME challenge via
-`charts/traefik-config`. This requires port 80 to be reachable from the
-internet. If your RPi is behind NAT and you cannot expose port 80, switch to
-the **DNS-01** challenge by editing the `certResolvers` block in
-`charts/traefik-config/templates/helmchartconfig.yaml` to use a `dnsChallenge`
-(plus the provider's API-token env vars) instead of `httpChallenge`:
-
-```yaml
-certResolvers:
-  letsencrypt:
-    email: you@example.com
-    storage: /data/acme.json
-    dnsChallenge:
-      provider: cloudflare   # or route53, digitalocean, etc.
-```
+The bundled Traefik obtains certificates from Let's Encrypt using the **DNS-01**
+challenge via Cloudflare (configured in `charts/traefik-config`). DNS-01 is used
+because the global HTTP→HTTPS redirect would bounce an HTTP-01 challenge to
+`:443` and fail it; DNS-01 needs no inbound port. It requires the
+`traefik-cloudflare-token` secret (see [docs/secrets.md](docs/secrets.md)).
 
 ACME certificates are stored in a PersistentVolume (`/data/acme.json`) so they
-survive Traefik restarts.
+survive Traefik restarts. Full details and troubleshooting in
+[docs/tls.md](docs/tls.md).
