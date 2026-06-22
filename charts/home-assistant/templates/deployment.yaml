@@ -6,6 +6,8 @@ metadata:
     {{- include "home-assistant.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "home-assistant.selectorLabels" . | nindent 6 }}
