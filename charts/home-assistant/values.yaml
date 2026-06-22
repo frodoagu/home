@@ -36,8 +36,9 @@ ingress:
   # Additional Traefik middlewares to attach (e.g. auth, rate-limit)
   middlewares: []
 
-# Home Assistant external URL (canonical public URL seen by users)
-# Prevents redirect loops when behind a reverse proxy
+# Home Assistant external URL – tells HA its canonical public HTTPS URL.
+# Prevents redirect loops when behind a reverse proxy (Traefik).
+# If unset, Home Assistant creates this from the ingress.host value.
 externalUrl: "https://home.agu.com.ar"
 
 # Resource requests/limits – tune for RPi
@@ -60,8 +61,6 @@ tolerations: []
 affinity: {}
 
 # Extra environment variables
-# Home Assistant behind reverse proxy: tell it to trust X-Forwarded-* headers
-# from Traefik so it knows the original connection was HTTPS and stops redirecting
 env:
   - name: TZ
     value: "UTC"

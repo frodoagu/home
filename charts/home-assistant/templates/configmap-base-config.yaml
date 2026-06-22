@@ -1,0 +1,19 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-base-config
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+data:
+  configuration.yaml: |
+    homeassistant:
+      name: Home
+{{- if .Values.externalUrl }}
+      external_url: {{ .Values.externalUrl }}
+{{- end }}
+
+    automation: !include automations.yaml
+    script: !include scripts.yaml
+    scene: !include scenes.yaml
+{{- end }}
