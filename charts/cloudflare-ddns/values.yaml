@@ -25,6 +25,7 @@ cloudflare:
 # Domains whose A (and AAAA, if enabled) records track the public IP.
 # favonia creates the records if they don't exist yet.
 domains:
+  - agu.com.ar
   - home.agu.com.ar
   - argocd.home.agu.com.ar
   - traefik.home.agu.com.ar
