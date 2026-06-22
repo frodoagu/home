@@ -35,9 +35,22 @@ spec:
             - sh
             - -c
             - |
-              # Only on first run: copy the ConfigMap config if PVC is empty
+              # Ensure trusted_proxies config exists (needed for reverse proxy)
+              # On first run: copy the whole ConfigMap
+              # On restarts: skip if http section already exists
               if [ ! -f /config/configuration.yaml ]; then
                 cp /base-config/configuration.yaml /config/
+              elif ! grep -q "trusted_proxies:" /config/configuration.yaml; then
+                # Append http config if not already present
+                cat >> /config/configuration.yaml <<'EOF'
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+EOF
               fi
           volumeMounts:
             - name: config
