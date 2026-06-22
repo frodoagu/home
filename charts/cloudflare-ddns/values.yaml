@@ -27,8 +27,8 @@ cloudflare:
 domains:
   - agu.com.ar
   - home.agu.com.ar
-  - argocd.home.agu.com.ar
-  - traefik.home.agu.com.ar
+  - argocd.agu.com.ar
+  - traefik.agu.com.ar
 
 # DNS-only (grey cloud). Keep false so Traefik terminates TLS directly and the
 # Let's Encrypt HTTP-01 challenge reaches the cluster. Set true to proxy through

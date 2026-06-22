@@ -8,7 +8,7 @@ argo-cd:
     ingress:
       enabled: true
       ingressClassName: traefik
-      hostname: argocd.home.agu.com.ar
+      hostname: argocd.agu.com.ar
       # Do NOT set `tls: true` here: that makes the upstream chart add a
       # `tls.secretName: argocd-server-tls` block, and Traefik then looks for a
       # (non-existent) Kubernetes secret to terminate TLS with instead of using

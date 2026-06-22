@@ -18,8 +18,8 @@ Internet → Router (port 80/443 forwarded) → RPi
                                               └─ k3s
                                                   ├─ Traefik (bundled, LoadBalancer 80/443)
                                                   │    └─ Let's Encrypt ACME DNS-01 (Cloudflare)
-                                                  │    └─ Dashboard (https://traefik.home.agu.com.ar)
-                                                  ├─ Argo CD  (https://argocd.home.agu.com.ar)
+                                                  │    └─ Dashboard (https://traefik.agu.com.ar)
+                                                  ├─ Argo CD  (https://argocd.agu.com.ar)
                                                   ├─ Home Assistant (https://home.agu.com.ar)
                                                   │    └─ host network (mDNS/SSDP discovery) + Bluetooth + Google Assistant
                                                   └─ cloudflare-ddns → Cloudflare API (updates A records)
@@ -35,8 +35,8 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   a Cloudflare API token with **Zone:DNS:Edit**. The `cloudflare-ddns` app
   creates/updates these A records to track the home public IP:
   - `home.agu.com.ar` → Home Assistant
-  - `argocd.home.agu.com.ar` → Argo CD
-  - `traefik.home.agu.com.ar` → Traefik dashboard
+  - `argocd.agu.com.ar` → Argo CD
+  - `traefik.agu.com.ar` → Traefik dashboard
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
 
 ## Setup from a fresh Raspberry Pi OS

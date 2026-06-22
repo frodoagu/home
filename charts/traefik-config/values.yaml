@@ -43,7 +43,7 @@ persistence:
 # ── Dashboard ────────────────────────────────────────────────────────────────
 dashboard:
   enabled: true
-  host: traefik.home.agu.com.ar
+  host: traefik.agu.com.ar
 
 # ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
 dashboardAuth:
