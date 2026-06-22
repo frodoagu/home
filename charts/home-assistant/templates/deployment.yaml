@@ -40,10 +40,28 @@ spec:
         # bits needed to sit behind the Traefik reverse proxy are present.
         - name: ensure-proxy-config
           image: busybox:1.36
-          {{- with .Values.externalUrl }}
+          {{- if or .Values.externalUrl .Values.googleAssistant.enabled }}
           env:
+            {{- with .Values.externalUrl }}
             - name: EXTERNAL_URL
               value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.googleAssistant.enabled }}
+            - name: GOOGLE_ASSISTANT_BLOCK
+              value: |
+                google_assistant:
+                  project_id: {{ .Values.googleAssistant.projectId | quote }}
+                  service_account: !include google_assistant_sa.json
+                  report_state: {{ .Values.googleAssistant.reportState }}
+                  expose_by_default: {{ .Values.googleAssistant.exposeByDefault }}
+                  exposed_domains:
+                  {{- range .Values.googleAssistant.exposedDomains }}
+                    - {{ . }}
+                  {{- end }}
+                  {{- with .Values.googleAssistant.secureDevicesPin }}
+                  secure_devices_pin: {{ . | quote }}
+                  {{- end }}
+            {{- end }}
           {{- end }}
           command:
             - sh
@@ -71,6 +89,13 @@ spec:
                  && ! grep -q "external_url:" "$CONFIG" \
                  && ! grep -q '^homeassistant:' "$CONFIG"; then
                 printf '\nhomeassistant:\n  external_url: "%s"\n' "$EXTERNAL_URL" >> "$CONFIG"
+              fi
+
+              # Google Assistant block (written verbatim from the env var, which
+              # already carries correct YAML indentation). Appended once.
+              if [ -n "${GOOGLE_ASSISTANT_BLOCK:-}" ] \
+                 && ! grep -q '^google_assistant:' "$CONFIG"; then
+                printf '\n%s\n' "$GOOGLE_ASSISTANT_BLOCK" >> "$CONFIG"
               fi
           volumeMounts:
             - name: config
@@ -121,6 +146,15 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            {{- if .Values.googleAssistant.enabled }}
+            # HomeGraph service-account key, referenced by `!include` in the
+            # generated google_assistant config. subPath keeps it a single file
+            # overlaid onto the /config PVC.
+            - name: google-sa
+              mountPath: /config/google_assistant_sa.json
+              subPath: {{ .Values.googleAssistant.serviceAccount.secretKey }}
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -132,6 +166,11 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if .Values.googleAssistant.enabled }}
+        - name: google-sa
+          secret:
+            secretName: {{ .Values.googleAssistant.serviceAccount.secretName }}
+        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

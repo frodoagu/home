@@ -42,6 +42,48 @@ ingress:
 # If unset, Home Assistant creates this from the ingress.host value.
 externalUrl: "https://home.agu.com.ar"
 
+# Google Assistant / Google Home integration (manual `google_assistant`, not
+# Nabu Casa). Requires an "Actions on Google" smart-home project plus a HomeGraph
+# service-account key. See charts/home-assistant/README or the project README for
+# the one-time Google Console setup steps.
+#
+# NOTE: the init container writes the `google_assistant:` block into
+# configuration.yaml only once (it won't rewrite an existing block). To change
+# these settings after first sync, edit the block in /config/configuration.yaml
+# (or delete it and let the init container regenerate it) and restart the pod.
+googleAssistant:
+  enabled: false
+  # Project ID from the Actions on Google / Google Cloud project.
+  projectId: ""
+  # Proactively push state changes to Google (needs the service account below).
+  reportState: true
+  # Expose all supported entities by default. Narrow per-entity in the HA UI
+  # (Settings → Voice assistants → Google Assistant) once linked.
+  exposeByDefault: true
+  exposedDomains:
+    - light
+    - switch
+    - fan
+    - cover
+    - climate
+    - scene
+    - script
+    - media_player
+    - vacuum
+    - lock
+  # Optional PIN Google must speak before actuating "secure" devices (locks,
+  # garage doors, ...). Leave empty to disable.
+  secureDevicesPin: ""
+  # HomeGraph service-account JSON. It is sensitive and must NOT live in git:
+  # create it as a Secret in this namespace out-of-band and reference it here.
+  #   kubectl create secret generic ha-google-sa -n home-assistant \
+  #     --from-file=service_account.json=/path/to/homegraph-key.json
+  # The init container mounts this key at /config/google_assistant_sa.json and
+  # the generated config references it via `service_account: !include`.
+  serviceAccount:
+    secretName: "ha-google-sa"
+    secretKey: "service_account.json"
+
 # Resource requests/limits – tune for RPi
 resources:
   requests:
