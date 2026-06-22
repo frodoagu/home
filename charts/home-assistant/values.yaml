@@ -55,6 +55,14 @@ resources:
 # discovery, which cannot cross the pod overlay network into the physical LAN.
 hostNetwork: true
 
+# Container security context. NET_ADMIN/NET_RAW are required by HA's Bluetooth
+# integration to manage the adapter (active scanning, adapter recovery).
+securityContext:
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW
+
 # Node selector – useful to pin HA to a specific node
 nodeSelector: {}
 

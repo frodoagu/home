@@ -71,15 +71,28 @@ spec:
             - name: http
               containerPort: 8123
               protocol: TCP
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.env }}
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          # Startup probe tolerates slow HA boot; liveness/readiness stay lean so
+          # the pod is marked Ready as soon as HA actually responds.
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 120
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 5
@@ -87,7 +100,6 @@ spec:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 90
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
