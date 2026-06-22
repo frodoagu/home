@@ -30,10 +30,12 @@ domains:
   - argocd.agu.com.ar
   - traefik.agu.com.ar
 
-# DNS-only (grey cloud). Keep false so Traefik terminates TLS directly and the
-# Let's Encrypt HTTP-01 challenge reaches the cluster. Set true to proxy through
-# Cloudflare (orange cloud).
-proxied: false
+# Proxy all records through Cloudflare (orange cloud). Safe here because TLS
+# certs are issued via ACME DNS-01 (see charts/traefik-config), which needs no
+# inbound HTTP-01 challenge. All hosts are single-level under agu.com.ar, so
+# Cloudflare Universal SSL (*.agu.com.ar) covers them at the edge. Set false for
+# DNS-only (grey cloud) if you need the browser to reach Traefik directly.
+proxied: true
 
 # IP detection. IPv4 via Cloudflare's trace endpoint; IPv6 disabled by default.
 ip4Provider: "cloudflare.trace"
