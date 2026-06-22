@@ -10,7 +10,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/frodoagu/home
+    repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD
     path: charts/argocd
     helm:
