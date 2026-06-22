@@ -39,9 +39,14 @@ spec:
           storage: {{ .Values.acme.storage }}
           dnsChallenge:
             provider: {{ .Values.acme.dnsChallenge.provider }}
-    # Access logs show request/response details for debugging
-    accessLog:
-      format: json
+    # Access logs (request/response details) to stdout for debugging. This is
+    # the Traefik *chart* key (logs.access); the bare top-level `accessLog`
+    # static-config key is not a chart value and is silently ignored. With no
+    # filePath set, Traefik writes access logs to stdout (kubectl logs).
+    logs:
+      access:
+        enabled: true
+        format: json
     # Cloudflare API token for the lego DNS-01 provider. Sourced from a Secret
     # in the Traefik namespace (see values.yaml) so it never lives in git.
     env:
