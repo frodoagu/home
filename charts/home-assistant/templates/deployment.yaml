@@ -35,33 +35,46 @@ spec:
       {{- end }}
       {{- if .Values.ingress.enabled }}
       initContainers:
-        - name: copy-base-config
+        # Home Assistant owns configuration.yaml (it writes default_config etc.
+        # on first boot). We never replace it — we only idempotently ensure the
+        # bits needed to sit behind the Traefik reverse proxy are present.
+        - name: ensure-proxy-config
           image: busybox:1.36
+          {{- with .Values.externalUrl }}
+          env:
+            - name: EXTERNAL_URL
+              value: {{ . | quote }}
+          {{- end }}
           command:
             - sh
             - -c
             - |
-              # Ensure trusted_proxies config exists (needed for reverse proxy)
-              # On first run: copy the whole ConfigMap
-              # On restarts: skip if http section already exists
-              if [ ! -f /config/configuration.yaml ]; then
-                cp /base-config/configuration.yaml /config/
-              elif ! grep -q "trusted_proxies:" /config/configuration.yaml; then
-                # Append http config if not already present
-                echo "" >> /config/configuration.yaml
-                echo "http:" >> /config/configuration.yaml
-                echo "  use_x_forwarded_for: true" >> /config/configuration.yaml
-                echo "  trusted_proxies:" >> /config/configuration.yaml
-                echo "    - 10.0.0.0/8" >> /config/configuration.yaml
-                echo "    - 172.16.0.0/12" >> /config/configuration.yaml
-                echo "    - 192.168.0.0/16" >> /config/configuration.yaml
+              set -eu
+              CONFIG=/config/configuration.yaml
+
+              # Seed a minimal valid base only if HA has not created one yet,
+              # so default integrations (frontend, discovery, ...) stay enabled.
+              if [ ! -f "$CONFIG" ]; then
+                printf 'default_config:\n' > "$CONFIG"
+              fi
+
+              # Reverse-proxy headers: trust the cluster/LAN CIDRs so HA accepts
+              # X-Forwarded-For from Traefik (the source IP is the node/pod IP).
+              # printf writes exact bytes, so YAML indentation here is irrelevant.
+              if ! grep -q "trusted_proxies:" "$CONFIG"; then
+                printf '\nhttp:\n  use_x_forwarded_for: true\n  trusted_proxies:\n    - 10.0.0.0/8\n    - 172.16.0.0/12\n    - 192.168.0.0/16\n' >> "$CONFIG"
+              fi
+
+              # external_url (only if requested and not already configured, and
+              # no homeassistant: block exists — avoids a duplicate top-level key).
+              if [ -n "${EXTERNAL_URL:-}" ] \
+                 && ! grep -q "external_url:" "$CONFIG" \
+                 && ! grep -q '^homeassistant:' "$CONFIG"; then
+                printf '\nhomeassistant:\n  external_url: "%s"\n' "$EXTERNAL_URL" >> "$CONFIG"
               fi
           volumeMounts:
             - name: config
               mountPath: /config
-            - name: base-config
-              mountPath: /base-config
-              readOnly: true
       {{- end }}
       containers:
         - name: home-assistant
@@ -119,14 +132,6 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- if .Values.ingress.enabled }}
-        - name: base-config
-          configMap:
-            name: {{ include "home-assistant.fullname" . }}-base-config
-            items:
-              - key: configuration.yaml
-                path: configuration.yaml
-        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

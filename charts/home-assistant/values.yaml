@@ -6,8 +6,9 @@ replicaCount: 1
 image:
   repository: ghcr.io/home-assistant/home-assistant
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  # Pin to an explicit version for reproducible deploys. Bump deliberately
+  # (also update Chart.yaml appVersion). Avoid floating tags like "stable".
+  tag: "2026.6.4"
 
 nameOverride: ""
 fullnameOverride: ""

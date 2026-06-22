@@ -3,9 +3,12 @@
 
 image:
   repository: favonia/cloudflare-ddns
-  # Floating tag for convenience; pin to a release (e.g. "1.15.1") for repeatable
-  # deploys. Tags: https://github.com/favonia/cloudflare-ddns/releases
+  # Human-readable tag (used only when digest is empty). Releases:
+  # https://github.com/favonia/cloudflare-ddns/releases
   tag: "latest"
+  # Pin by digest for reproducible deploys (takes precedence over tag).
+  # This is the digest currently running; update deliberately on upgrade.
+  digest: "sha256:bc53b40b13c8b2a84e9b93c21f65fcd7d574b741014fb93912eb9efd93015aa2"
   pullPolicy: IfNotPresent
 
 cloudflare:
