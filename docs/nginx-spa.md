@@ -27,7 +27,7 @@ content origin:
 
 ```bash
 # Build your SPA into an image that copies the dist/ output to content.root, e.g.
-#   FROM nginx:1.27-alpine
+#   FROM nginx:1.31-alpine
 #   COPY dist/ /usr/share/nginx/html/
 # then in charts/nginx-spa/values.yaml:
 #   image.repository: ghcr.io/<you>/<spa>
@@ -36,8 +36,19 @@ content origin:
 ```
 
 The deployment annotates pods with a `checksum/config` of the ConfigMap, so a
-config change rolls the pods automatically. Bumping `image.tag` likewise triggers
+config change rolls the pods automatically. Changing `image.tag` likewise triggers
 a new rollout via ArgoCD.
+
+### How this repo actually ships it
+
+The live `agu.com.ar` SPA is the React app in [`site/`](../site). On every push
+to `site/`, the [`build-site`](../.github/workflows/site.yml) GitHub Action builds
+an **arm64** image and pushes `ghcr.io/frodoagu/home-site:latest`. Argo CD Image
+Updater (see [charts/argocd-image-updater](../charts/argocd-image-updater)) watches
+that tag's digest and writes the pinned `image.tag: latest@sha256:...` back into
+`values.yaml` over git, which ArgoCD then rolls out — so what runs is always an
+immutable digest, with no manual tag bumps. The image is private; the kubelet
+pulls it with the `ghcr-creds` secret (see [secrets.md](secrets.md)).
 
 ## SPA routing & caching
 

@@ -17,11 +17,12 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   traefik-config/    Configures the k3s-BUNDLED Traefik via HelmChartConfig (does NOT install it). Targets kube-system.
   home-assistant/    Home Assistant + Google Assistant integration.
   cloudflare-ddns/   Dynamic DNS updater.
-  nginx-spa/         nginx serving the agu.com.ar SPA from a baked image.
+  nginx-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
+  argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      A grid of small web apps; add one via src/apps/registry.jsx.
-                     CI (.github/workflows/site.yml) builds it into ghcr.io/frodoagu/home-site
-                     and bumps charts/nginx-spa/values.yaml to the new sha tag.
+                     CI (.github/workflows/site.yml) builds it into ghcr.io/frodoagu/home-site:latest (arm64);
+                     Argo CD Image Updater then pins the digest into charts/nginx-spa/values.yaml via git.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -36,8 +37,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   and `tls.certResolver: letsencrypt`. HTTP→HTTPS redirect is global (no HTTP route needed).
 - **TLS**: Let's Encrypt via ACME **DNS-01** through Cloudflare (configured in
   `charts/traefik-config`). Hostnames are under `agu.com.ar`.
-- **Secrets** (Cloudflare tokens, Google HomeGraph SA, basic-auth) are created
-  **out-of-band with `kubectl create secret`** and referenced by name — never committed.
+- **Secrets** (Cloudflare tokens, Google HomeGraph SA, basic-auth, `ghcr-creds`,
+  `git-creds`) are created **out-of-band with `kubectl create secret`** and
+  referenced by name — never committed. Full list in `docs/secrets.md`.
+- **SPA image auto-updates**: CI builds `site/` → `ghcr.io/frodoagu/home-site:latest`;
+  the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
+  `charts/nginx-spa/values.yaml` via git write-back. The v1.x Image Updater
+  controller only reconciles `ImageUpdater` CRs — NOT Application annotations.
+- **Instant sync**: a GitHub push webhook → `argocd.agu.com.ar/api/webhook`
+  refreshes apps on push (no secret configured); otherwise ArgoCD polls ~3 min.
 
 ## Chart conventions (match these when adding/editing a chart)
 

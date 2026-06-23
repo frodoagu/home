@@ -16,7 +16,8 @@ services running on a Raspberry Pi with k3s.
 | [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
-| [nginx](https://nginx.org/) | Static single-page app served at the apex `agu.com.ar` | `charts/nginx-spa/` |
+| [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/nginx-spa/` |
+| [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 
 ## Architecture
@@ -30,11 +31,16 @@ flowchart TD
     Internet -->|DNS lookup| CF
     Internet -->|HTTPS| Router
 
+    Repo[(Git repo<br/>frodoagu/home)]
+    GHA[GitHub Actions<br/>build-site]
+    GHCR[(GHCR<br/>home-site image)]
+
     subgraph RPi["Raspberry Pi · k3s"]
         Traefik[Traefik<br/>bundled · LoadBalancer 80/443<br/>Let's Encrypt DNS-01]
         Argo[Argo CD]
+        IU[Argo CD<br/>Image Updater]
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
-        SPA[nginx-spa<br/>static site]
+        SPA[nginx-spa<br/>React SPA]
         DDNS[cloudflare-ddns]
     end
 
@@ -48,10 +54,19 @@ flowchart TD
     Argo -.-> HA
     Argo -.-> SPA
     Argo -.-> DDNS
+    Argo -.-> IU
 
     Traefik -->|ACME DNS-01| CF
     DDNS -->|update A records| CF
     HA -->|mDNS/SSDP discovery| LAN([LAN devices])
+
+    %% SPA build & auto-update pipeline
+    Repo -->|push site/| GHA
+    GHA -->|push :latest arm64| GHCR
+    GHCR -.->|watch digest| IU
+    IU -->|pin digest write-back| Repo
+    GHCR -.->|pull image| SPA
+    Repo -->|webhook → sync| Argo
 ```
 
 ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) pattern – every chart in this repo is declared as an `Application` under `apps/`.
@@ -160,7 +175,7 @@ kubectl apply -f apps/root.yaml
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
 Let's Encrypt + the dashboard) and deploys the remaining apps (Home Assistant,
-nginx-spa, cloudflare-ddns).
+nginx-spa, argocd-image-updater, cloudflare-ddns).
 
 ### 3 – Create the required secrets
 
