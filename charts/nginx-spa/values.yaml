@@ -2,7 +2,6 @@
 # Adjust these to match your environment.
 
 replicaCount: 1
-
 image:
   # The agu.com.ar SPA, built from site/ and baked into an nginx image by the
   # build-site GitHub Action (.github/workflows/site.yml). The action pushes an
@@ -11,8 +10,7 @@ image:
   pullPolicy: IfNotPresent
   # Bootstrap value; CI overwrites this with the immutable sha-<commit> tag of
   # the latest build. Avoid leaving floating tags like "latest" long-term.
-  tag: "latest"
-
+  tag: "sha-7e4d7c13b15e"
 # Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
 #   kubectl -n nginx-spa create secret docker-registry ghcr-creds \
 #     --docker-server=ghcr.io \
@@ -20,15 +18,12 @@ image:
 #     --docker-password=<github-PAT-with-read:packages>
 imagePullSecrets:
   - name: ghcr-creds
-
 nameOverride: ""
 fullnameOverride: ""
-
 # nginx serves the SPA on port 80
 service:
   type: ClusterIP
   port: 80
-
 # Where the static files come from. Pick one:
 #   image    – the SPA is already baked into image.repository at contentRoot.
 #   configMap – render a tiny placeholder index.html from this chart (handy to
@@ -38,16 +33,7 @@ content:
   # Filesystem path inside the container that nginx serves as the web root.
   root: /usr/share/nginx/html
   # Placeholder page used only when source == configMap.
-  placeholderHtml: |
-    <!doctype html>
-    <html lang="en">
-      <head><meta charset="utf-8"><title>nginx-spa</title></head>
-      <body style="font-family: system-ui; text-align: center; margin-top: 4rem">
-        <h1>nginx-spa is running 🎉</h1>
-        <p>Replace this by setting <code>content.source: image</code> and a real SPA image.</p>
-      </body>
-    </html>
-
+  placeholderHtml: "<!doctype html>\n<html lang=\"en\">\n  <head><meta charset=\"utf-8\"><title>nginx-spa</title></head>\n  <body style=\"font-family: system-ui; text-align: center; margin-top: 4rem\">\n    <h1>nginx-spa is running \U0001F389</h1>\n    <p>Replace this by setting <code>content.source: image</code> and a real SPA image.</p>\n  </body>\n</html>\n"
 # Ingress via Traefik IngressRoute
 ingress:
   enabled: true
@@ -57,7 +43,6 @@ ingress:
   certResolver: letsencrypt
   # Additional Traefik middlewares to attach (e.g. auth, rate-limit)
   middlewares: []
-
 # Resource requests/limits – tune for RPi. nginx serving static files is cheap.
 resources:
   requests:
@@ -66,12 +51,8 @@ resources:
   limits:
     cpu: 100m
     memory: 64Mi
-
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
-
 # Extra environment variables for the nginx container
 env: []
