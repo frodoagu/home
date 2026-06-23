@@ -227,14 +227,16 @@ kubectl -n argocd create secret generic git-creds \
   --from-literal=password='your-classic-PAT-with-repo+read:packages'
 ```
 
-> The write-back is already wired in [apps/nginx-spa.yaml](apps/nginx-spa.yaml):
-> `write-back-method: git:secret:argocd/git-creds` plus a `git-repository`
-> override to the HTTPS remote (the app's own `repoURL` is SSH, which a PAT can't
-> drive). No further config needed once `git-creds` exists.
+> The write-back is already wired in the `ImageUpdater` CR
+> ([charts/argocd-image-updater/templates/nginx-spa-imageupdater.yaml](charts/argocd-image-updater/templates/nginx-spa-imageupdater.yaml)):
+> `method: git:secret:argocd/git-creds` plus an HTTPS `repository` override (the
+> app's own `repoURL` is SSH, which a PAT can't drive). No further config needed
+> once `git-creds` exists. The v1.x controller only reconciles `ImageUpdater`
+> resources, so each app that wants auto-updates gets one of these CRs.
 >
 > _Prefer narrower scope?_ Drop `repo` from the token and instead give the Argo CD
-> repository a **read-write deploy key**; then remove the `git-creds` /
-> `git-repository` annotations so write-back uses the SSH `repoURL` directly.
+> repository a **read-write deploy key**; then set the CR's `method: git` and the
+> HTTPS `repository` back to the SSH remote so write-back uses it directly.
 
 See [docs/secrets.md](docs/secrets.md) for rotation notes.
 

@@ -5,7 +5,7 @@ description: >-
   public IP, using favonia/cloudflare-ddns.
 type: application
 version: 0.1.0
-appVersion: "latest"
+appVersion: "1.16.2"
 keywords:
   - cloudflare
   - ddns
