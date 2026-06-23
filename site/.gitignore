@@ -2,3 +2,8 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# CI artifacts (test report / build log used to build the job summary)
+vitest-report.json
+build.log
+coverage

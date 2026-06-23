@@ -1,8 +1,9 @@
-name: test-site
+name: 🧪 Site · Tests & Build
 
-# Lint-by-build + unit/component tests for the agu.com.ar SPA. Runs on PRs and
-# on pushes, but only when the site source changes. The image build
-# (site.yml) is separate and still gated on push to main.
+# Unit/component tests + production build for the agu.com.ar SPA. Runs on PRs
+# and pushes, but only when the site source changes. Publishes a rich job
+# summary (test results + bundle sizes). The image build (site.yml) is separate
+# and still gated on push to main.
 on:
   push:
     paths:
@@ -16,24 +17,93 @@ on:
 
 jobs:
   test:
+    name: Test & build the SPA
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: site
     steps:
-      - uses: actions/checkout@v4
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: site/package-lock.json
 
-      - name: Install deps
+      - name: 📦 Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      - name: 🧪 Run tests
+        run: npm test -- --reporter=default --reporter=json --outputFile=vitest-report.json
 
-      - name: Build (typecheck-by-bundle)
-        run: npm run build
+      - name: 📊 Test summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const out = process.env.GITHUB_STEP_SUMMARY;
+            const w = (s = "") => fs.appendFileSync(out, s + "\n");
+            let r;
+            try { r = JSON.parse(fs.readFileSync("vitest-report.json", "utf8")); }
+            catch { w("## 🧪 Tests\n\n⚠️ Could not generate the test report."); process.exit(0); }
+            const files = r.testResults || [];
+            const passedFiles = files.filter((f) => f.status === "passed").length;
+            const ok = r.numFailedTests === 0 && r.numFailedTestSuites === 0;
+            const ms = files
+              .flatMap((f) => f.assertionResults || [])
+              .reduce((acc, a) => acc + (a.duration || 0), 0);
+            w("## 🧪 Tests");
+            w();
+            w(`${ok ? "✅ **All tests passed**" : "❌ **Some tests are failing**"}`);
+            w();
+            w("| Metric | Value |");
+            w("| --- | --- |");
+            w(`| Tests | ${r.numPassedTests}/${r.numTotalTests} ✅ |`);
+            if (r.numFailedTests) w(`| Failed | ${r.numFailedTests} ❌ |`);
+            if (r.numPendingTests) w(`| Skipped | ${r.numPendingTests} ⏭️ |`);
+            w(`| Files | ${passedFiles}/${files.length} |`);
+            w(`| Duration | ${(ms / 1000).toFixed(2)}s |`);
+            w();
+            w("| File | Tests | Status |");
+            w("| --- | --- | --- |");
+            for (const f of files) {
+              const name = f.name.replace(process.cwd() + "/", "");
+              const pass = (f.assertionResults || []).filter((a) => a.status === "passed").length;
+              const total = (f.assertionResults || []).length;
+              w(`| \`${name}\` | ${pass}/${total} | ${f.status === "passed" ? "✅" : "❌"} |`);
+            }
+            const failed = (r.testResults || [])
+              .flatMap((f) => (f.assertionResults || []).filter((a) => a.status === "failed"))
+              .map((a) => a.fullName || a.title);
+            if (failed.length) {
+              w();
+              w("<details><summary>❌ Failed tests</summary>\n");
+              for (const t of failed) w(`- ${t}`);
+              w("\n</details>");
+            }
+          '
+
+      - name: 🏗️ Build
+        run: npm run build | tee build.log
+
+      - name: 📦 Build summary
+        if: always()
+        run: |
+          {
+            echo "## 📦 Build"
+            echo ""
+            if [ -f build.log ] && grep -q "dist/" build.log; then
+              echo "Production bundle (size · gzip):"
+              echo ""
+              echo '```'
+              grep -E "dist/" build.log | sed 's/\x1b\[[0-9;]*m//g'
+              echo '```'
+              echo ""
+              echo "Total \`dist/\` size: **$(du -sh dist 2>/dev/null | cut -f1)**"
+            else
+              echo "⚠️ The build did not complete."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
