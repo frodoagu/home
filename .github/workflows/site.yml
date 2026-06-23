@@ -1,0 +1,65 @@
+name: build-site
+
+# Build the agu.com.ar SPA into a container image, push it to GHCR, and bump
+# the nginx-spa chart to the new immutable tag so ArgoCD rolls it out.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/frodoagu/home-site
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to commit the values.yaml tag bump
+      packages: write # to push to GHCR
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./site
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Bump chart image tag
+        run: |
+          yq -i '.image.repository = "${{ env.IMAGE }}" | .image.tag = "${{ steps.tag.outputs.sha }}"' \
+            charts/nginx-spa/values.yaml
+
+      - name: Commit tag bump
+        run: |
+          if git diff --quiet -- charts/nginx-spa/values.yaml; then
+            echo "No tag change to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add charts/nginx-spa/values.yaml
+          git commit -m "ci: deploy home-site ${{ steps.tag.outputs.sha }} [skip ci]"
+          git push

@@ -1,9 +1,10 @@
 # Repository guide
 
 Agu's home-lab **GitOps** repository: Helm charts + ArgoCD `Application`s for
-services running on a Raspberry Pi with **k3s**. No application source code lives
-here — only Kubernetes/Helm manifests. The README has the full operator runbook
-(fresh-Pi setup, secrets, DNS); this file is the orientation for editing.
+services running on a Raspberry Pi with **k3s**. Mostly Kubernetes/Helm
+manifests; the one exception is `site/`, the source for the agu.com.ar landing
+SPA (built into an image by CI — see below). The README has the full operator
+runbook (fresh-Pi setup, secrets, DNS); this file is the orientation for editing.
 
 ## Layout
 
@@ -16,7 +17,11 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   traefik-config/    Configures the k3s-BUNDLED Traefik via HelmChartConfig (does NOT install it). Targets kube-system.
   home-assistant/    Home Assistant + Google Assistant integration.
   cloudflare-ddns/   Dynamic DNS updater.
-  nginx-spa/         nginx serving a single-page app (static site).
+  nginx-spa/         nginx serving the agu.com.ar SPA from a baked image.
+site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
+                     A grid of small web apps; add one via src/apps/registry.jsx.
+                     CI (.github/workflows/site.yml) builds it into ghcr.io/frodoagu/home-site
+                     and bumps charts/nginx-spa/values.yaml to the new sha tag.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```

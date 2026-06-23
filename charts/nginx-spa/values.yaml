@@ -4,15 +4,22 @@
 replicaCount: 1
 
 image:
-  # Default to the official nginx image and serve content from a ConfigMap /
-  # PVC (see `content` below). To ship a pre-built SPA baked into an image,
-  # point this at your own image (e.g. ghcr.io/you/my-spa) and set
-  # content.source: image.
-  repository: nginx
+  # The agu.com.ar SPA, built from site/ and baked into an nginx image by the
+  # build-site GitHub Action (.github/workflows/site.yml). The action pushes an
+  # immutable `sha-<commit>` tag and bumps `tag` below on every push to main.
+  repository: ghcr.io/frodoagu/home-site
   pullPolicy: IfNotPresent
-  # Pin to an explicit tag for reproducible deploys (also update Chart.yaml
-  # appVersion). Avoid floating tags like "latest".
-  tag: "1.27-alpine"
+  # Bootstrap value; CI overwrites this with the immutable sha-<commit> tag of
+  # the latest build. Avoid leaving floating tags like "latest" long-term.
+  tag: "latest"
+
+# Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
+#   kubectl -n nginx-spa create secret docker-registry ghcr-creds \
+#     --docker-server=ghcr.io \
+#     --docker-username=<github-user> \
+#     --docker-password=<github-PAT-with-read:packages>
+imagePullSecrets:
+  - name: ghcr-creds
 
 nameOverride: ""
 fullnameOverride: ""
