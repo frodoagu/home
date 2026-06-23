@@ -1,16 +1,18 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { apps } from "./apps/registry";
-
-const TAGLINE = [
-  "DevOps",
-  "Motoviajero",
-  "Endurero",
-  "Papá",
-  "Oficios",
-];
+import { apps, CATEGORIES } from "./apps/registry";
 
 export default function Landing() {
+  // null = no filter (show everything). Clicking the active chip clears it.
+  const [active, setActive] = useState(null);
+
+  const toggle = (cat) => setActive((cur) => (cur === cat ? null : cat));
+
+  const visible = active
+    ? apps.filter((app) => app.categories?.includes(active))
+    : apps;
+
   return (
     <div className="min-h-full bg-slate-950 text-slate-100 font-sans">
       <div className="mx-auto max-w-5xl px-5 py-12 sm:py-16">
@@ -21,28 +23,58 @@ export default function Landing() {
             Herramientas y experimentos web que voy armando. Cosas de oficios,
             infra y lo que se cruce.
           </p>
+
+          {/* Identity facets — click to filter the apps below */}
           <div className="mt-4 flex flex-wrap gap-2">
-            {TAGLINE.map((t) => (
-              <span
-                key={t}
-                className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-slate-400"
-              >
-                {t}
-              </span>
-            ))}
+            {CATEGORIES.map((cat) => {
+              const isActive = active === cat;
+              const count = apps.filter((a) => a.categories?.includes(cat)).length;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => toggle(cat)}
+                  aria-pressed={isActive}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                    isActive
+                      ? "border-amber-400/60 bg-amber-400/15 text-amber-300"
+                      : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                  }`}
+                >
+                  {cat}
+                  <span className="ml-1.5 text-[10px] text-slate-600">{count}</span>
+                </button>
+              );
+            })}
           </div>
         </header>
 
         {/* App grid */}
         <section>
-          <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-slate-500">
-            Apps
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {apps.map((app) => (
-              <AppCard key={app.slug} app={app} />
-            ))}
+          <div className="mb-4 flex items-center gap-2">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              {active ? `Apps · ${active}` : "Apps"}
+            </h2>
+            {active && (
+              <button
+                onClick={() => setActive(null)}
+                className="text-xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+              >
+                limpiar filtro
+              </button>
+            )}
           </div>
+
+          {visible.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {visible.map((app) => (
+                <AppCard key={app.slug} app={app} />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-500">
+              Todavía no hay apps en <span className="text-slate-300">{active}</span>. Pronto. 🛠️
+            </p>
+          )}
         </section>
 
         <footer className="mt-16 text-xs text-slate-600">
