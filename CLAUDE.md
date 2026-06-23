@@ -20,8 +20,13 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   nginx-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
-                     A grid of small web apps; add one via src/apps/registry.jsx.
-                     CI (.github/workflows/site.yml) builds it into ghcr.io/frodoagu/home-site:latest (arm64);
+                     Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
+                     section of external links (`privateLinks`) gated by client-side Google
+                     sign-in (src/auth/). Pure logic lives in plain .js modules next to each
+                     component (mandelbrot.js, neutralCurrent.js, auth.js) and is unit-tested
+                     with Vitest (*.test.js[x]).
+                     CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
+                     .github/workflows/site.yml builds ghcr.io/frodoagu/home-site:latest (arm64);
                      Argo CD Image Updater then pins the digest into charts/nginx-spa/values.yaml via git.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
@@ -62,12 +67,25 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 
 ## Validating changes
 
+Charts (no CI renders these — run helm locally before committing):
+
 ```bash
 helm lint charts/<name>
 helm template t charts/<name>            # render with defaults
 helm template t charts/<name> --set k=v  # exercise conditional paths
 ```
-No CI renders these for you — run helm locally before committing.
+
+Site (`site/`) — CI runs these on PRs/pushes, but run them locally too:
+
+```bash
+cd site
+npm test            # Vitest unit + component tests (vitest run)
+npm run build       # production bundle (also catches import/JSX errors)
+```
+
+When adding logic to a site app, keep the pure/computational part in a plain
+`.js` module beside the component (e.g. `mandelbrot.js`) and add a `*.test.js`
+next to it — components stay thin and the math gets covered.
 
 ## Deploying
 

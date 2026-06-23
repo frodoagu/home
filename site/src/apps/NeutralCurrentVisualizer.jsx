@@ -1,26 +1,23 @@
 import { useState, useMemo } from "react";
 import { Zap, RotateCcw, Activity, Waves, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { I_MAX, F_HZ, T_MS, rad, neutralCurrent } from "./neutralCurrent";
 
 /* -------------------------------------------------------------------------
  * Visualizador de corriente de neutro en sistema trifásico (3F + N)
  * - Fundamental puro, ángulos fijos 0/120/240, 50 Hz (T = 20 ms).
- * - In = |Ia∠0 + Ib∠120 + Ic∠240|  ≡  √(Ia²+Ib²+Ic² − ΣIxIy)
+ * - Cálculo central en `neutralCurrent.js`; acá sólo se dibuja.
  * - El pico de in(t)=ia+ib+ic coincide con |In| (vistas consistentes).
  * ---------------------------------------------------------------------- */
 
 const PHASES = [
-  { key: "a", label: "Fase A", angle: 0,   color: "#f43f5e" }, // rojo
-  { key: "b", label: "Fase B", angle: 120, color: "#3b82f6" }, // azul
-  { key: "c", label: "Fase C", angle: 240, color: "#eab308" }, // amarillo
+  { key: "a", label: "Fase A", angle: 0,   color: "#ef4444" }, // roja
+  { key: "b", label: "Fase B", angle: 120, color: "#92400e" }, // marrón
+  { key: "c", label: "Fase C", angle: 240, color: "#eab308" }, // amarilla
 ];
 
-const N_GREEN  = "#22c55e"; // balanceado
-const N_AMBER  = "#f59e0b"; // desbalanceado
-const N_RED     = "#ef4444"; // carga alta
-
-const I_MAX = 30;      // A, fondo de escala por fase
-const F_HZ  = 50;      // red AR
-const T_MS  = 1000 / F_HZ; // 20 ms
+// El neutro siempre se dibuja celeste (la severidad se indica con el texto/ícono).
+const NEUTRAL = "#38bdf8";
+const ACCENT = "#f59e0b"; // ámbar de la marca (icono y tabs activas)
 
 const PRESETS = [
   { label: "Balanceado", v: { a: 10, b: 10, c: 10 } },
@@ -29,7 +26,6 @@ const PRESETS = [
   { label: "Monofásico 30/0/0", v: { a: 30, b: 0, c: 0 } },
 ];
 
-const rad = (d) => (d * Math.PI) / 180;
 const fmt = (n) => n.toFixed(1);
 
 export default function NeutralCurrentVisualizer() {
@@ -40,17 +36,8 @@ export default function NeutralCurrentVisualizer() {
 
   /* ---- cálculo central ---- */
   const { In, comp, balanced, severity, sevColor } = useMemo(() => {
-    const { a, b, c } = I;
-    // suma fasorial en componentes (math coords, y hacia arriba)
-    const cx = a * Math.cos(rad(0)) + b * Math.cos(rad(120)) + c * Math.cos(rad(240));
-    const cy = a * Math.sin(rad(0)) + b * Math.sin(rad(120)) + c * Math.sin(rad(240));
-    // clamp a 0: el radicando es ≥0 analíticamente, pero el float puede dar -1e-15
-    const mag = Math.sqrt(Math.max(0, a*a + b*b + c*c - a*b - b*c - c*a));
-    const bal = mag < 0.2;
-    let sev = "ok", col = N_GREEN;
-    if (!bal) { sev = "warn"; col = N_AMBER; }
-    if (mag > I_MAX * 0.5) { sev = "high"; col = N_RED; } // >15A: neutro cargado
-    return { In: mag, comp: { x: cx, y: cy }, balanced: bal, severity: sev, sevColor: col };
+    const r = neutralCurrent(I);
+    return { ...r, sevColor: NEUTRAL };
   }, [I]);
 
   return (
@@ -60,7 +47,7 @@ export default function NeutralCurrentVisualizer() {
         <header className="flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
-              <Zap size={20} style={{ color: N_AMBER }} />
+              <Zap size={20} style={{ color: ACCENT }} />
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
@@ -224,7 +211,7 @@ function TabBtn({ active, onClick, icon, label }) {
     <button onClick={onClick}
       className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
         ${active ? "text-slate-100 border-b-2" : "text-slate-500 border-b-2 border-transparent hover:text-slate-300"}`}
-      style={active ? { borderColor: N_AMBER } : undefined}>
+      style={active ? { borderColor: ACCENT } : undefined}>
       {icon}{label}
     </button>
   );

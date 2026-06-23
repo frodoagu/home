@@ -6,7 +6,15 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./config";
+import { GOOGLE_CLIENT_ID } from "./config";
+import {
+  clearStoredUser,
+  decodeJwt,
+  isAuthorized,
+  loadStoredUser,
+  storeUser,
+  userFromClaims,
+} from "./auth";
 
 /* -------------------------------------------------------------------------
  * Client-side Google sign-in (Google Identity Services).
@@ -15,47 +23,12 @@ import { ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./config";
  * decode it for the email/name/picture, persist it until it expires, and treat
  * any email in ALLOWED_EMAILS as authorized. This gates the private section at
  * the UX level only — the services behind the links keep their own auth.
+ * Pure helpers (decode/storage/allowlist) live in `auth.js`.
  * ---------------------------------------------------------------------- */
 
-const STORAGE_KEY = "agu.auth.user";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
 const AuthContext = createContext(null);
-
-// Decode the payload of a JWT (base64url) without verifying the signature —
-// good enough for reading public claims client-side.
-function decodeJwt(token) {
-  try {
-    const payload = token.split(".")[1];
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    // Handle UTF-8 (e.g. accents in the name).
-    const decoded = decodeURIComponent(
-      json
-        .split("")
-        .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
-        .join(""),
-    );
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
-}
-
-function loadStoredUser() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const user = JSON.parse(raw);
-    // exp is in seconds (JWT convention).
-    if (!user?.exp || user.exp * 1000 < Date.now()) {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
-    return user;
-  } catch {
-    return null;
-  }
-}
 
 // Load the GIS script once and resolve when window.google is ready.
 let gsiPromise = null;
@@ -80,16 +53,9 @@ export function AuthProvider({ children }) {
 
   // Keep the latest setter available to the GIS callback without re-initializing.
   const handleCredential = useCallback((response) => {
-    const claims = decodeJwt(response?.credential || "");
-    if (!claims?.email) return;
-    const next = {
-      email: claims.email,
-      emailVerified: claims.email_verified === true,
-      name: claims.name || claims.email,
-      picture: claims.picture || "",
-      exp: claims.exp,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const next = userFromClaims(decodeJwt(response?.credential || ""));
+    if (!next) return;
+    storeUser(next);
     setUser(next);
   }, []);
 
@@ -127,17 +93,12 @@ export function AuthProvider({ children }) {
   );
 
   const signOut = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    clearStoredUser();
     window.google?.accounts?.id?.disableAutoSelect?.();
     setUser(null);
   }, []);
 
-  const authorized = useMemo(() => {
-    if (!user?.email || !user.emailVerified) return false;
-    return ALLOWED_EMAILS.map((e) => e.toLowerCase()).includes(
-      user.email.toLowerCase(),
-    );
-  }, [user]);
+  const authorized = useMemo(() => isAuthorized(user), [user]);
 
   const value = useMemo(
     () => ({ user, authorized, ready, renderButton, signOut }),

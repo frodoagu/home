@@ -50,6 +50,27 @@ that tag's digest and writes the pinned `image.tag: latest@sha256:...` back into
 immutable digest, with no manual tag bumps. The image is private; the kubelet
 pulls it with the `ghcr-creds` secret (see [secrets.md](secrets.md)).
 
+## Desarrollo y tests
+
+```bash
+cd site
+npm install
+npm run dev      # servidor de desarrollo (http://localhost:5173)
+npm test         # Vitest: tests unitarios + de componentes (vitest run)
+npm run build    # bundle de producción
+```
+
+La lógica pura de cada app vive en un módulo `.js` al lado de su componente
+(`src/apps/mandelbrot.js`, `src/apps/neutralCurrent.js`, `src/auth/auth.js`) y se
+testea con Vitest + Testing Library (`*.test.js[x]`). Los componentes quedan
+finos (orquestan render/interacción) y el cálculo queda cubierto. Convención al
+agregar una app: extraé la matemática a un `.js` y sumá su `*.test.js`.
+
+CI corre los tests y el build en cada **push** y **pull request** que toque
+`site/` ([`test-site`](../.github/workflows/site-test.yml)); el build de la
+imagen ([`build-site`](../.github/workflows/site.yml)) sigue aparte, sólo en push
+a `main`.
+
 ## Public vs. private apps (Google sign-in)
 
 The landing has two halves (see [`site/src/Landing.jsx`](../site/src/Landing.jsx)):

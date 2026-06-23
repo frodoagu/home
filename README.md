@@ -320,7 +320,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
-- [docs/nginx-spa.md](docs/nginx-spa.md) — static SPA chart: image vs. placeholder content, SPA routing fallback
+- [docs/nginx-spa.md](docs/nginx-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 
 ## Let's Encrypt notes
 

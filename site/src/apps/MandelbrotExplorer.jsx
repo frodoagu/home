@@ -1,96 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Minus, Plus, RotateCcw, MapPin, Palette, Loader2 } from "lucide-react";
+import {
+  INITIAL_SPAN,
+  MIN_SPAN,
+  MAX_INTERNAL,
+  PREVIEW_Q,
+  PALETTES,
+  PRESETS,
+  computeRows,
+  paletteGradient,
+  zoomView,
+  panView,
+} from "./mandelbrot";
 
 /* -------------------------------------------------------------------------
  * Explorador del conjunto de Mandelbrot.
- * - Render por escape-time con coloreado suave (continuous / normalized iter).
- * - Paletas vibrantes tipo coseno (Inigo Quilez): color = a + b·cos(2π(c·t+d)).
+ * - Núcleo matemático (escape-time, coloreado suave, paletas) en `mandelbrot.js`.
  * - Render progresivo y cancelable: primero un preview de baja resolución
  *   (instantáneo) y luego refina a resolución completa por franjas, sin
  *   bloquear la UI ni al Raspberry.
  * - Interacción unificada mouse + touch (pointer events): clic/tap para acercar,
  *   arrastrar para desplazar, rueda para zoom; botones +/− para mobile.
  * ---------------------------------------------------------------------- */
-
-const TAU = Math.PI * 2;
-const INITIAL_SPAN = 3.2; // ancho del plano complejo en la vista completa
-const MIN_SPAN = 4e-14; // límite práctico del double (más allá: pixelado)
-const MAX_SPAN = 4.5;
-const ESCAPE2 = 1 << 16; // |z|² de escape (256²) — radio grande = degradé suave
-const COLOR_CYCLE = 0.028; // iteraciones por ciclo de color ≈ 1/COLOR_CYCLE
-const MAX_INTERNAL = 820; // tope del lado mayor del canvas (acota el costo)
-const PREVIEW_Q = 0.32; // factor de resolución del preview
-
-// Paletas (a, b, c, d) del esquema coseno de IQ. Vibrantes a propósito.
-const PALETTES = [
-  { name: "Arcoíris", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.33, 0.67] },
-  { name: "Fuego", a: [0.5, 0.45, 0.4], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.1, 0.2] },
-  { name: "Océano", a: [0.4, 0.5, 0.5], b: [0.45, 0.5, 0.5], c: [1, 1, 1], d: [0.6, 0.55, 0.4] },
-  { name: "Neón", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [2.0, 1.0, 0.0], d: [0.5, 0.2, 0.25] },
-  { name: "Áureo", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.3, 0.2, 0.2] },
-];
-
-// Lugares emblemáticos del fractal. span chico = más zoom; iter sube en lo profundo.
-const PRESETS = [
-  { label: "Vista completa", cx: -0.5, cy: 0, span: 3.2, iter: 200 },
-  { label: "Valle de caballitos", cx: -0.745428, cy: 0.113009, span: 0.016, iter: 600 },
-  { label: "Valle de elefantes", cx: 0.2925, cy: 0.0149, span: 0.05, iter: 500 },
-  { label: "Espiral triple", cx: -0.088, cy: 0.654, span: 0.028, iter: 600 },
-  { label: "Mini-Mandelbrot", cx: -1.768778, cy: 0.001738, span: 0.006, iter: 800 },
-  { label: "Tentáculos", cx: -0.748, cy: 0.1, span: 0.0017, iter: 900 },
-  { label: "Espiral satélite", cx: -0.722, cy: 0.246, span: 0.018, iter: 700 },
-  { label: "Misiurewicz", cx: -0.77568377, cy: 0.13646737, span: 0.012, iter: 800 },
-];
-
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-// Color de un punto continuo `t` para una paleta — devuelve "r,g,b" (0–255).
-function paletteCss(p, t) {
-  const ch = (i) => clamp(Math.round(255 * (p.a[i] + p.b[i] * Math.cos(TAU * (p.c[i] * t + p.d[i])))), 0, 255);
-  return `${ch(0)},${ch(1)},${ch(2)}`;
-}
-function paletteGradient(p) {
-  const stops = [];
-  for (let i = 0; i <= 8; i++) stops.push(`rgb(${paletteCss(p, i / 8)}) ${(i / 8) * 100}%`);
-  return `linear-gradient(90deg, ${stops.join(",")})`;
-}
-
-// Núcleo: rellena `data` (RGBA) para las filas [rowStart, rowEnd) sin asignar
-// objetos por píxel (paleta inlineada) para no castigar al GC en el loop caliente.
-function computeRows(data, rw, rh, cx, cy, span, maxIter, p, rowStart, rowEnd) {
-  const dx = span / rw; // píxeles cuadrados → mismo paso en x e y
-  const x0 = cx - span / 2 + dx / 2;
-  const y0 = cy - (dx * rh) / 2 + dx / 2;
-  const [a0, a1, a2] = p.a, [b0, b1, b2] = p.b, [c0, c1, c2] = p.c, [d0, d1, d2] = p.d;
-  const invLn2 = 1 / Math.LN2;
-  for (let py = rowStart; py < rowEnd; py++) {
-    const im = y0 + py * dx;
-    let o = py * rw * 4;
-    for (let px = 0; px < rw; px++) {
-      const re = x0 + px * dx;
-      let zx = 0, zy = 0, zx2 = 0, zy2 = 0, n = 0;
-      while (n < maxIter && zx2 + zy2 <= ESCAPE2) {
-        zy = 2 * zx * zy + im;
-        zx = zx2 - zy2 + re;
-        zx2 = zx * zx;
-        zy2 = zy * zy;
-        n++;
-      }
-      if (n >= maxIter) {
-        data[o++] = 8; data[o++] = 10; data[o++] = 20; data[o++] = 255; // interior
-      } else {
-        // iteración normalizada (coloreado suave)
-        const logZn = Math.log(zx2 + zy2) * 0.5;
-        const nu = Math.log(logZn * invLn2) * invLn2;
-        const t = (n + 1 - nu) * COLOR_CYCLE;
-        data[o++] = clamp((a0 + b0 * Math.cos(TAU * (c0 * t + d0))) * 255, 0, 255);
-        data[o++] = clamp((a1 + b1 * Math.cos(TAU * (c1 * t + d1))) * 255, 0, 255);
-        data[o++] = clamp((a2 + b2 * Math.cos(TAU * (c2 * t + d2))) * 255, 0, 255);
-        data[o++] = 255;
-      }
-    }
-  }
-}
 
 export default function MandelbrotExplorer() {
   const [view, setView] = useState({ cx: -0.5, cy: 0, span: INITIAL_SPAN });
@@ -210,16 +141,8 @@ export default function MandelbrotExplorer() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    setView((v) => {
-      const aspect = rect.height / rect.width;
-      const reAt = v.cx + (px / rect.width - 0.5) * v.span;
-      const imAt = v.cy + (py / rect.height - 0.5) * v.span * aspect;
-      const nspan = clamp(v.span * factor, MIN_SPAN, MAX_SPAN);
-      return {
-        cx: reAt - (px / rect.width - 0.5) * nspan,
-        cy: imAt - (py / rect.height - 0.5) * nspan * aspect,
-      };
-    });
+    const aspect = rect.height / rect.width;
+    setView((v) => zoomView(v, px / rect.width, py / rect.height, aspect, factor));
   }, []);
 
   // Rueda del mouse: zoom hacia el cursor (listener nativo para poder cancelar el scroll).
@@ -251,13 +174,7 @@ export default function MandelbrotExplorer() {
     if (!d.moved) return;
     d.x = e.clientX;
     d.y = e.clientY;
-    setView((v) => {
-      const aspect = rect.height / rect.width;
-      return {
-        cx: v.cx - (dxp / rect.width) * v.span,
-        cy: v.cy - (dyp / rect.height) * v.span * aspect,
-      };
-    });
+    setView((v) => panView(v, dxp / rect.width, dyp / rect.height, rect.height / rect.width));
   };
   const onPointerUp = (e) => {
     const d = drag.current;
