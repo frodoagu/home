@@ -16,7 +16,10 @@ metadata:
     argocd-image-updater.argoproj.io/spa.allow-tags: regexp:^latest$
     argocd-image-updater.argoproj.io/spa.helm.image-name: image.repository
     argocd-image-updater.argoproj.io/spa.helm.image-tag: image.tag
-    argocd-image-updater.argoproj.io/write-back-method: git
+    # Write-back over HTTPS using the git-creds secret (PAT with repo scope).
+    # The app's repoURL is SSH, so override it to HTTPS for the push.
+    argocd-image-updater.argoproj.io/write-back-method: git:secret:argocd/git-creds
+    argocd-image-updater.argoproj.io/git-repository: https://github.com/frodoagu/home.git
     argocd-image-updater.argoproj.io/write-back-target: helmvalues:./charts/nginx-spa/values.yaml
     argocd-image-updater.argoproj.io/git-branch: main
 spec:
