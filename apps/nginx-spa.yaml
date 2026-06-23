@@ -7,9 +7,6 @@ metadata:
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
-  # NOTE: image auto-updates for this app are configured via an ImageUpdater CR
-  # (charts/argocd-image-updater/templates/nginx-spa-imageupdater.yaml), not via
-  # annotations — the v1.x Image Updater controller only reconciles CRs.
 spec:
   project: default
   source:

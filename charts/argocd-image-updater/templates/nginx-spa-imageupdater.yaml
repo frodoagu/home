@@ -17,7 +17,8 @@ spec:
     gitConfig:
       repository: "https://github.com/frodoagu/home.git"
       branch: main
-      writeBackTarget: "helmvalues:./charts/nginx-spa/values.yaml"
+      # Relative to the nginx-spa Application's source path (charts/nginx-spa).
+      writeBackTarget: "helmvalues:./values.yaml"
   applicationRefs:
     - namePattern: nginx-spa
       images:
