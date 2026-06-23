@@ -256,6 +256,24 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/nginx-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 
+### 5 – Instant sync (optional Git webhook)
+
+By default ArgoCD polls git every ~3 min. To deploy on push instead, point a
+GitHub webhook at the ArgoCD server (already exposed at `argocd.agu.com.ar`):
+
+```bash
+gh api -X POST /repos/frodoagu/home/hooks \
+  -f name=web -F active=true -f 'events[]=push' \
+  -f config[url]=https://argocd.agu.com.ar/api/webhook \
+  -f config[content_type]=json
+```
+
+No shared secret is configured — ArgoCD accepts the push event and refreshes the
+affected apps immediately. An unauthenticated POST can only trigger a harmless
+re-check (which ArgoCD does on its timer anyway). To require HMAC verification,
+set `webhook.github.secret` in `argocd-secret` and add the same secret to the
+webhook config (`-f config[secret]=...`).
+
 ## Repository layout
 
 ```
