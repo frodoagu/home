@@ -56,6 +56,17 @@ export function zoomView(view, fx, fy, aspect, factor) {
 }
 
 /**
+ * Dimensiones de exportación que conservan el aspecto del lienzo (cw×ch) y ponen
+ * el lado mayor en `long` px (4K = 3840 por defecto). Devuelve {W, H} enteros.
+ */
+export function exportDims(cw, ch, long = 3840) {
+  if (cw <= 0 || ch <= 0) return { W: long, H: long };
+  return cw >= ch
+    ? { W: long, H: Math.max(1, Math.round((long * ch) / cw)) }
+    : { W: Math.max(1, Math.round((long * cw) / ch)), H: long };
+}
+
+/**
  * Nueva vista tras desplazar el lienzo (fdx, fdy) en fracciones del ancho/alto.
  * Conserva `span`.
  */

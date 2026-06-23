@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Minus, Plus, RotateCcw, MapPin, Palette, Loader2 } from "lucide-react";
+import { Sparkles, Minus, Plus, RotateCcw, MapPin, Palette, Loader2, Image } from "lucide-react";
 import {
   INITIAL_SPAN,
   MIN_SPAN,
@@ -8,6 +8,7 @@ import {
   PALETTES,
   PRESETS,
   computeRows,
+  exportDims,
   paletteGradient,
   zoomView,
   panView,
@@ -29,6 +30,7 @@ export default function MandelbrotExplorer() {
   const [palIdx, setPalIdx] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [presetLabel, setPresetLabel] = useState("Vista completa");
+  const [exportPct, setExportPct] = useState(null); // null = no exportando
 
   const canvasRef = useRef(null);
   const offRef = useRef(null); // canvas offscreen para el preview escalado
@@ -202,6 +204,61 @@ export default function MandelbrotExplorer() {
     if (c) zoomAt(c.width / 2, c.height / 2, factor);
   };
 
+  // Renderiza la vista actual a 4K (offscreen, progresivo) y la abre como JPG en
+  // una pestaña nueva. La pestaña se abre YA en el click (gesto del usuario) para
+  // que no la bloquee el popup-blocker, y se navega al blob cuando termina.
+  const exportHighRes = useCallback(() => {
+    if (exportPct !== null) return; // ya hay una exportación en curso
+    const { cw, ch } = sizeRef.current;
+    const { view: v, maxIter: mi, palIdx: pi } = stateRef.current;
+    const { W, H } = exportDims(cw, ch, 3840);
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(
+        `<title>Mandelbrot 4K</title><body style="margin:0;background:#020617;color:#e2e8f0;` +
+          `font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh">` +
+          `Renderizando ${W}×${H}…</body>`,
+      );
+    }
+
+    const off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    const octx = off.getContext("2d");
+    const img = octx.createImageData(W, H);
+    const data = img.data;
+    let py = 0;
+    setExportPct(0);
+
+    const step = () => {
+      const start = performance.now();
+      while (py < H && performance.now() - start < 24) {
+        const next = Math.min(H, py + 4);
+        computeRows(data, W, H, v.cx, v.cy, v.span, mi, PALETTES[pi], py, next);
+        py = next;
+      }
+      setExportPct(Math.round((py / H) * 100));
+      if (py < H) {
+        requestAnimationFrame(step);
+        return;
+      }
+      octx.putImageData(img, 0, 0);
+      off.toBlob(
+        (blob) => {
+          const url = URL.createObjectURL(blob);
+          if (win) win.location = url;
+          else window.open(url, "_blank");
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          setExportPct(null);
+        },
+        "image/jpeg",
+        0.92,
+      );
+    };
+    requestAnimationFrame(step);
+  }, [exportPct]);
+
   const zoomLevel = INITIAL_SPAN / view.span;
   const fmtZoom = zoomLevel >= 1000
     ? `${(zoomLevel / 1000).toFixed(1)}k×`
@@ -262,6 +319,24 @@ export default function MandelbrotExplorer() {
 
           {/* Controles */}
           <section className="space-y-4 lg:order-1 lg:col-span-4">
+            <button
+              onClick={exportHighRes}
+              disabled={exportPct !== null}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-3 text-sm font-medium text-fuchsia-200 transition-colors hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {exportPct !== null ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Renderizando 4K… {exportPct}%
+                </>
+              ) : (
+                <>
+                  <Image size={16} />
+                  Exportar vista en 4K (JPG)
+                </>
+              )}
+            </button>
+
             <Card title="Lugares" icon={<MapPin size={15} />}>
               <div className="grid grid-cols-2 gap-2 pt-1">
                 {PRESETS.map((pr) => {

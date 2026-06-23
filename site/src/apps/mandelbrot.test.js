@@ -11,6 +11,7 @@ import {
   paletteCss,
   paletteGradient,
   computeRows,
+  exportDims,
   zoomView,
   panView,
 } from "./mandelbrot";
@@ -128,6 +129,24 @@ describe("zoomView", () => {
     expect(zoomView(tiny, 0.5, 0.5, 1, 0.5).span).toBe(MIN_SPAN);
     const huge = { cx: 0, cy: 0, span: MAX_SPAN };
     expect(zoomView(huge, 0.5, 0.5, 1, 2).span).toBe(MAX_SPAN);
+  });
+});
+
+describe("exportDims", () => {
+  it("pone el lado mayor en `long` y conserva el aspecto (landscape)", () => {
+    expect(exportDims(800, 600, 3840)).toEqual({ W: 3840, H: 2880 });
+  });
+
+  it("conserva el aspecto en portrait (lado mayor = alto)", () => {
+    expect(exportDims(600, 800, 3840)).toEqual({ W: 2880, H: 3840 });
+  });
+
+  it("cuadrado → W = H = long", () => {
+    expect(exportDims(500, 500, 3840)).toEqual({ W: 3840, H: 3840 });
+  });
+
+  it("es robusto ante dimensiones inválidas", () => {
+    expect(exportDims(0, 0, 3840)).toEqual({ W: 3840, H: 3840 });
   });
 });
 
