@@ -4,7 +4,7 @@ import {
   INITIAL_SPAN,
   MIN_SPAN,
   MAX_INTERNAL,
-  PREVIEW_Q,
+  PREVIEW_MAX,
   PALETTES,
   PRESETS,
   computeRows,
@@ -48,8 +48,10 @@ export default function MandelbrotExplorer() {
     if (!canvas) return;
     const { cw, ch } = sizeRef.current;
     const { view: v, maxIter: mi, palIdx: pi } = stateRef.current;
-    const rw = Math.max(1, Math.round(cw * PREVIEW_Q));
-    const rh = Math.max(1, Math.round(ch * PREVIEW_Q));
+    // Tamaño fijo (lado mayor ≈ PREVIEW_MAX), independiente de la resolución full.
+    const q = Math.min(1, PREVIEW_MAX / Math.max(cw, ch));
+    const rw = Math.max(1, Math.round(cw * q));
+    const rh = Math.max(1, Math.round(ch * q));
     const off = offRef.current;
     off.width = rw;
     off.height = rh;
@@ -98,7 +100,9 @@ export default function MandelbrotExplorer() {
     if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return false;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    // Renderizar a la densidad real del display (cap a 2x) para que se vea
+    // nítido en pantallas HiDPI; el cap por MAX_INTERNAL evita lienzos gigantes.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     let cw = Math.round(rect.width * dpr);
     let ch = Math.round(rect.height * dpr);
     const longest = Math.max(cw, ch);

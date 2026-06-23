@@ -10,8 +10,10 @@ export const MIN_SPAN = 4e-14; // límite práctico del double (más allá: pixe
 export const MAX_SPAN = 4.5;
 export const ESCAPE2 = 1 << 16; // |z|² de escape (256²) — radio grande = degradé suave
 export const COLOR_CYCLE = 0.028; // iteraciones por ciclo de color ≈ 1/COLOR_CYCLE
-export const MAX_INTERNAL = 820; // tope del lado mayor del canvas (acota el costo)
-export const PREVIEW_Q = 0.32; // factor de resolución del preview
+export const MAX_INTERNAL = 2048; // tope del lado mayor del canvas (en píxeles reales);
+// el render ocurre en el navegador del cliente, no en el Pi — alto = nítido.
+export const PREVIEW_MAX = 380; // lado mayor del preview (px) — fijo para que el
+// arrastre/zoom sea fluido sin importar la resolución del render completo.
 export const INTERIOR = [8, 10, 20]; // color del interior del conjunto
 
 // Paletas (a, b, c, d) del esquema coseno de IQ. Vibrantes a propósito.
