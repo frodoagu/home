@@ -1,12 +1,13 @@
-import { GitBranch, Home, Network, Zap } from "lucide-react";
+import { GitBranch, Home, Network, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
+import MandelbrotExplorer from "./MandelbrotExplorer";
 
 /* -------------------------------------------------------------------------
  * Filter categories — the identity facets shown as chips on the landing.
  * Each app declares which of these it belongs to (`categories`), and the
  * chips filter the grid by them. Keep this list in sync with app entries.
  * ---------------------------------------------------------------------- */
-export const CATEGORIES = ["DevOps", "Motoviajero", "Endurero", "Papá", "Oficios"];
+export const CATEGORIES = ["DevOps", "Motoviajero", "Endurero", "Papá", "Oficios", "Mate"];
 
 /* -------------------------------------------------------------------------
  * App registry — single source of truth for the landing grid and routing.
@@ -30,6 +31,16 @@ export const apps = [
     icon: Zap,
     accent: "#f59e0b",
     Component: NeutralCurrentVisualizer,
+  },
+  {
+    slug: "mandelbrot",
+    title: "Mandelbrot",
+    description: "Explorá el fractal con zoom infinito, colores vibrantes y lugares emblemáticos.",
+    categories: ["Mate"],
+    tag: "Fractal",
+    icon: Sparkles,
+    accent: "#c026d3",
+    Component: MandelbrotExplorer,
   },
 ];
 
