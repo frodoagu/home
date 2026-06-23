@@ -193,14 +193,22 @@ kubectl create secret generic cloudflare-ddns-token \
   -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-cloudflare-token'
 ```
 
-**GHCR pull credentials** for the private `ghcr.io/frodoagu/home-site` SPA image.
-Create a GitHub **Personal Access Token (classic)** with the `read:packages`
-scope, then create the same `docker-registry` secret in **two** namespaces — one
-for the kubelet to pull the image (`nginx-spa`), one for Argo CD Image Updater to
-query the digest (`argocd`):
+The private SPA pipeline (`ghcr.io/frodoagu/home-site`) uses **one** GitHub
+**classic Personal Access Token** for everything. Create it at
+[github.com/settings/tokens](https://github.com/settings/tokens) with both
+scopes:
+
+- **`read:packages`** — pull the image / query its digest (GHCR has no usable
+  fine-grained-token path for container pulls; use a *classic* token).
+- **`repo`** — let Argo CD Image Updater push the digest write-back commit to
+  this private repo.
+
+**1. GHCR pull credentials** (`ghcr-creds`) — the same `docker-registry` secret
+in **two** namespaces: one for the kubelet to pull (`nginx-spa`), one for Image
+Updater to query the digest (`argocd`):
 
 ```bash
-GHCR_PAT='your-github-PAT-with-read:packages'
+GHCR_PAT='your-classic-PAT-with-repo+read:packages'
 for ns in nginx-spa argocd; do
   kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n "$ns" create secret docker-registry ghcr-creds \
@@ -210,28 +218,23 @@ for ns in nginx-spa argocd; do
 done
 ```
 
-**Image Updater write-back** — after detecting a new image digest, Argo CD Image
-Updater commits the pinned `latest@sha256:...` back to this repo, so it needs
-**write** access to `git@github.com:frodoagu/home.git`. Pick one:
+**2. Image Updater write-back credentials** (`git-creds`) — Image Updater commits
+the pinned `latest@sha256:...` back to the repo over HTTPS, using the same token:
 
-- **Read-write deploy key (recommended — narrower scope).** Keep the GHCR token at
-  just `read:packages`, and give the Argo CD repository a deploy key with write
-  access. Write-back then uses the existing SSH `repoURL`, no extra config.
+```bash
+kubectl -n argocd create secret generic git-creds \
+  --from-literal=username=frodoagu \
+  --from-literal=password='your-classic-PAT-with-repo+read:packages'
+```
 
-- **One classic PAT for everything (simplest secrets).** Use a single classic
-  token scoped to **`repo` + `read:packages`** (`repo` is required to push to a
-  private repo). Reuse it as the `GHCR_PAT` above, then add an HTTPS git
-  credential for write-back:
-
-  ```bash
-  kubectl -n argocd create secret generic git-creds \
-    --from-literal=username=frodoagu \
-    --from-literal=password='<classic-PAT-with-repo+read:packages>'
-  ```
-
-  Because the app's `repoURL` is SSH, also override the write-back remote to HTTPS
-  with an annotation on `apps/nginx-spa.yaml`:
-  `argocd-image-updater.argoproj.io/git-repository: https://github.com/frodoagu/home.git`
+> The write-back is already wired in [apps/nginx-spa.yaml](apps/nginx-spa.yaml):
+> `write-back-method: git:secret:argocd/git-creds` plus a `git-repository`
+> override to the HTTPS remote (the app's own `repoURL` is SSH, which a PAT can't
+> drive). No further config needed once `git-creds` exists.
+>
+> _Prefer narrower scope?_ Drop `repo` from the token and instead give the Argo CD
+> repository a **read-write deploy key**; then remove the `git-creds` /
+> `git-repository` annotations so write-back uses the SSH `repoURL` directly.
 
 See [docs/secrets.md](docs/secrets.md) for rotation notes.
 
