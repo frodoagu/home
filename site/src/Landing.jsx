@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { apps, CATEGORIES } from "./apps/registry";
+import PrivateSection from "./PrivateSection";
 
 export default function Landing() {
   // null = no filter (show everything). Clicking the active chip clears it.
@@ -52,7 +53,7 @@ export default function Landing() {
         <section>
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              {active ? `Apps · ${active}` : "Apps"}
+              {active ? `Públicas · ${active}` : "Públicas"}
             </h2>
             {active && (
               <button
@@ -76,6 +77,9 @@ export default function Landing() {
             </p>
           )}
         </section>
+
+        {/* Private half — external links to self-hosted services, gated by Google sign-in. */}
+        <PrivateSection />
 
         <footer className="mt-16 text-xs text-slate-600">
           agu.com.ar · self-hosted en un Raspberry Pi 🍓

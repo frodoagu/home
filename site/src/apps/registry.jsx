@@ -1,4 +1,4 @@
-import { Zap } from "lucide-react";
+import { GitBranch, Home, Network, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 
 /* -------------------------------------------------------------------------
@@ -34,3 +34,43 @@ export const apps = [
 ];
 
 export const getApp = (slug) => apps.find((a) => a.slug === slug);
+
+/* -------------------------------------------------------------------------
+ * Private links — external links to other self-hosted services, shown only
+ * after Google sign-in (see PrivateSection + AuthProvider). Unlike `apps`,
+ * these are NOT internal React components: each is just an external `href`.
+ *   href   absolute URL to the service (opens in a new tab)
+ *   icon   a lucide-react icon component
+ *   accent hex color for the card accent
+ * NOTE: URLs are placeholders under the `<x>.agu.com.ar` pattern — adjust to
+ * the real hostnames.
+ * ---------------------------------------------------------------------- */
+export const privateLinks = [
+  {
+    slug: "traefik",
+    title: "Traefik",
+    description: "Dashboard del ingress del cluster.",
+    href: "https://traefik.agu.com.ar/dashboard/",
+    tag: "Infra",
+    icon: Network,
+    accent: "#3b82f6",
+  },
+  {
+    slug: "home-assistant",
+    title: "Home Assistant",
+    description: "Domótica del hogar.",
+    href: "https://home.agu.com.ar",
+    tag: "Hogar",
+    icon: Home,
+    accent: "#22c55e",
+  },
+  {
+    slug: "argocd",
+    title: "ArgoCD",
+    description: "GitOps / estado de los despliegues.",
+    href: "https://argocd.agu.com.ar",
+    tag: "GitOps",
+    icon: GitBranch,
+    accent: "#f97316",
+  },
+];

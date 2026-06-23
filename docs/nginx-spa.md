@@ -50,6 +50,35 @@ that tag's digest and writes the pinned `image.tag: latest@sha256:...` back into
 immutable digest, with no manual tag bumps. The image is private; the kubelet
 pulls it with the `ghcr-creds` secret (see [secrets.md](secrets.md)).
 
+## Public vs. private apps (Google sign-in)
+
+The landing has two halves (see [`site/src/Landing.jsx`](../site/src/Landing.jsx)):
+
+- **Públicas** — the existing grid of in-app tools, visible to everyone. Source of
+  truth: `apps` in [`site/src/apps/registry.jsx`](../site/src/apps/registry.jsx).
+- **Privadas** — external links to other self-hosted services (Traefik dashboard,
+  Home Assistant, ArgoCD), revealed only after a Google sign-in with an allowed
+  email. Source of truth: `privateLinks` in the same registry — adjust the
+  placeholder `*.agu.com.ar` URLs to your real hostnames.
+
+Auth is **client-side** Google Identity Services
+([`site/src/auth/AuthProvider.jsx`](../site/src/auth/AuthProvider.jsx)): no backend,
+just a signed Google ID token decoded in the browser and checked against an
+allowlist. This is a **UX gate** — it hides the existence/URLs of internal services
+from casual visitors; the real authentication still lives on each linked service
+(basic-auth / its own login).
+
+### Wiring it up
+
+1. In Google Cloud → APIs & Services → Credentials, create an **OAuth client ID**
+   of type *Web application*. Under **Authorized JavaScript origins** add
+   `https://agu.com.ar` (and `http://localhost:5173` for `npm run dev`). No redirect
+   URIs are needed — GIS uses popup/one-tap.
+2. Put the client ID in [`site/src/auth/config.js`](../site/src/auth/config.js)
+   (or build with `VITE_GOOGLE_CLIENT_ID=...`). The client ID is **public by
+   design**, so committing it is fine.
+3. List the allowed emails in `ALLOWED_EMAILS` in the same file.
+
 ## SPA routing & caching
 
 The bundled nginx config (`templates/configmap.yaml`) is tuned for SPAs:

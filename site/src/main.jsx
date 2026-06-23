@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
 import Landing from "./Landing";
 import AppHost from "./AppHost";
+import { AuthProvider } from "./auth/AuthProvider";
 
 const router = createBrowserRouter([
   { path: "/", element: <Landing /> },
@@ -12,6 +13,8 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
   </React.StrictMode>
 );

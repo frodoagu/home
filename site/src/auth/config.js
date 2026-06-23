@@ -15,7 +15,7 @@
  * ---------------------------------------------------------------------- */
 export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-  "PEGAR-CLIENT-ID.apps.googleusercontent.com";
+  "1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com";
 
 // Emails allowed into the private section. Compared case-insensitively.
 export const ALLOWED_EMAILS = ["federico.nicolas.agu@gmail.com"];
