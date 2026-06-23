@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { apps, CATEGORIES } from "./apps/registry";
+import { apps, CATEGORIES, privateLinks } from "./apps/registry";
 import PrivateSection from "./PrivateSection";
 
 export default function Landing() {
@@ -29,7 +29,9 @@ export default function Landing() {
           <div className="mt-4 flex flex-wrap gap-2">
             {CATEGORIES.map((cat) => {
               const isActive = active === cat;
-              const count = apps.filter((a) => a.categories?.includes(cat)).length;
+              const count = [...apps, ...privateLinks].filter((a) =>
+                a.categories?.includes(cat),
+              ).length;
               return (
                 <button
                   key={cat}
@@ -79,7 +81,7 @@ export default function Landing() {
         </section>
 
         {/* Private half — external links to self-hosted services, gated by Google sign-in. */}
-        <PrivateSection />
+        <PrivateSection active={active} />
 
         <footer className="mt-16 text-xs text-slate-600">
           agu.com.ar · self-hosted en un Raspberry Pi 🍓

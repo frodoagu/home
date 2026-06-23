@@ -42,6 +42,8 @@ export const getApp = (slug) => apps.find((a) => a.slug === slug);
  *   href   absolute URL to the service (opens in a new tab)
  *   icon   a lucide-react icon component
  *   accent hex color for the card accent
+ * Like public apps, each declares `categories` (from CATEGORIES) so the same
+ * landing filter chips apply to the private grid too.
  * NOTE: URLs are placeholders under the `<x>.agu.com.ar` pattern — adjust to
  * the real hostnames.
  * ---------------------------------------------------------------------- */
@@ -51,6 +53,7 @@ export const privateLinks = [
     title: "Traefik",
     description: "Dashboard del ingress del cluster.",
     href: "https://traefik.agu.com.ar/dashboard/",
+    categories: ["DevOps"],
     tag: "Infra",
     icon: Network,
     accent: "#3b82f6",
@@ -60,6 +63,7 @@ export const privateLinks = [
     title: "Home Assistant",
     description: "Domótica del hogar.",
     href: "https://home.agu.com.ar",
+    categories: ["DevOps", "Papá"],
     tag: "Hogar",
     icon: Home,
     accent: "#22c55e",
@@ -69,6 +73,7 @@ export const privateLinks = [
     title: "ArgoCD",
     description: "GitOps / estado de los despliegues.",
     href: "https://argocd.agu.com.ar",
+    categories: ["DevOps"],
     tag: "GitOps",
     icon: GitBranch,
     accent: "#f97316",

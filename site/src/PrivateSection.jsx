@@ -5,15 +5,19 @@ import { privateLinks } from "./apps/registry";
 
 // The private half of the landing: external links to other self-hosted
 // services, revealed only after a Google sign-in with an allowed email.
-export default function PrivateSection() {
+export default function PrivateSection({ active }) {
   const { user, authorized, signOut } = useAuth();
+
+  const visible = active
+    ? privateLinks.filter((link) => link.categories?.includes(active))
+    : privateLinks;
 
   return (
     <section className="mt-14">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
           <Lock size={13} />
-          Privado
+          {active ? `Privado · ${active}` : "Privado"}
         </h2>
         {user && (
           <div className="flex items-center gap-2">
@@ -41,14 +45,18 @@ export default function PrivateSection() {
 
       {!user ? (
         <SignInGate />
-      ) : authorized ? (
+      ) : !authorized ? (
+        <NotAuthorized />
+      ) : visible.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {privateLinks.map((link) => (
+          {visible.map((link) => (
             <LinkCard key={link.slug} link={link} />
           ))}
         </div>
       ) : (
-        <NotAuthorized />
+        <p className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-500">
+          Nada privado en <span className="text-slate-300">{active}</span>.
+        </p>
       )}
     </section>
   );
