@@ -19,6 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
+      contents: read # to checkout the (private) repo
       packages: write # to push to GHCR
     steps:
       - uses: actions/checkout@v4
