@@ -210,10 +210,30 @@ for ns in nginx-spa argocd; do
 done
 ```
 
-> Image Updater also writes the resolved digest back to this repo over git, so
-> the Argo CD repository credentials for `git@github.com:frodoagu/home.git` must
-> have **write** access (use a read-write deploy key). See
-> [docs/secrets.md](docs/secrets.md).
+**Image Updater write-back** — after detecting a new image digest, Argo CD Image
+Updater commits the pinned `latest@sha256:...` back to this repo, so it needs
+**write** access to `git@github.com:frodoagu/home.git`. Pick one:
+
+- **Read-write deploy key (recommended — narrower scope).** Keep the GHCR token at
+  just `read:packages`, and give the Argo CD repository a deploy key with write
+  access. Write-back then uses the existing SSH `repoURL`, no extra config.
+
+- **One classic PAT for everything (simplest secrets).** Use a single classic
+  token scoped to **`repo` + `read:packages`** (`repo` is required to push to a
+  private repo). Reuse it as the `GHCR_PAT` above, then add an HTTPS git
+  credential for write-back:
+
+  ```bash
+  kubectl -n argocd create secret generic git-creds \
+    --from-literal=username=frodoagu \
+    --from-literal=password='<classic-PAT-with-repo+read:packages>'
+  ```
+
+  Because the app's `repoURL` is SSH, also override the write-back remote to HTTPS
+  with an annotation on `apps/nginx-spa.yaml`:
+  `argocd-image-updater.argoproj.io/git-repository: https://github.com/frodoagu/home.git`
+
+See [docs/secrets.md](docs/secrets.md) for rotation notes.
 
 > The Google Assistant integration needs an extra secret (`ha-google-sa`) only
 > if you enable it — see [docs/google-assistant.md](docs/google-assistant.md).
