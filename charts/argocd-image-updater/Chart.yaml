@@ -1,0 +1,18 @@
+apiVersion: v2
+name: argocd-image-updater
+description: Wrapper Helm chart for Argo CD Image Updater on k3s
+type: application
+version: 0.1.0
+appVersion: "v1.2.1"
+keywords:
+  - argocd
+  - image-updater
+  - gitops
+sources:
+  - https://github.com/argoproj-labs/argocd-image-updater
+maintainers:
+  - name: frodoagu
+dependencies:
+  - name: argocd-image-updater
+    version: "1.2.2"
+    repository: https://argoproj.github.io/argo-helm

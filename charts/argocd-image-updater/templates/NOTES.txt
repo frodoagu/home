@@ -1,0 +1,14 @@
+Argo CD Image Updater is installed in the "argocd" namespace.
+
+It watches images referenced by Applications carrying
+`argocd-image-updater.argoproj.io/*` annotations and writes new image
+references back to git (GitOps write-back).
+
+Prerequisites (created out-of-band, never committed):
+  * Secret argocd/ghcr-creds  – GHCR pull credentials used to query tags/digests.
+  * Write access to the git repo for write-back commits (read-write deploy key
+    on the Argo CD repository, or a git-creds secret).
+
+Check it is running:
+  kubectl -n argocd get pods -l app.kubernetes.io/name=argocd-image-updater
+  kubectl -n argocd logs deployment/argocd-image-updater -f

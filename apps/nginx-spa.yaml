@@ -7,6 +7,18 @@ metadata:
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Argo CD Image Updater: track the digest of the mutable `latest` tag that CI
+    # pushes, and write the pinned `latest@sha256:...` back into the chart values
+    # via git. See charts/argocd-image-updater.
+    argocd-image-updater.argoproj.io/image-list: spa=ghcr.io/frodoagu/home-site
+    argocd-image-updater.argoproj.io/spa.update-strategy: digest
+    argocd-image-updater.argoproj.io/spa.allow-tags: regexp:^latest$
+    argocd-image-updater.argoproj.io/spa.helm.image-name: image.repository
+    argocd-image-updater.argoproj.io/spa.helm.image-tag: image.tag
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/write-back-target: helmvalues:./charts/nginx-spa/values.yaml
+    argocd-image-updater.argoproj.io/git-branch: main
 spec:
   project: default
   source:

@@ -1,7 +1,9 @@
 name: build-site
 
-# Build the agu.com.ar SPA into a container image, push it to GHCR, and bump
-# the nginx-spa chart to the new immutable tag so ArgoCD rolls it out.
+# Build the agu.com.ar SPA into a container image and push it to GHCR as
+# `latest` (plus an immutable `sha-<commit>` tag for traceability). Argo CD
+# Image Updater watches `latest`'s digest and writes the pinned digest back to
+# the nginx-spa chart, which rolls out the new version. CI does not touch git.
 on:
   push:
     branches: [main]
@@ -17,7 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to commit the values.yaml tag bump
       packages: write # to push to GHCR
     steps:
       - uses: actions/checkout@v4
@@ -46,20 +47,3 @@ jobs:
             ${{ env.IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Bump chart image tag
-        run: |
-          yq -i '.image.repository = "${{ env.IMAGE }}" | .image.tag = "${{ steps.tag.outputs.sha }}"' \
-            charts/nginx-spa/values.yaml
-
-      - name: Commit tag bump
-        run: |
-          if git diff --quiet -- charts/nginx-spa/values.yaml; then
-            echo "No tag change to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add charts/nginx-spa/values.yaml
-          git commit -m "ci: deploy home-site ${{ steps.tag.outputs.sha }} [skip ci]"
-          git push

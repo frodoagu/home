@@ -193,6 +193,28 @@ kubectl create secret generic cloudflare-ddns-token \
   -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-cloudflare-token'
 ```
 
+**GHCR pull credentials** for the private `ghcr.io/frodoagu/home-site` SPA image.
+Create a GitHub **Personal Access Token (classic)** with the `read:packages`
+scope, then create the same `docker-registry` secret in **two** namespaces — one
+for the kubelet to pull the image (`nginx-spa`), one for Argo CD Image Updater to
+query the digest (`argocd`):
+
+```bash
+GHCR_PAT='your-github-PAT-with-read:packages'
+for ns in nginx-spa argocd; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n "$ns" create secret docker-registry ghcr-creds \
+    --docker-server=ghcr.io \
+    --docker-username=frodoagu \
+    --docker-password="$GHCR_PAT"
+done
+```
+
+> Image Updater also writes the resolved digest back to this repo over git, so
+> the Argo CD repository credentials for `git@github.com:frodoagu/home.git` must
+> have **write** access (use a read-write deploy key). See
+> [docs/secrets.md](docs/secrets.md).
+
 > The Google Assistant integration needs an extra secret (`ha-google-sa`) only
 > if you enable it — see [docs/google-assistant.md](docs/google-assistant.md).
 
@@ -218,12 +240,15 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 │   ├── root.yaml            # App-of-apps bootstrap entry point
 │   ├── traefik.yaml
 │   ├── argocd.yaml
+│   ├── argocd-image-updater.yaml
 │   ├── home-assistant.yaml
 │   ├── nginx-spa.yaml
 │   └── cloudflare-ddns.yaml
+├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
+    ├── argocd-image-updater/ # Argo CD Image Updater wrapper (auto-deploys new SPA image digests)
     ├── home-assistant/      # Home Assistant Helm chart
     ├── nginx-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater

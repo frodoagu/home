@@ -4,13 +4,15 @@
 replicaCount: 1
 image:
   # The agu.com.ar SPA, built from site/ and baked into an nginx image by the
-  # build-site GitHub Action (.github/workflows/site.yml). The action pushes an
-  # immutable `sha-<commit>` tag and bumps `tag` below on every push to main.
+  # build-site GitHub Action (.github/workflows/site.yml). CI pushes the mutable
+  # `latest` tag; Argo CD Image Updater watches its digest and rewrites `tag`
+  # below to `latest@sha256:...` via git (see apps/nginx-spa.yaml annotations),
+  # so what actually runs is always an immutable digest.
   repository: ghcr.io/frodoagu/home-site
   pullPolicy: IfNotPresent
-  # Bootstrap value; CI overwrites this with the immutable sha-<commit> tag of
-  # the latest build. Avoid leaving floating tags like "latest" long-term.
-  tag: "sha-7e4d7c13b15e"
+  # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
+  # `latest@sha256:<digest>` on the first reconcile.
+  tag: "latest"
 # Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
 #   kubectl -n nginx-spa create secret docker-registry ghcr-creds \
 #     --docker-server=ghcr.io \

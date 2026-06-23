@@ -1,0 +1,38 @@
+# Default values for the argocd-image-updater wrapper chart.
+# All keys under `argocd-image-updater` are forwarded to the upstream chart:
+# https://github.com/argoproj/argo-helm/blob/main/charts/argocd-image-updater/values.yaml
+#
+# Per-application config (which image to track, update strategy, write-back
+# target, Helm param mapping) lives as annotations on the consuming
+# Application — see apps/nginx-spa.yaml.
+argocd-image-updater:
+  # -- Single replica is plenty for a home / RPi cluster.
+  replicas: 1
+
+  config:
+    logLevel: info
+
+    # Identity used for the write-back commits this controller pushes to git.
+    gitCommitUser: argocd-image-updater
+    gitCommitMail: argocd-image-updater@agu.com.ar
+
+    # Registry definitions. GHCR is private, so point it at the pull secret
+    # (created out-of-band in the argocd namespace). Image Updater uses these
+    # credentials to query tags/digests; the kubelet uses its own copy of the
+    # secret in the workload namespace to actually pull (see charts/nginx-spa).
+    registries:
+      - name: GitHub Container Registry
+        api_url: https://ghcr.io
+        prefix: ghcr.io
+        ping: false
+        credentials: pullsecret:argocd/ghcr-creds
+        default: true
+
+  # -- Modest footprint for the RPi.
+  resources:
+    requests:
+      cpu: 10m
+      memory: 48Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
