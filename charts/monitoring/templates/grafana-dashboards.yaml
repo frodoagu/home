@@ -1,0 +1,19 @@
+{{- if (index .Values "victoria-metrics-k8s-stack" "grafana" "enabled") }}
+# Custom Grafana dashboards. The grafana sidecar imports any ConfigMap carrying
+# the grafana_dashboard label; every JSON under dashboards/ is bundled here as a
+# separate data key. Loaded via .Files.Get so Grafana's own double-brace legend
+# syntax survives Helm templating.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "monitoring.fullname" . }}-dashboards
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "monitoring.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

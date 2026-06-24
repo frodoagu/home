@@ -1,0 +1,99 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["kubernetes", "k3s", "cluster"],
+  "title": "Kubernetes — Cluster",
+  "uid": "k8s-cluster",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      { "name": "DS_PROM", "label": "Datasource", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "" }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Overview", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false },
+    {
+      "title": "Pods Running", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" }, "unit": "short" }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{phase=\"Running\"})", "refId": "A" } ]
+    },
+    {
+      "title": "Pods Pending", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{phase=\"Pending\"})", "refId": "A" } ]
+    },
+    {
+      "title": "Pods Failed", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{phase=\"Failed\"})", "refId": "A" } ]
+    },
+    {
+      "title": "CrashLoopBackOff", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "expr": "sum(kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"})", "refId": "A" } ]
+    },
+    {
+      "title": "Nodes Ready", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none" },
+      "targets": [ { "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})", "refId": "A" } ]
+    },
+    {
+      "title": "Deployments unavailable", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "expr": "count(kube_deployment_status_replicas_available < kube_deployment_spec_replicas) or vector(0)", "refId": "A" } ]
+    },
+
+    { "type": "row", "title": "Resource Usage", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "collapsed": false },
+    {
+      "title": "CPU by namespace", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [ { "expr": "sum by(namespace)(rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{namespace}}", "refId": "A" } ]
+    },
+    {
+      "title": "Memory by namespace", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [ { "expr": "sum by(namespace)(container_memory_working_set_bytes{container!=\"\",container!=\"POD\"})", "legendFormat": "{{namespace}}", "refId": "A" } ]
+    },
+
+    { "type": "row", "title": "Health & Storage", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "collapsed": false },
+    {
+      "title": "Pod restarts (1h)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60 } }, "overrides": [] },
+      "targets": [ { "expr": "topk(10, sum by(namespace,pod)(increase(kube_pod_container_status_restarts_total[1h])) > 0)", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A" } ]
+    },
+    {
+      "title": "PVC usage", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes", "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}", "refId": "A" } ]
+    }
+  ]
+}

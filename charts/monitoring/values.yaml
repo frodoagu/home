@@ -47,6 +47,12 @@ rpiThrottleExporter:
     limits:
       memory: 16Mi
 
+# Scrape the k3s-bundled Traefik (metrics already on pod port 9100). Drives the
+# "Traefik — Ingress" dashboard. See templates/vmpodscrape-traefik.yaml.
+traefikScrape:
+  enabled: true
+  namespace: kube-system
+
 # External endpoints probed by blackbox for uptime + TLS-expiry. Probed from
 # inside the cluster against the public hostnames, so this also exercises the
 # whole Traefik + Let's Encrypt path end-to-end.

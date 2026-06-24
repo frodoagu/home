@@ -1,0 +1,157 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["raspberrypi", "node", "hardware"],
+  "title": "Raspberry Pi — Health",
+  "uid": "rpi-health",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      { "name": "DS_PROM", "label": "Datasource", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "" }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Thermal & Power", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false },
+    {
+      "title": "CPU Temperature", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "celsius", "min": 30, "max": 90, "custom": { "fillOpacity": 10, "gradientMode": "scheme" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 80 } ] }, "color": { "mode": "thresholds" } }, "overrides": [] },
+      "targets": [ { "expr": "node_thermal_zone_temp", "legendFormat": "CPU", "refId": "A" } ]
+    },
+    {
+      "title": "Fan Speed", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "rotrpm", "min": 0, "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [ { "expr": "node_hwmon_fan_rpm", "legendFormat": "{{sensor}}", "refId": "A" } ]
+    },
+    {
+      "title": "Cooler Level & PWM", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "node_cooling_device_cur_state{type=\"pwm-fan\"}", "legendFormat": "level", "refId": "A" },
+        { "expr": "node_cooling_device_max_state{type=\"pwm-fan\"}", "legendFormat": "max level", "refId": "B" },
+        { "expr": "node_hwmon_pwm", "legendFormat": "PWM duty", "refId": "C" }
+      ]
+    },
+    {
+      "title": "Throttle / Under-voltage (now)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "OK", "color": "green" }, "1": { "text": "ALERT", "color": "red" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
+      "targets": [
+        { "expr": "node_rpi_under_voltage_now", "legendFormat": "Under-voltage", "refId": "A" },
+        { "expr": "node_rpi_throttled_now", "legendFormat": "Throttled", "refId": "B" },
+        { "expr": "node_rpi_freq_capped_now", "legendFormat": "Freq capped", "refId": "C" },
+        { "expr": "node_rpi_soft_temp_limit_now", "legendFormat": "Soft temp limit", "refId": "D" }
+      ]
+    },
+    {
+      "title": "Throttle events (timeline)", "type": "state-timeline",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 8 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 80, "lineWidth": 0 }, "mappings": [ { "type": "value", "options": { "0": { "text": "ok", "color": "green" }, "1": { "text": "active", "color": "red" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "mergeValues": true, "showValue": "never", "rowHeight": 0.9 },
+      "targets": [
+        { "expr": "node_rpi_under_voltage_now", "legendFormat": "under-voltage", "refId": "A" },
+        { "expr": "node_rpi_throttled_now", "legendFormat": "throttled", "refId": "B" },
+        { "expr": "node_rpi_freq_capped_now", "legendFormat": "freq capped", "refId": "C" },
+        { "expr": "node_rpi_soft_temp_limit_now", "legendFormat": "soft temp limit", "refId": "D" }
+      ]
+    },
+
+    { "type": "row", "title": "CPU & Load", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "collapsed": false },
+    {
+      "title": "CPU Usage (total)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 20 } }, "overrides": [] },
+      "targets": [ { "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))", "legendFormat": "busy", "refId": "A" } ]
+    },
+    {
+      "title": "CPU per-core", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [ { "expr": "100 * (1 - rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))", "legendFormat": "core {{cpu}}", "refId": "A" } ]
+    },
+    {
+      "title": "Load Average", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "node_load1", "legendFormat": "1m", "refId": "A" },
+        { "expr": "node_load5", "legendFormat": "5m", "refId": "B" },
+        { "expr": "node_load15", "legendFormat": "15m", "refId": "C" },
+        { "expr": "count(count by(cpu)(node_cpu_seconds_total))", "legendFormat": "cores", "refId": "D" }
+      ]
+    },
+
+    { "type": "row", "title": "Memory & Disk", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }, "collapsed": false },
+    {
+      "title": "Memory", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [
+        { "expr": "node_memory_MemTotal_bytes", "legendFormat": "total", "refId": "A" },
+        { "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "legendFormat": "used", "refId": "B" },
+        { "expr": "node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes", "legendFormat": "swap used", "refId": "C" }
+      ]
+    },
+    {
+      "title": "Disk Usage", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 80 }, { "color": "red", "value": 90 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "100 * (1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"})", "legendFormat": "{{mountpoint}}", "refId": "A" } ]
+    },
+    {
+      "title": "SD Card I/O", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 23 },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } }, "overrides": [ { "matcher": { "id": "byName", "options": "utilization %" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "custom.axisPlacement", "value": "right" } ] } ] },
+      "targets": [
+        { "expr": "rate(node_disk_read_bytes_total{device=\"mmcblk0\"}[5m])", "legendFormat": "read", "refId": "A" },
+        { "expr": "rate(node_disk_written_bytes_total{device=\"mmcblk0\"}[5m])", "legendFormat": "write", "refId": "B" },
+        { "expr": "100 * rate(node_disk_io_time_seconds_total{device=\"mmcblk0\"}[5m])", "legendFormat": "utilization %", "refId": "C" }
+      ]
+    },
+
+    { "type": "row", "title": "Network & System", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }, "collapsed": false },
+    {
+      "title": "Network Throughput", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 10, "x": 0, "y": 31 },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "{{device}} rx", "refId": "A" },
+        { "expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "{{device}} tx", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Under-voltage alarm (hwmon)", "type": "state-timeline",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 8, "x": 10, "y": 31 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 80, "lineWidth": 0 }, "mappings": [ { "type": "value", "options": { "0": { "text": "ok", "color": "green" }, "1": { "text": "low voltage", "color": "red" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "mergeValues": true, "showValue": "never", "rowHeight": 0.9 },
+      "targets": [ { "expr": "node_hwmon_in_lcrit_alarm_volts{sensor=\"in0\"}", "legendFormat": "PSU", "refId": "A" } ]
+    },
+    {
+      "title": "Uptime", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 31 },
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "targets": [ { "expr": "time() - node_boot_time_seconds", "legendFormat": "uptime", "refId": "A" } ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["kubernetes", "workloads", "services"],
+  "title": "Workloads — Per-service",
+  "uid": "workloads",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      { "name": "DS_PROM", "label": "Datasource", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "" },
+      { "name": "namespace", "label": "Namespace", "type": "query", "datasource": { "type": "prometheus", "uid": "${DS_PROM}" }, "query": "label_values(kube_pod_info, namespace)", "refresh": 2, "includeAll": true, "multi": true, "allValue": ".*", "current": { "text": "All", "value": "$__all" }, "sort": 1 }
+    ]
+  },
+  "panels": [
+    {
+      "title": "CPU by pod", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [ { "expr": "sum by(namespace,pod)(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A" } ]
+    },
+    {
+      "title": "Memory by pod", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [ { "expr": "sum by(namespace,pod)(container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",container!=\"POD\"})", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A" } ]
+    },
+    {
+      "title": "Network RX/TX by pod", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by(namespace,pod)(rate(container_network_receive_bytes_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "{{namespace}}/{{pod}} rx", "refId": "A" },
+        { "expr": "sum by(namespace,pod)(rate(container_network_transmit_bytes_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "{{namespace}}/{{pod}} tx", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Container restarts (total)", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60 } }, "overrides": [] },
+      "targets": [ { "expr": "sum by(namespace,pod)(kube_pod_container_status_restarts_total{namespace=~\"$namespace\"})", "legendFormat": "{{namespace}}/{{pod}}", "refId": "A" } ]
+    },
+    {
+      "title": "Pods", "type": "table",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [ { "expr": "kube_pod_status_phase{namespace=~\"$namespace\"} == 1", "format": "table", "instant": true, "refId": "A" } ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "Value": true, "job": true, "instance": true, "uid": true, "container": true, "endpoint": true, "service": true, "pod_ip": true }, "renameByName": { "namespace": "Namespace", "pod": "Pod", "phase": "Phase" } } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "tags": ["blackbox", "uptime", "sla", "tls"],
+  "title": "Blackbox — Uptime & SLA",
+  "uid": "blackbox-sla",
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      { "name": "DS_PROM", "label": "Datasource", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "" }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Availability", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false },
+    {
+      "title": "Status (now)", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
+      "targets": [ { "expr": "probe_success", "legendFormat": "{{instance}}", "refId": "A" } ]
+    },
+    {
+      "title": "Uptime % (range)", "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "decimals": 2, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 95 }, { "color": "green", "value": 99 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true },
+      "targets": [ { "expr": "100 * avg_over_time(probe_success[$__range])", "legendFormat": "{{instance}}", "refId": "A", "instant": true } ]
+    },
+    {
+      "title": "Up/Down history", "type": "state-timeline",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 7 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 80, "lineWidth": 0 }, "mappings": [ { "type": "value", "options": { "0": { "text": "down", "color": "red" }, "1": { "text": "up", "color": "green" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "mergeValues": true, "showValue": "never", "rowHeight": 0.9 },
+      "targets": [ { "expr": "probe_success", "legendFormat": "{{instance}}", "refId": "A" } ]
+    },
+
+    { "type": "row", "title": "Latency", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "collapsed": false },
+    {
+      "title": "Probe duration", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "targets": [ { "expr": "probe_duration_seconds", "legendFormat": "{{instance}}", "refId": "A" } ]
+    },
+    {
+      "title": "HTTP phase breakdown", "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [ { "expr": "avg by(phase)(probe_http_duration_seconds)", "legendFormat": "{{phase}}", "refId": "A" } ]
+    },
+
+    { "type": "row", "title": "TLS Certificates", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }, "collapsed": false },
+    {
+      "title": "Certificate expiry (days)", "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "min": 0, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 3 }, { "color": "green", "value": 14 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "basic", "showUnfilled": true },
+      "targets": [ { "expr": "floor((probe_ssl_earliest_cert_expiry - time()) / 86400) and probe_ssl_earliest_cert_expiry > 0", "legendFormat": "{{instance}}", "refId": "A", "instant": true } ]
+    }
+  ]
+}

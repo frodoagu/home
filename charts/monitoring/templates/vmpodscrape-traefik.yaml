@@ -1,0 +1,25 @@
+{{- if .Values.traefikScrape.enabled }}
+# Scrape the k3s-bundled Traefik. Its Prometheus endpoint is already enabled by
+# default on the `metrics` container port (9100) but is NOT published on the
+# Service, so we target the pod directly with a VMPodScrape (no change needed to
+# charts/traefik-config / the ingress itself). The VM operator watches all
+# namespaces, so this CR in the monitoring namespace picks up the kube-system pod.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "monitoring.fullname" . }}-traefik
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.traefikScrape.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+{{- end }}
