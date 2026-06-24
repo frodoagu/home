@@ -184,9 +184,8 @@ victoria-metrics-k8s-stack:
             - send_resolved: true
               # Bot token comes from the mounted out-of-band secret (never in git).
               bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
-              # !!! REPLACE with your numeric Telegram chat id (e.g. from @userinfobot;
-              # negative for groups). Not sensitive, so it's fine to commit.
-              chat_id: 0
+              # Numeric Telegram chat id (from @userinfobot). Not sensitive.
+              chat_id: 5676033362
               parse_mode: HTML
               message: |-
                 {{ range .Alerts }}<b>[{{ .Status | toUpper }}{{ if eq .Status "firing" }} 🔥{{ else }} ✅{{ end }}] {{ .Labels.alertname }}</b> ({{ .Labels.severity }})
