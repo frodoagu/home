@@ -33,8 +33,11 @@ oauth2-proxy:
   # ── Provider and cookie configuration ─────────────────────────────────────
   extraArgs:
     - --provider=google
-    # Allow any domain; authenticatedEmailsFile restricts to the specific list.
-    - --email-domain=*
+    # Authorization is by the explicit allowlist in authenticatedEmailsFile
+    # above (--authenticated-emails-file). Do NOT add --email-domain=*: oauth2-proxy
+    # authorizes with an OR (email in the list OR domain matches), so a wildcard
+    # domain would let ANY Google account in and make the allowlist useless. With
+    # no --email-domain set, only the listed addresses are allowed.
     # Pure auth proxy — oauth2-proxy validates the session but does not proxy
     # content (Traefik does that via ForwardAuth).
     - --upstream=static://202
