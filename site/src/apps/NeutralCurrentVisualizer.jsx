@@ -1,12 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Zap, RotateCcw, Activity, Waves, AlertTriangle, CheckCircle2, BarChart3,
   Plus, Trash2, AirVent, Microwave, Droplets, Refrigerator, MonitorSmartphone, Lightbulb,
-  Unplug, ArrowUp, ArrowDown,
+  Unplug, ArrowUp, ArrowDown, Gauge, Cable, GripVertical, ChevronUp, ChevronDown,
 } from "lucide-react";
 import {
-  I_MAX, F_HZ, T_MS, V_NOM, rad, APPLIANCES, getAppliance, FAULTS,
+  I_MAX, F_HZ, T_MS, V_NOM, rad, APPLIANCES, getAppliance, FAULTS, CABLE_SECTIONS,
   buildPhaseSpectrum, harmonicNeutral, phaseInstant, openNeutralVoltages, scaleSpectrum,
+  cableResistance, solveVoltages,
 } from "./neutralCurrent";
 
 /* -------------------------------------------------------------------------
@@ -14,6 +15,9 @@ import {
  * - Sliders = carga lineal base por fase (solo fundamental, ∠ 0/120/240).
  * - Artefactos = cargas no lineales que inyectan armónicos. Los triples (3,9…)
  *   se SUMAN en el neutro aunque el sistema esté balanceado.
+ * - Cableado por conductor (largo + sección) -> caída de tensión y, con el
+ *   neutro, su desplazamiento. Fallas combinables (corte de fase y/o neutro).
+ * - Los paneles se pueden reordenar (drag o flechas) y el orden se guarda.
  * - Cálculo central en `neutralCurrent.js`; acá sólo se dibuja.
  * ---------------------------------------------------------------------- */
 
@@ -23,11 +27,10 @@ const PHASES = [
   { key: "c", label: "Fase C", angle: 240, color: "#eab308" }, // amarilla
 ];
 
-// El neutro siempre se dibuja celeste (la severidad se indica con el texto/ícono).
 const NEUTRAL = "#38bdf8";
-const ACCENT = "#f59e0b"; // ámbar de la marca (icono y tabs activas)
+const ACCENT = "#f59e0b"; // ámbar de la marca
+const DANGER = "#f43f5e"; // rojo-rosa para fallas
 
-// Íconos lucide por key de artefacto (catálogo en neutralCurrent.js).
 const APP_ICONS = {
   aire: AirVent, micro: Microwave, bomba: Droplets,
   heladera: Refrigerator, pc: MonitorSmartphone, led: Lightbulb,
@@ -44,47 +47,107 @@ const PRESETS = [
 const fmt = (n) => n.toFixed(1);
 let _uid = 0;
 
+/* ---- orden de paneles persistido en localStorage ---- */
+const PANEL_KEY = "ncv:panel-order:v1";
+const DEFAULT_PANEL_ORDER = ["metrics", "viz", "load", "faults", "cables", "appliances"];
+
+function loadOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PANEL_KEY));
+    if (!Array.isArray(saved)) return DEFAULT_PANEL_ORDER;
+    const known = new Set(DEFAULT_PANEL_ORDER);
+    const out = saved.filter((id) => known.has(id));
+    for (const id of DEFAULT_PANEL_ORDER) if (!out.includes(id)) out.push(id);
+    return out;
+  } catch {
+    return DEFAULT_PANEL_ORDER;
+  }
+}
+
+function usePanelOrder() {
+  const [order, setOrder] = useState(loadOrder);
+  const [draggingId, setDraggingId] = useState(null);
+  const dragId = useRef(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(PANEL_KEY, JSON.stringify(order)); } catch { /* ignore */ }
+  }, [order]);
+
+  const reorder = (from, to) =>
+    setOrder((prev) => {
+      const a = [...prev];
+      const fi = a.indexOf(from);
+      const ti = a.indexOf(to);
+      if (fi < 0 || ti < 0 || fi === ti) return prev;
+      a.splice(fi, 1);
+      a.splice(ti, 0, from);
+      return a;
+    });
+
+  return {
+    order,
+    draggingId,
+    isDefault: order.join() === DEFAULT_PANEL_ORDER.join(),
+    onDragStart: (id) => (e) => {
+      dragId.current = id;
+      setDraggingId(id);
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", id); } catch { /* ignore */ }
+    },
+    onDragEnd: () => { dragId.current = null; setDraggingId(null); },
+    onDragOver: (id) => (e) => {
+      e.preventDefault();
+      if (dragId.current && dragId.current !== id) reorder(dragId.current, id);
+    },
+    onDrop: (e) => e.preventDefault(),
+    move: (id, dir) =>
+      setOrder((prev) => {
+        const a = [...prev];
+        const i = a.indexOf(id);
+        const j = i + dir;
+        if (j < 0 || j >= a.length) return prev;
+        [a[i], a[j]] = [a[j], a[i]];
+        return a;
+      }),
+    reset: () => setOrder(DEFAULT_PANEL_ORDER),
+  };
+}
+
 export default function NeutralCurrentVisualizer() {
   const [I, setI] = useState({ a: 10, b: 10, c: 10 });
   const [appliances, setAppliances] = useState([]); // [{id, key, phase}]
   const [target, setTarget] = useState("3f");        // fase destino: a|b|c|3f
   const [tab, setTab] = useState("phasors");
   const [vis, setVis] = useState({ a: true, b: true, c: true, n: true }); // trazas visibles
-  // Fallas combinables: corte de cada fase (a/b/c) y/o del neutro (n).
   const [faults, setFaults] = useState({ a: false, b: false, c: false, n: false });
+  const [cables, setCables] = useState({
+    a: { L: 20, A: 4 }, b: { L: 20, A: 4 }, c: { L: 20, A: 4 }, n: { L: 20, A: 4 },
+  });
+  const dnd = usePanelOrder();
 
   const toggleVis = (k) => setVis((s) => ({ ...s, [k]: !s[k] }));
   const toggleFault = (k) => setFaults((s) => ({ ...s, [k]: !s[k] }));
   const clearFaults = () => setFaults({ a: false, b: false, c: false, n: false });
-
-  const set = (k, val) => setI((s) => ({ ...s, [k]: Number(val) }));
+  const setLoad = (k, val) => setI((s) => ({ ...s, [k]: Number(val) }));
+  const setCable = (k, field, val) =>
+    setCables((s) => ({ ...s, [k]: { ...s[k], [field]: Number(val) } }));
 
   const addAppliance = (key) => {
     const phases = target === "3f" ? ["a", "b", "c"] : [target];
-    setAppliances((s) => [
-      ...s,
-      ...phases.map((phase) => ({ id: ++_uid, key, phase })),
-    ]);
+    setAppliances((s) => [...s, ...phases.map((phase) => ({ id: ++_uid, key, phase }))]);
   };
   const removeAppliance = (id) => setAppliances((s) => s.filter((a) => a.id !== id));
   const clearAppliances = () => setAppliances([]);
 
   /* ---- espectro por fase (base + artefactos), falla y cálculo central ---- */
-  const { spectra, In, comp, fund, perHarmonic, severity, faultV } = useMemo(() => {
+  const { spectra, In, comp, fund, perHarmonic, severity } = useMemo(() => {
     const base = {};
     for (const { key } of PHASES) {
-      const apps = appliances
-        .filter((a) => a.phase === key)
-        .map((a) => getAppliance(a.key));
+      const apps = appliances.filter((a) => a.phase === key).map((a) => getAppliance(a.key));
       base[key] = buildPhaseSpectrum(I[key], apps);
     }
-
-    // Corte de fase(s): esas líneas quedan sin corriente.
     for (const k of ["a", "b", "c"]) if (faults[k]) base[k] = {};
 
-    // Corte de neutro: no hay retorno (In = 0) y las tensiones se desplazan.
-    // Sólo cuentan las fases activas; cargas resistivas -> la corriente escala
-    // con su tensión. (Combinable con cortes de fase: ésas ya tienen fund 0.)
     if (faults.n) {
       const nominalFund = { a: base.a[1] || 0, b: base.b[1] || 0, c: base.c[1] || 0 };
       const ov = openNeutralVoltages(nominalFund);
@@ -95,28 +158,98 @@ export default function NeutralCurrentVisualizer() {
       };
       const calc = harmonicNeutral(scaled);
       return {
-        spectra: scaled, faultV: ov,
-        In: 0, comp: { x: 0, y: 0 }, fund: calc.fund,
-        perHarmonic: [], severity: "ok",
+        spectra: scaled, In: 0, comp: { x: 0, y: 0 },
+        fund: calc.fund, perHarmonic: [], severity: "ok",
       };
     }
-
-    return { spectra: base, faultV: null, ...harmonicNeutral(base) };
+    return { spectra: base, ...harmonicNeutral(base) };
   }, [I, appliances, faults]);
+
+  /* ---- resistencias de cable y tensiones de carga (fundamental) ---- */
+  const { R, Rn } = useMemo(() => {
+    const R = {};
+    for (const p of PHASES) R[p.key] = cableResistance(cables[p.key].L, cables[p.key].A);
+    const Rn = faults.n ? Infinity : cableResistance(cables.n.L, cables.n.A);
+    return { R, Rn };
+  }, [cables, faults.n]);
+
+  const volt = useMemo(() => {
+    const G = {};
+    for (const p of PHASES) {
+      const apps = appliances.filter((a) => a.phase === p.key).map((a) => getAppliance(a.key));
+      const spec = buildPhaseSpectrum(I[p.key], apps);
+      G[p.key] = (faults[p.key] ? 0 : (spec[1] || 0)) / V_NOM;
+    }
+    return solveVoltages({ G, R, Rn });
+  }, [I, appliances, faults, R, Rn]);
 
   const neutralOpen = faults.n;
   const sevColor = NEUTRAL;
-  // ¿hay distorsión? (algún armónico > fundamental). Habilita vista de armónicos.
   const harmonicAmps = perHarmonic.filter((p) => p.h !== 1 && p.mag > 0.05);
   const triplenIn = Math.sqrt(
     perHarmonic.filter((p) => p.triplen).reduce((s, p) => s + p.mag * p.mag, 0)
   );
 
+  const renderPanel = (id) => {
+    switch (id) {
+      case "metrics":
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {PHASES.map((p) => (
+              <Metric key={p.key} label={p.label} value={fund[p.key]} unit="A"
+                color={p.color} sub={`∠ ${p.angle}° · fundamental`} />
+            ))}
+            <NeutralMetric In={In} color={sevColor} />
+          </div>
+        );
+      case "viz":
+        return (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+              <div className="flex border-b border-slate-800 overflow-x-auto">
+                <TabBtn active={tab === "phasors"} onClick={() => setTab("phasors")}
+                  icon={<Activity size={14} />} label="Fasores" />
+                <TabBtn active={tab === "waves"} onClick={() => setTab("waves")}
+                  icon={<Waves size={14} />} label="Ondas" />
+                <TabBtn active={tab === "harm"} onClick={() => setTab("harm")}
+                  icon={<BarChart3 size={14} />} label="Armónicos" />
+                <TabBtn active={tab === "volts"} onClick={() => setTab("volts")}
+                  icon={<Gauge size={14} />} label="Tensión" />
+              </div>
+              <div className="p-4">
+                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
+                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
+                {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} />}
+                {tab === "volts" && <VoltageView volt={volt} spectra={spectra} R={R} Rn={Rn} faults={faults} neutralOpen={neutralOpen} vis={vis} onToggle={toggleVis} />}
+              </div>
+            </div>
+            {neutralOpen
+              ? <VoltagePanel volt={volt} faults={faults} />
+              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} faults={faults} />}
+          </div>
+        );
+      case "load":
+        return <LoadCard I={I} onChange={setLoad} onPreset={setI} />;
+      case "faults":
+        return <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} />;
+      case "cables":
+        return <CableCard cables={cables} onChange={setCable} />;
+      case "appliances":
+        return (
+          <AppliancesCard
+            appliances={appliances} target={target} setTarget={setTarget}
+            onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="w-full min-h-full bg-slate-950 text-slate-100 p-4 sm:p-6 font-sans">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <header className="flex items-center justify-between gap-3 mb-5">
+        <header className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-2">
               <Zap size={20} style={{ color: ACCENT }} />
@@ -130,84 +263,62 @@ export default function NeutralCurrentVisualizer() {
               </p>
             </div>
           </div>
-          <StatusBadge severity={severity} faults={faults} color={sevColor} />
+          <div className="flex items-center gap-2">
+            {!dnd.isDefault && (
+              <button onClick={dnd.reset} title="Restablecer el orden de los paneles"
+                className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs
+                           text-slate-400 hover:text-slate-100 hover:border-slate-500 transition-colors">
+                <RotateCcw size={13} /> Orden
+              </button>
+            )}
+            <StatusBadge severity={severity} faults={faults} color={sevColor} />
+          </div>
         </header>
 
-        {/* Métricas: fundamental por fase + corriente de neutro (salida clave) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          {PHASES.map((p) => (
-            <Metric key={p.key} label={p.label} value={fund[p.key]} unit="A"
-              color={p.color} sub={`∠ ${p.angle}° · fundamental`} />
+        {/* Paneles reordenables */}
+        <div className="space-y-4">
+          {dnd.order.map((id, idx) => (
+            <DraggablePanel key={id} id={id} dnd={dnd}
+              first={idx === 0} last={idx === dnd.order.length - 1}>
+              {renderPanel(id)}
+            </DraggablePanel>
           ))}
-          <NeutralMetric In={In} color={sevColor} />
-        </div>
-
-        <div className="grid lg:grid-cols-12 gap-4 items-start">
-          {/* Controles (carga base + fallas) */}
-          <section className="lg:col-span-4 space-y-4">
-            <Card title="Carga lineal base por fase" icon={<Activity size={15} />}>
-              <div className="space-y-4 pt-1">
-                {PHASES.map((p) => (
-                  <Slider key={p.key} phase={p} value={I[p.key]} onChange={(v) => set(p.key, v)} />
-                ))}
-              </div>
-              <div className="mt-4 border-t border-slate-800 pt-3">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 mb-2">
-                  <RotateCcw size={11} /> Presets
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {PRESETS.map((pr) => (
-                    <button key={pr.label} onClick={() => setI(pr.v)}
-                      className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
-                                 text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
-                      {pr.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Card>
-
-            <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} />
-          </section>
-
-          {/* Visualización + detalle del neutro */}
-          <section className="lg:col-span-8 space-y-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
-              <div className="flex border-b border-slate-800">
-                <TabBtn active={tab === "phasors"} onClick={() => setTab("phasors")}
-                  icon={<Activity size={14} />} label="Fasores" />
-                <TabBtn active={tab === "waves"} onClick={() => setTab("waves")}
-                  icon={<Waves size={14} />} label="Ondas" />
-                <TabBtn active={tab === "harm"} onClick={() => setTab("harm")}
-                  icon={<BarChart3 size={14} />} label="Armónicos" />
-              </div>
-              <div className="p-4">
-                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
-                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
-                {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} />}
-              </div>
-            </div>
-
-            {neutralOpen
-              ? <VoltagePanel ov={faultV} faults={faults} />
-              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} faults={faults} />}
-          </section>
-
-          {/* Artefactos: ancho completo abajo, catálogo + conectados en dos columnas */}
-          <section className="lg:col-span-12">
-            <AppliancesCard
-              appliances={appliances} target={target} setTarget={setTarget}
-              onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
-          </section>
         </div>
       </div>
     </div>
   );
 }
 
-/* ===================== Subcomponentes UI ===================== */
+/* ===================== Panel arrastrable ===================== */
 
-const DANGER = "#f43f5e"; // rojo-rosa para fallas
+function DraggablePanel({ id, dnd, first, last, children }) {
+  const dragging = dnd.draggingId === id;
+  return (
+    <div onDragOver={dnd.onDragOver(id)} onDrop={dnd.onDrop}
+      className={`relative group transition-opacity ${dragging ? "opacity-40" : ""}`}>
+      <div className="absolute left-1/2 -translate-x-1/2 -top-3 z-20 flex items-center rounded-full
+                      border border-slate-700 bg-slate-800 shadow opacity-0 group-hover:opacity-100
+                      focus-within:opacity-100 transition-opacity">
+        <button onClick={() => dnd.move(id, -1)} disabled={first} title="Subir"
+          className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
+          <ChevronUp size={12} />
+        </button>
+        <span draggable onDragStart={dnd.onDragStart(id)} onDragEnd={dnd.onDragEnd}
+          title="Arrastrar para reordenar"
+          className="px-1 py-0.5 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-200">
+          <GripVertical size={12} />
+        </span>
+        <button onClick={() => dnd.move(id, 1)} disabled={last} title="Bajar"
+          className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
+          <ChevronDown size={12} />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ===================== Subcomponentes UI ===================== */
 
 // Texto corto que resume las fallas activas.
 function faultSummary(faults) {
@@ -220,17 +331,15 @@ function faultSummary(faults) {
 }
 
 function StatusBadge({ severity, faults, color }) {
-  // Las fallas mandan sobre la severidad normal.
   if (faults.a || faults.b || faults.c || faults.n)
     return <Badge color={DANGER} Icon={Unplug} txt={faultSummary(faults)} />;
-
   const map = {
-    ok:   { txt: "Balanceado",    Icon: CheckCircle2, c: color },
-    warn: { txt: "Desbalanceado", Icon: AlertTriangle, c: color },
-    high: { txt: "Neutro cargado", Icon: AlertTriangle, c: color },
+    ok:   { txt: "Balanceado",    Icon: CheckCircle2 },
+    warn: { txt: "Desbalanceado", Icon: AlertTriangle },
+    high: { txt: "Neutro cargado", Icon: AlertTriangle },
   };
-  const { txt, Icon, c } = map[severity];
-  return <Badge color={c} Icon={Icon} txt={txt} />;
+  const { txt, Icon } = map[severity];
+  return <Badge color={color} Icon={Icon} txt={txt} />;
 }
 
 function Badge({ color, Icon, txt }) {
@@ -258,7 +367,6 @@ function Metric({ label, value, unit, color, sub }) {
   );
 }
 
-// Métrica destacada de la corriente de neutro (4ª celda de la fila superior).
 function NeutralMetric({ In, color }) {
   const pct = Math.min(100, (In / I_MAX) * 100);
   return (
@@ -280,6 +388,77 @@ function NeutralMetric({ In, color }) {
   );
 }
 
+function LoadCard({ I, onChange, onPreset }) {
+  return (
+    <Card title="Carga lineal base por fase" icon={<Activity size={15} />}>
+      <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+        <div className="space-y-4">
+          {PHASES.map((p) => (
+            <Slider key={p.key} phase={p} value={I[p.key]} onChange={(v) => onChange(p.key, v)} />
+          ))}
+        </div>
+        <div className="md:border-l md:border-slate-800 md:pl-6">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 mb-2">
+            <RotateCcw size={11} /> Presets
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {PRESETS.map((pr) => (
+              <button key={pr.label} onClick={() => onPreset(pr.v)}
+                className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
+                           text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
+                {pr.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CableCard({ cables, onChange }) {
+  const rows = [...PHASES, { key: "n", label: "Neutro", color: NEUTRAL }];
+  return (
+    <Card title="Cableado por conductor" icon={<Cable size={15} />}>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+        {rows.map((r) => {
+          const R = cableResistance(cables[r.key].L, cables[r.key].A);
+          return (
+            <div key={r.key} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: r.color }} />
+                  <span className="text-sm text-slate-300">{r.label}</span>
+                </div>
+                <span className="font-mono text-[10px] text-slate-500">{R.toFixed(3)} Ω</span>
+              </div>
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>Largo</span><span className="font-mono">{cables[r.key].L} m</span>
+                </div>
+                <input type="range" min={1} max={100} step={1} value={cables[r.key].L}
+                  onChange={(e) => onChange(r.key, "L", e.target.value)}
+                  className="w-full cursor-pointer" style={{ accentColor: r.color }} />
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[10px] text-slate-500">Sección</span>
+                <select value={cables[r.key].A} onChange={(e) => onChange(r.key, "A", e.target.value)}
+                  className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-mono text-slate-200">
+                  {CABLE_SECTIONS.map((s) => <option key={s} value={s}>{s} mm²</option>)}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
+        R = ρ·L/A (cobre). Más largo o menos sección ⇒ más resistencia ⇒ más caída de tensión bajo carga.
+        El neutro afecta su propio desplazamiento. Mirá la pestaña <b className="text-slate-400">Tensión</b>.
+      </p>
+    </Card>
+  );
+}
+
 function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClear }) {
   const targets = [
     { k: "a", label: "A" }, { k: "b", label: "B" },
@@ -288,7 +467,6 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
   return (
     <Card title="Artefactos (armónicos)" icon={<Plus size={15} />}>
       <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
-        {/* columna izquierda: destino + catálogo */}
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">Agregar a la fase</span>
@@ -322,7 +500,6 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
           </div>
         </div>
 
-        {/* columna derecha: conectados */}
         <div className="md:border-l md:border-slate-800 md:pl-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">
@@ -367,7 +544,6 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
   );
 }
 
-// Botones (toggles) para simular fallas combinables: cortes de fase y/o neutro.
 function FaultCard({ faults, onToggle, onClear }) {
   const any = faults.a || faults.b || faults.c || faults.n;
   return (
@@ -381,7 +557,7 @@ function FaultCard({ faults, onToggle, onClear }) {
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {FAULTS.map((f) => {
           const active = faults[f.key];
           return (
@@ -407,11 +583,11 @@ function FaultCard({ faults, onToggle, onClear }) {
 }
 
 // Panel de tensiones cuando el neutro queda abierto (estrella flotante).
-function VoltagePanel({ ov, faults }) {
+function VoltagePanel({ volt, faults }) {
   const rows = PHASES.map((p) => {
     const cut = faults[p.key];
-    const V = ov.V[p.key];
-    const pct = (ov.ratio[p.key] - 1) * 100;
+    const V = volt.V[p.key];
+    const pct = (V / V_NOM - 1) * 100;
     return { p, cut, V, pct, over: pct > 5, under: pct < -5 };
   });
   return (
@@ -536,7 +712,7 @@ function Card({ title, icon, children }) {
 function TabBtn({ active, onClick, icon, label }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
+      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors
         ${active ? "text-slate-100 border-b-2" : "text-slate-500 border-b-2 border-transparent hover:text-slate-300"}`}
       style={active ? { borderColor: ACCENT } : undefined}>
       {icon}{label}
@@ -548,9 +724,8 @@ function TabBtn({ active, onClick, icon, label }) {
 
 function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen }) {
   const VB = 340, C = VB / 2, R = 140, scale = R / I_MAX;
-  const In = Math.hypot(comp.x, comp.y); // resultante de la fundamental
+  const In = Math.hypot(comp.x, comp.y);
 
-  // tip de cada fasor en coords de pantalla (y invertida)
   const tip = (mag, angle) => ({
     x: C + mag * Math.cos(rad(angle)) * scale,
     y: C - mag * Math.sin(rad(angle)) * scale,
@@ -560,27 +735,22 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen }) {
   return (
     <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${VB} ${VB}`} className="w-full" style={{ maxWidth: 420 }}>
-        {/* graticule */}
         {[10, 20, 30].map((r) => (
-          <circle key={r} cx={C} cy={C} r={r * scale} fill="none"
-            stroke="#1e293b" strokeWidth={1} />
+          <circle key={r} cx={C} cy={C} r={r * scale} fill="none" stroke="#1e293b" strokeWidth={1} />
         ))}
         {[10, 20, 30].map((r) => (
           <text key={`t${r}`} x={C + 3} y={C - r * scale + 11} fill="#475569"
             fontSize={9} fontFamily="monospace">{r}A</text>
         ))}
-        {/* ejes */}
         <line x1={10} y1={C} x2={VB - 10} y2={C} stroke="#334155" strokeWidth={1} />
         <line x1={C} y1={10} x2={C} y2={VB - 10} stroke="#334155" strokeWidth={1} />
 
-        {/* fasores de fase */}
         {PHASES.map((p) => {
           const t = tip(I[p.key], p.angle);
           if (I[p.key] < 0.05 || !vis[p.key]) return null;
           return <Arrow key={p.key} x1={C} y1={C} x2={t.x} y2={t.y} color={p.color} width={2.5} />;
         })}
 
-        {/* neutro (resultante de la fundamental) punteado */}
         {In >= 0.05 && vis.n && (
           <Arrow x1={C} y1={C} x2={nTip.x} y2={nTip.y} color={nColor} width={3} dashed glow />
         )}
@@ -611,7 +781,7 @@ function Arrow({ x1, y1, x2, y2, color, width, dashed, glow }) {
   );
 }
 
-/* ===================== Vista: Formas de Onda ===================== */
+/* ===================== Vista: Formas de Onda (corriente) ===================== */
 
 function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
   const W = 560, H = 260, padL = 40, padR = 16, padT = 16, padB = 30;
@@ -619,9 +789,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
   const cY = padT + plotH / 2;
   const N = 220;
 
-  // muestreo: ip(t) = Σ_h mag·sin(hθ + h·∠fase), in(t) = ia+ib+ic
   const { paths, nPath, yMax } = useMemo(() => {
-    const acc = { a: [], b: [], c: [], n: [] };
     const raw = { a: [], b: [], c: [], n: [] };
     let peak = 1;
     for (let i = 0; i <= N; i++) {
@@ -638,12 +806,10 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
     const yS = (plotH / 2) / yMax;
     const x = (ms) => padL + (ms / T_MS) * plotW;
     const y = (amp) => cY - amp * yS;
-    for (const k of ["a", "b", "c", "n"])
-      for (const [ms, v] of raw[k]) acc[k].push([x(ms), y(v)]);
-    const toStr = (arr) => arr.map((p) => p.join(",")).join(" ");
+    const toStr = (arr) => arr.map(([ms, v]) => `${x(ms)},${y(v)}`).join(" ");
     return {
-      paths: PHASES.map((p) => ({ key: p.key, color: p.color, pts: toStr(acc[p.key]) })),
-      nPath: toStr(acc.n),
+      paths: PHASES.map((p) => ({ key: p.key, color: p.color, pts: toStr(raw[p.key]) })),
+      nPath: toStr(raw.n),
       yMax,
     };
   }, [spectra]);
@@ -656,7 +822,6 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
   return (
     <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        {/* grilla horizontal (amperios) */}
         {ticks.map((a) => (
           <g key={a}>
             <line x1={padL} y1={y(a)} x2={W - padR} y2={y(a)}
@@ -665,22 +830,18 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
               fontSize={9} fontFamily="monospace">{Math.round(a)}</text>
           </g>
         ))}
-        {/* grilla vertical (ms) */}
         {[0, 5, 10, 15, 20].map((ms) => (
           <g key={ms}>
-            <line x1={x(ms)} y1={padT} x2={x(ms)} y2={H - padB}
-              stroke="#1e293b" strokeWidth={1} />
+            <line x1={x(ms)} y1={padT} x2={x(ms)} y2={H - padB} stroke="#1e293b" strokeWidth={1} />
             <text x={x(ms)} y={H - padB + 14} textAnchor="middle" fill="#475569"
               fontSize={9} fontFamily="monospace">{ms}ms</text>
           </g>
         ))}
 
-        {/* ondas de fase (distorsionadas por armónicos) */}
         {paths.filter((p) => vis[p.key]).map((p) => (
           <polyline key={p.key} points={p.pts} fill="none" stroke={p.color}
             strokeWidth={2} strokeLinejoin="round" />
         ))}
-        {/* onda del neutro: punteada para que la fase de abajo se vea cuando coinciden */}
         {vis.n && !neutralOpen && (
           <polyline points={nPath} fill="none" stroke={nColor} strokeWidth={2.5}
             strokeDasharray="7 5" strokeLinecap="round" strokeLinejoin="round"
@@ -694,6 +855,130 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
         {neutralOpen
           ? "Neutro abierto: no circula corriente de retorno; las fases muestran la corriente con la tensión desplazada."
           : "El neutro (punteado) = suma instantánea de las tres fases. Con una sola fase cargada se superpone con ella."}
+      </p>
+    </div>
+  );
+}
+
+/* ===================== Vista: Tensión (forma de onda) ===================== */
+
+function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle }) {
+  const W = 560, H = 260, padL = 44, padR = 16, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const cY = padT + plotH / 2;
+  const N = 240;
+
+  const { paths, yMax } = useMemo(() => {
+    const raw = { a: [], b: [], c: [] };
+    let peak = V_NOM;
+
+    // Caída armónica del neutro (compartida): -Rn · Σ corrientes armónicas (h>1).
+    const neutralDrop = (th) => {
+      if (neutralOpen || !Number.isFinite(Rn)) return 0;
+      let inH = 0;
+      for (const p of PHASES) {
+        const spec = spectra[p.key] || {};
+        for (const [h, m] of Object.entries(spec)) {
+          const ho = Number(h);
+          if (ho > 1) inH += m * Math.sin(ho * th + rad(ho * p.angle));
+        }
+      }
+      return -Rn * inH;
+    };
+
+    for (let i = 0; i <= N; i++) {
+      const ms = (i / N) * T_MS;
+      const th = (ms / T_MS) * 2 * Math.PI;
+      const vN = neutralDrop(th);
+      for (const p of PHASES) {
+        if (faults[p.key]) { raw[p.key].push([ms, null]); continue; } // fase cortada
+        // fundamental (con caída) resuelta en `volt` + distorsión armónica del cable
+        let u = volt.V[p.key] * Math.sin(th + volt.ang[p.key]) + vN;
+        if (!neutralOpen && Number.isFinite(R[p.key])) {
+          const spec = spectra[p.key] || {};
+          let drop = 0;
+          for (const [h, m] of Object.entries(spec)) {
+            const ho = Number(h);
+            if (ho > 1) drop += m * Math.sin(ho * th + rad(ho * p.angle));
+          }
+          u -= R[p.key] * drop;
+        }
+        raw[p.key].push([ms, u]);
+        peak = Math.max(peak, Math.abs(u));
+      }
+    }
+    const yMax = Math.ceil(peak / 50) * 50 || 50;
+    const yS = (plotH / 2) / yMax;
+    const x = (ms) => padL + (ms / T_MS) * plotW;
+    const y = (v) => cY - v * yS;
+    const toStr = (arr) =>
+      arr.filter(([, v]) => v != null).map(([ms, v]) => `${x(ms)},${y(v)}`).join(" ");
+    return {
+      paths: PHASES.map((p) => ({ key: p.key, color: p.color, pts: toStr(raw[p.key]) })),
+      yMax,
+    };
+  }, [volt, spectra, R, Rn, faults, neutralOpen]);
+
+  const yS = (plotH / 2) / yMax;
+  const y = (v) => cY - v * yS;
+  const x = (ms) => padL + (ms / T_MS) * plotW;
+  const ticks = [-yMax, 0, yMax];
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)}
+              stroke={v === 0 ? "#334155" : "#1e293b"} strokeWidth={1} />
+            <text x={padL - 5} y={y(v) + 3} textAnchor="end" fill="#475569"
+              fontSize={9} fontFamily="monospace">{Math.round(v)}</text>
+          </g>
+        ))}
+        {/* referencia ±V_NOM para ver la caída/sobretensión */}
+        {[V_NOM, -V_NOM].map((v) => (
+          <g key={`ref${v}`}>
+            <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)} stroke="#475569"
+              strokeWidth={1} strokeDasharray="3 4" opacity={0.6} />
+          </g>
+        ))}
+        <text x={W - padR} y={y(V_NOM) - 4} textAnchor="end" fill="#64748b"
+          fontSize={8} fontFamily="monospace">{V_NOM}V nom</text>
+
+        {[0, 5, 10, 15, 20].map((ms) => (
+          <g key={ms}>
+            <line x1={x(ms)} y1={padT} x2={x(ms)} y2={H - padB} stroke="#1e293b" strokeWidth={1} />
+            <text x={x(ms)} y={H - padB + 14} textAnchor="middle" fill="#475569"
+              fontSize={9} fontFamily="monospace">{ms}ms</text>
+          </g>
+        ))}
+
+        {paths.filter((p) => vis[p.key] && !faults[p.key] && p.pts).map((p) => (
+          <polyline key={p.key} points={p.pts} fill="none" stroke={p.color}
+            strokeWidth={2} strokeLinejoin="round" />
+        ))}
+      </svg>
+
+      <Legend nColor={NEUTRAL} vis={vis} onToggle={onToggle} noNeutral />
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-mono">
+        {PHASES.map((p) => {
+          if (faults[p.key]) return (
+            <span key={p.key} className="text-slate-600">{p.label}: cortada</span>
+          );
+          const V = volt.V[p.key];
+          const pct = (V / V_NOM - 1) * 100;
+          const c = pct > 5 ? DANGER : pct < -5 ? "#eab308" : "#94a3b8";
+          return (
+            <span key={p.key} style={{ color: c }}>
+              {p.label}: {Math.round(V)} V ({pct >= 0 ? "+" : ""}{pct.toFixed(0)}%)
+            </span>
+          );
+        })}
+      </div>
+      <p className="mt-1 text-[10px] text-slate-600 font-mono text-center max-w-md leading-relaxed">
+        {neutralOpen
+          ? "Neutro abierto: la tensión de carga se redistribuye según el desbalance (las fases livianas sobretensionan)."
+          : "Tensión en la carga = nominal menos la caída por el cable (R·I). Subí el largo / bajá la sección para verla."}
       </p>
     </div>
   );
@@ -713,7 +998,6 @@ function HarmonicView({ perHarmonic, In, nColor }) {
   return (
     <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-        {/* eje base */}
         <line x1={padL} y1={baseY} x2={W - padR} y2={baseY} stroke="#334155" strokeWidth={1} />
         {bars.map((b, i) => {
           const h = (b.mag / max) * plotH;
@@ -726,9 +1010,7 @@ function HarmonicView({ perHarmonic, In, nColor }) {
               <text x={cx} y={baseY - h - 5} textAnchor="middle" fill="#94a3b8"
                 fontSize={9} fontFamily="monospace">{fmt(b.mag)}</text>
               <text x={cx} y={baseY + 14} textAnchor="middle"
-                fill={b.triplen ? nColor : "#64748b"} fontSize={10} fontFamily="monospace">
-                {b.h}ª
-              </text>
+                fill={b.triplen ? nColor : "#64748b"} fontSize={10} fontFamily="monospace">{b.h}ª</text>
               {b.triplen && (
                 <text x={cx} y={baseY + 26} textAnchor="middle" fill="#475569"
                   fontSize={8} fontFamily="monospace">triple</text>
@@ -751,8 +1033,7 @@ function HarmonicView({ perHarmonic, In, nColor }) {
   );
 }
 
-function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen }) {
-  // Si onToggle está, cada ítem es un botón para mostrar/ocultar esa traza.
+function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral }) {
   const interactive = typeof onToggle === "function";
   const swatch = (color, dash) =>
     dash ? (
@@ -775,13 +1056,10 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen }) {
     );
     if (!interactive)
       return (
-        <span key={key} className={base} style={{ color: bold ? color : undefined }}>
-          {content}
-        </span>
+        <span key={key} className={base} style={{ color: bold ? color : undefined }}>{content}</span>
       );
     return (
-      <button key={key} onClick={() => onToggle(key)}
-        title={on ? "Ocultar" : "Mostrar"}
+      <button key={key} onClick={() => onToggle(key)} title={on ? "Ocultar" : "Mostrar"}
         className={`${base} rounded-md px-2 py-1 transition-colors hover:bg-slate-800/70`}
         style={{ color: on ? (bold ? color : "#94a3b8") : "#64748b" }}>
         {content}
@@ -789,12 +1067,11 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen }) {
     );
   };
 
-  // Con el neutro abierto no tiene sentido togglear su traza (no existe).
   const neutralLabel = `Neutro${note ? ` · ${note}` : ""}`;
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs">
       {PHASES.map((p) => item(p.key, p.label, p.color))}
-      {neutralOpen ? (
+      {noNeutral ? null : neutralOpen ? (
         <span className="flex items-center gap-1.5 font-medium text-slate-600">
           <Unplug size={12} /> {neutralLabel}
         </span>

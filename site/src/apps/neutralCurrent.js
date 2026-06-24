@@ -221,6 +221,75 @@ export function openNeutralVoltages(fund) {
   return { vn, V, ratio };
 }
 
+// Resistividad del cobre (Ω·mm²/m) a ~20 °C.
+export const RHO_CU = 0.0175;
+// Secciones de cable normalizadas (mm²).
+export const CABLE_SECTIONS = [1.5, 2.5, 4, 6, 10, 16, 25, 35];
+
+/** Resistencia de un conductor: R = ρ·L/A (L en m, A en mm²). */
+export function cableResistance(lengthM, sectionMm2) {
+  if (!sectionMm2 || sectionMm2 <= 0) return Infinity;
+  return (RHO_CU * (lengthM || 0)) / sectionMm2;
+}
+
+/**
+ * Tensión fase-neutro en la carga, a frecuencia fundamental, resolviendo el
+ * nodo del neutro con la resistencia de cada cable. Modela en un solo cálculo:
+ *  - la caída de tensión por la carga (más amperes -> más caída),
+ *  - el desplazamiento del neutro por su propia resistencia,
+ *  - el neutro abierto (Rn = Infinity), donde el punto estrella flota.
+ *
+ * Cargas resistivas: conductancia G_p (S). Cada fase ve E_p = V_NOM∠θ_p en el
+ * origen y un cable R_p; el neutro vuelve por R_n. Con a_p = G_p/(1+G_p·R_p):
+ *   V_N = Σ E_p·a_p / (Σ a_p + 1/R_n)
+ *   I_p = (E_p − V_N)·a_p ,  U_carga_p = (E_p − V_N)/(1 + G_p·R_p)
+ *
+ * @param {{G:{a,b,c}, R:{a,b,c}, Rn:number}} p
+ * @returns {{V:{a,b,c} (V), ang:{a,b,c} (rad), I:{a,b,c} (A), vn:{x,y}, In:number}}
+ */
+export function solveVoltages({ G, R, Rn }) {
+  const a = {};
+  for (const k of PHASE_KEYS) {
+    const Gp = G[k] || 0;
+    const Rp = R[k] || 0;
+    a[k] = Gp / (1 + Gp * Rp);
+  }
+  const E = {};
+  for (const k of PHASE_KEYS)
+    E[k] = { x: V_NOM * Math.cos(rad(PHASE_ANGLES[k])), y: V_NOM * Math.sin(rad(PHASE_ANGLES[k])) };
+
+  let numX = 0;
+  let numY = 0;
+  let den = Number.isFinite(Rn) && Rn > 0 ? 1 / Rn : 0;
+  for (const k of PHASE_KEYS) {
+    numX += E[k].x * a[k];
+    numY += E[k].y * a[k];
+    den += a[k];
+  }
+  const vn = den > 1e-12 ? { x: numX / den, y: numY / den } : { x: 0, y: 0 };
+
+  const V = {};
+  const ang = {};
+  const I = {};
+  let inx = 0;
+  let iny = 0;
+  for (const k of PHASE_KEYS) {
+    const dx = E[k].x - vn.x;
+    const dy = E[k].y - vn.y;
+    const ipx = dx * a[k];
+    const ipy = dy * a[k];
+    inx += ipx;
+    iny += ipy;
+    I[k] = Math.hypot(ipx, ipy);
+    const f = 1 / (1 + (G[k] || 0) * (R[k] || 0));
+    const ux = dx * f;
+    const uy = dy * f;
+    V[k] = Math.hypot(ux, uy);
+    ang[k] = Math.atan2(uy, ux);
+  }
+  return { V, ang, I, vn, In: Math.hypot(inx, iny) };
+}
+
 /** Corriente instantánea de una fase (suma de armónicos) en θ [rad]. */
 export function phaseInstant(spec, angleDeg, theta) {
   let v = 0;

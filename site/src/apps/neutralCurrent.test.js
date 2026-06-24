@@ -3,6 +3,7 @@ import {
   neutralCurrent, rad, T_MS, I_MAX,
   buildPhaseSpectrum, harmonicNeutral, getAppliance, isTriplen,
   openNeutralVoltages, scaleSpectrum, V_NOM,
+  cableResistance, solveVoltages, RHO_CU,
 } from "./neutralCurrent";
 
 describe("rad", () => {
@@ -151,6 +152,54 @@ describe("openNeutralVoltages", () => {
     expect(r.ratio.a).toBeLessThan(1); // subtensión
     expect(r.ratio.b).toBeGreaterThan(1); // sobretensión
     expect(r.ratio.c).toBeGreaterThan(1);
+  });
+});
+
+describe("cableResistance", () => {
+  it("R = ρ·L/A", () => {
+    expect(cableResistance(20, 4)).toBeCloseTo((RHO_CU * 20) / 4);
+  });
+  it("sección 0 o inválida => Infinity (conductor abierto)", () => {
+    expect(cableResistance(20, 0)).toBe(Infinity);
+  });
+});
+
+describe("solveVoltages", () => {
+  const Z = { a: 0, b: 0, c: 0 };
+
+  it("sin carga: tensión nominal en las tres fases", () => {
+    const r = solveVoltages({ G: Z, R: Z, Rn: 0.1 });
+    for (const k of ["a", "b", "c"]) expect(r.V[k]).toBeCloseTo(V_NOM);
+  });
+
+  it("balanceado con cable ideal (R=0): sin caída ni corrimiento", () => {
+    const g = 0.05;
+    const r = solveVoltages({ G: { a: g, b: g, c: g }, R: Z, Rn: 0.01 });
+    for (const k of ["a", "b", "c"]) expect(r.V[k]).toBeCloseTo(V_NOM);
+    expect(r.In).toBeCloseTo(0);
+  });
+
+  it("caída de tensión: más carga en una fase => menos tensión en esa carga", () => {
+    const R = { a: 0.5, b: 0.5, c: 0.5 };
+    const light = solveVoltages({ G: { a: 0.02, b: 0, c: 0 }, R, Rn: 0.01 });
+    const heavy = solveVoltages({ G: { a: 0.2, b: 0, c: 0 }, R, Rn: 0.01 });
+    expect(heavy.V.a).toBeLessThan(light.V.a);
+    expect(heavy.V.a).toBeLessThan(V_NOM);
+    expect(heavy.I.a).toBeGreaterThan(light.I.a); // pero más corriente
+  });
+
+  it("neutro abierto (Rn=∞) coincide con openNeutralVoltages cuando R=0", () => {
+    const G = { a: 10 / V_NOM, b: 1 / V_NOM, c: 1 / V_NOM };
+    const sv = solveVoltages({ G, R: Z, Rn: Infinity });
+    const ov = openNeutralVoltages({ a: 10, b: 1, c: 1 });
+    for (const k of ["a", "b", "c"]) expect(sv.V[k]).toBeCloseTo(ov.V[k]);
+    expect(sv.In).toBeCloseTo(0); // sin retorno, no hay corriente de neutro
+  });
+
+  it("neutro abierto monofásico: la fase vacía sobretensiona", () => {
+    const r = solveVoltages({ G: { a: 0.05, b: 0, c: 0 }, R: Z, Rn: Infinity });
+    expect(r.V.b).toBeGreaterThan(V_NOM);
+    expect(r.V.c).toBeGreaterThan(V_NOM);
   });
 });
 
