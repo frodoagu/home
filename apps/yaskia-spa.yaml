@@ -1,0 +1,30 @@
+---
+# ArgoCD Application – nginx serving the yaskia.com single-page application.
+# The chart lives in a separate repo (frodoagu/yaskia) alongside the site source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: yaskia-spa
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://yaskia.com"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/yaskia.git
+    targetRevision: HEAD
+    path: charts/yaskia-spa
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: yaskia-spa
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
