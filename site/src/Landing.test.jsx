@@ -4,13 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import Landing from "./Landing";
 import { AuthProvider } from "./auth/AuthProvider";
+import { LanguageProvider } from "./i18n/LanguageProvider";
 
 function renderLanding() {
   return render(
     <MemoryRouter>
-      <AuthProvider>
-        <Landing />
-      </AuthProvider>
+      <LanguageProvider initialLanguage="es">
+        <AuthProvider>
+          <Landing />
+        </AuthProvider>
+      </LanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -32,7 +35,7 @@ describe("Landing", () => {
     const user = userEvent.setup();
     renderLanding();
     // 'Mate' sólo contiene Mandelbrot; 'Corriente de Neutro' es Oficios.
-    await user.click(screen.getByRole("button", { name: /Mate/ }));
+    await user.click(screen.getByRole("button", { name: /Mate/i }));
     expect(screen.getByText("Mandelbrot")).toBeInTheDocument();
     expect(screen.queryByText("Corriente de Neutro")).not.toBeInTheDocument();
   });

@@ -7,7 +7,19 @@ import MandelbrotExplorer from "./MandelbrotExplorer";
  * Each app declares which of these it belongs to (`categories`), and the
  * chips filter the grid by them. Keep this list in sync with app entries.
  * ---------------------------------------------------------------------- */
-export const CATEGORIES = ["DevOps", "Motoviajero", "Endurero", "Papá", "Oficios", "Mate"];
+export const CATEGORIES = ["devops", "rider", "enduro", "dad", "trades", "mate"];
+
+export const CATEGORY_LABELS = {
+  devops: { es: "DevOps", en: "DevOps" },
+  rider: { es: "Motoviajero", en: "Rider" },
+  enduro: { es: "Endurero", en: "Enduro" },
+  dad: { es: "Papa", en: "Dad" },
+  trades: { es: "Oficios", en: "Trades" },
+  mate: { es: "Mate", en: "Mate" },
+};
+
+export const getCategoryLabel = (key, language) =>
+  CATEGORY_LABELS[key]?.[language] || CATEGORY_LABELS[key]?.es || key;
 
 /* -------------------------------------------------------------------------
  * App registry — single source of truth for the landing grid and routing.
@@ -24,20 +36,26 @@ export const CATEGORIES = ["DevOps", "Motoviajero", "Endurero", "Papá", "Oficio
 export const apps = [
   {
     slug: "corriente-neutro",
-    title: "Corriente de Neutro",
-    description: "Visualizador de fases y consumo en un sistema trifásico (3F + N).",
-    categories: ["Oficios"],
-    tag: "Electricidad",
+    title: { es: "Corriente de Neutro", en: "Neutral Current" },
+    description: {
+      es: "Visualizador de fases y consumo en un sistema trifasico (3F + N).",
+      en: "Phase and load visualizer for a three-phase system (3P + N).",
+    },
+    categories: ["trades"],
+    tag: { es: "Electricidad", en: "Electrical" },
     icon: Zap,
     accent: "#f59e0b",
     Component: NeutralCurrentVisualizer,
   },
   {
     slug: "mandelbrot",
-    title: "Mandelbrot",
-    description: "Explorá el fractal con zoom infinito, colores vibrantes y lugares emblemáticos.",
-    categories: ["Mate"],
-    tag: "Fractal",
+    title: { es: "Mandelbrot", en: "Mandelbrot" },
+    description: {
+      es: "Explora el fractal con zoom infinito, colores vibrantes y lugares emblematicos.",
+      en: "Explore the fractal with infinite zoom, vivid colors, and iconic locations.",
+    },
+    categories: ["mate"],
+    tag: { es: "Fractal", en: "Fractal" },
     icon: Sparkles,
     accent: "#c026d3",
     Component: MandelbrotExplorer,
@@ -61,41 +79,50 @@ export const getApp = (slug) => apps.find((a) => a.slug === slug);
 export const privateLinks = [
   {
     slug: "traefik",
-    title: "Traefik",
-    description: "Dashboard del ingress del cluster.",
+    title: { es: "Traefik", en: "Traefik" },
+    description: {
+      es: "Panel del ingress del cluster.",
+      en: "Ingress dashboard for the cluster.",
+    },
     href: "https://traefik.agu.com.ar/dashboard/",
-    categories: ["DevOps"],
-    tag: "Infra",
+    categories: ["devops"],
+    tag: { es: "Infra", en: "Infra" },
     icon: Network,
     accent: "#3b82f6",
   },
   {
     slug: "home-assistant",
-    title: "Home Assistant",
-    description: "Domótica del hogar.",
+    title: { es: "Home Assistant", en: "Home Assistant" },
+    description: { es: "Domotica del hogar.", en: "Home automation." },
     href: "https://home.agu.com.ar",
-    categories: ["DevOps", "Papá"],
-    tag: "Hogar",
+    categories: ["devops", "dad"],
+    tag: { es: "Hogar", en: "Home" },
     icon: Home,
     accent: "#22c55e",
   },
   {
     slug: "argocd",
-    title: "ArgoCD",
-    description: "GitOps / estado de los despliegues.",
+    title: { es: "ArgoCD", en: "ArgoCD" },
+    description: {
+      es: "GitOps / estado de los despliegues.",
+      en: "GitOps / deployment status.",
+    },
     href: "https://argocd.agu.com.ar",
-    categories: ["DevOps"],
-    tag: "GitOps",
+    categories: ["devops"],
+    tag: { es: "GitOps", en: "GitOps" },
     icon: GitBranch,
     accent: "#f97316",
   },
   {
     slug: "grafana",
-    title: "Grafana",
-    description: "Métricas del cluster, hardware del Pi y uptime.",
+    title: { es: "Grafana", en: "Grafana" },
+    description: {
+      es: "Metricas del cluster, hardware del Pi y uptime.",
+      en: "Cluster metrics, Pi hardware, and uptime.",
+    },
     href: "https://grafana.agu.com.ar",
-    categories: ["DevOps"],
-    tag: "Monitoreo",
+    categories: ["devops"],
+    tag: { es: "Monitoreo", en: "Monitoring" },
     icon: Activity,
     accent: "#f59e0b",
   },

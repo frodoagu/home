@@ -15,6 +15,7 @@ import {
   storeUser,
   userFromClaims,
 } from "./auth";
+import { useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Client-side Google sign-in (Google Identity Services).
@@ -48,6 +49,7 @@ function loadGsi() {
 }
 
 export function AuthProvider({ children }) {
+  const { language } = useLanguage();
   const [user, setUser] = useState(() => loadStoredUser());
   const [ready, setReady] = useState(false);
 
@@ -86,10 +88,10 @@ export function AuthProvider({ children }) {
         size: "large",
         shape: "pill",
         text: "signin_with",
-        locale: "es",
+        locale: language,
       });
     },
-    [ready],
+    [ready, language],
   );
 
   const signOut = useCallback(() => {

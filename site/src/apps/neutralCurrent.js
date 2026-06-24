@@ -36,42 +36,42 @@ export const isTriplen = (h) => h % 3 === 0;
 export const APPLIANCES = [
   {
     key: "aire",
-    label: "Aire (inverter)",
+    label: { es: "Aire (inverter)", en: "AC (inverter)" },
     icon: "AirVent",
     current: 12,
     spectrum: { 3: 0.2, 5: 0.12, 7: 0.07, 9: 0.03 },
   },
   {
     key: "micro",
-    label: "Microondas",
+    label: { es: "Microondas", en: "Microwave" },
     icon: "Microwave",
     current: 8,
     spectrum: { 3: 0.3, 5: 0.18, 7: 0.08 },
   },
   {
     key: "bomba",
-    label: "Bomba de agua",
+    label: { es: "Bomba de agua", en: "Water pump" },
     icon: "Droplets",
     current: 8,
     spectrum: { 3: 0.06, 5: 0.05, 7: 0.03 },
   },
   {
     key: "heladera",
-    label: "Heladera",
+    label: { es: "Heladera", en: "Fridge" },
     icon: "Refrigerator",
     current: 3,
     spectrum: { 3: 0.1, 5: 0.06, 7: 0.03 },
   },
   {
     key: "pc",
-    label: "PC / Fuente",
+    label: { es: "PC / Fuente", en: "PC / PSU" },
     icon: "MonitorSmartphone",
     current: 2,
     spectrum: { 3: 0.6, 5: 0.35, 7: 0.2, 9: 0.1, 11: 0.06 },
   },
   {
     key: "led",
-    label: "Luces LED",
+    label: { es: "Luces LED", en: "LED lights" },
     icon: "Lightbulb",
     current: 1.5,
     spectrum: { 3: 0.3, 5: 0.1, 7: 0.05 },
@@ -170,10 +170,10 @@ export const V_NOM = 230; // V fase-neutro (AR)
 
 // Fallas combinables que se pueden simular (cortes de fase y/o de neutro).
 export const FAULTS = [
-  { key: "a", label: "Corte Fase A" },
-  { key: "b", label: "Corte Fase B" },
-  { key: "c", label: "Corte Fase C" },
-  { key: "n", label: "Corte de Neutro" },
+  { key: "a", label: { es: "Corte Fase A", en: "Phase A open" } },
+  { key: "b", label: { es: "Corte Fase B", en: "Phase B open" } },
+  { key: "c", label: { es: "Corte Fase C", en: "Phase C open" } },
+  { key: "n", label: { es: "Corte de Neutro", en: "Neutral open" } },
 ];
 
 /** Multiplica todas las magnitudes de un espectro por un factor. */

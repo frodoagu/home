@@ -1,18 +1,33 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { getApp } from "./apps/registry";
+import LanguageToggle from "./components/LanguageToggle";
+import { localizeText, useLanguage } from "./i18n/LanguageProvider";
 
 // Wraps a registered app: a thin top bar with a back link, then the app itself.
 export default function AppHost() {
+  const { language } = useLanguage();
   const { slug } = useParams();
   const app = getApp(slug);
+
+  const txt = language === "es"
+    ? {
+        notFound: "No encontre esa app.",
+        backHome: "Volver al inicio",
+        home: "Inicio",
+      }
+    : {
+        notFound: "I could not find that app.",
+        backHome: "Back to home",
+        home: "Home",
+      };
 
   if (!app) {
     return (
       <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-slate-950 text-slate-100">
-        <p className="text-slate-400">No encontré esa app.</p>
+        <p className="text-slate-400">{txt.notFound}</p>
         <Link to="/" className="text-sm text-amber-400 hover:underline">
-          ← Volver al inicio
+          ← {txt.backHome}
         </Link>
       </div>
     );
@@ -22,16 +37,19 @@ export default function AppHost() {
 
   return (
     <div className="flex min-h-full flex-col bg-slate-950">
-      <div className="flex items-center gap-3 border-b border-slate-800 bg-slate-950 px-4 py-2.5">
-        <Link
-          to="/"
-          className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-100"
-        >
-          <ArrowLeft size={16} />
-          Inicio
-        </Link>
-        <span className="text-slate-700">/</span>
-        <span className="text-sm text-slate-300">{app.title}</span>
+      <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-100"
+          >
+            <ArrowLeft size={16} />
+            {txt.home}
+          </Link>
+          <span className="text-slate-700">/</span>
+          <span className="text-sm text-slate-300">{localizeText(app.title, language)}</span>
+        </div>
+        <LanguageToggle />
       </div>
       <div className="flex-1">
         <Component />

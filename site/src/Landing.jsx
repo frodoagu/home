@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
-import { apps, CATEGORIES, privateLinks } from "./apps/registry";
+import { apps, CATEGORIES, getCategoryLabel, privateLinks } from "./apps/registry";
 import PrivateSection from "./PrivateSection";
+import LanguageToggle from "./components/LanguageToggle";
+import { localizeText, useLanguage } from "./i18n/LanguageProvider";
 
 export default function Landing() {
+  const { language } = useLanguage();
   // null = no filter (show everything). Clicking the active chip clears it.
   const [active, setActive] = useState(null);
 
@@ -14,15 +17,37 @@ export default function Landing() {
     ? apps.filter((app) => app.categories?.includes(active))
     : apps;
 
+  const txt = language === "es"
+    ? {
+        intro: "Herramientas y experimentos web que voy armando. Cosas de oficios, infra y lo que se cruce.",
+        publicTitle: "Publicas",
+        privateLabel: "Privadas",
+        clearFilter: "limpiar filtro",
+        empty: "Todavia no hay apps en",
+        soon: "Pronto.",
+        footer: "agu.com.ar · self-hosted en un Raspberry Pi",
+      }
+    : {
+        intro: "Web tools and experiments I keep building. A mix of trades, infra, and whatever comes next.",
+        publicTitle: "Public",
+        privateLabel: "Private",
+        clearFilter: "clear filter",
+        empty: "No apps yet in",
+        soon: "Soon.",
+        footer: "agu.com.ar · self-hosted on a Raspberry Pi",
+      };
+
   return (
     <div className="min-h-full bg-slate-950 text-slate-100 font-sans">
       <div className="mx-auto max-w-5xl px-5 py-12 sm:py-16">
         {/* Header */}
         <header className="mb-10 sm:mb-14">
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">Agu</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">Agu</h1>
+            <LanguageToggle />
+          </div>
           <p className="mt-2 text-slate-400 max-w-2xl">
-            Herramientas y experimentos web que voy armando. Cosas de oficios,
-            infra y lo que se cruce.
+            {txt.intro}
           </p>
 
           {/* Identity facets — click to filter the apps below */}
@@ -43,7 +68,7 @@ export default function Landing() {
                       : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600 hover:text-slate-200"
                   }`}
                 >
-                  {cat}
+                  {getCategoryLabel(cat, language)}
                   <span className="ml-1.5 text-[10px] text-slate-600">{count}</span>
                 </button>
               );
@@ -55,14 +80,14 @@ export default function Landing() {
         <section>
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              {active ? `Públicas · ${active}` : "Públicas"}
+              {active ? `${txt.publicTitle} · ${getCategoryLabel(active, language)}` : txt.publicTitle}
             </h2>
             {active && (
               <button
                 onClick={() => setActive(null)}
                 className="text-xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
               >
-                limpiar filtro
+                {txt.clearFilter}
               </button>
             )}
           </div>
@@ -75,7 +100,7 @@ export default function Landing() {
             </div>
           ) : (
             <p className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-500">
-              Todavía no hay apps en <span className="text-slate-300">{active}</span>. Pronto. 🛠️
+              {txt.empty} <span className="text-slate-300">{getCategoryLabel(active, language)}</span>. {txt.soon} 🛠️
             </p>
           )}
         </section>
@@ -84,7 +109,7 @@ export default function Landing() {
         <PrivateSection active={active} />
 
         <footer className="mt-16 text-xs text-slate-600">
-          agu.com.ar · self-hosted en un Raspberry Pi 🍓
+          {txt.footer} 🍓
         </footer>
       </div>
     </div>
@@ -92,6 +117,7 @@ export default function Landing() {
 }
 
 function AppCard({ app }) {
+  const { language } = useLanguage();
   const { icon: Icon, accent } = app;
   return (
     <Link
@@ -111,9 +137,9 @@ function AppCard({ app }) {
           className="text-slate-600 transition-colors group-hover:text-slate-300"
         />
       </div>
-      <h3 className="text-base font-semibold text-slate-100">{app.title}</h3>
-      <p className="mt-1 flex-1 text-sm text-slate-400">{app.description}</p>
-      {app.tag && (
+      <h3 className="text-base font-semibold text-slate-100">{localizeText(app.title, language)}</h3>
+      <p className="mt-1 flex-1 text-sm text-slate-400">{localizeText(app.description, language)}</p>
+      {localizeText(app.tag, language) && (
         <span
           className="mt-3 self-start rounded-full px-2 py-0.5 text-[10px] font-medium"
           style={{
@@ -122,7 +148,7 @@ function AppCard({ app }) {
             border: `1px solid ${accent}33`,
           }}
         >
-          {app.tag}
+          {localizeText(app.tag, language)}
         </span>
       )}
     </Link>

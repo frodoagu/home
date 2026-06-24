@@ -13,6 +13,7 @@ import {
   zoomView,
   panView,
 } from "./mandelbrot";
+import { useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Explorador del conjunto de Mandelbrot.
@@ -25,6 +26,7 @@ import {
  * ---------------------------------------------------------------------- */
 
 export default function MandelbrotExplorer() {
+  const { language } = useLanguage();
   const [view, setView] = useState({ cx: -0.5, cy: 0, span: INITIAL_SPAN });
   const [maxIter, setMaxIter] = useState(200);
   const [palIdx, setPalIdx] = useState(0);
@@ -265,6 +267,46 @@ export default function MandelbrotExplorer() {
     : `${zoomLevel.toFixed(zoomLevel < 10 ? 1 : 0)}×`;
   const nearLimit = view.span <= MIN_SPAN * 50;
 
+  const txt = language === "es"
+    ? {
+        title: "Mandelbrot · Explorador de fractales",
+        subtitle: "z <- z^2 + c · coloreado suave · zoom hasta el limite del double",
+        zoomIn: "Acercar",
+        zoomOut: "Alejar",
+        resetView: "Reiniciar vista",
+        canvasHelp1: "Toca/clic para acercar · arrastra para mover · rueda para zoom ·",
+        canvasHelp2: "shift+clic",
+        canvasHelp3: "para alejar",
+        rendering4k: "Renderizando 4K...",
+        export4k: "Exportar vista en 4K (JPG)",
+        spots: "Lugares",
+        palette: "Paleta",
+        detail: "Detalle",
+        iterations: "Iteraciones",
+        iterHint: "Mas iteraciones = mas detalle en lo profundo (y render mas lento).",
+        coords: "Coordenadas",
+        limitWarn: "Cerca del limite de precision (double): mas zoom se ve pixelado.",
+      }
+    : {
+        title: "Mandelbrot · Fractal explorer",
+        subtitle: "z <- z^2 + c · smooth coloring · zoom until double precision limits",
+        zoomIn: "Zoom in",
+        zoomOut: "Zoom out",
+        resetView: "Reset view",
+        canvasHelp1: "Tap/click to zoom in · drag to pan · wheel to zoom ·",
+        canvasHelp2: "shift+click",
+        canvasHelp3: "to zoom out",
+        rendering4k: "Rendering 4K...",
+        export4k: "Export current view in 4K (JPG)",
+        spots: "Spots",
+        palette: "Palette",
+        detail: "Detail",
+        iterations: "Iterations",
+        iterHint: "More iterations = more detail in deep zones (and slower render).",
+        coords: "Coordinates",
+        limitWarn: "Near floating-point precision limits: extra zoom may look pixelated.",
+      };
+
   return (
     <div className="w-full min-h-full bg-slate-950 text-slate-100 p-4 sm:p-6 font-sans">
       <div className="mx-auto max-w-6xl">
@@ -276,10 +318,10 @@ export default function MandelbrotExplorer() {
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
-                Mandelbrot · Explorador de fractales
+                {txt.title}
               </h1>
               <p className="font-mono text-xs text-slate-500">
-                z ← z² + c · coloreado suave · zoom hasta el límite del double
+                {txt.subtitle}
               </p>
             </div>
           </div>
@@ -305,14 +347,14 @@ export default function MandelbrotExplorer() {
                 />
                 {/* Controles flotantes de zoom (cómodos en mobile) */}
                 <div className="absolute bottom-3 right-3 flex flex-col gap-2">
-                  <IconBtn onClick={() => zoomCenter(0.5)} title="Acercar"><Plus size={18} /></IconBtn>
-                  <IconBtn onClick={() => zoomCenter(2)} title="Alejar"><Minus size={18} /></IconBtn>
-                  <IconBtn onClick={reset} title="Reiniciar vista"><RotateCcw size={16} /></IconBtn>
+                  <IconBtn onClick={() => zoomCenter(0.5)} title={txt.zoomIn}><Plus size={18} /></IconBtn>
+                  <IconBtn onClick={() => zoomCenter(2)} title={txt.zoomOut}><Minus size={18} /></IconBtn>
+                  <IconBtn onClick={reset} title={txt.resetView}><RotateCcw size={16} /></IconBtn>
                 </div>
               </div>
               <p className="border-t border-slate-800 px-3 py-2 text-center text-[11px] text-slate-500">
-                Tocá/clic para acercar · arrastrá para mover · rueda para zoom ·
-                <span className="text-slate-400"> shift+clic</span> para alejar
+                {txt.canvasHelp1}
+                <span className="text-slate-400"> {txt.canvasHelp2}</span> {txt.canvasHelp3}
               </p>
             </div>
           </section>
@@ -327,17 +369,17 @@ export default function MandelbrotExplorer() {
               {exportPct !== null ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Renderizando 4K… {exportPct}%
+                  {txt.rendering4k} {exportPct}%
                 </>
               ) : (
                 <>
                   <Image size={16} />
-                  Exportar vista en 4K (JPG)
+                  {txt.export4k}
                 </>
               )}
             </button>
 
-            <Card title="Lugares" icon={<MapPin size={15} />}>
+            <Card title={txt.spots} icon={<MapPin size={15} />}>
               <div className="grid grid-cols-2 gap-2 pt-1">
                 {PRESETS.map((pr) => {
                   const active = pr.label === presetLabel;
@@ -358,7 +400,7 @@ export default function MandelbrotExplorer() {
               </div>
             </Card>
 
-            <Card title="Paleta" icon={<Palette size={15} />}>
+            <Card title={txt.palette} icon={<Palette size={15} />}>
               <div className="space-y-2 pt-1">
                 {PALETTES.map((p, i) => (
                   <button
@@ -380,10 +422,10 @@ export default function MandelbrotExplorer() {
               </div>
             </Card>
 
-            <Card title="Detalle" icon={<Sparkles size={15} />}>
+            <Card title={txt.detail} icon={<Sparkles size={15} />}>
               <div className="pt-1">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-sm text-slate-300">Iteraciones</span>
+                  <span className="text-sm text-slate-300">{txt.iterations}</span>
                   <span className="font-mono text-sm font-semibold tabular-nums text-fuchsia-300">
                     {maxIter}
                   </span>
@@ -399,12 +441,12 @@ export default function MandelbrotExplorer() {
                   style={{ accentColor: "#c026d3" }}
                 />
                 <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
-                  Más iteraciones = más detalle en lo profundo (y render más lento).
+                  {txt.iterHint}
                 </p>
               </div>
             </Card>
 
-            <Card title="Coordenadas" icon={<MapPin size={15} />}>
+            <Card title={txt.coords} icon={<MapPin size={15} />}>
               <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 pt-1 font-mono text-[11px]">
                 <dt className="text-slate-500">re</dt>
                 <dd className="truncate text-right text-slate-300">{view.cx.toPrecision(10)}</dd>
@@ -415,7 +457,7 @@ export default function MandelbrotExplorer() {
               </dl>
               {nearLimit && (
                 <p className="mt-2 text-[10px] leading-relaxed text-amber-400/80">
-                  Cerca del límite de precisión (double): más zoom se ve pixelado.
+                  {txt.limitWarn}
                 </p>
               )}
             </Card>

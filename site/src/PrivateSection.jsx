@@ -1,12 +1,26 @@
 import { useEffect, useRef } from "react";
 import { ArrowUpRight, Lock, LogOut, ShieldAlert } from "lucide-react";
 import { useAuth } from "./auth/AuthProvider";
-import { privateLinks } from "./apps/registry";
+import { getCategoryLabel, privateLinks } from "./apps/registry";
+import { localizeText, useLanguage } from "./i18n/LanguageProvider";
 
 // The private half of the landing: external links to other self-hosted
 // services, revealed only after a Google sign-in with an allowed email.
 export default function PrivateSection({ active }) {
+  const { language } = useLanguage();
   const { user, authorized, signOut } = useAuth();
+
+  const txt = language === "es"
+    ? {
+        title: "Privado",
+        signOut: "Salir",
+        empty: "Nada privado en",
+      }
+    : {
+        title: "Private",
+        signOut: "Sign out",
+        empty: "No private links in",
+      };
 
   const visible = active
     ? privateLinks.filter((link) => link.categories?.includes(active))
@@ -17,7 +31,7 @@ export default function PrivateSection({ active }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
           <Lock size={13} />
-          {active ? `Privado · ${active}` : "Privado"}
+          {active ? `${txt.title} · ${getCategoryLabel(active, language)}` : txt.title}
         </h2>
         {user && (
           <div className="flex items-center gap-2">
@@ -37,7 +51,7 @@ export default function PrivateSection({ active }) {
               className="flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900 px-2.5 py-1 text-xs text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200"
             >
               <LogOut size={12} />
-              Salir
+              {txt.signOut}
             </button>
           </div>
         )}
@@ -55,7 +69,7 @@ export default function PrivateSection({ active }) {
         </div>
       ) : (
         <p className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-500">
-          Nada privado en <span className="text-slate-300">{active}</span>.
+          {txt.empty} <span className="text-slate-300">{getCategoryLabel(active, language)}</span>.
         </p>
       )}
     </section>
@@ -63,8 +77,21 @@ export default function PrivateSection({ active }) {
 }
 
 function SignInGate() {
+  const { language } = useLanguage();
   const { renderButton, ready } = useAuth();
   const btnRef = useRef(null);
+
+  const txt = language === "es"
+    ? {
+        title: "Zona privada",
+        body: "Accesos a los servicios self-hosted. Inicia sesion con Google para verlos.",
+        loading: "Cargando Google...",
+      }
+    : {
+        title: "Private zone",
+        body: "Access to self-hosted services. Sign in with Google to view them.",
+        loading: "Loading Google...",
+      };
 
   useEffect(() => {
     renderButton(btnRef.current);
@@ -76,32 +103,43 @@ function SignInGate() {
         <Lock size={20} />
       </div>
       <div>
-        <h3 className="text-base font-semibold text-slate-100">Zona privada</h3>
+        <h3 className="text-base font-semibold text-slate-100">{txt.title}</h3>
         <p className="mx-auto mt-1 max-w-sm text-sm text-slate-400">
-          Accesos a los servicios self-hosted. Iniciá sesión con Google para
-          verlos.
+          {txt.body}
         </p>
       </div>
       <div ref={btnRef} className="min-h-[40px]" />
       {!ready && (
-        <p className="text-xs text-slate-600">Cargando Google…</p>
+        <p className="text-xs text-slate-600">{txt.loading}</p>
       )}
     </div>
   );
 }
 
 function NotAuthorized() {
+  const { language } = useLanguage();
   const { user } = useAuth();
+  const txt = language === "es"
+    ? {
+        title: "Sin acceso",
+        bodyStart: "La cuenta",
+        bodyEnd: "no esta autorizada para esta seccion.",
+      }
+    : {
+        title: "No access",
+        bodyStart: "Account",
+        bodyEnd: "is not authorized for this section.",
+      };
+
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 px-5 py-10 text-center">
       <div className="rounded-lg border border-amber-500/30 bg-slate-950 p-2.5 text-amber-300">
         <ShieldAlert size={20} />
       </div>
       <div>
-        <h3 className="text-base font-semibold text-slate-100">Sin acceso</h3>
+        <h3 className="text-base font-semibold text-slate-100">{txt.title}</h3>
         <p className="mx-auto mt-1 max-w-sm text-sm text-slate-400">
-          La cuenta <span className="text-slate-300">{user?.email}</span> no está
-          autorizada para esta sección.
+          {txt.bodyStart} <span className="text-slate-300">{user?.email}</span> {txt.bodyEnd}
         </p>
       </div>
     </div>
@@ -109,6 +147,7 @@ function NotAuthorized() {
 }
 
 function LinkCard({ link }) {
+  const { language } = useLanguage();
   const { icon: Icon, accent } = link;
   return (
     <a
@@ -130,9 +169,9 @@ function LinkCard({ link }) {
           className="text-slate-600 transition-colors group-hover:text-slate-300"
         />
       </div>
-      <h3 className="text-base font-semibold text-slate-100">{link.title}</h3>
-      <p className="mt-1 flex-1 text-sm text-slate-400">{link.description}</p>
-      {link.tag && (
+      <h3 className="text-base font-semibold text-slate-100">{localizeText(link.title, language)}</h3>
+      <p className="mt-1 flex-1 text-sm text-slate-400">{localizeText(link.description, language)}</p>
+      {localizeText(link.tag, language) && (
         <span
           className="mt-3 self-start rounded-full px-2 py-0.5 text-[10px] font-medium"
           style={{
@@ -141,7 +180,7 @@ function LinkCard({ link }) {
             border: `1px solid ${accent}33`,
           }}
         >
-          {link.tag}
+          {localizeText(link.tag, language)}
         </span>
       )}
     </a>

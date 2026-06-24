@@ -9,6 +9,7 @@ import {
   buildPhaseSpectrum, harmonicNeutral, phaseInstant, openNeutralVoltages, scaleSpectrum,
   cableResistance, solveVoltages, specRms, conductorTemp, resistanceAtTemp, AMPACITY, T_AMBIENT,
 } from "./neutralCurrent";
+import { localizeText, useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Visualizador de corriente de neutro en sistema trifásico (3F + N)
@@ -22,9 +23,9 @@ import {
  * ---------------------------------------------------------------------- */
 
 const PHASES = [
-  { key: "a", label: "Fase A", angle: 0,   color: "#ef4444" }, // roja
-  { key: "b", label: "Fase B", angle: 120, color: "#92400e" }, // marrón
-  { key: "c", label: "Fase C", angle: 240, color: "#eab308" }, // amarilla
+  { key: "a", label: { es: "Fase A", en: "Phase A" }, angle: 0, color: "#ef4444" },
+  { key: "b", label: { es: "Fase B", en: "Phase B" }, angle: 120, color: "#92400e" },
+  { key: "c", label: { es: "Fase C", en: "Phase C" }, angle: 240, color: "#eab308" },
 ];
 
 const NEUTRAL = "#38bdf8";
@@ -37,11 +38,11 @@ const APP_ICONS = {
 };
 
 const PRESETS = [
-  { label: "Sin carga base", v: { a: 0, b: 0, c: 0 } },
-  { label: "Balanceado", v: { a: 10, b: 10, c: 10 } },
-  { label: "3 / 7 / 7",  v: { a: 3,  b: 7,  c: 7  } },
-  { label: "Carga alta 60/60/60", v: { a: 60, b: 60, c: 60 } },
-  { label: "Monofásico 100/0/0", v: { a: 100, b: 0, c: 0 } },
+  { label: { es: "Sin carga base", en: "No base load" }, v: { a: 0, b: 0, c: 0 } },
+  { label: { es: "Balanceado", en: "Balanced" }, v: { a: 10, b: 10, c: 10 } },
+  { label: { es: "3 / 7 / 7", en: "3 / 7 / 7" }, v: { a: 3, b: 7, c: 7 } },
+  { label: { es: "Carga alta 60/60/60", en: "High load 60/60/60" }, v: { a: 60, b: 60, c: 60 } },
+  { label: { es: "Monofasico 100/0/0", en: "Single-phase 100/0/0" }, v: { a: 100, b: 0, c: 0 } },
 ];
 
 const fmt = (n) => n.toFixed(1);
@@ -114,6 +115,7 @@ function usePanelOrder() {
 }
 
 export default function NeutralCurrentVisualizer() {
+  const { language } = useLanguage();
   const [I, setI] = useState({ a: 10, b: 10, c: 10 });
   const [appliances, setAppliances] = useState([]); // [{id, key, phase}]
   const [target, setTarget] = useState("3f");        // fase destino: a|b|c|3f
@@ -204,16 +206,44 @@ export default function NeutralCurrentVisualizer() {
     perHarmonic.filter((p) => p.triplen).reduce((s, p) => s + p.mag * p.mag, 0)
   );
 
+  const txt = language === "es"
+    ? {
+        title: "Corriente de Neutro · Sistema Trifasico",
+        order: "Orden",
+        orderTip: "Restablecer el orden de los paneles",
+        tabPhasors: "Fasores",
+        tabWaves: "Ondas",
+        tabHarm: "Armonicos",
+        tabVoltage: "Tension",
+        loadTitle: "Carga lineal base por fase",
+        faultsTitle: "Simular fallas",
+        cablesTitle: "Cableado por conductor",
+        appliancesTitle: "Artefactos (armonicos)",
+      }
+    : {
+        title: "Neutral Current · Three-Phase System",
+        order: "Order",
+        orderTip: "Reset panel order",
+        tabPhasors: "Phasors",
+        tabWaves: "Waves",
+        tabHarm: "Harmonics",
+        tabVoltage: "Voltage",
+        loadTitle: "Base linear load per phase",
+        faultsTitle: "Simulate faults",
+        cablesTitle: "Cabling by conductor",
+        appliancesTitle: "Appliances (harmonics)",
+      };
+
   const renderPanel = (id) => {
     switch (id) {
       case "metrics":
         return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {PHASES.map((p) => (
-              <Metric key={p.key} label={p.label} value={fund[p.key]} unit="A"
-                color={p.color} sub={`∠ ${p.angle}° · fundamental`} />
+              <Metric key={p.key} label={localizeText(p.label, language)} value={fund[p.key]} unit="A"
+                color={p.color} sub={`∠ ${p.angle}° · ${language === "es" ? "fundamental" : "fundamental"}`} />
             ))}
-            <NeutralMetric In={In} color={sevColor} />
+            <NeutralMetric In={In} color={sevColor} language={language} />
           </div>
         );
       case "viz":
@@ -222,37 +252,37 @@ export default function NeutralCurrentVisualizer() {
             <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
               <div className="flex border-b border-slate-800 overflow-x-auto">
                 <TabBtn active={tab === "phasors"} onClick={() => setTab("phasors")}
-                  icon={<Activity size={14} />} label="Fasores" />
+                  icon={<Activity size={14} />} label={txt.tabPhasors} />
                 <TabBtn active={tab === "waves"} onClick={() => setTab("waves")}
-                  icon={<Waves size={14} />} label="Ondas" />
+                  icon={<Waves size={14} />} label={txt.tabWaves} />
                 <TabBtn active={tab === "harm"} onClick={() => setTab("harm")}
-                  icon={<BarChart3 size={14} />} label="Armónicos" />
+                  icon={<BarChart3 size={14} />} label={txt.tabHarm} />
                 <TabBtn active={tab === "volts"} onClick={() => setTab("volts")}
-                  icon={<Gauge size={14} />} label="Tensión" />
+                  icon={<Gauge size={14} />} label={txt.tabVoltage} />
               </div>
               <div className="p-4">
-                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
-                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} />}
-                {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} />}
-                {tab === "volts" && <VoltageView volt={volt} spectra={spectra} R={R} Rn={Rn} faults={faults} neutralOpen={neutralOpen} vis={vis} onToggle={toggleVis} />}
+                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} />}
+                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} />}
+                {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} language={language} />}
+                {tab === "volts" && <VoltageView volt={volt} spectra={spectra} R={R} Rn={Rn} faults={faults} neutralOpen={neutralOpen} vis={vis} onToggle={toggleVis} language={language} />}
               </div>
             </div>
             {neutralOpen
-              ? <VoltagePanel volt={volt} faults={faults} />
-              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} faults={faults} />}
+              ? <VoltagePanel volt={volt} faults={faults} language={language} />
+              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} faults={faults} language={language} />}
           </div>
         );
       case "load":
-        return <LoadCard I={I} onChange={setLoad} onPreset={setI} />;
+        return <LoadCard I={I} onChange={setLoad} onPreset={setI} language={language} title={txt.loadTitle} />;
       case "faults":
-        return <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} />;
+        return <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} language={language} title={txt.faultsTitle} />;
       case "cables":
-        return <CableCard cables={cables} conductors={conductors} onChange={setCable} />;
+        return <CableCard cables={cables} conductors={conductors} onChange={setCable} language={language} title={txt.cablesTitle} />;
       case "appliances":
         return (
           <AppliancesCard
             appliances={appliances} target={target} setTarget={setTarget}
-            onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
+            onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} language={language} title={txt.appliancesTitle} />
         );
       default:
         return null;
@@ -270,22 +300,24 @@ export default function NeutralCurrentVisualizer() {
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-semibold tracking-tight">
-                Corriente de Neutro · Sistema Trifásico
+                {txt.title}
               </h1>
               <p className="text-xs text-slate-500 font-mono">
-                {F_HZ} Hz · T = {T_MS} ms · fundamental + armónicos · ∠ fijos 0/120/240°
+                {language === "es"
+                  ? `${F_HZ} Hz · T = ${T_MS} ms · fundamental + armonicos · ∠ fijos 0/120/240°`
+                  : `${F_HZ} Hz · T = ${T_MS} ms · fundamental + harmonics · fixed angles 0/120/240°`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {!dnd.isDefault && (
-              <button onClick={dnd.reset} title="Restablecer el orden de los paneles"
+              <button onClick={dnd.reset} title={txt.orderTip}
                 className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs
                            text-slate-400 hover:text-slate-100 hover:border-slate-500 transition-colors">
-                <RotateCcw size={13} /> Orden
+                <RotateCcw size={13} /> {txt.order}
               </button>
             )}
-            <StatusBadge severity={severity} faults={faults} color={sevColor} />
+            <StatusBadge severity={severity} faults={faults} color={sevColor} language={language} />
           </div>
         </header>
 
@@ -293,7 +325,7 @@ export default function NeutralCurrentVisualizer() {
         <div className="space-y-4">
           {dnd.order.map((id, idx) => (
             <DraggablePanel key={id} id={id} dnd={dnd}
-              first={idx === 0} last={idx === dnd.order.length - 1}>
+              first={idx === 0} last={idx === dnd.order.length - 1} language={language}>
               {renderPanel(id)}
             </DraggablePanel>
           ))}
@@ -305,7 +337,7 @@ export default function NeutralCurrentVisualizer() {
 
 /* ===================== Panel arrastrable ===================== */
 
-function DraggablePanel({ id, dnd, first, last, children }) {
+function DraggablePanel({ id, dnd, first, last, children, language }) {
   const dragging = dnd.draggingId === id;
   return (
     <div onDragOver={dnd.onDragOver(id)} onDrop={dnd.onDrop}
@@ -313,16 +345,16 @@ function DraggablePanel({ id, dnd, first, last, children }) {
       <div className="absolute left-1/2 -translate-x-1/2 -top-3 z-20 flex items-center rounded-full
                       border border-slate-700 bg-slate-800 shadow opacity-0 group-hover:opacity-100
                       focus-within:opacity-100 transition-opacity">
-        <button onClick={() => dnd.move(id, -1)} disabled={first} title="Subir"
+        <button onClick={() => dnd.move(id, -1)} disabled={first} title={language === "es" ? "Subir" : "Move up"}
           className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
           <ChevronUp size={12} />
         </button>
         <span draggable onDragStart={dnd.onDragStart(id)} onDragEnd={dnd.onDragEnd}
-          title="Arrastrar para reordenar"
+          title={language === "es" ? "Arrastrar para reordenar" : "Drag to reorder"}
           className="px-1 py-0.5 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-200">
           <GripVertical size={12} />
         </span>
-        <button onClick={() => dnd.move(id, 1)} disabled={last} title="Bajar"
+        <button onClick={() => dnd.move(id, 1)} disabled={last} title={language === "es" ? "Bajar" : "Move down"}
           className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
           <ChevronDown size={12} />
         </button>
@@ -335,22 +367,36 @@ function DraggablePanel({ id, dnd, first, last, children }) {
 /* ===================== Subcomponentes UI ===================== */
 
 // Texto corto que resume las fallas activas.
-function faultSummary(faults) {
+function faultSummary(faults, language) {
   const cut = ["a", "b", "c"].filter((k) => faults[k]).map((k) => k.toUpperCase());
   const parts = [];
-  if (cut.length)
-    parts.push(`Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}`);
-  if (faults.n) parts.push("Neutro abierto");
+  if (cut.length) {
+    if (language === "es") {
+      parts.push(`Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}`);
+    } else {
+      parts.push(`Phase${cut.length > 1 ? "s" : ""} ${cut.join("/")} open`);
+    }
+  }
+  if (faults.n) parts.push(language === "es" ? "Neutro abierto" : "Neutral open");
   return parts.join(" + ");
 }
 
-function StatusBadge({ severity, faults, color }) {
+function StatusBadge({ severity, faults, color, language }) {
   if (faults.a || faults.b || faults.c || faults.n)
-    return <Badge color={DANGER} Icon={Unplug} txt={faultSummary(faults)} />;
+    return <Badge color={DANGER} Icon={Unplug} txt={faultSummary(faults, language)} />;
   const map = {
-    ok:   { txt: "Balanceado",    Icon: CheckCircle2 },
-    warn: { txt: "Desbalanceado", Icon: AlertTriangle },
-    high: { txt: "Neutro cargado", Icon: AlertTriangle },
+    ok: {
+      txt: language === "es" ? "Balanceado" : "Balanced",
+      Icon: CheckCircle2,
+    },
+    warn: {
+      txt: language === "es" ? "Desbalanceado" : "Unbalanced",
+      Icon: AlertTriangle,
+    },
+    high: {
+      txt: language === "es" ? "Neutro cargado" : "High neutral load",
+      Icon: AlertTriangle,
+    },
   };
   const { txt, Icon } = map[severity];
   return <Badge color={color} Icon={Icon} txt={txt} />;
@@ -381,13 +427,15 @@ function Metric({ label, value, unit, color, sub }) {
   );
 }
 
-function NeutralMetric({ In, color }) {
+function NeutralMetric({ In, color, language }) {
   const pct = Math.min(100, (In / I_MAX) * 100);
   return (
     <div className="rounded-xl border bg-slate-900 p-3"
       style={{ borderColor: color + "66", backgroundColor: color + "0d" }}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium" style={{ color }}>Corriente de Neutro</span>
+        <span className="text-xs font-medium" style={{ color }}>
+          {language === "es" ? "Corriente de Neutro" : "Neutral Current"}
+        </span>
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
       </div>
       <div className="mt-1 flex items-baseline gap-1">
@@ -402,13 +450,19 @@ function NeutralMetric({ In, color }) {
   );
 }
 
-function LoadCard({ I, onChange, onPreset }) {
+function LoadCard({ I, onChange, onPreset, language, title }) {
   return (
-    <Card title="Carga lineal base por fase" icon={<Activity size={15} />}>
+    <Card title={title} icon={<Activity size={15} />}>
       <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
         <div className="space-y-4">
           {PHASES.map((p) => (
-            <Slider key={p.key} phase={p} value={I[p.key]} onChange={(v) => onChange(p.key, v)} />
+            <Slider
+              key={p.key}
+              phase={p}
+              language={language}
+              value={I[p.key]}
+              onChange={(v) => onChange(p.key, v)}
+            />
           ))}
         </div>
         <div className="md:border-l md:border-slate-800 md:pl-6">
@@ -416,11 +470,11 @@ function LoadCard({ I, onChange, onPreset }) {
             <RotateCcw size={11} /> Presets
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {PRESETS.map((pr) => (
-              <button key={pr.label} onClick={() => onPreset(pr.v)}
+            {PRESETS.map((pr, idx) => (
+              <button key={idx} onClick={() => onPreset(pr.v)}
                 className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
                            text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
-                {pr.label}
+                {localizeText(pr.label, language)}
               </button>
             ))}
           </div>
@@ -437,10 +491,10 @@ function tempColor(t) {
   return "#22c55e";                 // frío
 }
 
-function CableCard({ cables, conductors, onChange }) {
-  const rows = [...PHASES, { key: "n", label: "Neutro", color: NEUTRAL }];
+function CableCard({ cables, conductors, onChange, language, title }) {
+  const rows = [...PHASES, { key: "n", label: { es: "Neutro", en: "Neutral" }, color: NEUTRAL }];
   return (
-    <Card title="Cableado por conductor" icon={<Cable size={15} />}>
+    <Card title={title} icon={<Cable size={15} />}>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
         {rows.map((r) => {
           const c = conductors[r.key];
@@ -453,7 +507,9 @@ function CableCard({ cables, conductors, onChange }) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: r.color }} />
-                  <span className="text-sm text-slate-300">{r.label}</span>
+                  <span className="text-sm text-slate-300">
+                    {localizeText(r.label, language) || r.label}
+                  </span>
                 </div>
                 <span className="font-mono text-[10px] text-slate-500">{c.R.toFixed(3)} Ω</span>
               </div>
@@ -489,25 +545,27 @@ function CableCard({ cables, conductors, onChange }) {
         })}
       </div>
       <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
-        R = ρ·L/A (cobre). Más A o menos sección ⇒ más temperatura; el cobre caliente sube su R
-        (R(T)=R₂₀·(1+α·ΔT)) y la caída de tensión aumenta. El % es la carga sobre la ampacidad
-        (100% ≈ {T_AMBIENT + 40} °C, límite del PVC). Mirá la pestaña <b className="text-slate-400">Tensión</b>.
+        {language === "es"
+          ? `R = ρ·L/A (cobre). Mas A o menos seccion => mas temperatura; el cobre caliente sube su R (R(T)=R20·(1+alpha·dT)) y la caida de tension aumenta. El % es la carga sobre la ampacidad (100% ~= ${T_AMBIENT + 40} °C, limite del PVC). Mira la pestana Tension.`
+          : `R = rho·L/A (copper). More current or less section means more heat; hot copper increases R (R(T)=R20·(1+alpha·dT)) and voltage drop rises. The % is load versus ampacity (100% ~= ${T_AMBIENT + 40} °C, PVC limit). Check the Voltage tab.`}
       </p>
     </Card>
   );
 }
 
-function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClear }) {
+function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClear, language, title }) {
   const targets = [
     { k: "a", label: "A" }, { k: "b", label: "B" },
     { k: "c", label: "C" }, { k: "3f", label: "3φ" },
   ];
   return (
-    <Card title="Artefactos (armónicos)" icon={<Plus size={15} />}>
+    <Card title={title} icon={<Plus size={15} />}>
       <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">Agregar a la fase</span>
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">
+              {language === "es" ? "Agregar a la fase" : "Add to phase"}
+            </span>
             <div className="flex gap-1">
               {targets.map((t) => (
                 <button key={t.k} onClick={() => setTarget(t.k)}
@@ -529,7 +587,7 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
                   className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/50 px-2 py-2
                              text-xs text-slate-300 hover:border-amber-500/60 hover:bg-slate-800 transition-colors text-left">
                   <Icon size={16} style={{ color: ACCENT }} className="shrink-0" />
-                  <span className="leading-tight">{a.label}<br />
+                  <span className="leading-tight">{localizeText(a.label, language)}<br />
                     <span className="text-[10px] text-slate-600 font-mono">{a.current} A</span>
                   </span>
                 </button>
@@ -541,19 +599,20 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
         <div className="md:border-l md:border-slate-800 md:pl-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              Conectados ({appliances.length})
+              {language === "es" ? "Conectados" : "Connected"} ({appliances.length})
             </span>
             {appliances.length > 0 && (
               <button onClick={onClear}
                 className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 transition-colors">
-                <Trash2 size={11} /> Limpiar
+                <Trash2 size={11} /> {language === "es" ? "Limpiar" : "Clear"}
               </button>
             )}
           </div>
           {appliances.length === 0 ? (
             <p className="text-xs text-slate-600 leading-relaxed">
-              Sin artefactos. Elegí una fase (o 3φ) y tocá un artefacto para agregarlo.
-              Probá agregar el mismo a las 3 fases para ver cómo cargan el neutro vía 3ª armónica.
+              {language === "es"
+                ? "Sin artefactos. Elegi una fase (o 3f) y toca un artefacto para agregarlo."
+                : "No appliances yet. Pick a phase (or 3f) and add an appliance."}
             </p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1 max-h-44 overflow-y-auto pr-1">
@@ -565,9 +624,11 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
                   <div key={a.id}
                     className="flex items-center gap-2 rounded-md bg-slate-950/60 px-2 py-1 text-xs">
                     <Icon size={13} className="shrink-0 text-slate-400" />
-                    <span className="flex-1 truncate text-slate-300">{meta?.label}</span>
+                    <span className="flex-1 truncate text-slate-300">{localizeText(meta?.label, language)}</span>
                     <span className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: ph?.color }} />
-                    <span className="font-mono text-[10px] text-slate-500 w-3">{ph?.label.slice(-1)}</span>
+                    <span className="font-mono text-[10px] text-slate-500 w-3">
+                      {localizeText(ph?.label, language)?.slice(-1)}
+                    </span>
                     <button onClick={() => onRemove(a.id)} className="text-slate-600 hover:text-rose-400">
                       <Trash2 size={12} />
                     </button>
@@ -582,16 +643,18 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
   );
 }
 
-function FaultCard({ faults, onToggle, onClear }) {
+function FaultCard({ faults, onToggle, onClear, language, title }) {
   const any = faults.a || faults.b || faults.c || faults.n;
   return (
-    <Card title="Simular fallas" icon={<Unplug size={15} />}>
+    <Card title={title} icon={<Unplug size={15} />}>
       <div className="flex items-center justify-between mb-2 pt-1">
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">Combinables</span>
+        <span className="text-[10px] uppercase tracking-wide text-slate-500">
+          {language === "es" ? "Combinables" : "Combinable"}
+        </span>
         {any && (
           <button onClick={onClear}
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-            <CheckCircle2 size={11} /> Sin fallas
+            <CheckCircle2 size={11} /> {language === "es" ? "Sin fallas" : "No faults"}
           </button>
         )}
       </div>
@@ -606,22 +669,22 @@ function FaultCard({ faults, onToggle, onClear }) {
                   : "border-slate-800 bg-slate-950/50 text-slate-300 hover:border-slate-600 hover:bg-slate-800"
               }`}>
               <span className={`h-2 w-2 rounded-full shrink-0 ${active ? "bg-rose-400" : "bg-slate-700"}`} />
-              {f.label}
+              {localizeText(f.label, language)}
             </button>
           );
         })}
       </div>
       <p className="mt-2 text-[10px] text-slate-600 leading-relaxed">
-        Corte de fase: esa línea queda sin corriente y el neutro carga el desbalance.
-        Corte de neutro: I<sub>N</sub> = 0 pero las tensiones se desplazan (peligro).
-        Se pueden activar varias a la vez (p. ej. una fase + neutro).
+        {language === "es"
+          ? "Corte de fase: esa linea queda sin corriente y el neutro carga el desbalance. Corte de neutro: I_N = 0 pero las tensiones se desplazan (peligro). Se pueden activar varias a la vez."
+          : "Phase open: that line has no current and neutral carries the imbalance. Neutral open: I_N = 0 but voltages shift (danger). You can combine multiple faults."}
       </p>
     </Card>
   );
 }
 
 // Panel de tensiones cuando el neutro queda abierto (estrella flotante).
-function VoltagePanel({ volt, faults }) {
+function VoltagePanel({ volt, faults, language }) {
   const rows = PHASES.map((p) => {
     const cut = faults[p.key];
     const V = volt.V[p.key];
@@ -631,12 +694,12 @@ function VoltagePanel({ volt, faults }) {
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: DANGER + "55", backgroundColor: DANGER + "0d" }}>
       <div className="flex items-center gap-2 text-sm font-medium" style={{ color: DANGER }}>
-        <Unplug size={15} /> {faultSummary(faults)} · tensión de fase
+        <Unplug size={15} /> {faultSummary(faults, language)} · {language === "es" ? "tension de fase" : "phase voltage"}
       </div>
       <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-        Sin retorno, I<sub>N</sub> = 0; pero el punto estrella se desplaza y la tensión sobre cada
-        carga cambia. Las fases poco cargadas <b className="text-slate-200">sobretensionan</b> (peligro
-        para los equipos).
+        {language === "es"
+          ? "Sin retorno, I_N = 0; pero el punto estrella se desplaza y la tension sobre cada carga cambia. Las fases poco cargadas sobretensionan (peligro para equipos)."
+          : "With no return path, I_N = 0; but star point shifts and each load voltage changes. Lightly loaded phases can overvoltage (danger for equipment)."}
       </p>
       <div className="mt-3 grid grid-cols-3 gap-2">
         {rows.map(({ p, cut, V, pct, over, under }) => {
@@ -646,10 +709,12 @@ function VoltagePanel({ volt, faults }) {
             <div key={p.key} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2.5">
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: p.color }} />
-                <span className="text-xs text-slate-400">{p.label}</span>
+                <span className="text-xs text-slate-400">{localizeText(p.label, language)}</span>
               </div>
               {cut ? (
-                <div className="mt-1 text-sm font-mono text-slate-500">cortada</div>
+                <div className="mt-1 text-sm font-mono text-slate-500">
+                  {language === "es" ? "cortada" : "open"}
+                </div>
               ) : (
                 <>
                   <div className="mt-1 flex items-baseline gap-1">
@@ -676,7 +741,7 @@ function VoltagePanel({ volt, faults }) {
 }
 
 // Detalle/explicación de la corriente de neutro (debajo de la visualización).
-function NeutralCard({ In, color, triplenIn, hasHarm, faults }) {
+function NeutralCard({ In, color, triplenIn, hasHarm, faults, language }) {
   const cut = ["a", "b", "c"].filter((k) => faults[k]).map((k) => k.toUpperCase());
   const phaseCut = cut.length > 0;
   return (
@@ -684,44 +749,47 @@ function NeutralCard({ In, color, triplenIn, hasHarm, faults }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-mono font-bold tabular-nums" style={{ color }}>{fmt(In)}</span>
-          <span className="text-sm text-slate-500 font-mono">A en el neutro</span>
+          <span className="text-sm text-slate-500 font-mono">
+            {language === "es" ? "A en el neutro" : "A in neutral"}
+          </span>
         </div>
         {hasHarm && (
           <div className="flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-mono"
             style={{ borderColor: color + "55", color, backgroundColor: color + "12" }}>
-            <BarChart3 size={13} /> {fmt(triplenIn)} A de armónicos triples
+            <BarChart3 size={13} /> {fmt(triplenIn)} {language === "es" ? "A de armonicos triples" : "A from triplen harmonics"}
           </div>
         )}
       </div>
       {phaseCut ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-          <b className="text-rose-300">Fase{cut.length > 1 ? "s" : ""} {cut.join("/")} cortada{cut.length > 1 ? "s" : ""}</b>:
-          sin corriente en esa(s) línea(s), el neutro tiene que conducir todo el desbalance de las fases restantes.
+          {language === "es"
+            ? `Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}: el neutro conduce todo el desbalance restante.`
+            : `Phase${cut.length > 1 ? "s" : ""} ${cut.join("/")} open: neutral carries all remaining imbalance.`}
         </p>
       ) : hasHarm ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-          <span className="font-mono text-slate-500">I<sub>N</sub> = √(Σ |I<sub>N,h</sub>|²)</span>.
-          Los armónicos triples (3ª, 9ª…) están en fase en las tres líneas y se{" "}
-          <b className="text-slate-200">suman</b> en el neutro aunque las fases estén balanceadas — por eso
-          el neutro puede conducir corriente sin que haya desbalance.
+          {language === "es"
+            ? "I_N = sqrt(sum |I_N,h|^2). Los armonicos triples (3, 9...) estan en fase y se suman en el neutro incluso con fases balanceadas."
+            : "I_N = sqrt(sum |I_N,h|^2). Triplen harmonics (3rd, 9th...) are in phase and add up in neutral even with balanced phases."}
         </p>
       ) : (
         <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-          <span className="font-mono">I<sub>N</sub> = √(Ia²+Ib²+Ic² − Ia·Ib − Ib·Ic − Ic·Ia)</span> ·
-          solo fundamental, sin armónicos. Agregá artefactos para ver cómo cargan el neutro.
+          {language === "es"
+            ? "I_N = sqrt(Ia^2+Ib^2+Ic^2-Ia*Ib-Ib*Ic-Ic*Ia). Solo fundamental, sin armonicos."
+            : "I_N = sqrt(Ia^2+Ib^2+Ic^2-Ia*Ib-Ib*Ic-Ic*Ia). Fundamental only, no harmonics."}
         </p>
       )}
     </div>
   );
 }
 
-function Slider({ phase, value, onChange }) {
+function Slider({ phase, value, onChange, language }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: phase.color }} />
-          <span className="text-sm text-slate-300">{phase.label}</span>
+          <span className="text-sm text-slate-300">{localizeText(phase.label, language)}</span>
           <span className="text-[10px] text-slate-600 font-mono">∠{phase.angle}°</span>
         </div>
         <span className="font-mono text-sm font-semibold tabular-nums" style={{ color: phase.color }}>
@@ -760,7 +828,7 @@ function TabBtn({ active, onClick, icon, label }) {
 
 /* ===================== Vista: Diagrama Fasorial ===================== */
 
-function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen }) {
+function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language }) {
   const VB = 340, C = VB / 2, R = 140, scale = R / I_MAX;
   const In = Math.hypot(comp.x, comp.y);
 
@@ -796,10 +864,18 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen }) {
         <circle cx={C} cy={C} r={3} fill="#64748b" />
       </svg>
 
-      <Legend nColor={nColor} note={neutralOpen ? "abierto · I_N = 0" : `I_N fund. ≈ ${fmt(In)} A`}
-        vis={vis} onToggle={onToggle} neutralOpen={neutralOpen} />
+      <Legend
+        nColor={nColor}
+        note={neutralOpen ? (language === "es" ? "abierto · I_N = 0" : "open · I_N = 0") : `I_N fund. ≈ ${fmt(In)} A`}
+        vis={vis}
+        onToggle={onToggle}
+        neutralOpen={neutralOpen}
+        language={language}
+      />
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center">
-        El diagrama fasorial muestra solo la fundamental. Los armónicos se ven en las otras pestañas.
+        {language === "es"
+          ? "El diagrama fasorial muestra solo la fundamental. Los armonicos se ven en otras pestanas."
+          : "Phasor diagram shows only the fundamental. Harmonics are shown in the other tabs."}
       </p>
     </div>
   );
@@ -822,7 +898,7 @@ function Arrow({ x1, y1, x2, y2, color, width, dashed, glow }) {
 
 /* ===================== Vista: Formas de Onda (corriente) ===================== */
 
-function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
+function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language }) {
   const W = 560, H = 260, padL = 40, padR = 16, padT = 16, padB = 30;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const cY = padT + plotH / 2;
@@ -888,12 +964,23 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
         )}
       </svg>
 
-      <Legend nColor={nColor} note={neutralOpen ? "abierto · I_N = 0" : `I_N rms ≈ ${fmt(In)} A`}
-        dashed vis={vis} onToggle={onToggle} neutralOpen={neutralOpen} />
+      <Legend
+        nColor={nColor}
+        note={neutralOpen ? (language === "es" ? "abierto · I_N = 0" : "open · I_N = 0") : `I_N rms ≈ ${fmt(In)} A`}
+        dashed
+        vis={vis}
+        onToggle={onToggle}
+        neutralOpen={neutralOpen}
+        language={language}
+      />
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center">
         {neutralOpen
-          ? "Neutro abierto: no circula corriente de retorno; las fases muestran la corriente con la tensión desplazada."
-          : "El neutro (punteado) = suma instantánea de las tres fases. Con una sola fase cargada se superpone con ella."}
+          ? (language === "es"
+            ? "Neutro abierto: no circula retorno; la tension se desplaza."
+            : "Neutral open: no return current flows; voltage shifts.")
+          : (language === "es"
+            ? "El neutro punteado es la suma instantanea de las tres fases."
+            : "Dashed neutral is the instantaneous sum of the three phases.")}
       </p>
     </div>
   );
@@ -901,7 +988,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen }) {
 
 /* ===================== Vista: Tensión (forma de onda) ===================== */
 
-function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle }) {
+function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle, language }) {
   const W = 560, H = 260, padL = 44, padR = 16, padT = 16, padB = 30;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const cY = padT + plotH / 2;
@@ -998,26 +1085,32 @@ function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle 
         ))}
       </svg>
 
-      <Legend nColor={NEUTRAL} vis={vis} onToggle={onToggle} noNeutral />
+      <Legend nColor={NEUTRAL} vis={vis} onToggle={onToggle} noNeutral language={language} />
       <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-mono">
         {PHASES.map((p) => {
           if (faults[p.key]) return (
-            <span key={p.key} className="text-slate-600">{p.label}: cortada</span>
+            <span key={p.key} className="text-slate-600">
+              {localizeText(p.label, language)}: {language === "es" ? "cortada" : "open"}
+            </span>
           );
           const V = volt.V[p.key];
           const pct = (V / V_NOM - 1) * 100;
           const c = pct > 5 ? DANGER : pct < -5 ? "#eab308" : "#94a3b8";
           return (
             <span key={p.key} style={{ color: c }}>
-              {p.label}: {Math.round(V)} V ({pct >= 0 ? "+" : ""}{pct.toFixed(0)}%)
+              {localizeText(p.label, language)}: {Math.round(V)} V ({pct >= 0 ? "+" : ""}{pct.toFixed(0)}%)
             </span>
           );
         })}
       </div>
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center max-w-md leading-relaxed">
         {neutralOpen
-          ? "Neutro abierto: la tensión de carga se redistribuye según el desbalance (las fases livianas sobretensionan)."
-          : "Tensión en la carga = nominal menos la caída por el cable (R·I). Subí el largo / bajá la sección para verla."}
+          ? (language === "es"
+            ? "Neutro abierto: la tension de carga se redistribuye segun el desbalance."
+            : "Neutral open: load voltage redistributes based on imbalance.")
+          : (language === "es"
+            ? "Tension en la carga = nominal menos caida de cable (R·I)."
+            : "Load voltage = nominal minus cable drop (R·I).")}
       </p>
     </div>
   );
@@ -1025,7 +1118,7 @@ function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle 
 
 /* ===================== Vista: Armónicos del Neutro ===================== */
 
-function HarmonicView({ perHarmonic, In, nColor }) {
+function HarmonicView({ perHarmonic, In, nColor, language }) {
   const bars = perHarmonic.filter((p) => p.mag > 0.01);
   const max = Math.max(In, ...bars.map((b) => b.mag), 1);
   const W = 560, H = 260, padL = 40, padR = 16, padT = 16, padB = 36;
@@ -1059,20 +1152,23 @@ function HarmonicView({ perHarmonic, In, nColor }) {
         })}
         {bars.length === 0 && (
           <text x={W / 2} y={H / 2} textAnchor="middle" fill="#475569"
-            fontSize={12} fontFamily="monospace">Sin corriente de neutro</text>
+            fontSize={12} fontFamily="monospace">
+            {language === "es" ? "Sin corriente de neutro" : "No neutral current"}
+          </text>
         )}
       </svg>
 
       <p className="mt-2 text-[11px] text-slate-400 text-center max-w-md leading-relaxed">
-        Aporte de cada armónico a I<sub>N</sub>. Los <span style={{ color: nColor }}>triples (3ª, 9ª…)</span>{" "}
-        están en fase en las tres líneas y se <b>suman</b>; el resto se cancela si el sistema está balanceado.
+        {language === "es"
+          ? "Aporte de cada armonico a I_N. Los triples (3, 9...) se suman en el neutro."
+          : "Contribution of each harmonic to I_N. Triplen harmonics (3rd, 9th...) add in neutral."}
       </p>
-      <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} />
+      <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} language={language} />
     </div>
   );
 }
 
-function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral }) {
+function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral, language }) {
   const interactive = typeof onToggle === "function";
   const swatch = (color, dash) =>
     dash ? (
@@ -1098,7 +1194,10 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral })
         <span key={key} className={base} style={{ color: bold ? color : undefined }}>{content}</span>
       );
     return (
-      <button key={key} onClick={() => onToggle(key)} title={on ? "Ocultar" : "Mostrar"}
+      <button
+        key={key}
+        onClick={() => onToggle(key)}
+        title={on ? (language === "es" ? "Ocultar" : "Hide") : (language === "es" ? "Mostrar" : "Show")}
         className={`${base} rounded-md px-2 py-1 transition-colors hover:bg-slate-800/70`}
         style={{ color: on ? (bold ? color : "#94a3b8") : "#64748b" }}>
         {content}
@@ -1106,10 +1205,10 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral })
     );
   };
 
-  const neutralLabel = `Neutro${note ? ` · ${note}` : ""}`;
+  const neutralLabel = `${language === "es" ? "Neutro" : "Neutral"}${note ? ` · ${note}` : ""}`;
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs">
-      {PHASES.map((p) => item(p.key, p.label, p.color))}
+      {PHASES.map((p) => item(p.key, localizeText(p.label, language), p.color))}
       {noNeutral ? null : neutralOpen ? (
         <span className="flex items-center gap-1.5 font-medium text-slate-600">
           <Unplug size={12} /> {neutralLabel}

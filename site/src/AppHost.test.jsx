@@ -2,13 +2,16 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AppHost from "./AppHost";
+import { LanguageProvider } from "./i18n/LanguageProvider";
 
 function renderAt(path) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/app/:slug" element={<AppHost />} />
-      </Routes>
+      <LanguageProvider initialLanguage="es">
+        <Routes>
+          <Route path="/app/:slug" element={<AppHost />} />
+        </Routes>
+      </LanguageProvider>
     </MemoryRouter>,
   );
 }
@@ -23,6 +26,6 @@ describe("AppHost", () => {
 
   it("muestra el fallback para un slug inexistente", () => {
     renderAt("/app/no-existe");
-    expect(screen.getByText("No encontré esa app.")).toBeInTheDocument();
+    expect(screen.getByText(/No encont/)).toBeInTheDocument();
   });
 });
