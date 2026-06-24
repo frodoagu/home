@@ -1,4 +1,4 @@
-{{- if .Values.blackboxTargets }}
+{{- if .Values.blackboxTargets.public }}
 # Uptime / TLS probing. vmagent drives the blackbox-exporter against each public
 # hostname (from inside the cluster, so it also validates Traefik + Let's Encrypt
 # end-to-end). Produces probe_success, probe_duration_seconds and
@@ -20,7 +20,31 @@ spec:
   targets:
     staticConfig:
       targets:
-        {{- range .Values.blackboxTargets }}
+        {{- range .Values.blackboxTargets.public }}
+        - {{ . | quote }}
+        {{- end }}
+{{- end }}
+{{- if .Values.blackboxTargets.authGated }}
+---
+# Endpoints behind google-auth: an unauthenticated probe gets 401/redirect, which
+# the http_auth module treats as "up" (the stack is serving). TLS still checked.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMProbe
+metadata:
+  name: {{ include "monitoring.fullname" . }}-blackbox-auth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  jobName: blackbox-http-auth
+  module: http_auth
+  interval: 60s
+  vmProberSpec:
+    url: blackbox-exporter:9115
+  targets:
+    staticConfig:
+      targets:
+        {{- range .Values.blackboxTargets.authGated }}
         - {{ . | quote }}
         {{- end }}
 {{- end }}

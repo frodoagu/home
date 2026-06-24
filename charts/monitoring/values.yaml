@@ -56,12 +56,18 @@ traefikScrape:
 # External endpoints probed by blackbox for uptime + TLS-expiry. Probed from
 # inside the cluster against the public hostnames, so this also exercises the
 # whole Traefik + Let's Encrypt path end-to-end.
+#   public    — expect a 2xx (module http_2xx)
+#   authGated — sit behind google-auth, so an unauthenticated probe gets a
+#               401/redirect. For uptime that still means "the stack is serving",
+#               so they use http_auth which also accepts 301/302/401/403.
 blackboxTargets:
-  - https://agu.com.ar
-  - https://argocd.agu.com.ar
-  - https://home.agu.com.ar
-  - https://auth.agu.com.ar/ping
-  - https://grafana.agu.com.ar
+  public:
+    - https://agu.com.ar
+    - https://argocd.agu.com.ar
+    - https://home.agu.com.ar
+    - https://auth.agu.com.ar/ping
+  authGated:
+    - https://grafana.agu.com.ar
 
 # ── prometheus-blackbox-exporter (upstream) ────────────────────────────────────
 prometheus-blackbox-exporter:
@@ -85,6 +91,17 @@ prometheus-blackbox-exporter:
           preferred_ip_protocol: ip4
           ip_protocol_fallback: false
           fail_if_not_ssl: true
+      # For endpoints behind google-auth: a 401/redirect is a healthy response
+      # (the auth gate is up). Still requires TLS so cert-expiry is tracked.
+      http_auth:
+        prober: http
+        timeout: 5s
+        http:
+          method: GET
+          preferred_ip_protocol: ip4
+          ip_protocol_fallback: false
+          fail_if_not_ssl: true
+          valid_status_codes: [200, 301, 302, 401, 403]
 
 # ── victoria-metrics-k8s-stack (upstream) ──────────────────────────────────────
 victoria-metrics-k8s-stack:
