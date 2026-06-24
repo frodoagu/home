@@ -85,6 +85,7 @@ spec:
           - websecure
         {{- if .Values.googleAuth.enabled }}
         middlewares:
+          - name: google-auth-signin
           - name: google-auth
         {{- else if .Values.dashboardAuth.enabled }}
         middlewares:

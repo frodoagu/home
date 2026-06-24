@@ -24,4 +24,4 @@ kubectl create secret generic oauth2-proxy-secrets \
   -n {{ .Release.Namespace }} \
   --from-literal=client-id='<google-client-id>' \
   --from-literal=client-secret='<google-client-secret>' \
-  --from-literal=cookie-secret="$(openssl rand -base64 32 | tr -d '\n' | base64)"
+  --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"

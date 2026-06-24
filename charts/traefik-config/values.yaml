@@ -53,6 +53,12 @@ googleAuth:
   enabled: true
   # Cluster-internal address of the oauth2-proxy /oauth2/auth endpoint.
   forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  # Redirect unauthenticated users (401/403) to oauth2-proxy sign-in.
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
 
 # ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
 # Kept for fallback — set googleAuth.enabled: false and dashboardAuth.enabled: true

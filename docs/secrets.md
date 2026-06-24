@@ -47,7 +47,7 @@ kubectl create namespace oauth2-proxy
 kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
   --from-literal=client-id='1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com' \
   --from-literal=client-secret='<google-client-secret-from-console>' \
-  --from-literal=cookie-secret="$(openssl rand -base64 32 | tr -d '\n' | base64)"
+  --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
 ```
 
 **cloudflare-ddns token:**

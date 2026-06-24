@@ -17,8 +17,8 @@ oauth2-proxy:
   # Created out-of-band; see docs/secrets.md. Must contain:
   #   client-id:     Google OAuth client ID (same as site/src/auth/config.js)
   #   client-secret: Google OAuth client secret (from Google Cloud Console)
-  #   cookie-secret: 16/24/32-byte random key, base64-encoded
-  #                  generate: openssl rand -base64 32 | tr -d '\n' | base64
+  #   cookie-secret: 16/24/32-byte random key (raw string)
+  #                  generate: tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
   config:
     existingSecret: oauth2-proxy-secrets
 
