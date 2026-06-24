@@ -120,9 +120,9 @@ victoria-metrics-k8s-stack:
       resources:
         requests:
           cpu: 50m
-          memory: 128Mi
+          memory: 256Mi
         limits:
-          memory: 512Mi
+          memory: 1Gi
 
   # ── Scraper ────────────────────────────────────────────────────────────────
   vmagent:
@@ -132,9 +132,9 @@ victoria-metrics-k8s-stack:
       resources:
         requests:
           cpu: 25m
-          memory: 96Mi
+          memory: 128Mi
         limits:
-          memory: 256Mi
+          memory: 512Mi
 
   # ── Rule evaluation ──────────────────────────────────────────────────────────
   vmalert:
@@ -144,7 +144,7 @@ victoria-metrics-k8s-stack:
           cpu: 10m
           memory: 64Mi
         limits:
-          memory: 128Mi
+          memory: 256Mi
 
   # Ship the upstream Kubernetes alerting rules (node/pod/workload health).
   defaultRules:
@@ -164,7 +164,7 @@ victoria-metrics-k8s-stack:
           cpu: 10m
           memory: 32Mi
         limits:
-          memory: 64Mi
+          memory: 128Mi
     config:
       route:
         receiver: telegram
@@ -206,9 +206,9 @@ victoria-metrics-k8s-stack:
     resources:
       requests:
         cpu: 25m
-        memory: 96Mi
+        memory: 128Mi
       limits:
-        memory: 192Mi
+        memory: 512Mi
     # Trust the X-Auth-Request-Email header set by the google-auth ForwardAuth
     # middleware → users are auto-created as Admin, no Grafana login page.
     grafana.ini:
