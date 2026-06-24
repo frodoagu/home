@@ -1,0 +1,27 @@
+oauth2-proxy is deployed!
+
+Sign-in endpoint: https://{{ .Values.ingress.host }}
+
+━━ How it works ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Protected services (e.g. Traefik dashboard) use a Traefik ForwardAuth middleware
+that points to:
+
+  http://oauth2-proxy.{{ .Release.Namespace }}.svc.cluster.local/oauth2/auth
+
+When the middleware is active and you are NOT signed in, Traefik returns a 401.
+Navigate to https://{{ .Values.ingress.host }} to sign in, then retry the
+protected URL. The session cookie is scoped to .agu.com.ar, so one sign-in
+covers all subdomains.
+
+━━ Google OAuth setup ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+In Google Cloud Console → APIs & Services → Credentials, open the OAuth client
+used by the site and add this Authorized redirect URI:
+
+  https://{{ .Values.ingress.host }}/oauth2/callback
+
+━━ Pre-requisite secret ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+kubectl create secret generic oauth2-proxy-secrets \
+  -n {{ .Release.Namespace }} \
+  --from-literal=client-id='<google-client-id>' \
+  --from-literal=client-secret='<google-client-secret>' \
+  --from-literal=cookie-secret="$(openssl rand -base64 32 | tr -d '\n' | base64)"

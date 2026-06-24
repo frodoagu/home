@@ -1,0 +1,64 @@
+# Default values for the oauth2-proxy wrapper chart.
+# All keys under `oauth2-proxy` are forwarded to the upstream chart:
+# https://github.com/oauth2-proxy/manifests/tree/main/helm/oauth2-proxy
+
+# ── Traefik IngressRoute ───────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  host: auth.agu.com.ar
+  certResolver: letsencrypt
+  middlewares: []
+
+oauth2-proxy:
+  # Predictable service name — prevents release-name + chart-name doubling.
+  fullnameOverride: oauth2-proxy
+
+  # ── Authentication secret ──────────────────────────────────────────────────
+  # Created out-of-band; see docs/secrets.md. Must contain:
+  #   client-id:     Google OAuth client ID (same as site/src/auth/config.js)
+  #   client-secret: Google OAuth client secret (from Google Cloud Console)
+  #   cookie-secret: 16/24/32-byte random key, base64-encoded
+  #                  generate: openssl rand -base64 32 | tr -d '\n' | base64
+  config:
+    existingSecret: oauth2-proxy-secrets
+
+  # ── Restrict access to specific email addresses ────────────────────────────
+  # The ConfigMap is re-rendered on each ArgoCD sync, so adding an email here
+  # is all it takes — no secret rotation needed.
+  authenticatedEmailsFile:
+    enabled: true
+    restricted_access: |-
+      federico.nicolas.agu@gmail.com
+
+  # ── Provider and cookie configuration ─────────────────────────────────────
+  extraArgs:
+    - --provider=google
+    # Allow any domain; authenticatedEmailsFile restricts to the specific list.
+    - --email-domain=*
+    # Pure auth proxy — oauth2-proxy validates the session but does not proxy
+    # content (Traefik does that via ForwardAuth).
+    - --upstream=static://202
+    - --reverse-proxy=true
+    # Share the session cookie across all agu.com.ar subdomains so signing in
+    # once at auth.agu.com.ar grants access to traefik.agu.com.ar, home.agu.com.ar, …
+    - --cookie-domain=.agu.com.ar
+    - --whitelist-domain=.agu.com.ar
+    # Skip the "Sign in with Google" button and go directly to Google.
+    - --skip-provider-button=true
+    # Return user info headers (consumed by downstream services if desired).
+    - --set-xauthrequest=true
+    - --cookie-secure=true
+    - --redirect-url=https://auth.agu.com.ar/oauth2/callback
+
+  # Disable the upstream chart's Kubernetes Ingress — we use a Traefik IngressRoute.
+  ingress:
+    enabled: false
+
+  # ── Resources (tuned for Raspberry Pi) ────────────────────────────────────
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

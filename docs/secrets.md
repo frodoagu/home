@@ -11,7 +11,8 @@ ArgoCD never sees the sensitive value and won't prune a secret it doesn't track.
 | Secret | Namespace | Used by | Holds |
 |---|---|---|---|
 | `traefik-cloudflare-token` | `kube-system` | Traefik ACME DNS-01 | Cloudflare API token (Zone:DNS:Edit) under key `CF_DNS_API_TOKEN` |
-| `traefik-dashboard-auth` | `kube-system` | Traefik dashboard | htpasswd `users` for HTTP basic auth |
+| `traefik-dashboard-auth` | `kube-system` | Traefik dashboard (basic auth fallback) | htpasswd `users` for HTTP basic auth |
+| `oauth2-proxy-secrets` | `oauth2-proxy` | oauth2-proxy | Google OAuth `client-id`, `client-secret`, and 32-byte `cookie-secret` |
 | `cloudflare-ddns-token` | `cloudflare-ddns` | cloudflare-ddns | Cloudflare API token under key `CLOUDFLARE_API_TOKEN` |
 | `ghcr-creds` | `agu-spa` **and** `argocd` | kubelet pull (agu-spa) + Argo CD Image Updater registry reads (argocd) | GHCR `docker-registry` creds — classic PAT with `read:packages` |
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
@@ -32,6 +33,21 @@ kubectl create secret generic traefik-cloudflare-token -n kube-system \
 htpasswd -nb admin 'your-password' | \
   kubectl create secret generic traefik-dashboard-auth \
     -n kube-system --from-file=users=/dev/stdin
+```
+
+**oauth2-proxy Google OAuth** (powers the `google-auth` ForwardAuth middleware).
+Prerequisites:
+1. In Google Cloud Console → APIs & Services → Credentials, open the OAuth Client
+   `1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0` and add
+   `https://auth.agu.com.ar/oauth2/callback` to *Authorized redirect URIs*.
+2. Copy the client secret from the console.
+
+```bash
+kubectl create namespace oauth2-proxy
+kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
+  --from-literal=client-id='1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com' \
+  --from-literal=client-secret='<google-client-secret-from-console>' \
+  --from-literal=cookie-secret="$(openssl rand -base64 32 | tr -d '\n' | base64)"
 ```
 
 **cloudflare-ddns token:**

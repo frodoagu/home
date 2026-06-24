@@ -45,9 +45,20 @@ dashboard:
   enabled: true
   host: traefik.agu.com.ar
 
-# ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
-dashboardAuth:
+# ── Google OAuth authentication (ForwardAuth via oauth2-proxy) ───────────────
+# When enabled, the dashboard IngressRoute uses the google-auth ForwardAuth
+# middleware instead of HTTP basic auth. Requires charts/oauth2-proxy to be
+# deployed and the oauth2-proxy service reachable at forwardAuthAddress.
+googleAuth:
   enabled: true
+  # Cluster-internal address of the oauth2-proxy /oauth2/auth endpoint.
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+
+# ── Dashboard authentication (HTTP basic auth middleware) ────────────────────
+# Kept for fallback — set googleAuth.enabled: false and dashboardAuth.enabled: true
+# to revert to basic auth (e.g. while oauth2-proxy is not yet deployed).
+dashboardAuth:
+  enabled: false
   # Option A (default, recommended) – reference a Secret you create out-of-band
   # so the password never lives in git. Create it once with:
   #   htpasswd -nb admin 'your-password' | \

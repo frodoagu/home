@@ -83,7 +83,10 @@ spec:
         matchRule: Host(`{{ .Values.dashboard.host }}`)
         entryPoints:
           - websecure
-        {{- if .Values.dashboardAuth.enabled }}
+        {{- if .Values.googleAuth.enabled }}
+        middlewares:
+          - name: google-auth
+        {{- else if .Values.dashboardAuth.enabled }}
         middlewares:
           - name: dashboard-auth
         {{- end }}
