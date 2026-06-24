@@ -28,6 +28,7 @@ cloudflare:
 # favonia creates the records if they don't exist yet.
 domains:
   - agu.com.ar
+  - www.agu.com.ar
   - home.agu.com.ar
   - argocd.agu.com.ar
   - traefik.agu.com.ar

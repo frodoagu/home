@@ -50,6 +50,7 @@ flowchart TD
     Traefik -->|argocd.agu.com.ar| Argo
     Traefik -->|home.agu.com.ar| HA
     Traefik -->|agu.com.ar| SPA
+    Traefik -->|www.agu.com.ar 301| SPA
     Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
     Traefik -->|auth.agu.com.ar| OA2
     Traefik -.->|ForwardAuth on<br/>dashboard| OA2
@@ -84,6 +85,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   a Cloudflare API token with **Zone:DNS:Edit**. The `cloudflare-ddns` app
   creates/updates these A records to track the home public IP:
   - `agu.com.ar` → agu-spa (apex static site)
+  - `www.agu.com.ar` → 301 redirect to `agu.com.ar`
   - `home.agu.com.ar` → Home Assistant
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard

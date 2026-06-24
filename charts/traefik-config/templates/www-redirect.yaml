@@ -1,0 +1,32 @@
+# Permanent (301) redirect: www.agu.com.ar → agu.com.ar
+# The noop@internal service is a Traefik built-in that returns 204; the
+# redirect middleware fires before the request ever reaches it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: www-redirect
+  namespace: {{ .Values.traefikNamespace }}
+spec:
+  redirectRegex:
+    regex: "^https://www\\.agu\\.com\\.ar(.*)"
+    replacement: "https://agu.com.ar${1}"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: www-redirect
+  namespace: {{ .Values.traefikNamespace }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`www.agu.com.ar`)
+      kind: Rule
+      middlewares:
+        - name: www-redirect
+      services:
+        - name: noop@internal
+          kind: TraefikService
+  tls:
+    certResolver: letsencrypt
