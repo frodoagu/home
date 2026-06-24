@@ -176,9 +176,33 @@ victoria-metrics-k8s-stack:
     # expose their metrics endpoints, so these alerts are permanently false
     # positives. The scrape targets are already disabled above; silence the
     # rules too.
-    disabled:
-      KubeSchedulerDown: true
-      KubeControllerManagerDown: true
+    rules:
+      KubeSchedulerDown:
+        enabled: false
+      KubeControllerManagerDown:
+        enabled: false
+      RecordingRulesNoData:
+        enabled: false
+    # Some upstream kube-prometheus recording rules expect scheduler/control-plane
+    # metrics that k3s doesn't expose. Disable only those groups/rules to avoid
+    # recurring no-data noise while keeping the rest of the defaults.
+    groups:
+      kubernetes-system-scheduler:
+        enabled: false
+      kubernetes-system-controller-manager:
+        enabled: false
+      kube-scheduler.rules:
+        rules:
+          "cluster_quantile:scheduler_pod_scheduling_sli_duration_seconds:histogram_quantile":
+            enabled: false
+          "cluster_quantile:scheduler_scheduling_algorithm_duration_seconds:histogram_quantile":
+            enabled: false
+          "cluster_quantile:scheduler_scheduling_attempt_duration_seconds:histogram_quantile":
+            enabled: false
+      kube-prometheus-general.rules:
+        rules:
+          "count:up0":
+            enabled: false
 
   # Don't import the bundled VM/Kubernetes dashboards — keep only the custom
   # "Raspberry Pi — Health" dashboard (templates/grafana-dashboard-rpi.yaml).
