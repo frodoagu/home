@@ -370,6 +370,7 @@ webhook config (`-f config[secret]=...`).
 
 Per-topic guides live in [docs/](docs/):
 
+- [docs/monitoring.md](docs/monitoring.md) — VictoriaMetrics + Grafana stack: dashboards, Telegram alerts, blackbox probing, Traefik metrics, operating notes
 - [docs/secrets.md](docs/secrets.md) — all out-of-band secrets and how to create them
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth

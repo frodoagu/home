@@ -23,6 +23,10 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   cloudflare-ddns/   Dynamic DNS updater.
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
+  monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
+                     (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes.
+                     Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
+                     ConfigMap; bundled defaultDashboards are off). See docs/monitoring.md.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
                      section of external links (`privateLinks`) gated by client-side Google
