@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { neutralCurrent, rad, T_MS, I_MAX } from "./neutralCurrent";
+import {
+  neutralCurrent, rad, T_MS, I_MAX,
+  buildPhaseSpectrum, harmonicNeutral, getAppliance, isTriplen,
+} from "./neutralCurrent";
 
 describe("rad", () => {
   it("convierte grados a radianes", () => {
@@ -47,5 +50,69 @@ describe("neutralCurrent", () => {
     const { a, b, c } = { a: 12, b: 5, c: 3 };
     const expected = Math.sqrt(a * a + b * b + c * c - a * b - b * c - c * a);
     expect(neutralCurrent({ a, b, c }).In).toBeCloseTo(expected);
+  });
+});
+
+describe("isTriplen", () => {
+  it("marca 3, 9, 15 como triples y 1, 5, 7 como no", () => {
+    expect([3, 9, 15].every(isTriplen)).toBe(true);
+    expect([1, 5, 7, 11, 13].some(isTriplen)).toBe(false);
+  });
+});
+
+describe("buildPhaseSpectrum", () => {
+  it("solo carga base: espectro = { 1: base }", () => {
+    expect(buildPhaseSpectrum(10, [])).toEqual({ 1: 10 });
+  });
+
+  it("suma fundamental de artefactos y proyecta sus armónicos", () => {
+    const ac = { current: 10, spectrum: { 3: 0.2, 5: 0.1 } };
+    const spec = buildPhaseSpectrum(5, [ac]);
+    expect(spec[1]).toBeCloseTo(15); // base 5 + fundamental 10
+    expect(spec[3]).toBeCloseTo(2);  // 10 · 0.2
+    expect(spec[5]).toBeCloseTo(1);  // 10 · 0.1
+  });
+});
+
+describe("harmonicNeutral", () => {
+  it("fundamental balanceada sin armónicos: In ≈ 0", () => {
+    const s = { a: { 1: 10 }, b: { 1: 10 }, c: { 1: 10 } };
+    const r = harmonicNeutral(s);
+    expect(r.In).toBeCloseTo(0);
+    expect(r.severity).toBe("ok");
+    expect(r.fund).toEqual({ a: 10, b: 10, c: 10 });
+  });
+
+  it("armónico triple balanceado se SUMA en el neutro (3× por fase)", () => {
+    // 3ª armónica de 4 A en cada fase: en fase entre sí -> In = 12 A
+    const s = { a: { 3: 4 }, b: { 3: 4 }, c: { 3: 4 } };
+    const r = harmonicNeutral(s);
+    expect(r.In).toBeCloseTo(12); // fases "balanceadas" pero el neutro conduce 12 A
+    expect(r.severity).toBe("warn");
+    const h3 = r.perHarmonic.find((p) => p.h === 3);
+    expect(h3.mag).toBeCloseTo(12);
+    expect(h3.triplen).toBe(true);
+  });
+
+  it("armónico NO triple (5ª) balanceado se cancela en el neutro", () => {
+    const s = { a: { 5: 4 }, b: { 5: 4 }, c: { 5: 4 } };
+    expect(harmonicNeutral(s).In).toBeCloseTo(0);
+  });
+
+  it("RMS sobre armónicos: In = √(Σ |In_h|²)", () => {
+    // fundamental desbalanceada (5/0/0 -> 5) + 3ª balanceada (3 c/u -> 9)
+    const s = { a: { 1: 5, 3: 3 }, b: { 3: 3 }, c: { 3: 3 } };
+    const r = harmonicNeutral(s);
+    expect(r.In).toBeCloseTo(Math.hypot(5, 9));
+    expect(r.severity).toBe("warn");
+  });
+
+  it("aires balanceados en las 3 fases cargan el neutro vía 3ª", () => {
+    const ac = getAppliance("aire");
+    const spec = buildPhaseSpectrum(0, [ac]);
+    const r = harmonicNeutral({ a: spec, b: spec, c: spec });
+    // fundamental se cancela; suman los triples: 3ª (2.4/fase) y 9ª (0.36/fase)
+    expect(r.In).toBeCloseTo(Math.hypot(2.4 * 3, 0.36 * 3), 2);
+    expect(r.fund).toEqual({ a: 12, b: 12, c: 12 }); // fundamental balanceada
   });
 });
