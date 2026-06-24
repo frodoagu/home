@@ -100,47 +100,47 @@ export default function NeutralCurrentVisualizer() {
           <StatusBadge severity={severity} color={sevColor} />
         </header>
 
-        {/* Métricas (fundamental total por fase) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {/* Métricas: fundamental por fase + corriente de neutro (salida clave) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           {PHASES.map((p) => (
             <Metric key={p.key} label={p.label} value={fund[p.key]} unit="A"
               color={p.color} sub={`∠ ${p.angle}° · fundamental`} />
           ))}
-          <div className="hidden" />
+          <NeutralMetric In={In} color={sevColor} />
         </div>
 
-        <div className="grid lg:grid-cols-12 gap-4">
+        <div className="grid lg:grid-cols-12 gap-4 items-start">
           {/* Controles */}
-          <section className="lg:col-span-4 space-y-4">
+          <section className="lg:col-span-5 space-y-4">
             <Card title="Carga lineal base por fase" icon={<Activity size={15} />}>
-              <div className="space-y-5 pt-1">
+              <div className="space-y-4 pt-1">
                 {PHASES.map((p) => (
                   <Slider key={p.key} phase={p} value={I[p.key]} onChange={(v) => set(p.key, v)} />
                 ))}
+              </div>
+              <div className="mt-4 border-t border-slate-800 pt-3">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 mb-2">
+                  <RotateCcw size={11} /> Presets
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PRESETS.map((pr) => (
+                    <button key={pr.label} onClick={() => setI(pr.v)}
+                      className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
+                                 text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
+                      {pr.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </Card>
 
             <AppliancesCard
               appliances={appliances} target={target} setTarget={setTarget}
               onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
-
-            <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} />
-
-            <Card title="Presets" icon={<RotateCcw size={15} />}>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                {PRESETS.map((pr) => (
-                  <button key={pr.label} onClick={() => setI(pr.v)}
-                    className="rounded-md border border-slate-800 bg-slate-900 px-2 py-2 text-xs
-                               text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
-                    {pr.label}
-                  </button>
-                ))}
-              </div>
-            </Card>
           </section>
 
-          {/* Visualización */}
-          <section className="lg:col-span-8">
+          {/* Visualización + detalle del neutro */}
+          <section className="lg:col-span-7 space-y-4">
             <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
               <div className="flex border-b border-slate-800">
                 <TabBtn active={tab === "phasors"} onClick={() => setTab("phasors")}
@@ -156,6 +156,8 @@ export default function NeutralCurrentVisualizer() {
                 {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} />}
               </div>
             </div>
+
+            <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} />
           </section>
         </div>
       </div>
@@ -192,6 +194,28 @@ function Metric({ label, value, unit, color, sub }) {
         <span className="text-sm text-slate-500 font-mono">{unit}</span>
       </div>
       <span className="text-[10px] text-slate-600 font-mono">{sub}</span>
+    </div>
+  );
+}
+
+// Métrica destacada de la corriente de neutro (4ª celda de la fila superior).
+function NeutralMetric({ In, color }) {
+  const pct = Math.min(100, (In / I_MAX) * 100);
+  return (
+    <div className="rounded-xl border bg-slate-900 p-3"
+      style={{ borderColor: color + "66", backgroundColor: color + "0d" }}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium" style={{ color }}>Corriente de Neutro</span>
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-2xl font-mono font-bold tabular-nums" style={{ color }}>{fmt(In)}</span>
+        <span className="text-sm text-slate-500 font-mono">A · I<sub>N</sub></span>
+      </div>
+      <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-150"
+          style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
     </div>
   );
 }
@@ -274,30 +298,33 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
   );
 }
 
+// Detalle/explicación de la corriente de neutro (debajo de la visualización).
 function NeutralCard({ In, color, triplenIn, hasHarm }) {
-  const pct = Math.min(100, (In / I_MAX) * 100);
   return (
-    <div className="rounded-xl border bg-slate-900 p-4" style={{ borderColor: color + "55" }}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-400">Corriente de Neutro · I<sub>N</sub></span>
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
-      </div>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span className="text-4xl font-mono font-bold tabular-nums" style={{ color }}>{fmt(In)}</span>
-        <span className="text-lg text-slate-500 font-mono">A</span>
-      </div>
-      <div className="mt-3 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-150"
-          style={{ width: `${pct}%`, backgroundColor: color }} />
+    <div className="rounded-xl border bg-slate-900 p-4" style={{ borderColor: color + "44" }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-mono font-bold tabular-nums" style={{ color }}>{fmt(In)}</span>
+          <span className="text-sm text-slate-500 font-mono">A en el neutro</span>
+        </div>
+        {hasHarm && (
+          <div className="flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-mono"
+            style={{ borderColor: color + "55", color, backgroundColor: color + "12" }}>
+            <BarChart3 size={13} /> {fmt(triplenIn)} A de armónicos triples
+          </div>
+        )}
       </div>
       {hasHarm ? (
-        <p className="mt-2 text-[10px] text-slate-500 font-mono leading-relaxed">
-          √(Σ |I<sub>N,h</sub>|²) · de los cuales {fmt(triplenIn)} A son armónicos triples (3,9…)
-          que se suman en el neutro aunque las fases estén balanceadas.
+        <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+          <span className="font-mono text-slate-500">I<sub>N</sub> = √(Σ |I<sub>N,h</sub>|²)</span>.
+          Los armónicos triples (3ª, 9ª…) están en fase en las tres líneas y se{" "}
+          <b className="text-slate-200">suman</b> en el neutro aunque las fases estén balanceadas — por eso
+          el neutro puede conducir corriente sin que haya desbalance.
         </p>
       ) : (
-        <p className="mt-2 text-[10px] text-slate-600 font-mono leading-relaxed">
-          √(Ia²+Ib²+Ic² − Ia·Ib − Ib·Ic − Ic·Ia) · solo fundamental, sin armónicos
+        <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+          <span className="font-mono">I<sub>N</sub> = √(Ia²+Ib²+Ic² − Ia·Ib − Ib·Ic − Ic·Ia)</span> ·
+          solo fundamental, sin armónicos. Agregá artefactos para ver cómo cargan el neutro.
         </p>
       )}
     </div>
