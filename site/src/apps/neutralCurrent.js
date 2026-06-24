@@ -166,6 +166,62 @@ export function harmonicNeutral(spectra) {
   return { In, comp, fund, perHarmonic, balanced, severity };
 }
 
+export const V_NOM = 230; // V fase-neutro (AR)
+
+// Fallas que se pueden simular.
+export const FAULTS = [
+  { key: "none", label: "Sin falla" },
+  { key: "a", label: "Corte Fase A" },
+  { key: "b", label: "Corte Fase B" },
+  { key: "c", label: "Corte Fase C" },
+  { key: "n", label: "Corte de Neutro" },
+];
+
+/** Multiplica todas las magnitudes de un espectro por un factor. */
+export function scaleSpectrum(spec, f) {
+  const out = {};
+  for (const [h, m] of Object.entries(spec)) out[Number(h)] = m * f;
+  return out;
+}
+
+/**
+ * Neutro abierto (estrella flotante): las cargas quedan en estrella sin retorno,
+ * así que la corriente de neutro es 0 y el punto estrella se desplaza. Tomando
+ * cada carga como resistiva (conductancia G ∝ corriente fundamental), el neutro
+ * flotante en pu es V_n = Σ Gₖ·∠θₖ / Σ Gₖ y la tensión sobre cada carga es
+ * |∠θₖ − V_n|. Las fases poco cargadas suben (sobretensión) y las muy cargadas
+ * bajan; con cargas balanceadas no hay desplazamiento.
+ * @param fund { a, b, c } corrientes fundamentales por fase (A).
+ * @returns { vn, V: {a,b,c} en V, ratio: {a,b,c} = V/V_NOM }
+ */
+export function openNeutralVoltages(fund) {
+  const G = { a: fund.a || 0, b: fund.b || 0, c: fund.c || 0 };
+  const Gsum = G.a + G.b + G.c;
+  if (Gsum < 1e-9)
+    return {
+      vn: { x: 0, y: 0 },
+      V: { a: V_NOM, b: V_NOM, c: V_NOM },
+      ratio: { a: 1, b: 1, c: 1 },
+    };
+  let nx = 0;
+  let ny = 0;
+  for (const k of PHASE_KEYS) {
+    nx += G[k] * Math.cos(rad(PHASE_ANGLES[k]));
+    ny += G[k] * Math.sin(rad(PHASE_ANGLES[k]));
+  }
+  const vn = { x: nx / Gsum, y: ny / Gsum };
+  const V = {};
+  const ratio = {};
+  for (const k of PHASE_KEYS) {
+    const dx = Math.cos(rad(PHASE_ANGLES[k])) - vn.x;
+    const dy = Math.sin(rad(PHASE_ANGLES[k])) - vn.y;
+    const r = Math.hypot(dx, dy);
+    ratio[k] = r;
+    V[k] = r * V_NOM;
+  }
+  return { vn, V, ratio };
+}
+
 /** Corriente instantánea de una fase (suma de armónicos) en θ [rad]. */
 export function phaseInstant(spec, angleDeg, theta) {
   let v = 0;

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   neutralCurrent, rad, T_MS, I_MAX,
   buildPhaseSpectrum, harmonicNeutral, getAppliance, isTriplen,
+  openNeutralVoltages, scaleSpectrum, V_NOM,
 } from "./neutralCurrent";
 
 describe("rad", () => {
@@ -107,6 +108,53 @@ describe("harmonicNeutral", () => {
     expect(r.severity).toBe("warn");
   });
 
+  it("corte de fase = espectro vacío: el neutro conduce el resto", () => {
+    const s = { a: {}, b: { 1: 8 }, c: { 1: 8 } };
+    const r = harmonicNeutral(s);
+    // dos fases iguales a 120°+240° => |8∠120 + 8∠240| = 8 A
+    expect(r.In).toBeCloseTo(8);
+    expect(r.fund.a).toBe(0);
+  });
+});
+
+describe("scaleSpectrum", () => {
+  it("escala todas las magnitudes y normaliza claves a número", () => {
+    expect(scaleSpectrum({ 1: 10, 3: 2 }, 0.5)).toEqual({ 1: 5, 3: 1 });
+  });
+});
+
+describe("openNeutralVoltages", () => {
+  it("cargas balanceadas: sin desplazamiento, tensión nominal", () => {
+    const r = openNeutralVoltages({ a: 10, b: 10, c: 10 });
+    expect(r.vn.x).toBeCloseTo(0);
+    expect(r.vn.y).toBeCloseTo(0);
+    for (const k of ["a", "b", "c"]) {
+      expect(r.ratio[k]).toBeCloseTo(1);
+      expect(r.V[k]).toBeCloseTo(V_NOM);
+    }
+  });
+
+  it("sin carga: tensión nominal en las tres fases", () => {
+    const r = openNeutralVoltages({ a: 0, b: 0, c: 0 });
+    expect(r.V).toEqual({ a: V_NOM, b: V_NOM, c: V_NOM });
+  });
+
+  it("monofásico 10/0/0: la fase cargada cae y las vacías suben a √3·Vnom", () => {
+    const r = openNeutralVoltages({ a: 10, b: 0, c: 0 });
+    expect(r.ratio.a).toBeCloseTo(0);
+    expect(r.ratio.b).toBeCloseTo(Math.sqrt(3));
+    expect(r.ratio.c).toBeCloseTo(Math.sqrt(3));
+  });
+
+  it("desbalance: la fase muy cargada se hunde y la poco cargada sobretensiona", () => {
+    const r = openNeutralVoltages({ a: 10, b: 1, c: 1 });
+    expect(r.ratio.a).toBeLessThan(1); // subtensión
+    expect(r.ratio.b).toBeGreaterThan(1); // sobretensión
+    expect(r.ratio.c).toBeGreaterThan(1);
+  });
+});
+
+describe("harmonicNeutral (extra)", () => {
   it("aires balanceados en las 3 fases cargan el neutro vía 3ª", () => {
     const ac = getAppliance("aire");
     const spec = buildPhaseSpectrum(0, [ac]);
