@@ -8,6 +8,14 @@ metadata:
   namespace: {{ .Values.traefikNamespace }}
 spec:
   valuesContent: |-
+    # Allow Traefik CRDs (IngressRoute/Middleware) to reference resources in
+    # other namespaces. Required so the dashboard's `google-auth-signin` errors
+    # middleware (in kube-system) can point at the oauth2-proxy Service in the
+    # oauth2-proxy namespace; without this the middleware fails to build and the
+    # router that references it returns 404.
+    providers:
+      kubernetesCRD:
+        allowCrossNamespace: true
     # Pin the Traefik container image (overrides the bundled chart's default),
     # so we run a specific Traefik version regardless of the k3s-bundled chart.
     image:
