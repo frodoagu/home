@@ -34,6 +34,7 @@ const APP_ICONS = {
 };
 
 const PRESETS = [
+  { label: "Sin carga base", v: { a: 0, b: 0, c: 0 } },
   { label: "Balanceado", v: { a: 10, b: 10, c: 10 } },
   { label: "3 / 7 / 7",  v: { a: 3,  b: 7,  c: 7  } },
   { label: "10 / 7 / 7", v: { a: 10, b: 7,  c: 7  } },
@@ -49,9 +50,12 @@ export default function NeutralCurrentVisualizer() {
   const [target, setTarget] = useState("3f");        // fase destino: a|b|c|3f
   const [tab, setTab] = useState("phasors");
   const [vis, setVis] = useState({ a: true, b: true, c: true, n: true }); // trazas visibles
-  const [fault, setFault] = useState("none"); // none | a | b | c | n
+  // Fallas combinables: corte de cada fase (a/b/c) y/o del neutro (n).
+  const [faults, setFaults] = useState({ a: false, b: false, c: false, n: false });
 
   const toggleVis = (k) => setVis((s) => ({ ...s, [k]: !s[k] }));
+  const toggleFault = (k) => setFaults((s) => ({ ...s, [k]: !s[k] }));
+  const clearFaults = () => setFaults({ a: false, b: false, c: false, n: false });
 
   const set = (k, val) => setI((s) => ({ ...s, [k]: Number(val) }));
 
@@ -75,15 +79,13 @@ export default function NeutralCurrentVisualizer() {
       base[key] = buildPhaseSpectrum(I[key], apps);
     }
 
-    // Corte de una fase: esa fase queda sin corriente.
-    if (fault === "a" || fault === "b" || fault === "c") {
-      base[fault] = {};
-      return { spectra: base, faultV: null, ...harmonicNeutral(base) };
-    }
+    // Corte de fase(s): esas líneas quedan sin corriente.
+    for (const k of ["a", "b", "c"]) if (faults[k]) base[k] = {};
 
     // Corte de neutro: no hay retorno (In = 0) y las tensiones se desplazan.
-    // Cargas resistivas -> la corriente por fase escala con su tensión.
-    if (fault === "n") {
+    // Sólo cuentan las fases activas; cargas resistivas -> la corriente escala
+    // con su tensión. (Combinable con cortes de fase: ésas ya tienen fund 0.)
+    if (faults.n) {
       const nominalFund = { a: base.a[1] || 0, b: base.b[1] || 0, c: base.c[1] || 0 };
       const ov = openNeutralVoltages(nominalFund);
       const scaled = {
@@ -100,9 +102,9 @@ export default function NeutralCurrentVisualizer() {
     }
 
     return { spectra: base, faultV: null, ...harmonicNeutral(base) };
-  }, [I, appliances, fault]);
+  }, [I, appliances, faults]);
 
-  const neutralOpen = fault === "n";
+  const neutralOpen = faults.n;
   const sevColor = NEUTRAL;
   // ¿hay distorsión? (algún armónico > fundamental). Habilita vista de armónicos.
   const harmonicAmps = perHarmonic.filter((p) => p.h !== 1 && p.mag > 0.05);
@@ -128,7 +130,7 @@ export default function NeutralCurrentVisualizer() {
               </p>
             </div>
           </div>
-          <StatusBadge severity={severity} fault={fault} color={sevColor} />
+          <StatusBadge severity={severity} faults={faults} color={sevColor} />
         </header>
 
         {/* Métricas: fundamental por fase + corriente de neutro (salida clave) */}
@@ -141,8 +143,8 @@ export default function NeutralCurrentVisualizer() {
         </div>
 
         <div className="grid lg:grid-cols-12 gap-4 items-start">
-          {/* Controles */}
-          <section className="lg:col-span-5 space-y-4">
+          {/* Controles (carga base + fallas) */}
+          <section className="lg:col-span-4 space-y-4">
             <Card title="Carga lineal base por fase" icon={<Activity size={15} />}>
               <div className="space-y-4 pt-1">
                 {PHASES.map((p) => (
@@ -165,15 +167,11 @@ export default function NeutralCurrentVisualizer() {
               </div>
             </Card>
 
-            <AppliancesCard
-              appliances={appliances} target={target} setTarget={setTarget}
-              onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
-
-            <FaultCard fault={fault} setFault={setFault} />
+            <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} />
           </section>
 
           {/* Visualización + detalle del neutro */}
-          <section className="lg:col-span-7 space-y-4">
+          <section className="lg:col-span-8 space-y-4">
             <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
               <div className="flex border-b border-slate-800">
                 <TabBtn active={tab === "phasors"} onClick={() => setTab("phasors")}
@@ -191,8 +189,15 @@ export default function NeutralCurrentVisualizer() {
             </div>
 
             {neutralOpen
-              ? <VoltagePanel ov={faultV} />
-              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} fault={fault} />}
+              ? <VoltagePanel ov={faultV} faults={faults} />
+              : <NeutralCard In={In} color={sevColor} triplenIn={triplenIn} hasHarm={harmonicAmps.length > 0} faults={faults} />}
+          </section>
+
+          {/* Artefactos: ancho completo abajo, catálogo + conectados en dos columnas */}
+          <section className="lg:col-span-12">
+            <AppliancesCard
+              appliances={appliances} target={target} setTarget={setTarget}
+              onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} />
           </section>
         </div>
       </div>
@@ -204,12 +209,20 @@ export default function NeutralCurrentVisualizer() {
 
 const DANGER = "#f43f5e"; // rojo-rosa para fallas
 
-function StatusBadge({ severity, fault, color }) {
+// Texto corto que resume las fallas activas.
+function faultSummary(faults) {
+  const cut = ["a", "b", "c"].filter((k) => faults[k]).map((k) => k.toUpperCase());
+  const parts = [];
+  if (cut.length)
+    parts.push(`Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}`);
+  if (faults.n) parts.push("Neutro abierto");
+  return parts.join(" + ");
+}
+
+function StatusBadge({ severity, faults, color }) {
   // Las fallas mandan sobre la severidad normal.
-  if (fault === "n")
-    return <Badge color={DANGER} Icon={Unplug} txt="Neutro abierto" />;
-  if (fault === "a" || fault === "b" || fault === "c")
-    return <Badge color={DANGER} Icon={Unplug} txt={`Fase ${fault.toUpperCase()} cortada`} />;
+  if (faults.a || faults.b || faults.c || faults.n)
+    return <Badge color={DANGER} Icon={Unplug} txt={faultSummary(faults)} />;
 
   const map = {
     ok:   { txt: "Balanceado",    Icon: CheckCircle2, c: color },
@@ -274,94 +287,111 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
   ];
   return (
     <Card title="Artefactos (armónicos)" icon={<Plus size={15} />}>
-      {/* selector de fase destino */}
-      <div className="mt-2 mb-3">
-        <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Agregar a la fase</div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {targets.map((t) => (
-            <button key={t.k} onClick={() => setTarget(t.k)}
-              className={`rounded-md border px-2 py-1.5 text-xs font-mono transition-colors ${
-                target === t.k
-                  ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                  : "border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"
-              }`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* catálogo */}
-      <div className="grid grid-cols-2 gap-2">
-        {APPLIANCES.map((a) => {
-          const Icon = APP_ICONS[a.key] ?? Plus;
-          return (
-            <button key={a.key} onClick={() => onAdd(a.key)}
-              className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900 px-2 py-2
-                         text-xs text-slate-300 hover:border-amber-500/60 hover:bg-slate-800 transition-colors text-left">
-              <Icon size={16} style={{ color: ACCENT }} className="shrink-0" />
-              <span className="leading-tight">{a.label}<br />
-                <span className="text-[10px] text-slate-600 font-mono">{a.current} A</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* lista de artefactos activos */}
-      {appliances.length > 0 && (
-        <div className="mt-3 border-t border-slate-800 pt-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              Conectados ({appliances.length})
-            </span>
-            <button onClick={onClear}
-              className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 transition-colors">
-              <Trash2 size={11} /> Limpiar
-            </button>
+      <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+        {/* columna izquierda: destino + catálogo */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">Agregar a la fase</span>
+            <div className="flex gap-1">
+              {targets.map((t) => (
+                <button key={t.k} onClick={() => setTarget(t.k)}
+                  className={`rounded-md border px-2.5 py-1 text-xs font-mono transition-colors ${
+                    target === t.k
+                      ? "border-amber-500 bg-amber-500/10 text-amber-300"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-600"
+                  }`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-            {appliances.map((a) => {
-              const meta = getAppliance(a.key);
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {APPLIANCES.map((a) => {
               const Icon = APP_ICONS[a.key] ?? Plus;
-              const ph = PHASES.find((p) => p.key === a.phase);
               return (
-                <div key={a.id}
-                  className="flex items-center gap-2 rounded-md bg-slate-950/60 px-2 py-1 text-xs">
-                  <Icon size={13} className="shrink-0 text-slate-400" />
-                  <span className="flex-1 truncate text-slate-300">{meta?.label}</span>
-                  <span className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: ph?.color }} />
-                  <span className="font-mono text-[10px] text-slate-500 w-3">{ph?.label.slice(-1)}</span>
-                  <button onClick={() => onRemove(a.id)} className="text-slate-600 hover:text-rose-400">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
+                <button key={a.key} onClick={() => onAdd(a.key)}
+                  className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/50 px-2 py-2
+                             text-xs text-slate-300 hover:border-amber-500/60 hover:bg-slate-800 transition-colors text-left">
+                  <Icon size={16} style={{ color: ACCENT }} className="shrink-0" />
+                  <span className="leading-tight">{a.label}<br />
+                    <span className="text-[10px] text-slate-600 font-mono">{a.current} A</span>
+                  </span>
+                </button>
               );
             })}
           </div>
         </div>
-      )}
+
+        {/* columna derecha: conectados */}
+        <div className="md:border-l md:border-slate-800 md:pl-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">
+              Conectados ({appliances.length})
+            </span>
+            {appliances.length > 0 && (
+              <button onClick={onClear}
+                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 transition-colors">
+                <Trash2 size={11} /> Limpiar
+              </button>
+            )}
+          </div>
+          {appliances.length === 0 ? (
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Sin artefactos. Elegí una fase (o 3φ) y tocá un artefacto para agregarlo.
+              Probá agregar el mismo a las 3 fases para ver cómo cargan el neutro vía 3ª armónica.
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1 max-h-44 overflow-y-auto pr-1">
+              {appliances.map((a) => {
+                const meta = getAppliance(a.key);
+                const Icon = APP_ICONS[a.key] ?? Plus;
+                const ph = PHASES.find((p) => p.key === a.phase);
+                return (
+                  <div key={a.id}
+                    className="flex items-center gap-2 rounded-md bg-slate-950/60 px-2 py-1 text-xs">
+                    <Icon size={13} className="shrink-0 text-slate-400" />
+                    <span className="flex-1 truncate text-slate-300">{meta?.label}</span>
+                    <span className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: ph?.color }} />
+                    <span className="font-mono text-[10px] text-slate-500 w-3">{ph?.label.slice(-1)}</span>
+                    <button onClick={() => onRemove(a.id)} className="text-slate-600 hover:text-rose-400">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
 
-// Botones para simular fallas (corte de fase o de neutro).
-function FaultCard({ fault, setFault }) {
+// Botones (toggles) para simular fallas combinables: cortes de fase y/o neutro.
+function FaultCard({ faults, onToggle, onClear }) {
+  const any = faults.a || faults.b || faults.c || faults.n;
   return (
-    <Card title="Simular falla" icon={<Unplug size={15} />}>
-      <div className="grid grid-cols-2 gap-2 pt-1">
+    <Card title="Simular fallas" icon={<Unplug size={15} />}>
+      <div className="flex items-center justify-between mb-2 pt-1">
+        <span className="text-[10px] uppercase tracking-wide text-slate-500">Combinables</span>
+        {any && (
+          <button onClick={onClear}
+            className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
+            <CheckCircle2 size={11} /> Sin fallas
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
         {FAULTS.map((f) => {
-          const active = fault === f.key;
-          const danger = f.key !== "none";
+          const active = faults[f.key];
           return (
-            <button key={f.key} onClick={() => setFault(f.key)}
-              className={`rounded-md border px-2 py-2 text-xs transition-colors ${
+            <button key={f.key} onClick={() => onToggle(f.key)}
+              className={`flex items-center gap-2 rounded-md border px-2 py-2 text-xs transition-colors ${
                 active
-                  ? danger
-                    ? "border-rose-500 bg-rose-500/10 text-rose-300"
-                    : "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                  ? "border-rose-500 bg-rose-500/10 text-rose-300"
                   : "border-slate-800 bg-slate-950/50 text-slate-300 hover:border-slate-600 hover:bg-slate-800"
               }`}>
+              <span className={`h-2 w-2 rounded-full shrink-0 ${active ? "bg-rose-400" : "bg-slate-700"}`} />
               {f.label}
             </button>
           );
@@ -370,24 +400,24 @@ function FaultCard({ fault, setFault }) {
       <p className="mt-2 text-[10px] text-slate-600 leading-relaxed">
         Corte de fase: esa línea queda sin corriente y el neutro carga el desbalance.
         Corte de neutro: I<sub>N</sub> = 0 pero las tensiones se desplazan (peligro).
+        Se pueden activar varias a la vez (p. ej. una fase + neutro).
       </p>
     </Card>
   );
 }
 
 // Panel de tensiones cuando el neutro queda abierto (estrella flotante).
-function VoltagePanel({ ov }) {
+function VoltagePanel({ ov, faults }) {
   const rows = PHASES.map((p) => {
+    const cut = faults[p.key];
     const V = ov.V[p.key];
     const pct = (ov.ratio[p.key] - 1) * 100;
-    const over = pct > 5;
-    const under = pct < -5;
-    return { p, V, pct, over, under };
+    return { p, cut, V, pct, over: pct > 5, under: pct < -5 };
   });
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: DANGER + "55", backgroundColor: DANGER + "0d" }}>
       <div className="flex items-center gap-2 text-sm font-medium" style={{ color: DANGER }}>
-        <Unplug size={15} /> Neutro abierto · tensión de fase
+        <Unplug size={15} /> {faultSummary(faults)} · tensión de fase
       </div>
       <p className="mt-1 text-xs text-slate-400 leading-relaxed">
         Sin retorno, I<sub>N</sub> = 0; pero el punto estrella se desplaza y la tensión sobre cada
@@ -395,8 +425,8 @@ function VoltagePanel({ ov }) {
         para los equipos).
       </p>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        {rows.map(({ p, V, pct, over, under }) => {
-          const c = over ? DANGER : under ? "#eab308" : "#64748b";
+        {rows.map(({ p, cut, V, pct, over, under }) => {
+          const c = cut ? "#64748b" : over ? DANGER : under ? "#eab308" : "#94a3b8";
           const Icon = over ? ArrowUp : under ? ArrowDown : null;
           return (
             <div key={p.key} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2.5">
@@ -404,16 +434,22 @@ function VoltagePanel({ ov }) {
                 <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: p.color }} />
                 <span className="text-xs text-slate-400">{p.label}</span>
               </div>
-              <div className="mt-1 flex items-baseline gap-1">
-                <span className="text-xl font-mono font-bold tabular-nums" style={{ color: c }}>
-                  {Math.round(V)}
-                </span>
-                <span className="text-xs text-slate-500 font-mono">V</span>
-              </div>
-              <div className="flex items-center gap-1 text-[10px] font-mono" style={{ color: c }}>
-                {Icon && <Icon size={11} />}
-                {pct >= 0 ? "+" : ""}{pct.toFixed(0)}%
-              </div>
+              {cut ? (
+                <div className="mt-1 text-sm font-mono text-slate-500">cortada</div>
+              ) : (
+                <>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="text-xl font-mono font-bold tabular-nums" style={{ color: c }}>
+                      {Math.round(V)}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono">V</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] font-mono" style={{ color: c }}>
+                    {Icon && <Icon size={11} />}
+                    {pct >= 0 ? "+" : ""}{pct.toFixed(0)}%
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
@@ -426,8 +462,9 @@ function VoltagePanel({ ov }) {
 }
 
 // Detalle/explicación de la corriente de neutro (debajo de la visualización).
-function NeutralCard({ In, color, triplenIn, hasHarm, fault }) {
-  const phaseCut = fault === "a" || fault === "b" || fault === "c";
+function NeutralCard({ In, color, triplenIn, hasHarm, faults }) {
+  const cut = ["a", "b", "c"].filter((k) => faults[k]).map((k) => k.toUpperCase());
+  const phaseCut = cut.length > 0;
   return (
     <div className="rounded-xl border bg-slate-900 p-4" style={{ borderColor: color + "44" }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -444,8 +481,8 @@ function NeutralCard({ In, color, triplenIn, hasHarm, fault }) {
       </div>
       {phaseCut ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-          <b className="text-rose-300">Fase {fault.toUpperCase()} cortada</b>: sin corriente en esa línea,
-          el neutro tiene que conducir todo el desbalance de las dos fases restantes.
+          <b className="text-rose-300">Fase{cut.length > 1 ? "s" : ""} {cut.join("/")} cortada{cut.length > 1 ? "s" : ""}</b>:
+          sin corriente en esa(s) línea(s), el neutro tiene que conducir todo el desbalance de las fases restantes.
         </p>
       ) : hasHarm ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">

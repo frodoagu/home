@@ -168,9 +168,8 @@ export function harmonicNeutral(spectra) {
 
 export const V_NOM = 230; // V fase-neutro (AR)
 
-// Fallas que se pueden simular.
+// Fallas combinables que se pueden simular (cortes de fase y/o de neutro).
 export const FAULTS = [
-  { key: "none", label: "Sin falla" },
   { key: "a", label: "Corte Fase A" },
   { key: "b", label: "Corte Fase B" },
   { key: "c", label: "Corte Fase C" },
