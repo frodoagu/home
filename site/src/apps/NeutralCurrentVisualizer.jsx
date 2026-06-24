@@ -48,6 +48,13 @@ const PRESETS = [
 const fmt = (n) => n.toFixed(1);
 let _uid = 0;
 
+function niceAmpScaleMax(rawMax) {
+  if (rawMax <= 10) return 10;
+  if (rawMax <= 25) return Math.ceil(rawMax / 5) * 5;
+  if (rawMax <= 50) return Math.ceil(rawMax / 10) * 10;
+  return Math.ceil(rawMax / 20) * 20;
+}
+
 /* ---- orden de paneles persistido en localStorage ---- */
 const PANEL_KEY = "ncv:panel-order:v1";
 const DEFAULT_PANEL_ORDER = ["metrics", "viz", "load", "faults", "cables", "appliances"];
@@ -205,6 +212,8 @@ export default function NeutralCurrentVisualizer() {
   const triplenIn = Math.sqrt(
     perHarmonic.filter((p) => p.triplen).reduce((s, p) => s + p.mag * p.mag, 0)
   );
+  const rawAmpScaleMax = Math.max(10, Math.max(fund.a, fund.b, fund.c) * 1.05);
+  const ampScaleMax = niceAmpScaleMax(rawAmpScaleMax);
 
   const txt = language === "es"
     ? {
@@ -243,7 +252,7 @@ export default function NeutralCurrentVisualizer() {
               <Metric key={p.key} label={localizeText(p.label, language)} value={fund[p.key]} unit="A"
                 color={p.color} sub={`∠ ${p.angle}° · ${language === "es" ? "fundamental" : "fundamental"}`} />
             ))}
-            <NeutralMetric In={In} color={sevColor} language={language} />
+            <NeutralMetric In={In} color={sevColor} language={language} ampScaleMax={ampScaleMax} />
           </div>
         );
       case "viz":
@@ -261,8 +270,8 @@ export default function NeutralCurrentVisualizer() {
                   icon={<Gauge size={14} />} label={txt.tabVoltage} />
               </div>
               <div className="p-4">
-                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} />}
-                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} />}
+                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
+                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
                 {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} language={language} />}
                 {tab === "volts" && <VoltageView volt={volt} spectra={spectra} R={R} Rn={Rn} faults={faults} neutralOpen={neutralOpen} vis={vis} onToggle={toggleVis} language={language} />}
               </div>
@@ -427,8 +436,8 @@ function Metric({ label, value, unit, color, sub }) {
   );
 }
 
-function NeutralMetric({ In, color, language }) {
-  const pct = Math.min(100, (In / I_MAX) * 100);
+function NeutralMetric({ In, color, language, ampScaleMax }) {
+  const pct = Math.min(100, (In / ampScaleMax) * 100);
   return (
     <div className="rounded-xl border bg-slate-900 p-3"
       style={{ borderColor: color + "66", backgroundColor: color + "0d" }}>
@@ -828,8 +837,8 @@ function TabBtn({ active, onClick, icon, label }) {
 
 /* ===================== Vista: Diagrama Fasorial ===================== */
 
-function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language }) {
-  const VB = 340, C = VB / 2, R = 140, scale = R / I_MAX;
+function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
+  const VB = 340, C = VB / 2, R = 140, scale = R / ampScaleMax;
   const In = Math.hypot(comp.x, comp.y);
 
   const tip = (mag, angle) => ({
@@ -837,7 +846,7 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language }) {
     y: C - mag * Math.sin(rad(angle)) * scale,
   });
   const nTip = { x: C + comp.x * scale, y: C - comp.y * scale };
-  const rings = [0.25, 0.5, 0.75, 1].map((f) => Math.round(f * I_MAX));
+  const rings = [0.25, 0.5, 0.75, 1].map((f) => Math.round(f * ampScaleMax));
 
   return (
     <div className="flex flex-col items-center">
@@ -898,7 +907,7 @@ function Arrow({ x1, y1, x2, y2, color, width, dashed, glow }) {
 
 /* ===================== Vista: Formas de Onda (corriente) ===================== */
 
-function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language }) {
+function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
   const W = 560, H = 260, padL = 40, padR = 16, padT = 16, padB = 30;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const cY = padT + plotH / 2;
@@ -917,7 +926,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language })
       raw.a.push([ms, ia]); raw.b.push([ms, ib]); raw.c.push([ms, ic]); raw.n.push([ms, inst]);
       peak = Math.max(peak, Math.abs(ia), Math.abs(ib), Math.abs(ic), Math.abs(inst));
     }
-    const yMax = Math.ceil(peak / 10) * 10 || 10;
+    const yMax = Math.max(10, Math.ceil(ampScaleMax / 10) * 10);
     const yS = (plotH / 2) / yMax;
     const x = (ms) => padL + (ms / T_MS) * plotW;
     const y = (amp) => cY - amp * yS;
@@ -927,7 +936,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language })
       nPath: toStr(raw.n),
       yMax,
     };
-  }, [spectra]);
+  }, [spectra, ampScaleMax]);
 
   const yS = (plotH / 2) / yMax;
   const y = (amp) => cY - amp * yS;
