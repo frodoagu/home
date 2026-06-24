@@ -20,6 +20,7 @@ services running on a Raspberry Pi with k3s.
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/agu-spa/` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
+| [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, blackbox uptime, Telegram alerts | `charts/monitoring/` |
 
 ## Architecture
 
@@ -44,6 +45,7 @@ flowchart TD
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
         SPA[agu-spa<br/>React SPA]
         DDNS[cloudflare-ddns]
+        MON[monitoring<br/>VictoriaMetrics · Grafana<br/>node/RPi · blackbox]
     end
 
     Router --> Traefik
@@ -53,7 +55,8 @@ flowchart TD
     Traefik -->|www.agu.com.ar 301| SPA
     Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
     Traefik -->|auth.agu.com.ar| OA2
-    Traefik -.->|ForwardAuth on<br/>dashboard| OA2
+    Traefik -->|grafana.agu.com.ar| MON
+    Traefik -.->|ForwardAuth on<br/>dashboard + grafana| OA2
 
     Argo -.->|App of Apps sync| Traefik
     Argo -.-> HA
@@ -61,6 +64,9 @@ flowchart TD
     Argo -.-> DDNS
     Argo -.-> IU
     Argo -.-> OA2
+    Argo -.-> MON
+
+    MON -.->|alerts| TG([Telegram])
 
     Traefik -->|ACME DNS-01| CF
     DDNS -->|update A records| CF
@@ -90,6 +96,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard
   - `auth.agu.com.ar` → oauth2-proxy (Google sign-in for the dashboard)
+  - `grafana.agu.com.ar` → Grafana (monitoring, gated by the same Google sign-in)
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
 
 ## Setup from a fresh Raspberry Pi OS
@@ -183,7 +190,7 @@ kubectl apply -f apps/root.yaml
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
 Let's Encrypt + the dashboard) and deploys the remaining apps (oauth2-proxy,
-Home Assistant, agu-spa, argocd-image-updater, cloudflare-ddns).
+Home Assistant, agu-spa, argocd-image-updater, cloudflare-ddns, monitoring).
 
 ### 3 – Create the required secrets
 
@@ -283,6 +290,17 @@ kubectl -n argocd create secret generic git-creds \
 > repository a **read-write deploy key**; then set the CR's `method: git` and the
 > HTTPS `repository` back to the SSH remote so write-back uses it directly.
 
+**3. Alertmanager Telegram token** (`alertmanager-telegram`) — so monitoring
+alerts (RPi temperature/throttling, endpoint down, cert expiry, …) reach you.
+Create a bot via [@BotFather](https://t.me/BotFather), then set the numeric
+`chat_id` in `charts/monitoring/values.yaml`:
+
+```bash
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n monitoring create secret generic alertmanager-telegram \
+  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
+```
+
 See [docs/secrets.md](docs/secrets.md) for rotation notes.
 
 > The Google Assistant integration needs an extra secret (`ha-google-sa`) only
@@ -301,6 +319,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant` |
 | `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
+| `charts/monitoring/values.yaml` | `ingress.host` (Grafana), `blackboxTargets`, Alertmanager `chat_id`, retention/resources |
 
 ### 5 – Instant sync (optional Git webhook)
 
@@ -333,7 +352,8 @@ webhook config (`-f config[secret]=...`).
 │   ├── oauth2-proxy.yaml
 │   ├── home-assistant.yaml
 │   ├── agu-spa.yaml
-│   └── cloudflare-ddns.yaml
+│   ├── cloudflare-ddns.yaml
+│   └── monitoring.yaml
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
@@ -342,7 +362,8 @@ webhook config (`-f config[secret]=...`).
     ├── oauth2-proxy/        # Google ForwardAuth backend gating the Traefik dashboard
     ├── home-assistant/      # Home Assistant Helm chart
     ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
-    └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
+    ├── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
+    └── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
 ```
 
 ## Documentation

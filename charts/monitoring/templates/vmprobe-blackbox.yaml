@@ -1,0 +1,26 @@
+{{- if .Values.blackboxTargets }}
+# Uptime / TLS probing. vmagent drives the blackbox-exporter against each public
+# hostname (from inside the cluster, so it also validates Traefik + Let's Encrypt
+# end-to-end). Produces probe_success, probe_duration_seconds and
+# probe_ssl_earliest_cert_expiry — see templates/vmrules.yaml for the alerts.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMProbe
+metadata:
+  name: {{ include "monitoring.fullname" . }}-blackbox
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  jobName: blackbox-http
+  module: http_2xx
+  interval: 60s
+  vmProberSpec:
+    # blackbox-exporter Service (fullnameOverride pins this name), same namespace.
+    url: blackbox-exporter:9115
+  targets:
+    staticConfig:
+      targets:
+        {{- range .Values.blackboxTargets }}
+        - {{ . | quote }}
+        {{- end }}
+{{- end }}

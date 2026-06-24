@@ -1,0 +1,35 @@
+---
+# ArgoCD Application – observability stack (VictoriaMetrics k8s-stack + blackbox).
+# Metrics, Grafana dashboards, Alertmanager→Telegram alerts, node/hardware and
+# Raspberry Pi throttling metrics, plus external uptime/TLS probes.
+# See charts/monitoring.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://grafana.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/monitoring
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The VictoriaMetrics operator ships large CRDs; server-side apply avoids
+      # the client-side "metadata.annotations too long" error.
+      - ServerSideApply=true

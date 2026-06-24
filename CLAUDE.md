@@ -13,8 +13,12 @@ apps/                ArgoCD Application manifests (App-of-Apps). One file per wo
   root.yaml          Root app — points at apps/ itself; `kubectl apply -f` this once to bootstrap.
   <name>.yaml        One Application per chart, all in namespace `argocd`.
 charts/              Helm charts, one dir per service. Each app/<name>.yaml -> charts/<name>.
-  argocd/            ArgoCD itself (app-of-apps deploys ArgoCD from here).
+  argocd/            ArgoCD itself (app-of-apps deploys ArgoCD from here). Google login via bundled Dex/OIDC.
   traefik-config/    Configures the k3s-BUNDLED Traefik via HelmChartConfig (does NOT install it). Targets kube-system.
+                     Also ships the dashboard IngressRoute + auth middlewares (google-auth ForwardAuth,
+                     dashboard-auth basic-auth fallback) and the www→apex redirect.
+  oauth2-proxy/      Google OAuth2 ForwardAuth backend (wrapper chart over upstream). Backs the
+                     `google-auth` Traefik middleware that gates the dashboard. Host: auth.agu.com.ar.
   home-assistant/    Home Assistant + Google Assistant integration.
   cloudflare-ddns/   Dynamic DNS updater.
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
@@ -42,8 +46,19 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   and `tls.certResolver: letsencrypt`. HTTP→HTTPS redirect is global (no HTTP route needed).
 - **TLS**: Let's Encrypt via ACME **DNS-01** through Cloudflare (configured in
   `charts/traefik-config`). Hostnames are under `agu.com.ar`.
-- **Secrets** (Cloudflare tokens, Google HomeGraph SA, basic-auth, `ghcr-creds`,
-  `git-creds`) are created **out-of-band with `kubectl create secret`** and
+- **Auth (Google sign-in)**: two independent paths, both using the same Google
+  OAuth client. (1) The **Traefik dashboard** (`traefik.agu.com.ar`) is gated by
+  the `google-auth` Traefik **ForwardAuth** middleware → `oauth2-proxy`
+  (`auth.agu.com.ar`); a `google-auth-signin` `errors` middleware turns 401/403s
+  into a sign-in redirect. The session cookie is scoped to `.agu.com.ar`, so one
+  sign-in covers all subdomains; authorization is an explicit email allowlist
+  (`authenticatedEmailsFile.restricted_access` in `charts/oauth2-proxy/values.yaml`),
+  NOT `--email-domain`. (2) **ArgoCD** logs in via its bundled **Dex/OIDC**
+  (`charts/argocd/values.yaml`). The site's `privateLinks` use a separate,
+  purely client-side Google sign-in (`site/src/auth/`) — unrelated to oauth2-proxy.
+- **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex,
+  Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`, `git-creds`)
+  are created **out-of-band with `kubectl create secret`** and
   referenced by name — never committed. Full list in `docs/secrets.md`.
 - **SPA image auto-updates**: CI builds `site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
@@ -57,6 +72,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - Standard Helm scaffold: `Chart.yaml`, `values.yaml`, `templates/` with
   `_helpers.tpl` (name/fullname/chart/labels/selectorLabels), `deployment.yaml`,
   `service.yaml`, `ingress.yaml` (IngressRoute), `NOTES.txt`.
+- **Wrapper charts** (`oauth2-proxy`, `argocd-image-updater`, `argocd`, `monitoring`)
+  don't have their own `deployment.yaml`: they declare the real chart as a
+  `Chart.yaml` dependency, forward config under a sub-key in `values.yaml`, and add
+  only their own templates (IngressRoute, CRs, ConfigMaps). Run `helm dependency
+  build charts/<name>` before templating locally. The fetched `charts/*/charts/`
+  and `Chart.lock` are gitignored and NOT committed — ArgoCD resolves dependencies
+  from the upstream repos at sync time.
 - Helper template names are namespaced per chart: `{{ include "<chart>.fullname" . }}`.
 - **Pin image tags** explicitly in `values.yaml` (no `latest`/`stable`); keep
   `Chart.yaml` `appVersion` in sync. Image ref pattern:

@@ -1,0 +1,264 @@
+# Default values for the monitoring wrapper chart.
+#
+# Two upstream charts are wrapped (keys forwarded verbatim):
+#   victoria-metrics-k8s-stack   -> the metrics/alerting/dashboards stack
+#   prometheus-blackbox-exporter -> external HTTP/TLS probing for uptime
+#
+# Everything here is sized for a single Raspberry Pi running k3s and is biased
+# toward FEW DISK WRITES (only an SD card is available): long scrape interval,
+# short retention, ephemeral Grafana. If you later add an SSD, bump
+# victoria-metrics-k8s-stack.vmsingle.spec.storage and retentionPeriod.
+
+# ── This wrapper's own resources (templates/) ──────────────────────────────────
+
+# Grafana is exposed via a Traefik IngressRoute and protected by a local copy of
+# the google-auth ForwardAuth middleware (delegates to oauth2-proxy, same as the
+# other private services). See templates/google-auth-middleware.yaml.
+ingress:
+  enabled: true
+  host: grafana.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy. Mirrors charts/traefik-config's googleAuth block so
+# Grafana (in the monitoring namespace) can require Google sign-in without relying
+# on Traefik cross-namespace middleware references.
+googleAuth:
+  enabled: true
+  # Cluster-internal oauth2-proxy /oauth2/auth endpoint.
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  # Redirect unauthenticated users (401/403) to the oauth2-proxy sign-in page.
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# Raspberry Pi throttling/under-voltage exporter (templates/rpi-throttle-exporter.yaml).
+# node-exporter already gives CPU/RAM/disk/temperature; only throttling needs vcgencmd.
+rpiThrottleExporter:
+  enabled: true
+  image: busybox:1.36
+  # How often to poll `vcgencmd get_throttled` and rewrite the textfile metric.
+  intervalSeconds: 30
+  resources:
+    requests:
+      cpu: 5m
+      memory: 8Mi
+    limits:
+      memory: 16Mi
+
+# External endpoints probed by blackbox for uptime + TLS-expiry. Probed from
+# inside the cluster against the public hostnames, so this also exercises the
+# whole Traefik + Let's Encrypt path end-to-end.
+blackboxTargets:
+  - https://agu.com.ar
+  - https://argocd.agu.com.ar
+  - https://home.agu.com.ar
+  - https://auth.agu.com.ar/ping
+  - https://grafana.agu.com.ar
+
+# ── prometheus-blackbox-exporter (upstream) ────────────────────────────────────
+prometheus-blackbox-exporter:
+  # Predictable service name so the VMProbe can target `blackbox-exporter:9115`.
+  fullnameOverride: blackbox-exporter
+  resources:
+    requests:
+      cpu: 10m
+      memory: 24Mi
+    limits:
+      memory: 48Mi
+  # Default config already ships an http_2xx module; pin IPv4 and require TLS so
+  # https targets surface probe_ssl_earliest_cert_expiry for cert-expiry alerts.
+  config:
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          method: GET
+          preferred_ip_protocol: ip4
+          ip_protocol_fallback: false
+          fail_if_not_ssl: true
+
+# ── victoria-metrics-k8s-stack (upstream) ──────────────────────────────────────
+victoria-metrics-k8s-stack:
+  # The operator that reconciles all the VM* CRDs below.
+  victoria-metrics-operator:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+  # k3s does not expose these control-plane components for scraping on a single
+  # node; turn their scrape jobs off to avoid permanently-down targets.
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+  kubeProxy:
+    enabled: false
+
+  # ── Metrics database (single node) ──────────────────────────────────────────
+  vmsingle:
+    spec:
+      # SD-card friendly: 15 days of history is plenty for a home lab.
+      retentionPeriod: "15d"
+      replicaCount: 1
+      extraArgs:
+        # Collapse duplicate samples written within a scrape interval.
+        dedup.minScrapeInterval: 60s
+      storage:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Gi
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+
+  # ── Scraper ────────────────────────────────────────────────────────────────
+  vmagent:
+    spec:
+      # 60s scrape interval => far fewer samples/writes than the 30s default.
+      scrapeInterval: 60s
+      resources:
+        requests:
+          cpu: 25m
+          memory: 96Mi
+        limits:
+          memory: 256Mi
+
+  # ── Rule evaluation ──────────────────────────────────────────────────────────
+  vmalert:
+    spec:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+
+  # Ship the upstream Kubernetes alerting rules (node/pod/workload health).
+  defaultRules:
+    enabled: true
+
+  # ── Alertmanager → Telegram ──────────────────────────────────────────────────
+  alertmanager:
+    enabled: true
+    spec:
+      replicaCount: 1
+      # Mounts secret `alertmanager-telegram` at /etc/vm/secrets/alertmanager-telegram/
+      # so the bot token never lives in git (referenced via bot_token_file below).
+      secrets:
+        - alertmanager-telegram
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+    config:
+      route:
+        receiver: telegram
+        group_by: ["alertname", "severity", "instance"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        routes:
+          # Silence the always-firing watchdog/info alerts.
+          - receiver: blackhole
+            matchers:
+              - alertname =~ "Watchdog|InfoInhibitor"
+      receivers:
+        - name: blackhole
+        - name: telegram
+          telegram_configs:
+            - send_resolved: true
+              # Bot token comes from the mounted out-of-band secret (never in git).
+              bot_token_file: /etc/vm/secrets/alertmanager-telegram/bot-token
+              # !!! REPLACE with your numeric Telegram chat id (e.g. from @userinfobot;
+              # negative for groups). Not sensitive, so it's fine to commit.
+              chat_id: 0
+              parse_mode: HTML
+              message: |-
+                {{ range .Alerts }}<b>[{{ .Status | toUpper }}{{ if eq .Status "firing" }} 🔥{{ else }} ✅{{ end }}] {{ .Labels.alertname }}</b> ({{ .Labels.severity }})
+                {{ if .Annotations.summary }}{{ .Annotations.summary }}
+                {{ end }}{{ if .Annotations.description }}{{ .Annotations.description }}
+                {{ end }}{{ end }}
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    enabled: true
+    # We expose Grafana via our own Traefik IngressRoute (templates/grafana-ingress.yaml).
+    ingress:
+      enabled: false
+    # Ephemeral: dashboards + datasource are provisioned on every start, so no PVC
+    # (and no SD writes) are needed.
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 25m
+        memory: 96Mi
+      limits:
+        memory: 192Mi
+    # Trust the X-Auth-Request-Email header set by the google-auth ForwardAuth
+    # middleware → users are auto-created as Admin, no Grafana login page.
+    grafana.ini:
+      server:
+        root_url: https://grafana.agu.com.ar
+      auth:
+        disable_login_form: true
+      "auth.anonymous":
+        enabled: false
+      "auth.proxy":
+        enabled: true
+        header_name: X-Auth-Request-Email
+        header_property: email
+        auto_sign_up: true
+      users:
+        auto_assign_org_role: Admin
+      analytics:
+        reporting_enabled: false
+        check_for_updates: false
+
+  # ── node-exporter (hardware: CPU/RAM/disk/temperature) ───────────────────────
+  prometheus-node-exporter:
+    enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 24Mi
+      limits:
+        memory: 48Mi
+    # NOTE: this list REPLACES the parent chart's extraArgs, so the filesystem
+    # excludes are repeated here and the textfile collector dir is added (read by
+    # node-exporter, written by the rpi-throttle-exporter DaemonSet). The
+    # thermal_zone collector is enabled by default → node_thermal_zone_temp.
+    extraArgs:
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|erofs|sysfs|tracefs)$
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile
+    extraHostVolumeMounts:
+      - name: textfile
+        hostPath: /var/lib/node_exporter/textfile
+        mountPath: /var/lib/node_exporter/textfile
+        readOnly: true
+
+  # ── kube-state-metrics (pod/deployment/workload state) ───────────────────────
+  kube-state-metrics:
+    enabled: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi

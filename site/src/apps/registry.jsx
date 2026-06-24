@@ -1,4 +1,4 @@
-import { GitBranch, Home, Network, Sparkles, Zap } from "lucide-react";
+import { Activity, GitBranch, Home, Network, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -88,5 +88,15 @@ export const privateLinks = [
     tag: "GitOps",
     icon: GitBranch,
     accent: "#f97316",
+  },
+  {
+    slug: "grafana",
+    title: "Grafana",
+    description: "Métricas del cluster, hardware del Pi y uptime.",
+    href: "https://grafana.agu.com.ar",
+    categories: ["DevOps"],
+    tag: "Monitoreo",
+    icon: Activity,
+    accent: "#f59e0b",
   },
 ];

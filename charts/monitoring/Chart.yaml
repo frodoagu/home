@@ -1,0 +1,31 @@
+apiVersion: v2
+name: monitoring
+description: >-
+  Lightweight observability stack for the RPi k3s cluster — VictoriaMetrics
+  (vmsingle/vmagent/vmalert + Alertmanager + Grafana + node-exporter +
+  kube-state-metrics) plus a blackbox exporter for external uptime/TLS probes.
+  Tuned for low RAM and minimal disk writes (SD-card friendly). Alerts go to
+  Telegram; Grafana is gated by the same google-auth ForwardAuth as the other
+  private services.
+type: application
+version: 0.1.0
+appVersion: "v1.146.0"
+keywords:
+  - monitoring
+  - victoriametrics
+  - grafana
+  - blackbox
+  - raspberrypi
+  - gitops
+sources:
+  - https://github.com/VictoriaMetrics/helm-charts/tree/master/charts/victoria-metrics-k8s-stack
+  - https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-blackbox-exporter
+maintainers:
+  - name: frodoagu
+dependencies:
+  - name: victoria-metrics-k8s-stack
+    version: "0.85.2"
+    repository: https://victoriametrics.github.io/helm-charts/
+  - name: prometheus-blackbox-exporter
+    version: "11.13.0"
+    repository: https://prometheus-community.github.io/helm-charts

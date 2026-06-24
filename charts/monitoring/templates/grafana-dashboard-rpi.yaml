@@ -1,0 +1,17 @@
+{{- if (index .Values "victoria-metrics-k8s-stack" "grafana" "enabled") }}
+# Custom "Raspberry Pi — Health" dashboard. The grafana sidecar imports any
+# ConfigMap carrying the grafana_dashboard label, so this shows up automatically
+# alongside the chart's bundled VictoriaMetrics/Kubernetes dashboards.
+# Loaded via .Files.Get so Grafana's own double-brace legend syntax is left intact.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "monitoring.fullname" . }}-dashboard-rpi
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "monitoring.labels" . | nindent 4 }}
+data:
+  rpi-health.json: |-
+{{ .Files.Get "dashboards/rpi.json" | indent 4 }}
+{{- end }}

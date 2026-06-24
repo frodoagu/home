@@ -1,0 +1,128 @@
+# Custom alerting rules layered on top of the chart's defaultRules: Raspberry Pi
+# hardware health (temperature + throttling/under-voltage), basic node capacity,
+# and the blackbox uptime/TLS probes. vmalert evaluates these and fires through
+# Alertmanager → Telegram.
+#
+# NOTE: the double-brace expressions inside annotations are Prometheus/Alertmanager
+# templates, wrapped in Helm raw-string literals so Helm passes them through untouched.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: {{ include "monitoring.fullname" . }}-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: raspberrypi.hardware
+      rules:
+        - alert: RPiHighTemperature
+          expr: node_thermal_zone_temp > 70
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Raspberry Pi running hot ({{ $value | printf "%.1f" }} C)` | quote }}
+            description: {{ `CPU temperature on {{ $labels.instance }} has been above 70 C for 5m.` | quote }}
+        - alert: RPiCriticalTemperature
+          expr: node_thermal_zone_temp > 80
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: {{ `Raspberry Pi critically hot ({{ $value | printf "%.1f" }} C)` | quote }}
+            description: {{ `CPU temperature on {{ $labels.instance }} is above 80 C — throttling imminent. Check cooling.` | quote }}
+        - alert: RPiUnderVoltage
+          expr: node_rpi_under_voltage_now == 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Raspberry Pi under-voltage detected"
+            description: {{ `{{ $labels.instance }} reports under-voltage right now — check the PSU/cable.` | quote }}
+        - alert: RPiThrottled
+          expr: node_rpi_throttled_now == 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Raspberry Pi is throttled"
+            description: {{ `{{ $labels.instance }} is actively throttling the CPU right now.` | quote }}
+        - alert: RPiUnderVoltageOccurred
+          expr: node_rpi_under_voltage_occurred == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Raspberry Pi had under-voltage since boot"
+            description: {{ `{{ $labels.instance }} recorded an under-voltage event since last boot (sticky bit). PSU may be marginal.` | quote }}
+        - alert: RPiThrottleExporterDown
+          expr: node_rpi_exporter_up == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "rpi-throttle-exporter cannot read vcgencmd"
+            description: {{ `vcgencmd get_throttled is failing on {{ $labels.instance }}; throttle metrics are stale.` | quote }}
+
+    - name: node.capacity
+      rules:
+        - alert: NodeFilesystemLow
+          expr: 100 * node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 15
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Low disk space on {{ $labels.mountpoint }} ({{ $value | printf "%.0f" }}% free)` | quote }}
+            description: {{ `{{ $labels.instance }} {{ $labels.mountpoint }} has under 15% free for 15m.` | quote }}
+        - alert: NodeMemoryHigh
+          expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 90
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `High memory usage ({{ $value | printf "%.0f" }}%)` | quote }}
+            description: {{ `{{ $labels.instance }} memory usage above 90% for 15m.` | quote }}
+        - alert: NodeExporterDown
+          expr: up{job=~".*node-exporter.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "node-exporter target is down"
+            description: {{ `node-exporter on {{ $labels.instance }} has been unreachable for 5m.` | quote }}
+
+    - name: blackbox.uptime
+      rules:
+        - alert: ProbeDown
+          expr: probe_success == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: {{ `Endpoint down: {{ $labels.instance }}` | quote }}
+            description: {{ `Blackbox probe to {{ $labels.instance }} has failed for 5m.` | quote }}
+        - alert: ProbeSlow
+          expr: probe_duration_seconds > 3
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Slow endpoint: {{ $labels.instance }} ({{ $value | printf "%.1f" }}s)` | quote }}
+            description: {{ `Blackbox probe to {{ $labels.instance }} took over 3s for 10m.` | quote }}
+        - alert: ProbeSSLCertExpiringSoon
+          expr: probe_ssl_earliest_cert_expiry > 0 and (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `TLS cert for {{ $labels.instance }} expires in {{ $value | printf "%.0f" }} days` | quote }}
+            description: {{ `Certificate for {{ $labels.instance }} expires in under 14 days — Let's Encrypt renewal may be stuck.` | quote }}
+        - alert: ProbeSSLCertExpiringCritical
+          expr: probe_ssl_earliest_cert_expiry > 0 and (probe_ssl_earliest_cert_expiry - time()) / 86400 < 3
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: {{ `TLS cert for {{ $labels.instance }} expires in {{ $value | printf "%.0f" }} days` | quote }}
+            description: {{ `Certificate for {{ $labels.instance }} expires in under 3 days — renewal is failing.` | quote }}

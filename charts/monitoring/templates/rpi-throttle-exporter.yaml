@@ -1,0 +1,114 @@
+{{- if .Values.rpiThrottleExporter.enabled }}
+# rpi-throttle-exporter
+#
+# node-exporter already exposes temperature (node_thermal_zone_temp), CPU, RAM
+# and disk. The ONE thing it cannot read is the Raspberry Pi throttling /
+# under-voltage status, which only `vcgencmd get_throttled` reports.
+#
+# This DaemonSet runs a tiny shell loop that calls the HOST's vcgencmd (via
+# chroot into the host root) and writes a Prometheus textfile that node-exporter
+# picks up from the shared hostPath. It is privileged because vcgencmd needs the
+# VideoCore device — acceptable for a single-owner home cluster.
+#
+# Exported series (in node_rpi_throttle.prom):
+#   node_rpi_exporter_up           1 if vcgencmd succeeded, else 0
+#   node_rpi_throttled             raw bitmask from get_throttled
+#   node_rpi_under_voltage_now     bit 0  — under-voltage right now
+#   node_rpi_freq_capped_now       bit 1  — ARM frequency capped now
+#   node_rpi_throttled_now         bit 2  — currently throttled
+#   node_rpi_soft_temp_limit_now   bit 3  — soft temperature limit active
+#   node_rpi_under_voltage_occurred  bit 16 — happened since boot
+#   node_rpi_freq_capped_occurred    bit 17
+#   node_rpi_throttled_occurred      bit 18
+#   node_rpi_soft_temp_limit_occurred bit 19
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "monitoring.fullname" . }}-rpi-throttle-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rpi-throttle-exporter
+spec:
+  selector:
+    matchLabels:
+      {{- include "monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: rpi-throttle-exporter
+  template:
+    metadata:
+      labels:
+        {{- include "monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: rpi-throttle-exporter
+    spec:
+      # Run on every node, including a tainted control-plane node.
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: rpi-throttle-exporter
+          image: {{ .Values.rpiThrottleExporter.image | quote }}
+          securityContext:
+            privileged: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -u
+              INTERVAL="{{ .Values.rpiThrottleExporter.intervalSeconds }}"
+              OUT=/textfile/node_rpi_throttle.prom
+              while true; do
+                raw="$(chroot /host vcgencmd get_throttled 2>/dev/null || true)"
+                hex="${raw#*=}"
+                if [ -n "$raw" ] && [ "${hex#0x}" != "$hex" ]; then
+                  up=1
+                  val=$(( hex ))
+                else
+                  up=0
+                  val=0
+                fi
+                {
+                  echo "# HELP node_rpi_exporter_up 1 if vcgencmd get_throttled succeeded."
+                  echo "# TYPE node_rpi_exporter_up gauge"
+                  echo "node_rpi_exporter_up $up"
+                  echo "# HELP node_rpi_throttled Raspberry Pi throttling bitmask (vcgencmd get_throttled)."
+                  echo "# TYPE node_rpi_throttled gauge"
+                  echo "node_rpi_throttled $val"
+                  echo "# TYPE node_rpi_under_voltage_now gauge"
+                  echo "node_rpi_under_voltage_now $(( (val >> 0) & 1 ))"
+                  echo "# TYPE node_rpi_freq_capped_now gauge"
+                  echo "node_rpi_freq_capped_now $(( (val >> 1) & 1 ))"
+                  echo "# TYPE node_rpi_throttled_now gauge"
+                  echo "node_rpi_throttled_now $(( (val >> 2) & 1 ))"
+                  echo "# TYPE node_rpi_soft_temp_limit_now gauge"
+                  echo "node_rpi_soft_temp_limit_now $(( (val >> 3) & 1 ))"
+                  echo "# TYPE node_rpi_under_voltage_occurred gauge"
+                  echo "node_rpi_under_voltage_occurred $(( (val >> 16) & 1 ))"
+                  echo "# TYPE node_rpi_freq_capped_occurred gauge"
+                  echo "node_rpi_freq_capped_occurred $(( (val >> 17) & 1 ))"
+                  echo "# TYPE node_rpi_throttled_occurred gauge"
+                  echo "node_rpi_throttled_occurred $(( (val >> 18) & 1 ))"
+                  echo "# TYPE node_rpi_soft_temp_limit_occurred gauge"
+                  echo "node_rpi_soft_temp_limit_occurred $(( (val >> 19) & 1 ))"
+                } > "${OUT}.tmp" && mv "${OUT}.tmp" "${OUT}"
+                sleep "$INTERVAL"
+              done
+          resources:
+            {{- toYaml .Values.rpiThrottleExporter.resources | nindent 12 }}
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+            - name: textfile
+              mountPath: /textfile
+      volumes:
+        # Host root so we can chroot to the host's own vcgencmd + libraries +
+        # /dev/vchiq (avoids shipping VideoCore libs in the container image).
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        # Shared with node-exporter's --collector.textfile.directory.
+        - name: textfile
+          hostPath:
+            path: /var/lib/node_exporter/textfile
+            type: DirectoryOrCreate
+{{- end }}

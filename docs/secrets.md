@@ -18,6 +18,7 @@ ArgoCD never sees the sensitive value and won't prune a secret it doesn't track.
 | `ghcr-creds` | `agu-spa` **and** `argocd` | kubelet pull (agu-spa) + Argo CD Image Updater registry reads (argocd) | GHCR `docker-registry` creds — classic PAT with `read:packages` |
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
+| `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
 
 ## Create them
 
@@ -103,6 +104,18 @@ done
 # Write-back credentials (Image Updater commits the pinned digest over HTTPS)
 kubectl -n argocd create secret generic git-creds \
   --from-literal=username=frodoagu --from-literal=password="$PAT"
+```
+
+**Alertmanager → Telegram bot token.** Create a bot with [@BotFather](https://t.me/BotFather)
+(`/newbot`) to get the token, then message your bot once and grab your numeric
+chat id (e.g. via [@userinfobot](https://t.me/userinfobot)). Only the **token** is
+a secret; the chat id goes in `charts/monitoring/values.yaml`
+(`victoria-metrics-k8s-stack.alertmanager.config` → `telegram_configs[0].chat_id`).
+
+```bash
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n monitoring create secret generic alertmanager-telegram \
+  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
 ```
 
 GHCR has no usable fine-grained-token path for container pulls — use a *classic*

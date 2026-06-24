@@ -1,0 +1,24 @@
+monitoring stack deployed in namespace "{{ .Release.Namespace }}".
+
+Components (VictoriaMetrics k8s-stack + blackbox):
+  * vmsingle / vmagent / vmalert   – metrics DB, scraper, rule eval
+  * Alertmanager                   – routes alerts to Telegram
+  * Grafana                        – https://{{ .Values.ingress.host }} (Google sign-in via google-auth)
+  * node-exporter                  – CPU/RAM/disk/temperature
+  * kube-state-metrics             – pod/deployment/workload state
+  * rpi-throttle-exporter          – throttling/under-voltage (vcgencmd)
+  * blackbox-exporter + VMProbe    – external uptime/TLS probes
+
+Before alerts can reach you (created out-of-band — see docs/secrets.md):
+  kubectl -n {{ .Release.Namespace }} create secret generic alertmanager-telegram \
+    --from-literal=bot-token='<telegram-bot-token>'
+And set the numeric chat_id in charts/monitoring/values.yaml
+(victoria-metrics-k8s-stack.alertmanager.config ... telegram_configs[0].chat_id).
+
+Check it is running:
+  kubectl -n {{ .Release.Namespace }} get pods
+  kubectl -n {{ .Release.Namespace }} get vmsingle,vmagent,vmalert,vmalertmanager,vmprobe,vmrule
+
+Quick sanity:
+  kubectl -n {{ .Release.Namespace }} logs ds/{{ include "monitoring.fullname" . }}-rpi-throttle-exporter
+  # node_thermal_zone_temp, node_rpi_throttled_now should appear in vmagent targets.

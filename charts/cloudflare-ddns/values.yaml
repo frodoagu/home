@@ -33,6 +33,7 @@ domains:
   - argocd.agu.com.ar
   - traefik.agu.com.ar
   - auth.agu.com.ar
+  - grafana.agu.com.ar
 
 # Proxy all records through Cloudflare (orange cloud). Safe here because TLS
 # certs are issued via ACME DNS-01 (see charts/traefik-config), which needs no
