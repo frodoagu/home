@@ -14,7 +14,8 @@ services running on a Raspberry Pi with k3s.
 | Component | Role | Chart location |
 |---|---|---|
 | [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
-| [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
+| [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery (Google login via bundled Dex/OIDC) | `charts/argocd/` |
+| [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/agu-spa/` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
@@ -37,8 +38,9 @@ flowchart TD
 
     subgraph RPi["Raspberry Pi · k3s"]
         Traefik[Traefik<br/>bundled · LoadBalancer 80/443<br/>Let's Encrypt DNS-01]
-        Argo[Argo CD]
+        Argo[Argo CD<br/>Google login · Dex/OIDC]
         IU[Argo CD<br/>Image Updater]
+        OA2[oauth2-proxy<br/>Google ForwardAuth]
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
         SPA[agu-spa<br/>React SPA]
         DDNS[cloudflare-ddns]
@@ -49,12 +51,15 @@ flowchart TD
     Traefik -->|home.agu.com.ar| HA
     Traefik -->|agu.com.ar| SPA
     Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
+    Traefik -->|auth.agu.com.ar| OA2
+    Traefik -.->|ForwardAuth on<br/>dashboard| OA2
 
     Argo -.->|App of Apps sync| Traefik
     Argo -.-> HA
     Argo -.-> SPA
     Argo -.-> DDNS
     Argo -.-> IU
+    Argo -.-> OA2
 
     Traefik -->|ACME DNS-01| CF
     DDNS -->|update A records| CF
@@ -82,6 +87,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   - `home.agu.com.ar` → Home Assistant
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard
+  - `auth.agu.com.ar` → oauth2-proxy (Google sign-in for the dashboard)
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
 
 ## Setup from a fresh Raspberry Pi OS
@@ -174,8 +180,8 @@ kubectl apply -f apps/root.yaml
 ```
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
-Let's Encrypt + the dashboard) and deploys the remaining apps (Home Assistant,
-agu-spa, argocd-image-updater, cloudflare-ddns).
+Let's Encrypt + the dashboard) and deploys the remaining apps (oauth2-proxy,
+Home Assistant, agu-spa, argocd-image-updater, cloudflare-ddns).
 
 ### 3 – Create the required secrets
 
@@ -190,15 +196,37 @@ kubectl create secret generic traefik-cloudflare-token -n kube-system \
   --from-literal=CF_DNS_API_TOKEN='your-cloudflare-token'
 ```
 
-**Traefik dashboard** (HTTP basic auth, in the bundled Traefik's namespace):
+**Google sign-in (oauth2-proxy + ArgoCD).** The Traefik dashboard and ArgoCD are
+both gated by Google. They share one Google OAuth client — add **three** redirect
+URIs to it in the Cloud Console: `https://auth.agu.com.ar/oauth2/callback`,
+`https://argocd.agu.com.ar/api/dex/callback` (and keep the SPA's existing one).
+The dashboard goes through `oauth2-proxy` (Traefik ForwardAuth); ArgoCD uses its
+own bundled Dex/OIDC.
 
 ```bash
-htpasswd -nb admin 'your-password' | \
-  kubectl create secret generic traefik-dashboard-auth \
-    -n kube-system --from-file=users=/dev/stdin
+# oauth2-proxy — Google gate for the Traefik dashboard
+kubectl create namespace oauth2-proxy
+kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
+  --from-literal=client-id='<google-client-id>' \
+  --from-literal=client-secret='<google-client-secret>' \
+  --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+
+# ArgoCD Dex — Google login (label is REQUIRED so ArgoCD resolves the $-refs)
+kubectl create secret generic argocd-google-oidc -n argocd \
+  --from-literal=clientId='<google-client-id>' \
+  --from-literal=clientSecret='<google-client-secret>'
+kubectl label secret argocd-google-oidc -n argocd app.kubernetes.io/part-of=argocd
 ```
 
-> Need `htpasswd`? Install it with `sudo apt install -y apache2-utils`.
+> **Fallback — Traefik dashboard HTTP basic auth.** Only needed if you set
+> `googleAuth.enabled: false` + `dashboardAuth.enabled: true` in
+> `charts/traefik-config`. Needs `htpasswd` (`sudo apt install -y apache2-utils`):
+>
+> ```bash
+> htpasswd -nb admin 'your-password' | \
+>   kubectl create secret generic traefik-dashboard-auth \
+>     -n kube-system --from-file=users=/dev/stdin
+> ```
 
 **Cloudflare DDNS** (API token with Zone:DNS:Edit on `agu.com.ar`):
 
@@ -265,8 +293,9 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 
 | Chart | Key values to change |
 |---|---|
-| `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
-| `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
+| `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host`, `googleAuth` (ForwardAuth gate) |
+| `charts/oauth2-proxy/values.yaml` | `ingress.host`, `authenticatedEmailsFile.restricted_access` (allowed emails) |
+| `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname`, `configs.cm.url`/`dex.config`, `configs.rbac.policy.csv` (admin emails) |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant` |
 | `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
@@ -299,6 +328,7 @@ webhook config (`-f config[secret]=...`).
 │   ├── traefik.yaml
 │   ├── argocd.yaml
 │   ├── argocd-image-updater.yaml
+│   ├── oauth2-proxy.yaml
 │   ├── home-assistant.yaml
 │   ├── agu-spa.yaml
 │   └── cloudflare-ddns.yaml
@@ -307,6 +337,7 @@ webhook config (`-f config[secret]=...`).
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
     ├── argocd-image-updater/ # Argo CD Image Updater wrapper (auto-deploys new SPA image digests)
+    ├── oauth2-proxy/        # Google ForwardAuth backend gating the Traefik dashboard
     ├── home-assistant/      # Home Assistant Helm chart
     ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
