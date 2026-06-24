@@ -507,14 +507,18 @@ function WaveView({ spectra, In, nColor }) {
         {/* ondas de fase (distorsionadas por armónicos) */}
         {paths.map((p, i) => (
           <polyline key={i} points={p.pts} fill="none" stroke={p.color}
-            strokeWidth={1.5} opacity={0.85} strokeLinejoin="round" />
+            strokeWidth={2} strokeLinejoin="round" />
         ))}
-        {/* onda del neutro */}
+        {/* onda del neutro: punteada para que la fase de abajo se vea cuando coinciden */}
         <polyline points={nPath} fill="none" stroke={nColor} strokeWidth={2.5}
-          strokeLinejoin="round" style={{ filter: `drop-shadow(0 0 3px ${nColor})` }} />
+          strokeDasharray="7 5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ filter: `drop-shadow(0 0 3px ${nColor})` }} />
       </svg>
 
-      <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} />
+      <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} dashed />
+      <p className="mt-1 text-[10px] text-slate-600 font-mono text-center">
+        El neutro (punteado) = suma instantánea de las tres fases. Con una sola fase cargada se superpone con ella.
+      </p>
     </div>
   );
 }
@@ -571,7 +575,7 @@ function HarmonicView({ perHarmonic, In, nColor }) {
   );
 }
 
-function Legend({ nColor, note }) {
+function Legend({ nColor, note, dashed }) {
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs">
       {PHASES.map((p) => (
@@ -581,7 +585,14 @@ function Legend({ nColor, note }) {
         </span>
       ))}
       <span className="flex items-center gap-1.5 font-medium" style={{ color: nColor }}>
-        <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: nColor }} />
+        {dashed ? (
+          <svg width={14} height={4} className="overflow-visible">
+            <line x1={0} y1={2} x2={14} y2={2} stroke={nColor} strokeWidth={2.5}
+              strokeDasharray="4 3" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <span className="h-2 w-3 rounded-sm" style={{ backgroundColor: nColor }} />
+        )}
         Neutro{note ? ` · ${note}` : ""}
       </span>
     </div>
