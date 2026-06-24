@@ -131,6 +131,26 @@
       "targets": [
         { "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400", "legendFormat": "{{instance}}", "refId": "A" }
       ]
+    },
+    {
+      "title": "Fan Speed",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "rotrpm", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "node_hwmon_fan_rpm", "legendFormat": "{{sensor}}", "refId": "A" }
+      ]
+    },
+    {
+      "title": "Cooler Level (0–4)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROM}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "node_cooling_device_cur_state{type=\"pwm-fan\"}", "legendFormat": "level", "refId": "A" }
+      ]
     }
   ]
 }

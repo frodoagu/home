@@ -150,6 +150,11 @@ victoria-metrics-k8s-stack:
   defaultRules:
     enabled: true
 
+  # Don't import the bundled VM/Kubernetes dashboards — keep only the custom
+  # "Raspberry Pi — Health" dashboard (templates/grafana-dashboard-rpi.yaml).
+  defaultDashboards:
+    enabled: false
+
   # ── Alertmanager → Telegram ──────────────────────────────────────────────────
   alertmanager:
     enabled: true
@@ -214,6 +219,9 @@ victoria-metrics-k8s-stack:
     grafana.ini:
       server:
         root_url: https://grafana.agu.com.ar
+      dashboards:
+        # Land on the Raspberry Pi dashboard instead of the default home page.
+        default_home_dashboard_path: /var/lib/grafana/dashboards/default/rpi-health.json
       auth:
         disable_login_form: true
       "auth.anonymous":
