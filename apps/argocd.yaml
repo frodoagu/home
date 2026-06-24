@@ -5,6 +5,8 @@ kind: Application
 metadata:
   name: argocd
   namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://argocd.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
