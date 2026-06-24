@@ -4,7 +4,7 @@
 #
 # Per-application config (which image to track, update strategy, write-back
 # target, Helm param mapping) lives as annotations on the consuming
-# Application — see apps/nginx-spa.yaml.
+# Application — see apps/agu-spa.yaml.
 argocd-image-updater:
   # -- Single replica is plenty for a home / RPi cluster.
   replicas: 1
@@ -19,7 +19,7 @@ argocd-image-updater:
     # Registry definitions. GHCR is private, so point it at the pull secret
     # (created out-of-band in the argocd namespace). Image Updater uses these
     # credentials to query tags/digests; the kubelet uses its own copy of the
-    # secret in the workload namespace to actually pull (see charts/nginx-spa).
+    # secret in the workload namespace to actually pull (see charts/agu-spa).
     registries:
       - name: GitHub Container Registry
         api_url: https://ghcr.io

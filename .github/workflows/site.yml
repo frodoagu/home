@@ -3,7 +3,7 @@ name: 🚀 Site · Build & Publish Image
 # Build the agu.com.ar SPA into a container image and push it to GHCR as
 # `latest` (plus an immutable `sha-<commit>` tag for traceability). Argo CD
 # Image Updater watches `latest`'s digest and writes the pinned digest back to
-# the nginx-spa chart, which rolls out the new version. CI does not touch git.
+# the agu-spa chart, which rolls out the new version. CI does not touch git.
 on:
   push:
     branches: [main]
@@ -74,7 +74,7 @@ jobs:
               echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
               echo "| Commit | \`${GITHUB_SHA::12}\` |"
               echo ""
-              echo "Argo CD Image Updater will detect the new \`latest\` digest and pin it into \`charts/nginx-spa/values.yaml\` for the rollout."
+              echo "Argo CD Image Updater will detect the new \`latest\` digest and pin it into \`charts/agu-spa/values.yaml\` for the rollout."
             else
               echo "⚠️ The build did not complete."
             fi

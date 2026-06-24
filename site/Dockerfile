@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # ---- runtime stage: nginx serving the built assets ----
-# The nginx-spa Helm chart mounts its own /etc/nginx/conf.d/default.conf
+# The agu-spa Helm chart mounts its own /etc/nginx/conf.d/default.conf
 # (SPA fallback, caching, /healthz), so this image only ships the files.
 FROM nginx:1.31-alpine
 COPY --from=build /app/dist /usr/share/nginx/html

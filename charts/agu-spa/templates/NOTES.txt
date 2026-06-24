@@ -1,4 +1,4 @@
-nginx-spa has been deployed!
+agu-spa has been deployed!
 
 1. Access the app at:
    https://{{ .Values.ingress.host }}

@@ -17,7 +17,7 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   traefik-config/    Configures the k3s-BUNDLED Traefik via HelmChartConfig (does NOT install it). Targets kube-system.
   home-assistant/    Home Assistant + Google Assistant integration.
   cloudflare-ddns/   Dynamic DNS updater.
-  nginx-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
+  agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
@@ -27,7 +27,7 @@ site/                Source for the agu.com.ar landing SPA (Vite + React + Tailw
                      with Vitest (*.test.js[x]).
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      .github/workflows/site.yml builds ghcr.io/frodoagu/home-site:latest (arm64);
-                     Argo CD Image Updater then pins the digest into charts/nginx-spa/values.yaml via git.
+                     Argo CD Image Updater then pins the digest into charts/agu-spa/values.yaml via git.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -47,7 +47,7 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   referenced by name — never committed. Full list in `docs/secrets.md`.
 - **SPA image auto-updates**: CI builds `site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
-  `charts/nginx-spa/values.yaml` via git write-back. The v1.x Image Updater
+  `charts/agu-spa/values.yaml` via git write-back. The v1.x Image Updater
   controller only reconciles `ImageUpdater` CRs — NOT Application annotations.
 - **Instant sync**: a GitHub push webhook → `argocd.agu.com.ar/api/webhook`
   refreshes apps on push (no secret configured); otherwise ArgoCD polls ~3 min.

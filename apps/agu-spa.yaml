@@ -3,7 +3,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: nginx-spa
+  name: agu-spa
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -12,13 +12,13 @@ spec:
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD
-    path: charts/nginx-spa
+    path: charts/agu-spa
     helm:
       valueFiles:
         - values.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: nginx-spa
+    namespace: agu-spa
   syncPolicy:
     automated:
       prune: true

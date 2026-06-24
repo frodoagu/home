@@ -2,9 +2,9 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: {{ include "nginx-spa.fullname" . }}
+  name: {{ include "agu-spa.fullname" . }}
   labels:
-    {{- include "nginx-spa.labels" . | nindent 4 }}
+    {{- include "agu-spa.labels" . | nindent 4 }}
 spec:
   entryPoints:
     - websecure
@@ -12,7 +12,7 @@ spec:
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       services:
-        - name: {{ include "nginx-spa.fullname" . }}
+        - name: {{ include "agu-spa.fullname" . }}
           port: {{ .Values.service.port }}
       {{- if .Values.ingress.middlewares }}
       middlewares:

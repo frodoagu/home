@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nginx-spa.fullname" . }}
+  name: {{ include "agu-spa.fullname" . }}
   labels:
-    {{- include "nginx-spa.labels" . | nindent 4 }}
+    {{- include "agu-spa.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "nginx-spa.selectorLabels" . | nindent 6 }}
+      {{- include "agu-spa.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "nginx-spa.selectorLabels" . | nindent 8 }}
+        {{- include "agu-spa.selectorLabels" . | nindent 8 }}
       annotations:
         # Roll the pods whenever the nginx config (or placeholder) changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
@@ -76,4 +76,4 @@ spec:
       volumes:
         - name: nginx-conf
           configMap:
-            name: {{ include "nginx-spa.fullname" . }}-conf
+            name: {{ include "agu-spa.fullname" . }}-conf

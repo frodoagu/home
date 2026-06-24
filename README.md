@@ -16,7 +16,7 @@ services running on a Raspberry Pi with k3s.
 | [Traefik](https://traefik.io/) | Ingress / load-balancer with automatic Let's Encrypt TLS (k3s-bundled, configured via this repo) | `charts/traefik-config/` |
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery | `charts/argocd/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
-| [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/nginx-spa/` |
+| [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/agu-spa/` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 
@@ -40,7 +40,7 @@ flowchart TD
         Argo[Argo CD]
         IU[Argo CD<br/>Image Updater]
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
-        SPA[nginx-spa<br/>React SPA]
+        SPA[agu-spa<br/>React SPA]
         DDNS[cloudflare-ddns]
     end
 
@@ -78,7 +78,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
 - The `agu.com.ar` zone hosted on [Cloudflare](https://www.cloudflare.com/) and
   a Cloudflare API token with **Zone:DNS:Edit**. The `cloudflare-ddns` app
   creates/updates these A records to track the home public IP:
-  - `agu.com.ar` → nginx-spa (apex static site)
+  - `agu.com.ar` → agu-spa (apex static site)
   - `home.agu.com.ar` → Home Assistant
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard
@@ -175,7 +175,7 @@ kubectl apply -f apps/root.yaml
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
 Let's Encrypt + the dashboard) and deploys the remaining apps (Home Assistant,
-nginx-spa, argocd-image-updater, cloudflare-ddns).
+agu-spa, argocd-image-updater, cloudflare-ddns).
 
 ### 3 – Create the required secrets
 
@@ -219,12 +219,12 @@ scopes:
   this private repo.
 
 **1. GHCR pull credentials** (`ghcr-creds`) — the same `docker-registry` secret
-in **two** namespaces: one for the kubelet to pull (`nginx-spa`), one for Image
+in **two** namespaces: one for the kubelet to pull (`agu-spa`), one for Image
 Updater to query the digest (`argocd`):
 
 ```bash
 GHCR_PAT='your-classic-PAT-with-repo+read:packages'
-for ns in nginx-spa argocd; do
+for ns in agu-spa argocd; do
   kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n "$ns" create secret docker-registry ghcr-creds \
     --docker-server=ghcr.io \
@@ -243,7 +243,7 @@ kubectl -n argocd create secret generic git-creds \
 ```
 
 > The write-back is already wired in the `ImageUpdater` CR
-> ([charts/argocd-image-updater/templates/nginx-spa-imageupdater.yaml](charts/argocd-image-updater/templates/nginx-spa-imageupdater.yaml)):
+> ([charts/argocd-image-updater/templates/agu-spa-imageupdater.yaml](charts/argocd-image-updater/templates/agu-spa-imageupdater.yaml)):
 > `method: git:secret:argocd/git-creds` plus an HTTPS `repository` override (the
 > app's own `repoURL` is SSH, which a PAT can't drive). No further config needed
 > once `git-creds` exists. The v1.x controller only reconciles `ImageUpdater`
@@ -268,7 +268,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host` |
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname` |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant` |
-| `charts/nginx-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
+| `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 
 ### 5 – Instant sync (optional Git webhook)
@@ -300,7 +300,7 @@ webhook config (`-f config[secret]=...`).
 │   ├── argocd.yaml
 │   ├── argocd-image-updater.yaml
 │   ├── home-assistant.yaml
-│   ├── nginx-spa.yaml
+│   ├── agu-spa.yaml
 │   └── cloudflare-ddns.yaml
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
@@ -308,7 +308,7 @@ webhook config (`-f config[secret]=...`).
     ├── argocd/              # Argo CD wrapper (upstream chart)
     ├── argocd-image-updater/ # Argo CD Image Updater wrapper (auto-deploys new SPA image digests)
     ├── home-assistant/      # Home Assistant Helm chart
-    ├── nginx-spa/           # nginx serving a static single-page app (apex agu.com.ar)
+    ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     └── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
 ```
 
@@ -320,7 +320,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
-- [docs/nginx-spa.md](docs/nginx-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
+- [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 
 ## Let's Encrypt notes
 

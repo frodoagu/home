@@ -1,4 +1,4 @@
-# Default values for nginx-spa.
+# Default values for agu-spa.
 # Adjust these to match your environment.
 
 replicaCount: 1
@@ -14,7 +14,7 @@ image:
   # `latest@sha256:<digest>` on the first reconcile.
   tag: "latest@sha256:93c8895c026b0bf6eb40a6966d544a76d185614017dd24a975520ffacb9842af"
 # Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
-#   kubectl -n nginx-spa create secret docker-registry ghcr-creds \
+#   kubectl -n agu-spa create secret docker-registry ghcr-creds \
 #     --docker-server=ghcr.io \
 #     --docker-username=<github-user> \
 #     --docker-password=<github-PAT-with-read:packages>
@@ -35,7 +35,7 @@ content:
   # Filesystem path inside the container that nginx serves as the web root.
   root: /usr/share/nginx/html
   # Placeholder page used only when source == configMap.
-  placeholderHtml: "<!doctype html>\n<html lang=\"en\">\n  <head><meta charset=\"utf-8\"><title>nginx-spa</title></head>\n  <body style=\"font-family: system-ui; text-align: center; margin-top: 4rem\">\n    <h1>nginx-spa is running \U0001F389</h1>\n    <p>Replace this by setting <code>content.source: image</code> and a real SPA image.</p>\n  </body>\n</html>\n"
+  placeholderHtml: "<!doctype html>\n<html lang=\"en\">\n  <head><meta charset=\"utf-8\"><title>agu-spa</title></head>\n  <body style=\"font-family: system-ui; text-align: center; margin-top: 4rem\">\n    <h1>agu-spa is running \U0001F389</h1>\n    <p>Replace this by setting <code>content.source: image</code> and a real SPA image.</p>\n  </body>\n</html>\n"
 # Ingress via Traefik IngressRoute
 ingress:
   enabled: true

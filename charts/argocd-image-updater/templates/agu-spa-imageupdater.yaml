@@ -1,15 +1,15 @@
-# Per-app image-update config for the nginx-spa SPA. The v1.x controller only
+# Per-app image-update config for the agu-spa SPA. The v1.x controller only
 # reconciles ImageUpdater CRs (it ignores Application annotations), so each app
 # that wants auto-updates gets one of these.
 #
 # Tracks the digest of the mutable `latest` tag CI pushes to GHCR and writes the
-# pinned `latest@sha256:...` back to charts/nginx-spa/values.yaml over HTTPS using
+# pinned `latest@sha256:...` back to charts/agu-spa/values.yaml over HTTPS using
 # the git-creds secret (created out-of-band; see README). Registry auth comes
 # from the registries.conf credentials in this chart's values.yaml.
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
 metadata:
-  name: nginx-spa
+  name: agu-spa
   namespace: {{ .Release.Namespace }}
 spec:
   writeBackConfig:
@@ -17,10 +17,10 @@ spec:
     gitConfig:
       repository: "https://github.com/frodoagu/home.git"
       branch: main
-      # Relative to the nginx-spa Application's source path (charts/nginx-spa).
+      # Relative to the agu-spa Application's source path (charts/agu-spa).
       writeBackTarget: "helmvalues:./values.yaml"
   applicationRefs:
-    - namePattern: nginx-spa
+    - namePattern: agu-spa
       images:
         - alias: spa
           imageName: ghcr.io/frodoagu/home-site:latest

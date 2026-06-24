@@ -9,4 +9,4 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [tls.md](tls.md) | Let's Encrypt via the **DNS-01** Cloudflare challenge, and how `acme.json` is persisted |
 | [home-assistant.md](home-assistant.md) | Home Assistant chart specifics: config bootstrap, device discovery (host networking), Bluetooth |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
-| [nginx-spa.md](nginx-spa.md) | SPA chart: how `site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
+| [agu-spa.md](agu-spa.md) | SPA chart: how `site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |

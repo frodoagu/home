@@ -1,5 +1,5 @@
 apiVersion: v2
-name: nginx-spa
+name: agu-spa
 description: Helm chart for hosting a single-page application (SPA) behind nginx on k3s with Traefik ingress
 type: application
 version: 0.1.0

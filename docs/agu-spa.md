@@ -1,7 +1,7 @@
-# nginx-spa
+# agu-spa
 
-Chart: [`charts/nginx-spa`](../charts/nginx-spa). Deployed by ArgoCD from
-[apps/nginx-spa.yaml](../apps/nginx-spa.yaml), reachable at the apex
+Chart: [`charts/agu-spa`](../charts/agu-spa). Deployed by ArgoCD from
+[apps/agu-spa.yaml](../apps/agu-spa.yaml), reachable at the apex
 `https://agu.com.ar`.
 
 A minimal nginx that serves a built single-page application (React/Vue/Svelte/…)
@@ -11,7 +11,7 @@ ConfigMap.
 
 ## Where the files come from — `content.source`
 
-`content.source` in [values.yaml](../charts/nginx-spa/values.yaml) selects the
+`content.source` in [values.yaml](../charts/agu-spa/values.yaml) selects the
 content origin:
 
 - **`image` (default)** — the SPA build is already inside `image.repository` at
@@ -29,7 +29,7 @@ content origin:
 # Build your SPA into an image that copies the dist/ output to content.root, e.g.
 #   FROM nginx:1.31-alpine
 #   COPY dist/ /usr/share/nginx/html/
-# then in charts/nginx-spa/values.yaml:
+# then in charts/agu-spa/values.yaml:
 #   image.repository: ghcr.io/<you>/<spa>
 #   image.tag:        <version>      # pin explicitly; also bump Chart.yaml appVersion
 #   content.source:   image
