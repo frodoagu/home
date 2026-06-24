@@ -133,8 +133,8 @@
       "gridPos": { "h": 7, "w": 10, "x": 0, "y": 31 },
       "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
       "targets": [
-        { "expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "{{device}} rx", "refId": "A" },
-        { "expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[5m])", "legendFormat": "{{device}} tx", "refId": "B" }
+        { "expr": "rate(node_network_receive_bytes_total{device=~\"eth0|wlan0\"}[2m])", "legendFormat": "{{device}} rx", "refId": "A" },
+        { "expr": "rate(node_network_transmit_bytes_total{device=~\"eth0|wlan0\"}[2m])", "legendFormat": "{{device}} tx", "refId": "B" }
       ]
     },
     {
