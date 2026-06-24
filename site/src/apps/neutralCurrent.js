@@ -12,7 +12,7 @@
  *    que un sistema balanceado puede igual cargar fuerte el neutro.
  * ---------------------------------------------------------------------- */
 
-export const I_MAX = 30; // A, fondo de escala por fase
+export const I_MAX = 100; // A, fondo de escala por fase
 export const F_HZ = 50; // red AR
 export const T_MS = 1000 / F_HZ; // 20 ms
 
@@ -288,6 +288,39 @@ export function solveVoltages({ G, R, Rn }) {
     ang[k] = Math.atan2(uy, ux);
   }
   return { V, ang, I, vn, In: Math.hypot(inx, iny) };
+}
+
+// Ampacidad orientativa (A) por sección (mm²) — cobre, aislación PVC.
+export const AMPACITY = {
+  1.5: 17.5, 2.5: 24, 4: 32, 6: 41, 10: 57, 16: 76, 25: 101, 35: 125,
+};
+export const T_AMBIENT = 30; // °C de referencia
+export const T_RATED_RISE = 40; // °C de elevación a la ampacidad (PVC 70 °C)
+export const ALPHA_CU = 0.00393; // 1/°C, coef. térmico del cobre (ref. 20 °C)
+
+/** Resistencia del cobre corregida por temperatura: R(T) = R₂₀·(1 + α·(T−20)). */
+export function resistanceAtTemp(r20, tempC) {
+  if (!Number.isFinite(r20)) return r20;
+  return r20 * (1 + ALPHA_CU * (tempC - 20));
+}
+
+/** Corriente eficaz (RMS) de un espectro: √(Σ mₕ²). */
+export function specRms(spec) {
+  let s = 0;
+  for (const m of Object.values(spec || {})) s += m * m;
+  return Math.sqrt(s);
+}
+
+/**
+ * Temperatura estimada del conductor en régimen permanente. El calentamiento
+ * es ∝ I² (efecto Joule) y la disipación ∝ ΔT, así que en equilibrio
+ * ΔT ∝ (I/I_ampacidad)². A la ampacidad el conductor llega a su temperatura
+ * nominal (T_AMBIENT + T_RATED_RISE). Sube al aumentar I y al bajar la sección.
+ */
+export function conductorTemp(irms, sectionMm2, ambient = T_AMBIENT) {
+  const amp = AMPACITY[sectionMm2];
+  if (!amp || !irms) return ambient;
+  return ambient + T_RATED_RISE * (irms / amp) ** 2;
 }
 
 /** Corriente instantánea de una fase (suma de armónicos) en θ [rad]. */

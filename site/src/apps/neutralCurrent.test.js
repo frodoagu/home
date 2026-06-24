@@ -4,6 +4,8 @@ import {
   buildPhaseSpectrum, harmonicNeutral, getAppliance, isTriplen,
   openNeutralVoltages, scaleSpectrum, V_NOM,
   cableResistance, solveVoltages, RHO_CU,
+  conductorTemp, specRms, AMPACITY, T_AMBIENT, T_RATED_RISE,
+  resistanceAtTemp, ALPHA_CU,
 } from "./neutralCurrent";
 
 describe("rad", () => {
@@ -14,9 +16,9 @@ describe("rad", () => {
 });
 
 describe("constantes", () => {
-  it("T_MS es 20 ms (50 Hz) e I_MAX 30 A", () => {
+  it("T_MS es 20 ms (50 Hz) e I_MAX 100 A", () => {
     expect(T_MS).toBe(20);
-    expect(I_MAX).toBe(30);
+    expect(I_MAX).toBe(100);
   });
 });
 
@@ -28,14 +30,14 @@ describe("neutralCurrent", () => {
     expect(r.severity).toBe("ok");
   });
 
-  it("monofásico 30/0/0: In = 30 y severity high", () => {
-    const r = neutralCurrent({ a: 30, b: 0, c: 0 });
-    expect(r.In).toBeCloseTo(30);
+  it("monofásico 100/0/0: In = 100 y severity high", () => {
+    const r = neutralCurrent({ a: 100, b: 0, c: 0 });
+    expect(r.In).toBeCloseTo(100);
     expect(r.severity).toBe("high");
     expect(r.balanced).toBe(false);
   });
 
-  it("desbalance leve 10/7/7: 0 < In < 15 y severity warn", () => {
+  it("desbalance leve 10/7/7: 0 < In < I_MAX/2 y severity warn", () => {
     const r = neutralCurrent({ a: 10, b: 7, c: 7 });
     expect(r.In).toBeGreaterThan(0);
     expect(r.In).toBeLessThan(I_MAX * 0.5);
@@ -200,6 +202,43 @@ describe("solveVoltages", () => {
     const r = solveVoltages({ G: { a: 0.05, b: 0, c: 0 }, R: Z, Rn: Infinity });
     expect(r.V.b).toBeGreaterThan(V_NOM);
     expect(r.V.c).toBeGreaterThan(V_NOM);
+  });
+});
+
+describe("specRms", () => {
+  it("RMS = √(Σ mₕ²)", () => {
+    expect(specRms({ 1: 3, 3: 4 })).toBeCloseTo(5);
+    expect(specRms({})).toBe(0);
+  });
+});
+
+describe("conductorTemp", () => {
+  it("sin corriente: queda en ambiente", () => {
+    expect(conductorTemp(0, 4)).toBe(T_AMBIENT);
+  });
+  it("a la ampacidad llega a la temperatura nominal", () => {
+    expect(conductorTemp(AMPACITY[4], 4)).toBeCloseTo(T_AMBIENT + T_RATED_RISE);
+  });
+  it("sube con la corriente (∝ I²)", () => {
+    const t1 = conductorTemp(10, 4);
+    const t2 = conductorTemp(20, 4);
+    expect(t2 - T_AMBIENT).toBeCloseTo(4 * (t1 - T_AMBIENT)); // doble I => 4× elevación
+  });
+  it("sube al bajar la sección (misma corriente)", () => {
+    expect(conductorTemp(20, 2.5)).toBeGreaterThan(conductorTemp(20, 6));
+  });
+});
+
+describe("resistanceAtTemp", () => {
+  it("a 20 °C no cambia", () => {
+    expect(resistanceAtTemp(0.1, 20)).toBeCloseTo(0.1);
+  });
+  it("caliente => más resistencia (y por ende más caída)", () => {
+    expect(resistanceAtTemp(0.1, 70)).toBeCloseTo(0.1 * (1 + ALPHA_CU * 50));
+    expect(resistanceAtTemp(0.1, 70)).toBeGreaterThan(0.1);
+  });
+  it("Infinity (conductor abierto) se mantiene", () => {
+    expect(resistanceAtTemp(Infinity, 80)).toBe(Infinity);
   });
 });
 

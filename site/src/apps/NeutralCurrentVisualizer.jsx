@@ -2,12 +2,12 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Zap, RotateCcw, Activity, Waves, AlertTriangle, CheckCircle2, BarChart3,
   Plus, Trash2, AirVent, Microwave, Droplets, Refrigerator, MonitorSmartphone, Lightbulb,
-  Unplug, ArrowUp, ArrowDown, Gauge, Cable, GripVertical, ChevronUp, ChevronDown,
+  Unplug, ArrowUp, ArrowDown, Gauge, Cable, GripVertical, ChevronUp, ChevronDown, Thermometer,
 } from "lucide-react";
 import {
   I_MAX, F_HZ, T_MS, V_NOM, rad, APPLIANCES, getAppliance, FAULTS, CABLE_SECTIONS,
   buildPhaseSpectrum, harmonicNeutral, phaseInstant, openNeutralVoltages, scaleSpectrum,
-  cableResistance, solveVoltages,
+  cableResistance, solveVoltages, specRms, conductorTemp, resistanceAtTemp, AMPACITY, T_AMBIENT,
 } from "./neutralCurrent";
 
 /* -------------------------------------------------------------------------
@@ -40,8 +40,8 @@ const PRESETS = [
   { label: "Sin carga base", v: { a: 0, b: 0, c: 0 } },
   { label: "Balanceado", v: { a: 10, b: 10, c: 10 } },
   { label: "3 / 7 / 7",  v: { a: 3,  b: 7,  c: 7  } },
-  { label: "10 / 7 / 7", v: { a: 10, b: 7,  c: 7  } },
-  { label: "Monofásico 30/0/0", v: { a: 30, b: 0, c: 0 } },
+  { label: "Carga alta 60/60/60", v: { a: 60, b: 60, c: 60 } },
+  { label: "Monofásico 100/0/0", v: { a: 100, b: 0, c: 0 } },
 ];
 
 const fmt = (n) => n.toFixed(1);
@@ -165,13 +165,27 @@ export default function NeutralCurrentVisualizer() {
     return { spectra: base, ...harmonicNeutral(base) };
   }, [I, appliances, faults]);
 
-  /* ---- resistencias de cable y tensiones de carga (fundamental) ---- */
+  /* ---- por conductor: corriente RMS, temperatura y R corregida por calor ----
+     Más A o menos sección -> más temperatura; el cobre caliente sube su R, lo
+     que aumenta la caída de tensión (R(T) = R₂₀·(1+α·ΔT)). */
+  const conductors = useMemo(() => {
+    const rms = { a: 0, b: 0, c: 0, n: In };
+    for (const p of PHASES) rms[p.key] = specRms(spectra[p.key]);
+    const out = {};
+    for (const key of ["a", "b", "c", "n"]) {
+      const { L, A } = cables[key];
+      const temp = conductorTemp(rms[key], A);
+      const rCold = cableResistance(L, A);
+      out[key] = { rms: rms[key], temp, rCold, R: resistanceAtTemp(rCold, temp), section: A };
+    }
+    return out;
+  }, [cables, spectra, In]);
+
   const { R, Rn } = useMemo(() => {
     const R = {};
-    for (const p of PHASES) R[p.key] = cableResistance(cables[p.key].L, cables[p.key].A);
-    const Rn = faults.n ? Infinity : cableResistance(cables.n.L, cables.n.A);
-    return { R, Rn };
-  }, [cables, faults.n]);
+    for (const p of PHASES) R[p.key] = conductors[p.key].R;
+    return { R, Rn: faults.n ? Infinity : conductors.n.R };
+  }, [conductors, faults.n]);
 
   const volt = useMemo(() => {
     const G = {};
@@ -233,7 +247,7 @@ export default function NeutralCurrentVisualizer() {
       case "faults":
         return <FaultCard faults={faults} onToggle={toggleFault} onClear={clearFaults} />;
       case "cables":
-        return <CableCard cables={cables} onChange={setCable} />;
+        return <CableCard cables={cables} conductors={conductors} onChange={setCable} />;
       case "appliances":
         return (
           <AppliancesCard
@@ -416,13 +430,24 @@ function LoadCard({ I, onChange, onPreset }) {
   );
 }
 
-function CableCard({ cables, onChange }) {
+function tempColor(t) {
+  if (t >= 90) return DANGER;       // sobre el límite, peligro
+  if (t >= 70) return "#f59e0b";    // llegando al límite del PVC
+  if (t >= 50) return "#eab308";    // tibio
+  return "#22c55e";                 // frío
+}
+
+function CableCard({ cables, conductors, onChange }) {
   const rows = [...PHASES, { key: "n", label: "Neutro", color: NEUTRAL }];
   return (
     <Card title="Cableado por conductor" icon={<Cable size={15} />}>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
         {rows.map((r) => {
-          const R = cableResistance(cables[r.key].L, cables[r.key].A);
+          const c = conductors[r.key];
+          const A = cables[r.key].A;
+          const load = AMPACITY[A] ? (c.rms / AMPACITY[A]) * 100 : 0;
+          const tc = tempColor(c.temp);
+          const barPct = Math.min(100, ((c.temp - T_AMBIENT) / (110 - T_AMBIENT)) * 100);
           return (
             <div key={r.key} className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
               <div className="flex items-center justify-between">
@@ -430,7 +455,7 @@ function CableCard({ cables, onChange }) {
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: r.color }} />
                   <span className="text-sm text-slate-300">{r.label}</span>
                 </div>
-                <span className="font-mono text-[10px] text-slate-500">{R.toFixed(3)} Ω</span>
+                <span className="font-mono text-[10px] text-slate-500">{c.R.toFixed(3)} Ω</span>
               </div>
               <div className="mt-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -442,18 +467,31 @@ function CableCard({ cables, onChange }) {
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[10px] text-slate-500">Sección</span>
-                <select value={cables[r.key].A} onChange={(e) => onChange(r.key, "A", e.target.value)}
+                <select value={A} onChange={(e) => onChange(r.key, "A", e.target.value)}
                   className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-mono text-slate-200">
                   {CABLE_SECTIONS.map((s) => <option key={s} value={s}>{s} mm²</option>)}
                 </select>
+              </div>
+              {/* corriente y temperatura estimada */}
+              <div className="mt-2 border-t border-slate-800 pt-2">
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-slate-500">{c.rms.toFixed(1)} A · {Math.round(load)}%</span>
+                  <span className="flex items-center gap-1" style={{ color: tc }}>
+                    <Thermometer size={11} /> {Math.round(c.temp)} °C
+                  </span>
+                </div>
+                <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${barPct}%`, backgroundColor: tc }} />
+                </div>
               </div>
             </div>
           );
         })}
       </div>
       <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
-        R = ρ·L/A (cobre). Más largo o menos sección ⇒ más resistencia ⇒ más caída de tensión bajo carga.
-        El neutro afecta su propio desplazamiento. Mirá la pestaña <b className="text-slate-400">Tensión</b>.
+        R = ρ·L/A (cobre). Más A o menos sección ⇒ más temperatura; el cobre caliente sube su R
+        (R(T)=R₂₀·(1+α·ΔT)) y la caída de tensión aumenta. El % es la carga sobre la ampacidad
+        (100% ≈ {T_AMBIENT + 40} °C, límite del PVC). Mirá la pestaña <b className="text-slate-400">Tensión</b>.
       </p>
     </Card>
   );
@@ -731,14 +769,15 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen }) {
     y: C - mag * Math.sin(rad(angle)) * scale,
   });
   const nTip = { x: C + comp.x * scale, y: C - comp.y * scale };
+  const rings = [0.25, 0.5, 0.75, 1].map((f) => Math.round(f * I_MAX));
 
   return (
     <div className="flex flex-col items-center">
       <svg viewBox={`0 0 ${VB} ${VB}`} className="w-full" style={{ maxWidth: 420 }}>
-        {[10, 20, 30].map((r) => (
+        {rings.map((r) => (
           <circle key={r} cx={C} cy={C} r={r * scale} fill="none" stroke="#1e293b" strokeWidth={1} />
         ))}
-        {[10, 20, 30].map((r) => (
+        {rings.map((r) => (
           <text key={`t${r}`} x={C + 3} y={C - r * scale + 11} fill="#475569"
             fontSize={9} fontFamily="monospace">{r}A</text>
         ))}
