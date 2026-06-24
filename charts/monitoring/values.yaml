@@ -172,6 +172,13 @@ victoria-metrics-k8s-stack:
   # Ship the upstream Kubernetes alerting rules (node/pod/workload health).
   defaultRules:
     enabled: true
+    # k3s embeds scheduler/controller-manager in a single binary and doesn't
+    # expose their metrics endpoints, so these alerts are permanently false
+    # positives. The scrape targets are already disabled above; silence the
+    # rules too.
+    disabled:
+      KubeSchedulerDown: true
+      KubeControllerManagerDown: true
 
   # Don't import the bundled VM/Kubernetes dashboards — keep only the custom
   # "Raspberry Pi — Health" dashboard (templates/grafana-dashboard-rpi.yaml).
