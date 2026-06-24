@@ -12,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile.
-  tag: "latest@sha256:93c8895c026b0bf6eb40a6966d544a76d185614017dd24a975520ffacb9842af"
+  tag: "latest@sha256:f057b18e24f038f1ef385a5f62eaae59308b6bb28f812b14de468d217b9be5ff"
 # Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
 #   kubectl -n agu-spa create secret docker-registry ghcr-creds \
 #     --docker-server=ghcr.io \
