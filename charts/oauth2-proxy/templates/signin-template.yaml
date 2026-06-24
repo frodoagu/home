@@ -1,0 +1,40 @@
+{{- if .Values.ingress.enabled }}
+# Custom oauth2-proxy sign-in page mounted via --custom-templates-dir.
+#
+# Why this exists: Traefik's `errors` middleware (used to gate the dashboard)
+# can only serve this page with the ORIGINAL 401 status — it cannot emit a real
+# 302, so a browser never follows the Location header automatically (you'd see a
+# bare "Found" link and have to click it). Instead of oauth2-proxy's default
+# "Sign in with Google" button page, this template bounces the browser straight
+# to /oauth2/start (which 302s to Google) client-side via meta-refresh + JS, so
+# protected apps go directly to the Google login.
+#
+# The redirect is ABSOLUTE to {{ .Values.ingress.host }} on purpose: the
+# protected app (e.g. traefik.agu.com.ar) is a different host, so a relative
+# /oauth2/start would hit the app's own auth and loop. {{`{{ .Redirect }}`}} is
+# an oauth2-proxy runtime template var, escaped so Helm passes it through.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-signin-template
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  sign_in.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Signing in…</title>
+      <meta http-equiv="refresh" content="0; url=https://{{ .Values.ingress.host }}/oauth2/start?rd={{`{{ .Redirect }}`}}">
+      <script>window.location.replace("https://{{ .Values.ingress.host }}/oauth2/start?rd={{`{{ .Redirect }}`}}");</script>
+    </head>
+    <body>
+      <p>Redirecting to the Google sign-in…
+      <a href="https://{{ .Values.ingress.host }}/oauth2/start?rd={{`{{ .Redirect }}`}}">Continue</a>.</p>
+    </body>
+    </html>
+{{- end }}

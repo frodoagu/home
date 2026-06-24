@@ -28,7 +28,7 @@ spec:
       {{- end }}
       services:
         - name: {{ include "oauth2-proxy-wrapper.serviceName" . }}
-          port: 4180
+          port: 80
   tls:
     certResolver: {{ .Values.ingress.certResolver }}
 {{- end }}

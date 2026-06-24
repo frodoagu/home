@@ -43,12 +43,27 @@ oauth2-proxy:
     # once at auth.agu.com.ar grants access to traefik.agu.com.ar, home.agu.com.ar, …
     - --cookie-domain=.agu.com.ar
     - --whitelist-domain=.agu.com.ar
-    # Skip the "Sign in with Google" button and go directly to Google.
-    - --skip-provider-button=true
+    # Use a custom sign-in page (the oauth2-proxy-signin-template ConfigMap) that
+    # auto-redirects the browser to Google. Do NOT add --skip-provider-button:
+    # that makes /oauth2/sign_in return a 302, which Traefik's `errors` middleware
+    # can only relay as a 401 (browsers won't follow the Location). Rendering our
+    # template returns a 200 page that bounces onward, so protected apps go
+    # straight to the Google login instead of showing a "Found" link.
+    - --custom-templates-dir=/etc/oauth2-proxy-templates
     # Return user info headers (consumed by downstream services if desired).
     - --set-xauthrequest=true
     - --cookie-secure=true
     - --redirect-url=https://auth.agu.com.ar/oauth2/callback
+
+  # Mount the custom sign-in template (rendered by this wrapper chart) into the
+  # directory referenced by --custom-templates-dir above.
+  extraVolumes:
+    - name: signin-template
+      configMap:
+        name: oauth2-proxy-signin-template
+  extraVolumeMounts:
+    - name: signin-template
+      mountPath: /etc/oauth2-proxy-templates
 
   # Disable the upstream chart's Kubernetes Ingress — we use a Traefik IngressRoute.
   ingress:
