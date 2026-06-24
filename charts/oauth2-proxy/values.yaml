@@ -21,6 +21,14 @@ oauth2-proxy:
   #                  generate: tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
   config:
     existingSecret: oauth2-proxy-secrets
+    # Override the chart's DEFAULT config file, which ships `email_domains = [ "*" ]`.
+    # That wildcard is the real authorization gate and makes oauth2-proxy accept
+    # ANY Google account (it ORs domain-match with the email allowlist), so the
+    # authenticatedEmailsFile is ignored. Removing the --email-domain arg is not
+    # enough — the wildcard lives here. With email_domains empty, authorization is
+    # the allowlist only. (upstream comes from --upstream=static://202 above.)
+    configFile: |-
+      email_domains = []
 
   # ── Restrict access to specific email addresses ────────────────────────────
   # The ConfigMap is re-rendered on each ArgoCD sync, so adding an email here
