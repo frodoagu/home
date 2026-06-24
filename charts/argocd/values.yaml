@@ -30,6 +30,37 @@ argo-cd:
     params:
       server.insecure: true
 
+    # -- Google sign-in via the bundled Dex (OIDC). ArgoCD's own login page gains
+    # a "Log in via Google" button; the argocd CLI keeps working (`argocd login
+    # argocd.agu.com.ar --sso`) and the GitHub /api/webhook stays unauthenticated.
+    # `url` is required so Dex builds the correct callback. The clientID/secret
+    # are pulled from the out-of-band `argocd-google-oidc` secret (labelled
+    # app.kubernetes.io/part-of: argocd so ArgoCD resolves the $-references); see
+    # docs/secrets.md. Add https://argocd.agu.com.ar/api/dex/callback to the
+    # Google OAuth client's Authorized redirect URIs.
+    cm:
+      url: https://argocd.agu.com.ar
+      dex.config: |
+        connectors:
+          - type: oidc
+            id: google
+            name: Google
+            config:
+              issuer: https://accounts.google.com
+              clientID: $argocd-google-oidc:clientId
+              clientSecret: $argocd-google-oidc:clientSecret
+              redirectURI: https://argocd.agu.com.ar/api/dex/callback
+
+    # -- Map the signed-in Google account (matched by email) to ArgoCD admin.
+    # `scopes: [email]` makes RBAC match the email claim; everyone else gets the
+    # empty default role (no access). Add more `g, <email>, role:admin` lines to
+    # grant additional users.
+    rbac:
+      policy.default: ""
+      scopes: "[email]"
+      policy.csv: |
+        g, federico.nicolas.agu@gmail.com, role:admin
+
   # -- Use a single replica for a home / RPi environment
   controller:
     replicas: 1

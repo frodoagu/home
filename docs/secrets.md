@@ -13,6 +13,7 @@ ArgoCD never sees the sensitive value and won't prune a secret it doesn't track.
 | `traefik-cloudflare-token` | `kube-system` | Traefik ACME DNS-01 | Cloudflare API token (Zone:DNS:Edit) under key `CF_DNS_API_TOKEN` |
 | `traefik-dashboard-auth` | `kube-system` | Traefik dashboard (basic auth fallback) | htpasswd `users` for HTTP basic auth |
 | `oauth2-proxy-secrets` | `oauth2-proxy` | oauth2-proxy | Google OAuth `client-id`, `client-secret`, and 32-byte `cookie-secret` |
+| `argocd-google-oidc` | `argocd` | ArgoCD Dex (Google login) | Google OAuth `clientId` / `clientSecret`; must carry label `app.kubernetes.io/part-of: argocd` |
 | `cloudflare-ddns-token` | `cloudflare-ddns` | cloudflare-ddns | Cloudflare API token under key `CLOUDFLARE_API_TOKEN` |
 | `ghcr-creds` | `agu-spa` **and** `argocd` | kubelet pull (agu-spa) + Argo CD Image Updater registry reads (argocd) | GHCR `docker-registry` creds — classic PAT with `read:packages` |
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
@@ -48,6 +49,22 @@ kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
   --from-literal=client-id='1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com' \
   --from-literal=client-secret='<google-client-secret-from-console>' \
   --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+```
+
+**ArgoCD Google login (Dex/OIDC).** ArgoCD's Dex reads the Google client creds
+from this secret via the `$argocd-google-oidc:<key>` references in
+`charts/argocd/values.yaml`. The `app.kubernetes.io/part-of: argocd` label is
+**required** — ArgoCD only resolves `$`-variables from labelled secrets.
+Prerequisites:
+1. In Google Cloud Console, add `https://argocd.agu.com.ar/api/dex/callback` to
+   the OAuth client's *Authorized redirect URIs* (same client as oauth2-proxy).
+2. Copy the client secret from the console.
+
+```bash
+kubectl create secret generic argocd-google-oidc -n argocd \
+  --from-literal=clientId='1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com' \
+  --from-literal=clientSecret='<google-client-secret-from-console>'
+kubectl label secret argocd-google-oidc -n argocd app.kubernetes.io/part-of=argocd
 ```
 
 **cloudflare-ddns token:**
