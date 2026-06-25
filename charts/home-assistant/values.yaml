@@ -88,6 +88,14 @@ googleAssistant:
     secretName: "ha-google-sa"
     secretKey: "service_account.json"
 
+# HACS (Home Assistant Community Store) bootstrap.
+# The init container installs HACS into /config/custom_components only if it is
+# missing, so existing installs are not rewritten.
+hacs:
+  enabled: true
+  # Pin to a concrete HACS release tag from github.com/hacs/integration.
+  version: "2.0.5"
+
 # Resource requests/limits – tune for RPi
 resources:
   requests:

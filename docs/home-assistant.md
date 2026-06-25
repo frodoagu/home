@@ -24,10 +24,32 @@ so the written YAML is correct regardless of template indentation:
 3. Appends `homeassistant: external_url:` from `.Values.externalUrl`, guarded so
    it never creates a duplicate top-level `homeassistant:` key.
 4. Appends the `google_assistant:` block when that integration is enabled.
+5. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
 
 Each block is written **once** and skipped if already present. To change a block
 after first sync, edit it in `/config/configuration.yaml` (or delete the block
 and restart the pod to let the init container regenerate it).
+
+## HACS default bootstrap
+
+HACS is enabled by default (`.Values.hacs.enabled: true`). A dedicated init
+container downloads the pinned release zip from
+`https://github.com/hacs/integration` and extracts it into
+`/config/custom_components/hacs`.
+
+Behavior is idempotent:
+
+- If `/config/custom_components/hacs` already exists, install is skipped.
+- If it does not exist, HACS is installed before Home Assistant starts.
+
+To disable this behavior, set:
+
+```yaml
+hacs:
+   enabled: false
+```
+
+To upgrade/downgrade HACS, bump `.Values.hacs.version` to another release tag.
 
 > Why not a ConfigMap? An earlier design copied a whole `configuration.yaml` from
 > a ConfigMap on first run. It was effectively dead on any existing install, and
