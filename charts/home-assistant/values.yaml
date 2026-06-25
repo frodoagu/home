@@ -96,26 +96,6 @@ hacs:
   # Pin to a concrete HACS release tag from github.com/hacs/integration.
   version: "2.0.5"
 
-# SmartIR climate (IR-controlled ACs / heat pumps via a `remote.*` controller).
-# The `smartir` custom component must be installed first (via HACS) — this only
-# writes the YAML config that creates the climate entities. The init container
-# appends the block to configuration.yaml ONCE (skipped if `smartir:` already
-# present). The device-code JSON is auto-downloaded by SmartIR on first start.
-# To edit after first sync, change the block in /config/configuration.yaml (or
-# delete it and restart the pod to regenerate).
-smartir:
-  enabled: true
-  devices:
-    - name: Aire Acondicionado Dormitorio
-      # Code from the SmartIR climate codes matching your AC brand/remote.
-      deviceCode: 3000
-      # Entity that emits the IR (e.g. a Broadlink remote).
-      controllerData: remote.control_dormitorio
-      # Optional sensors — leave unset to omit.
-      temperatureSensor: ""
-      humiditySensor: ""
-      powerSensor: ""
-
 # Resource requests/limits – tune for RPi
 resources:
   requests:
