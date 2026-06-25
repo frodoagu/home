@@ -66,6 +66,7 @@ blackboxTargets:
     - https://argocd.agu.com.ar
     - https://home.agu.com.ar
     - https://auth.agu.com.ar/ping
+    - https://yaskia.com
   authGated:
     - https://grafana.agu.com.ar
 
