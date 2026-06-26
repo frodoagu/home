@@ -1,0 +1,16 @@
+apiVersion: v2
+name: pihole
+description: Helm chart for Pi-hole (network-wide DNS ad-blocker + DHCP) on k3s with Traefik ingress
+type: application
+version: 0.1.0
+appVersion: "2026.06.0"
+keywords:
+  - pihole
+  - dns
+  - dhcp
+  - ad-blocker
+sources:
+  - https://github.com/pi-hole/pi-hole
+  - https://github.com/pi-hole/docker-pi-hole
+maintainers:
+  - name: frodoagu

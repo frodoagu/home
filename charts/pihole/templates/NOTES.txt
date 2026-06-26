@@ -1,0 +1,41 @@
+Pi-hole has been deployed! 🛡️
+
+1. Web admin UI (Google sign-in gated):
+   https://{{ .Values.ingress.host }}/admin
+   (a DNS A record for {{ .Values.ingress.host }} must point at your RPi, like the
+    other agu.com.ar services)
+
+2. Admin password:
+{{- if .Values.admin.existingSecret }}
+   From secret "{{ .Values.admin.existingSecret }}" (key {{ .Values.admin.existingSecretKey }}).
+{{- else }}
+   No secret configured — Pi-hole auto-generated a random password. Read it with:
+     kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "pihole.fullname" . }} | grep -i password
+   or set your own:
+     kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "pihole.fullname" . }} -- pihole setpassword
+   Recommended: create a secret and set admin.existingSecret:
+     kubectl create secret generic pihole-admin -n {{ .Release.Namespace }} --from-literal=password=CHANGEME
+{{- end }}
+
+{{- if .Values.dhcp.enabled }}
+
+3. DHCP is ENABLED. Pi-hole hands out IPs in the range
+   {{ .Values.dhcp.start }} – {{ .Values.dhcp.end }} (gateway {{ .Values.dhcp.router }}) and
+   advertises ITSELF as the DNS server.
+
+   ⚠️  TURN OFF the DHCP server on your router first — two DHCP servers on one
+       LAN will fight and break connectivity. Then reboot devices (or wait for
+       lease renewal) so they pick up the new DNS.
+
+{{- if .Values.dhcp.reservations }}
+   Static reservations in effect (MAC → IP):
+   {{- range .Values.dhcp.reservations }}
+     - {{ .ip }}  {{ .mac }}{{ if .name }}  ({{ .name }}){{ end }}
+   {{- end }}
+{{- else }}
+   No static reservations set. Devices that must keep a fixed IP (Broadlink,
+   ESPHome BT proxies, ...) should be added under dhcp.reservations in values.yaml.
+{{- end }}
+{{- end }}
+
+4. State is persisted in PVC {{ include "pihole.fullname" . }}-config (/etc/pihole).

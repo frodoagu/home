@@ -1,0 +1,138 @@
+# Default values for pihole.
+# Pi-hole runs as the LAN's DNS ad-blocker AND DHCP server. DHCP is enabled
+# because the router cannot be told to hand out a custom DNS server — so Pi-hole
+# takes over DHCP and advertises ITSELF as the DNS resolver. The router's own
+# DHCP server MUST be turned off (two DHCP servers on one LAN conflict).
+
+replicaCount: 1
+
+image:
+  repository: pihole/pihole
+  pullPolicy: IfNotPresent
+  # Pin to an explicit version (keep Chart.yaml appVersion in sync). Avoid
+  # floating tags like "latest".
+  tag: "2026.06.0"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# IANA timezone — used for the query log / lease timestamps.
+timezone: "America/Argentina/Buenos_Aires"
+
+# Pi-hole serves its web UI on this plain-HTTP port. It is deliberately OFF 80/443
+# because the pod runs in hostNetwork and those host ports are taken by the
+# bundled Traefik (which terminates TLS and reverse-proxies to this port).
+webPort: 8080
+
+# ClusterIP service that fronts the web UI for the Traefik IngressRoute. DNS (53)
+# and DHCP (67) are reached directly on the node via hostNetwork, not through a
+# Service, so they are not listed here.
+service:
+  type: ClusterIP
+  port: 8080
+
+# Persistent storage for /etc/pihole (pihole.toml, gravity.db, the FTL query DB
+# and dnsmasq.d). On the RPi's SD card, so keep it modest.
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 2Gi
+  existingClaim: ""
+
+# Web UI via Traefik IngressRoute, gated by the google-auth ForwardAuth middleware.
+ingress:
+  enabled: true
+  host: pihole.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy (Google sign-in). Mirrors charts/monitoring so the
+# IngressRoute can require sign-in without relying on Traefik cross-namespace
+# middleware references — a local copy of the middleware is created in this
+# namespace (see templates/google-auth-middleware.yaml).
+googleAuth:
+  enabled: true
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# Admin password for the Pi-hole web UI. The UI is already behind google-auth, so
+# this is a second layer. Create the secret out-of-band (never in git):
+#   kubectl create secret generic pihole-admin -n pihole --from-literal=password=CHANGEME
+# Leave existingSecret empty to let Pi-hole auto-generate a random password (read
+# it from `kubectl logs`, or set one later with `pihole setpassword`).
+admin:
+  existingSecret: ""
+  existingSecretKey: password
+
+dns:
+  # Upstream resolvers Pi-hole forwards cache misses to (semicolon-separated).
+  upstreams: "1.1.1.1;1.0.0.1"
+  # LOCAL = only answer the directly-connected subnet | ALL | BIND | SINGLE.
+  # ALL is safe here: :53 is not exposed to the internet (no port-forward).
+  listeningMode: "all"
+  dnssec: false
+
+# DHCP server. Pi-hole replaces the router's DHCP so every device gets Pi-hole as
+# its DNS automatically. TURN OFF the router's DHCP before enabling this.
+dhcp:
+  enabled: true
+  start: "192.168.0.150"
+  end: "192.168.0.250"
+  # Default gateway advertised to clients (the router).
+  router: "192.168.0.1"
+  leaseTime: "24h"
+  ipv6: false
+  rapidCommit: false
+  # Static DHCP reservations (MAC -> fixed IP). Use for devices that MUST keep
+  # their current IP — e.g. Broadlink (addressed by IP in Home Assistant) and
+  # ESPHome Bluetooth proxies. Each entry: { mac, ip, name? }. The reserved IP
+  # may be inside or outside the start–end range; dnsmasq honours it either way.
+  #   reservations:
+  #     - { mac: "AA:BB:CC:DD:EE:FF", ip: "192.168.0.40", name: "broadlink-living" }
+  #     - { mac: "11:22:33:44:55:66", ip: "192.168.0.41", name: "esphome-btproxy" }
+  #
+  # Discovered from the live ARP table + OUI lookup (current IPs preserved).
+  # NOTE: the ARP table only shows recently-contacted devices — verify this list
+  # against the router lease table / Home Assistant and add any ESPHome proxy
+  # that was asleep when this was captured.
+  reservations:
+    - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.101", name: "broadlink-1" }
+    - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.186", name: "broadlink-2" }
+    - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.56", name: "esphome-btproxy" }
+
+# Resource requests/limits – tuned small for the RPi.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# hostNetwork is REQUIRED: DNS (53) and DHCP broadcasts (67) must reach the
+# physical LAN, which the pod overlay network cannot do.
+hostNetwork: true
+
+# DHCP needs NET_ADMIN (manage interfaces/leases) and NET_RAW (raw/broadcast
+# packets); NET_BIND_SERVICE lets FTL bind :53 if it runs unprivileged.
+securityContext:
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BIND_SERVICE
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables (e.g. additional FTLCONF_* overrides).
+env: []
+
+# Extra volumes / mounts if ever needed.
+extraVolumes: []
+extraVolumeMounts: []
