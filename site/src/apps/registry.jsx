@@ -1,4 +1,4 @@
-import { Activity, GitBranch, Home, Network, Sparkles, Zap } from "lucide-react";
+import { Activity, GitBranch, Home, Network, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -125,5 +125,18 @@ export const privateLinks = [
     tag: { es: "Monitoreo", en: "Monitoring" },
     icon: Activity,
     accent: "#f59e0b",
+  },
+  {
+    slug: "pihole",
+    title: { es: "Pi-hole", en: "Pi-hole" },
+    description: {
+      es: "Bloqueo de publicidad y DNS/DHCP de la red.",
+      en: "Network-wide ad-blocking and DNS/DHCP.",
+    },
+    href: "https://pihole.agu.com.ar/admin",
+    categories: ["devops"],
+    tag: { es: "DNS", en: "DNS" },
+    icon: Shield,
+    accent: "#ef4444",
   },
 ];
