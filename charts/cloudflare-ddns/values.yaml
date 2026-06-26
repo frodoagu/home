@@ -34,6 +34,7 @@ domains:
   - traefik.agu.com.ar
   - auth.agu.com.ar
   - grafana.agu.com.ar
+  - pihole.agu.com.ar
   - www.yaskia.com
   - yaskia.com
 
