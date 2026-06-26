@@ -5,16 +5,17 @@ Pi-hole has been deployed! 🛡️
    (a DNS A record for {{ .Values.ingress.host }} must point at your RPi, like the
     other agu.com.ar services)
 
-2. Admin password:
+2. Admin login:
 {{- if .Values.admin.existingSecret }}
-   From secret "{{ .Values.admin.existingSecret }}" (key {{ .Values.admin.existingSecretKey }}).
+   Password from secret "{{ .Values.admin.existingSecret }}" (key {{ .Values.admin.existingSecretKey }}).
+{{- else if .Values.admin.disablePassword }}
+   Pi-hole's own login is DISABLED — google-auth gates the UI. (Required: the
+   google-auth-signin errors middleware would otherwise hijack the API's 401 and
+   the SPA would report "Server unreachable!".) Set admin.disablePassword: false
+   + admin.existingSecret to use a password instead.
 {{- else }}
    No secret configured — Pi-hole auto-generated a random password. Read it with:
      kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "pihole.fullname" . }} | grep -i password
-   or set your own:
-     kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "pihole.fullname" . }} -- pihole setpassword
-   Recommended: create a secret and set admin.existingSecret:
-     kubectl create secret generic pihole-admin -n {{ .Release.Namespace }} --from-literal=password=CHANGEME
 {{- end }}
 
 {{- if .Values.dhcp.enabled }}

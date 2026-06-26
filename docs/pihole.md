@@ -148,15 +148,21 @@ State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 
 ## Admin password (optional)
 
-The UI is already behind Google sign-in, so the Pi-hole password is a second layer.
-To set one, create a secret and point `admin.existingSecret` at it:
+Pi-hole's **own login is disabled by default** (`admin.disablePassword: true` → empty
+`FTLCONF_webserver_api_password`); google-auth gates the UI instead. This isn't just
+convenience: the `google-auth-signin` errors middleware catches 401-403 from the
+**backend** too, so a Pi-hole API 401 (its own login) gets replaced with the sign-in
+page and the SPA reports **"Server unreachable!"**. With no password the API never
+401s and stays out of the middleware's way.
+
+To use a password instead, set `admin.disablePassword: false` and point
+`admin.existingSecret` at a secret (takes precedence):
 
 ```bash
 kubectl create secret generic pihole-admin -n pihole --from-literal=password='...'
 ```
 
-Left empty, Pi-hole auto-generates a password (read it from `kubectl logs`, or set
-one with `pihole setpassword`). See [secrets.md](secrets.md).
+See [secrets.md](secrets.md).
 
 ## DNS record
 
