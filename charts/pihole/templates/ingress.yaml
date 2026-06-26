@@ -1,4 +1,17 @@
 {{- if .Values.ingress.enabled }}
+# Redirect the bare root to /admin/. Pi-hole returns 403 for "/" (its UI lives
+# under /admin/); without this a bare-domain visit dead-ends on that 403.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "pihole.fullname" . }}-root-redirect
+  labels:
+    {{- include "pihole.labels" . | nindent 4 }}
+spec:
+  redirectRegex:
+    regex: "^https?://[^/]+/?$"
+    replacement: "https://{{ .Values.ingress.host }}/admin/"
+---
 # Traefik IngressRoute for the Pi-hole web UI, gated by the google-auth
 # ForwardAuth middleware (Google sign-in, allowlist enforced by oauth2-proxy).
 apiVersion: traefik.io/v1alpha1
@@ -11,6 +24,16 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Bare root → /admin/. This route is more specific than the catch-all below,
+    # so Traefik prefers it for "/". The redirect runs before auth (no need to
+    # gate a redirect), so the root never reaches Pi-hole's 403.
+    - match: Host(`{{ .Values.ingress.host }}`) && Path(`/`)
+      kind: Rule
+      middlewares:
+        - name: {{ include "pihole.fullname" . }}-root-redirect
+      services:
+        - name: {{ include "pihole.fullname" . }}
+          port: {{ .Values.service.port }}
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       {{- if .Values.googleAuth.enabled }}

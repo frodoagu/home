@@ -21,7 +21,11 @@ spec:
       - X-Auth-Request-Email
     trustForwardHeader: true
 ---
-# Turns oauth2-proxy 401/403 responses into a browser redirect to sign-in.
+# Turns oauth2-proxy 401 (no session) responses into a browser redirect to
+# sign-in. Scoped to 401 ONLY (not 401-403): Pi-hole returns 403 for the web
+# root "/", and catching 403 here would hijack that backend response into an
+# endless sign-in loop. oauth2-proxy uses 401 for "no session", so 401 alone
+# still triggers the redirect for genuinely unauthenticated users.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -32,7 +36,7 @@ metadata:
 spec:
   errors:
     status:
-      - "401-403"
+      - "401"
     service:
       name: {{ .Values.googleAuth.oauth2ProxyService.name }}
       namespace: {{ .Values.googleAuth.oauth2ProxyService.namespace }}
