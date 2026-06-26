@@ -14,9 +14,12 @@ spec:
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       {{- if .Values.googleAuth.enabled }}
+      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+      # sign-in redirect. Reversed, the raw 401 reaches the browser.
       middlewares:
-        - name: google-auth
         - name: google-auth-signin
+        - name: google-auth
       {{- end }}
       services:
         - name: {{ include "pihole.fullname" . }}
