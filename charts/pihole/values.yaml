@@ -88,12 +88,11 @@ dns:
 # DHCP server. Pi-hole replaces the router's DHCP so every device gets Pi-hole as
 # its DNS automatically.
 #
-# PHASED ROLLOUT: kept FALSE for the first (DNS-only) deploy so Pi-hole can be
-# validated without disrupting the LAN. Flip to true ONLY after turning off the
-# router's own DHCP server (two DHCP servers on one LAN conflict). The dhcp.*
-# settings and reservations below take effect once this is true.
+# DHCP server. The router's own DHCP is OFF and the Pi has a static IP, so Pi-hole
+# now owns DHCP and advertises itself as the resolver. (Keep this in sync with the
+# router: never run both DHCP servers at once.)
 dhcp:
-  enabled: false
+  enabled: true
   start: "192.168.0.150"
   end: "192.168.0.250"
   # Default gateway advertised to clients (the router).
