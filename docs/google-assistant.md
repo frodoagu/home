@@ -71,7 +71,7 @@ googleAssistant:
   projectId: "growserver"
   reportState: true
   exposeByDefault: true
-  exposedDomains: [light, switch, fan, cover, climate, scene, script, media_player, vacuum, lock]
+  exposedDomains: [light, switch, sensor, fan, cover, climate, scene, script, media_player, vacuum, lock]
   secureDevicesPin: ""        # set to require a spoken PIN for locks/garage/etc.
   serviceAccount:
     secretName: "ha-google-sa"

@@ -65,6 +65,7 @@ googleAssistant:
   exposedDomains:
     - light
     - switch
+    - sensor
     - fan
     - cover
     - climate
