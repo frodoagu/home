@@ -59,12 +59,21 @@ googleAuth:
     namespace: oauth2-proxy
     port: 80
 
-# Admin password for the Pi-hole web UI. The UI is already behind google-auth, so
-# this is a second layer. Create the secret out-of-band (never in git):
+# Admin password for the Pi-hole web UI.
+#
+# The UI is already gated by google-auth, so Pi-hole's OWN login is disabled by
+# default (disablePassword: true → empty FTLCONF_webserver_api_password). This is
+# effectively REQUIRED with this google-auth setup: the google-auth-signin errors
+# middleware catches 401-403 responses, including the ones Pi-hole's API returns
+# during its own login — which breaks the SPA ("Server unreachable!"). With no
+# password the API never 401s, so it stays out of the middleware's way.
+#
+# To use a password instead, set disablePassword: false and point existingSecret
+# at a secret created out-of-band (never in git):
 #   kubectl create secret generic pihole-admin -n pihole --from-literal=password=CHANGEME
-# Leave existingSecret empty to let Pi-hole auto-generate a random password (read
-# it from `kubectl logs`, or set one later with `pihole setpassword`).
+# (existingSecret takes precedence over disablePassword.)
 admin:
+  disablePassword: true
   existingSecret: ""
   existingSecretKey: password
 

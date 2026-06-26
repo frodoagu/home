@@ -77,6 +77,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.admin.existingSecret }}
                   key: {{ .Values.admin.existingSecretKey }}
+            {{- else if .Values.admin.disablePassword }}
+            # UI is gated by google-auth; disable Pi-hole's own login so its API
+            # never returns 401 (which the google-auth-signin errors middleware
+            # would otherwise hijack, breaking the SPA → "Server unreachable!").
+            - name: FTLCONF_webserver_api_password
+              value: ""
             {{- end }}
             {{- if .Values.dhcp.enabled }}
             - name: FTLCONF_dhcp_active
