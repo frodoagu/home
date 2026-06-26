@@ -21,6 +21,7 @@ services running on a Raspberry Pi with k3s.
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 | [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, blackbox uptime, Telegram alerts | `charts/monitoring/` |
+| [Pi-hole](https://pi-hole.net/) | Network-wide DNS ad-blocker + LAN DHCP server (hostNetwork) | `charts/pihole/` |
 
 ## Architecture
 
@@ -353,7 +354,8 @@ webhook config (`-f config[secret]=...`).
 │   ├── home-assistant.yaml
 │   ├── agu-spa.yaml
 │   ├── cloudflare-ddns.yaml
-│   └── monitoring.yaml
+│   ├── monitoring.yaml
+│   └── pihole.yaml
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
@@ -363,7 +365,8 @@ webhook config (`-f config[secret]=...`).
     ├── home-assistant/      # Home Assistant Helm chart
     ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     ├── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
-    └── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
+    ├── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
+    └── pihole/             # Pi-hole DNS ad-blocker + LAN DHCP server (hostNetwork)
 ```
 
 ## Documentation
@@ -376,6 +379,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
+- [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
 
 ## Let's Encrypt notes
 

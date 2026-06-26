@@ -10,3 +10,4 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [home-assistant.md](home-assistant.md) | Home Assistant chart specifics: config bootstrap, device discovery (host networking), Bluetooth |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
 | [agu-spa.md](agu-spa.md) | SPA chart: how `site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
+| [pihole.md](pihole.md) | Pi-hole as DNS ad-blocker + LAN DHCP: hostNetwork, the static-IP cold-boot chicken-and-egg, phased rollout, MAC→IP reservations |

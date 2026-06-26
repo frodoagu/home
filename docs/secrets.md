@@ -19,6 +19,7 @@ ArgoCD never sees the sensitive value and won't prune a secret it doesn't track.
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
+| `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — the UI is already behind google-auth; unset, Pi-hole auto-generates one) |
 
 ## Create them
 
@@ -82,6 +83,17 @@ kubectl create secret generic cloudflare-ddns-token -n cloudflare-ddns \
 ```bash
 kubectl create secret generic ha-google-sa -n home-assistant \
   --from-file=service_account.json=/path/to/homegraph-key.json
+```
+
+**Pi-hole admin password (optional).** The web UI is already gated by `google-auth`,
+so this is a second layer. Skip it and Pi-hole auto-generates a password (read it
+from `kubectl -n pihole logs deploy/pihole`); or set one and point
+`admin.existingSecret: pihole-admin` in `charts/pihole/values.yaml`. See
+[pihole.md](pihole.md).
+
+```bash
+kubectl create secret generic pihole-admin -n pihole \
+  --from-literal=password='your-password'
 ```
 
 **GHCR + Image Updater (the private SPA pipeline).** One GitHub **classic** PAT
