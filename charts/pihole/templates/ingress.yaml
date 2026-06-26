@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+# Traefik IngressRoute for the Pi-hole web UI, gated by the google-auth
+# ForwardAuth middleware (Google sign-in, allowlist enforced by oauth2-proxy).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "pihole.fullname" . }}
+  labels:
+    {{- include "pihole.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      {{- if .Values.googleAuth.enabled }}
+      middlewares:
+        - name: google-auth
+        - name: google-auth-signin
+      {{- end }}
+      services:
+        - name: {{ include "pihole.fullname" . }}
+          port: {{ .Values.service.port }}
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.

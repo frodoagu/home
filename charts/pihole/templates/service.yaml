@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pihole.fullname" . }}
+  labels:
+    {{- include "pihole.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "pihole.selectorLabels" . | nindent 4 }}
+  # Only the web UI is fronted by a Service (for the Traefik IngressRoute). DNS
+  # and DHCP are served directly on the node via hostNetwork.
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
