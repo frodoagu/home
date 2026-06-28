@@ -247,8 +247,10 @@ describe("harmonicNeutral (extra)", () => {
     const ac = getAppliance("aire");
     const spec = buildPhaseSpectrum(0, [ac]);
     const r = harmonicNeutral({ a: spec, b: spec, c: spec });
-    // fundamental se cancela; suman los triples: 3ª (2.4/fase) y 9ª (0.36/fase)
-    expect(r.In).toBeCloseTo(Math.hypot(2.4 * 3, 0.36 * 3), 2);
-    expect(r.fund).toEqual({ a: 12, b: 12, c: 12 }); // fundamental balanceada
+    // fundamental se cancela; suman los triples (3ª y 9ª), 3 fases en fase.
+    const i3 = ac.current * (ac.spectrum[3] ?? 0);
+    const i9 = ac.current * (ac.spectrum[9] ?? 0);
+    expect(r.In).toBeCloseTo(Math.hypot(i3 * 3, i9 * 3), 2);
+    expect(r.fund).toEqual({ a: ac.current, b: ac.current, c: ac.current }); // balanceada
   });
 });

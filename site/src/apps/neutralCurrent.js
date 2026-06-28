@@ -29,38 +29,77 @@ export const isTriplen = (h) => h % 3 === 0;
 
 /* -------------------------------------------------------------------------
  * Catálogo de artefactos. `current` = corriente fundamental (A) que toma el
- * artefacto; `spectrum` = magnitud de cada armónico como fracción de esa
- * fundamental (espectros ilustrativos, orden de magnitud realista). Cuanto
- * más "electrónica" la carga, más 3er armónico inyecta al neutro.
+ * artefacto en MARCHA/régimen; `spectrum` = magnitud de cada armónico como
+ * fracción de esa fundamental. Valores aproximados a 230 V fase-neutro (AR),
+ * con I ≈ P / 230. El pico de arranque de los motores (4-6× la nominal) NO se
+ * modela acá: el catálogo representa el consumo en régimen permanente.
+ *
+ * Regla práctica de la firma armónica:
+ *  - Cargas resistivas (resistencias, boilers): casi senoidales, ~0 armónicos.
+ *  - Motores de inducción (bombas, compresores): poca distorsión, algo de 5ª/7ª.
+ *  - Fuentes conmutadas / electrónica (PC, TV, LED): mucho 3er armónico, que es
+ *    el que SE SUMA en el neutro (triple) aunque las fases estén balanceadas.
  * ---------------------------------------------------------------------- */
 export const APPLIANCES = [
   {
+    // Split inverter ~4000 frig a plena carga: ~1.4 kW eléctricos (EER ~3.2).
     key: "aire",
     label: { es: "Aire (inverter)", en: "AC (inverter)" },
     icon: "AirVent",
-    current: 12,
+    current: 6,
     spectrum: { 3: 0.2, 5: 0.12, 7: 0.07, 9: 0.03 },
   },
   {
+    // Magnetrón ~1000 W de salida ≈ 1.5 kW de entrada. Doblador media onda.
     key: "micro",
     label: { es: "Microondas", en: "Microwave" },
     icon: "Microwave",
-    current: 8,
+    current: 6.5,
     spectrum: { 3: 0.3, 5: 0.18, 7: 0.08 },
   },
   {
+    // Cafetera automática 2000 W: el boiler/resistencia domina -> carga casi
+    // lineal (mucha corriente, poco aporte al neutro). La distorsión chica es
+    // por la bomba vibratoria y el control electrónico.
+    key: "cafetera",
+    label: { es: "Cafetera (2000 W)", en: "Coffee maker (2000 W)" },
+    icon: "Coffee",
+    current: 8.7,
+    spectrum: { 3: 0.05, 5: 0.03 },
+  },
+  {
+    // Compresor 1/2 HP (~0.37 kW mec.): motor de inducción a plena carga,
+    // ~1 kW de entrada en marcha. Arranque (LRA) 4-6× la nominal, no modelado.
+    key: "compresor",
+    label: { es: "Compresor (½ HP)", en: "Compressor (½ HP)" },
+    icon: "Wind",
+    current: 4.5,
+    spectrum: { 3: 0.05, 5: 0.06, 7: 0.04 },
+  },
+  {
+    // Bomba de agua 1/2 HP en marcha (~0.69 kW de entrada). Motor de inducción.
     key: "bomba",
     label: { es: "Bomba de agua", en: "Water pump" },
     icon: "Droplets",
-    current: 8,
+    current: 3,
     spectrum: { 3: 0.06, 5: 0.05, 7: 0.03 },
   },
   {
+    // Heladera no-frost: compresor en marcha ~0.28 kW (el ciclo de defrost
+    // suma más, pero el catálogo modela el compresor en régimen).
     key: "heladera",
     label: { es: "Heladera", en: "Fridge" },
     icon: "Refrigerator",
-    current: 3,
+    current: 1.2,
     spectrum: { 3: 0.1, 5: 0.06, 7: 0.03 },
+  },
+  {
+    // TV LED/OLED grande ~160 W. Fuente conmutada -> fuerte 3er armónico.
+    key: "tele",
+    label: { es: "Televisores", en: "TVs" },
+    icon: "Tv",
+    current: 0.7,
+    spectrum: { 3: 0.45, 5: 0.25, 7: 0.12, 9: 0.06 },
   },
   {
     key: "pc",
@@ -73,7 +112,7 @@ export const APPLIANCES = [
     key: "led",
     label: { es: "Luces LED", en: "LED lights" },
     icon: "Lightbulb",
-    current: 1.5,
+    current: 1,
     spectrum: { 3: 0.3, 5: 0.1, 7: 0.05 },
   },
 ];

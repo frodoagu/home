@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Zap, RotateCcw, Activity, Waves, AlertTriangle, CheckCircle2, BarChart3,
   Plus, Trash2, AirVent, Microwave, Droplets, Refrigerator, MonitorSmartphone, Lightbulb,
+  Coffee, Wind, Tv,
   Unplug, ArrowUp, ArrowDown, Gauge, Cable, GripVertical, ChevronUp, ChevronDown, Thermometer,
 } from "lucide-react";
 import {
@@ -33,8 +34,8 @@ const ACCENT = "#f59e0b"; // ámbar de la marca
 const DANGER = "#f43f5e"; // rojo-rosa para fallas
 
 const APP_ICONS = {
-  aire: AirVent, micro: Microwave, bomba: Droplets,
-  heladera: Refrigerator, pc: MonitorSmartphone, led: Lightbulb,
+  aire: AirVent, micro: Microwave, cafetera: Coffee, compresor: Wind, bomba: Droplets,
+  heladera: Refrigerator, tele: Tv, pc: MonitorSmartphone, led: Lightbulb,
 };
 
 const PRESETS = [
