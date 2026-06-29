@@ -65,9 +65,12 @@ victoria-logs-single:
   # server above; the default customConfig already parses k8s logs as JSON.
   vector:
     enabled: true
+    # The kubernetes_logs source watches every pod log on the node and buffers
+    # in memory; 192Mi was too tight and got OOMKilled (exit 137). The Pi has
+    # 8 GB RAM, so give it real headroom.
     resources:
       requests:
-        cpu: 25m
-        memory: 96Mi
-      limits:
+        cpu: 50m
         memory: 192Mi
+      limits:
+        memory: 512Mi
