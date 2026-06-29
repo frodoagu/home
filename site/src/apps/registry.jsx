@@ -1,4 +1,4 @@
-import { Activity, GitBranch, Home, Network, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, GitBranch, Home, LayoutDashboard, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -138,5 +138,31 @@ export const privateLinks = [
     tag: { es: "DNS", en: "DNS" },
     icon: Shield,
     accent: "#ef4444",
+  },
+  {
+    slug: "victoria-logs",
+    title: { es: "VictoriaLogs", en: "VictoriaLogs" },
+    description: {
+      es: "Logs centralizados del cluster (LogsQL).",
+      en: "Centralized cluster logs (LogsQL).",
+    },
+    href: "https://logs.agu.com.ar",
+    categories: ["devops"],
+    tag: { es: "Logs", en: "Logs" },
+    icon: ScrollText,
+    accent: "#14b8a6",
+  },
+  {
+    slug: "homepage",
+    title: { es: "Homepage", en: "Homepage" },
+    description: {
+      es: "Tablero de inicio con todos los servicios.",
+      en: "Start page linking every service.",
+    },
+    href: "https://dash.agu.com.ar",
+    categories: ["devops"],
+    tag: { es: "Dashboard", en: "Dashboard" },
+    icon: LayoutDashboard,
+    accent: "#6366f1",
   },
 ];
