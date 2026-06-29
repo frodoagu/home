@@ -55,12 +55,32 @@ keep Grafana focused on these:
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 
-To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`) and commit
-— no template changes needed. Each dashboard carries a `DS_PROM` datasource
-variable so it binds to the provisioned VictoriaMetrics datasource automatically.
-To change the landing dashboard, set
-`grafana."grafana.ini".dashboards.default_home_dashboard_path` in `values.yaml`
-(path is `/var/lib/grafana/dashboards/default/<file>.json`).
+To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
+the `home` tag — see *Playlist* below) and commit — no template changes needed.
+Each dashboard carries a `DS_PROM` datasource variable so it binds to the
+provisioned VictoriaMetrics datasource automatically. To change the landing
+dashboard, set `grafana."grafana.ini".dashboards.default_home_dashboard_path` in
+`values.yaml` (path is `/var/lib/grafana/dashboards/default/<file>.json`).
+
+## Playlist (rotate through all dashboards)
+
+Grafana has an **All dashboards** playlist that cycles through every dashboard on
+a 1-minute interval — handy for a wall display. It's defined **by tag**: each
+dashboard above carries a shared `home` tag and the playlist is a
+`dashboard_by_tag: home` item, so any new tagged dashboard joins automatically.
+
+Playlists aren't file-provisionable like dashboards/datasources, and Grafana here
+is **ephemeral** (no PVC → its SQLite DB is wiped on every restart). So a
+`playlist-provisioner` **sidecar** in the Grafana pod
+(`grafana.extraContainers` in [values.yaml](../charts/monitoring/values.yaml))
+re-creates the playlist via the Grafana HTTP API on each start: it waits for
+`/api/health`, deletes any stale copy, then POSTs `/api/playlists`. It
+authenticates by sending the operator's `X-Auth-Request-Email` (the same header
+the `google-auth` ForwardAuth injects), which Grafana's `auth.proxy` trusts and
+auto-assigns Admin — no password or secret needed.
+
+Start it from the UI (*Dashboards → Playlists → All dashboards → ▶*) or directly
+at `https://grafana.agu.com.ar/playlists/play/<uid>`.
 
 ## Alerts → Telegram
 

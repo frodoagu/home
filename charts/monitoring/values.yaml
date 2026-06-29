@@ -288,6 +288,49 @@ victoria-metrics-k8s-stack:
     # is provisioned via defaultDatasources.extra below.
     plugins:
       - victoriametrics-logs-datasource
+    # Grafana is ephemeral (no PVC), so its SQLite DB — and anything stored only
+    # there — is wiped on every pod restart. Playlists aren't file-provisionable
+    # the way dashboards/datasources are, so this sidecar re-creates the
+    # "All dashboards" playlist via the Grafana HTTP API on each start. It's a
+    # tag-based playlist (dashboard_by_tag: home), so every dashboard carrying the
+    # shared `home` tag is auto-included — dropping a new tagged *.json in
+    # dashboards/ joins it with no change here. Auth: Grafana trusts the
+    # X-Auth-Request-Email header (auth.proxy below) and auto-assigns Admin, so
+    # sending the operator's email authenticates as Admin without any secret.
+    extraContainers: |
+      - name: playlist-provisioner
+        image: curlimages/curl:8.11.1
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            GRAFANA=http://localhost:3000
+            EMAIL=federico.nicolas.agu@gmail.com
+            echo "waiting for Grafana to be ready..."
+            until curl -sf "$GRAFANA/api/health" >/dev/null 2>&1; do sleep 5; done
+            # Defensive: drop any existing "All dashboards" playlist first. The DB
+            # is normally wiped on restart, but a lone sidecar restart could re-run
+            # against a live DB and would otherwise create a duplicate.
+            curl -s -H "X-Auth-Request-Email: $EMAIL" \
+              "$GRAFANA/api/playlists?query=All%20dashboards" \
+              | grep -o '"uid":"[^"]*"' | cut -d'"' -f4 \
+              | while read -r uid; do
+                  curl -s -o /dev/null -X DELETE \
+                    -H "X-Auth-Request-Email: $EMAIL" "$GRAFANA/api/playlists/$uid"
+                done
+            echo "creating 'All dashboards' playlist..."
+            curl -s -X POST -H "Content-Type: application/json" \
+              -H "X-Auth-Request-Email: $EMAIL" \
+              -d '{"name":"All dashboards","interval":"1m","items":[{"type":"dashboard_by_tag","value":"home"}]}' \
+              "$GRAFANA/api/playlists"
+            echo "  ...done"
+            # Stay Running so the pod keeps all containers up (restartPolicy Always).
+            while true; do sleep 86400; done
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            memory: 32Mi
     # Trust the X-Auth-Request-Email header set by the google-auth ForwardAuth
     # middleware → users are auto-created as Admin, no Grafana login page.
     grafana.ini:

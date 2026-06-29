@@ -3,7 +3,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["kubernetes", "workloads", "services"],
+  "tags": ["home", "kubernetes", "workloads", "services"],
   "title": "Workloads — Per-service",
   "uid": "workloads",
   "time": { "from": "now-6h", "to": "now" },

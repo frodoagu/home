@@ -3,7 +3,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["blackbox", "uptime", "sla", "tls"],
+  "tags": ["home", "blackbox", "uptime", "sla", "tls"],
   "title": "Blackbox — Uptime & SLA",
   "uid": "blackbox-sla",
   "time": { "from": "now-24h", "to": "now" },

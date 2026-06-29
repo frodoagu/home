@@ -3,7 +3,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["raspberrypi", "node", "hardware"],
+  "tags": ["home", "raspberrypi", "node", "hardware"],
   "title": "Raspberry Pi — Health",
   "uid": "rpi-health",
   "time": { "from": "now-6h", "to": "now" },

@@ -3,7 +3,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["traefik", "ingress", "http"],
+  "tags": ["home", "traefik", "ingress", "http"],
   "title": "Traefik — Ingress",
   "uid": "traefik-ingress",
   "time": { "from": "now-6h", "to": "now" },

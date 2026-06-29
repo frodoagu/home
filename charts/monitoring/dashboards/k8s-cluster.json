@@ -3,7 +3,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["kubernetes", "k3s", "cluster"],
+  "tags": ["home", "kubernetes", "k3s", "cluster"],
   "title": "Kubernetes — Cluster",
   "uid": "k8s-cluster",
   "time": { "from": "now-6h", "to": "now" },
