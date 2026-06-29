@@ -18,3 +18,12 @@ data:
     {{- toYaml .Values.config.kubernetes | nindent 4 }}
   docker.yaml: |
     {{- toYaml .Values.config.docker | nindent 4 }}
+  proxmox.yaml: |
+    {{- toYaml .Values.config.proxmox | nindent 4 }}
+  # custom.css / custom.js MUST exist as files: on startup homepage copies its
+  # skeleton versions into /app/config, which fails (EROFS → crash) on our
+  # read-only ConfigMap mount. Shipping them here pre-empts that copy.
+  custom.css: |
+{{ .Values.config.customCSS | indent 4 }}
+  custom.js: |
+{{ .Values.config.customJS | indent 4 }}
