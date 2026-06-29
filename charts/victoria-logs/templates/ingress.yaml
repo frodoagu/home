@@ -1,0 +1,57 @@
+{{- if .Values.ingress.enabled }}
+# Redirect the bare root to the VictoriaLogs web UI (vmui lives under
+# /select/vmui/); without this a bare-domain visit lands on the plain status page.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "victoria-logs.fullname" . }}-root-redirect
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "victoria-logs.labels" . | nindent 4 }}
+spec:
+  redirectRegex:
+    regex: "^https?://[^/]+/?$"
+    replacement: "https://{{ .Values.ingress.host }}/select/vmui/"
+---
+# Traefik IngressRoute for the VictoriaLogs UI, gated by the google-auth
+# ForwardAuth middleware (Google sign-in, allowlist enforced by oauth2-proxy).
+# The upstream server Service is named "victoria-logs" (server.fullnameOverride)
+# and listens on 9428.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "victoria-logs.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "victoria-logs.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Bare root → vmui. More specific than the catch-all below, so Traefik prefers
+    # it for "/". The redirect runs before auth (no need to gate a redirect).
+    - match: Host(`{{ .Values.ingress.host }}`) && Path(`/`)
+      kind: Rule
+      middlewares:
+        - name: {{ include "victoria-logs.fullname" . }}-root-redirect
+      services:
+        - name: victoria-logs
+          port: 9428
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      {{- if .Values.googleAuth.enabled }}
+      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+      # sign-in redirect.
+      middlewares:
+        - name: google-auth-signin
+        - name: google-auth
+      {{- end }}
+      services:
+        - name: victoria-logs
+          port: 9428
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.

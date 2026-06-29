@@ -22,6 +22,9 @@ services running on a Raspberry Pi with k3s.
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 | [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, blackbox uptime, Telegram alerts | `charts/monitoring/` |
 | [Pi-hole](https://pi-hole.net/) | Network-wide DNS ad-blocker + LAN DHCP server (hostNetwork) | `charts/pihole/` |
+| [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
+| [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
+| [homepage](https://gethomepage.dev/) | Dashboard / start page for the lab (Google sign-in gated) | `charts/homepage/` |
 
 ## Architecture
 
@@ -307,6 +310,42 @@ See [docs/secrets.md](docs/secrets.md) for rotation notes.
 > The Google Assistant integration needs an extra secret (`ha-google-sa`) only
 > if you enable it — see [docs/google-assistant.md](docs/google-assistant.md).
 
+#### Committing secrets to git with Sealed Secrets
+
+The secrets above are created **out-of-band** because they must exist *before*
+the stack syncs (the Sealed Secrets controller isn't running yet at bootstrap).
+Once the cluster is up, the `sealed-secrets` controller (in `kube-system`) lets
+you manage any **new or rotated** secret from git instead: you commit an
+*encrypted* `SealedSecret` that only this cluster's controller can decrypt.
+
+```bash
+# One-time: install the CLI matching the controller (appVersion in
+# charts/sealed-secrets/Chart.yaml). macOS: brew install kubeseal
+# The controller runs in kube-system as `sealed-secrets-controller`, so kubeseal
+# finds it with NO flags.
+
+# Seal a secret straight into the repo (example: the Cloudflare DDNS token):
+kubectl create secret generic cloudflare-ddns-token -n cloudflare-ddns \
+  --from-literal=CLOUDFLARE_API_TOKEN='your-token' \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml \
+  > charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml
+
+# Commit it; ArgoCD applies the SealedSecret and the controller unseals it into a
+# real Secret of the same name/namespace. The plaintext never touches git.
+```
+
+> ⚠️ **Back up the controller's private key** — losing it makes every committed
+> `SealedSecret` unrecoverable:
+>
+> ```bash
+> kubectl get secret -n kube-system \
+>   -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml
+> ```
+>
+> Store that file **off** the repo (it is the master decryption key). See
+> [docs/secrets.md](docs/secrets.md).
+
 ### 4 – Customise values
 
 Hosts and email are already set for `agu.com.ar`. If you fork to another
@@ -321,6 +360,9 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 | `charts/monitoring/values.yaml` | `ingress.host` (Grafana), `blackboxTargets`, Alertmanager `chat_id`, retention/resources |
+| `charts/victoria-logs/values.yaml` | `ingress.host`, `victoria-logs-single.server.retentionPeriod`/`retentionDiskSpaceUsage`, PVC `size` |
+| `charts/homepage/values.yaml` | `ingress.host`, `config.*` (services/widgets/bookmarks/settings), `serviceDiscovery.enabled` |
+| `charts/sealed-secrets/values.yaml` | `image.tag` (keep in sync with `Chart.yaml` appVersion), `resources` |
 
 ### 5 – Instant sync (optional Git webhook)
 

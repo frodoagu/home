@@ -1,0 +1,73 @@
+# Default values for the victoria-logs wrapper chart.
+#
+# One upstream chart is wrapped (keys forwarded verbatim under its name):
+#   victoria-logs-single  -> the VictoriaLogs server + bundled Vector collector
+#
+# Everything here is sized for a single Raspberry Pi running k3s and is biased
+# toward FEW DISK WRITES (only an SD card is available): short retention plus a
+# hard disk-usage cap so the log DB can never fill the card. If you later add an
+# SSD, bump server.retentionPeriod / retentionDiskSpaceUsage and the PVC size.
+
+# ── This wrapper's own resources (templates/) ──────────────────────────────────
+
+# The VictoriaLogs UI (vmui) is exposed via a Traefik IngressRoute and protected
+# by a local copy of the google-auth ForwardAuth middleware (delegates to
+# oauth2-proxy, same as the other private services). See templates/ingress.yaml.
+ingress:
+  enabled: true
+  host: logs.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy. Mirrors charts/monitoring so the IngressRoute can
+# require Google sign-in without relying on Traefik cross-namespace middleware
+# references — a local copy of the middleware is created in this namespace
+# (see templates/google-auth-middleware.yaml).
+googleAuth:
+  enabled: true
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# ── victoria-logs-single (upstream) ────────────────────────────────────────────
+victoria-logs-single:
+  # Predictable service/StatefulSet name so the IngressRoute and the Grafana
+  # datasource (in charts/monitoring) can target a stable host:
+  #   http://victoria-logs.victoria-logs.svc.cluster.local:9428
+  server:
+    fullnameOverride: victoria-logs
+
+    # SD-card friendly retention. VictoriaLogs is very write-efficient, but the
+    # collector ships EVERY pod's logs, so cap both by time AND by disk usage.
+    # retentionPeriod unit chars: h/d/w/y (bare number = months).
+    retentionPeriod: "7d"
+    # Hard cap: drop the oldest data once on-disk usage reaches this, so logs can
+    # never fill the SD card regardless of volume. Keep below the PVC size.
+    retentionDiskSpaceUsage: "4GiB"
+
+    persistentVolume:
+      enabled: true
+      size: 5Gi
+      accessModes:
+        - ReadWriteOnce
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
+  # Bundled Vector agent (DaemonSet) that tails container logs on every node and
+  # forwards them to the VictoriaLogs server. The chart auto-wires the sink to the
+  # server above; the default customConfig already parses k8s logs as JSON.
+  vector:
+    enabled: true
+    resources:
+      requests:
+        cpu: 25m
+        memory: 96Mi
+      limits:
+        memory: 192Mi

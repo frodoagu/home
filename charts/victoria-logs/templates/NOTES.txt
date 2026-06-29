@@ -1,0 +1,18 @@
+VictoriaLogs has been deployed! 🪵
+
+1. Web UI (vmui), gated by Google sign-in:
+   https://{{ .Values.ingress.host }}
+
+   (DNS must resolve {{ .Values.ingress.host }} to your RPi's public/local IP)
+
+2. Logs are also queryable from Grafana — the VictoriaLogs datasource is
+   provisioned by the monitoring chart (charts/monitoring) and points at:
+   http://victoria-logs.{{ .Release.Namespace }}.svc.cluster.local:9428
+
+3. Collection: the bundled Vector agent (DaemonSet) tails every pod's logs and
+   ships them here. Retention is capped at {{ index .Values "victoria-logs-single" "server" "retentionPeriod" }}
+   and {{ index .Values "victoria-logs-single" "server" "retentionDiskSpaceUsage" }} of disk (SD-card friendly).
+
+4. Example LogsQL queries (vmui or Grafana Explore):
+   _time:5m kubernetes.pod_namespace:home-assistant
+   _time:1h error

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: sealed-secrets
+description: >-
+  Bitnami Sealed Secrets controller — lets you commit ENCRYPTED secrets to git
+  and have the in-cluster controller decrypt them into real Secrets. Closes the
+  gap where every secret here is created out-of-band with `kubectl create secret`
+  (see docs/secrets.md), making the cluster reproducible from this repo alone.
+  Vendored from the upstream release manifest (the project's Helm repo 404s after
+  the 2025 Bitnami catalog changes); the controller lives in kube-system as
+  `sealed-secrets-controller` so `kubeseal` works with zero flags.
+type: application
+version: 0.1.0
+appVersion: "0.38.1"
+keywords:
+  - sealed-secrets
+  - secrets
+  - encryption
+  - gitops
+sources:
+  - https://github.com/bitnami-labs/sealed-secrets
+maintainers:
+  - name: frodoagu

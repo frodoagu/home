@@ -1,8 +1,10 @@
 # Secrets
 
-No credentials live in git. Every chart that needs one references a Kubernetes
-Secret created **out-of-band** (the `existingSecret` / secret-name pattern), so
-ArgoCD never sees the sensitive value and won't prune a secret it doesn't track.
+No plaintext credentials live in git. Every chart that needs one references a
+Kubernetes Secret created **out-of-band** (the `existingSecret` / secret-name
+pattern), so ArgoCD never sees the sensitive value and won't prune a secret it
+doesn't track. Once the cluster is up, secrets can alternatively be committed to
+git **encrypted** via Sealed Secrets — see [Sealed Secrets](#sealed-secrets) below.
 
 `kubeconfig` is also gitignored — see [.gitignore](../.gitignore).
 
@@ -140,3 +142,48 @@ These secrets are imperative (not GitOps-managed). To rotate, re-create with the
 same name (`kubectl create ... --dry-run=client -o yaml | kubectl apply -f -`)
 and restart the consuming workload. The two Cloudflare tokens can be the same
 token or separate ones — separate is cleaner for revocation.
+
+## Sealed Secrets
+
+The `sealed-secrets` chart (`charts/sealed-secrets`) runs the Bitnami Sealed
+Secrets controller in `kube-system` as `sealed-secrets-controller`. It lets you
+manage secrets **from git** instead of imperatively: you commit an encrypted
+`SealedSecret`, ArgoCD applies it, and the controller decrypts it into a real
+`Secret` of the same name/namespace. Only this cluster's controller can decrypt
+it, so the encrypted form is safe to commit.
+
+**Bootstrap caveat:** the secrets in the table above are still created
+out-of-band, because they must exist *before* the stack syncs — the controller
+isn't running yet at bootstrap. Sealed Secrets is for **new or rotated** secrets
+after the cluster is up.
+
+```bash
+# Install the CLI once (match the controller's appVersion in
+# charts/sealed-secrets/Chart.yaml):  macOS: brew install kubeseal
+# The controller is at kube-system/sealed-secrets-controller, so kubeseal needs
+# NO --controller-* flags.
+
+# Build a Secret manifest WITHOUT applying it, pipe through kubeseal, commit:
+kubectl create secret generic <name> -n <namespace> \
+  --from-literal=<key>='<value>' --dry-run=client -o yaml \
+| kubeseal --format yaml > charts/<chart>/templates/<name>-sealed.yaml
+```
+
+To rotate a sealed secret, re-run the command with the new value and commit the
+new `SealedSecret` (it overwrites the underlying `Secret` on sync).
+
+### Back up the controller key
+
+The controller generates a private key (a `Secret` in `kube-system` labelled
+`sealedsecrets.bitnami.com/sealed-secrets-key`). **Losing it makes every
+committed `SealedSecret` permanently unrecoverable** — back it up off the repo:
+
+```bash
+kubectl get secret -n kube-system \
+  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml
+```
+
+> Packaging note: the chart **vendors** the upstream `controller.yaml` (the
+> project's Helm repo `bitnami-labs.github.io/sealed-secrets` now 404s). To bump
+> the controller, re-fetch the release manifest, re-apply the image/resources
+> edits, and sync `Chart.yaml` `appVersion`. See `charts/sealed-secrets/`.

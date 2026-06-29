@@ -1,0 +1,31 @@
+---
+# ArgoCD Application – VictoriaLogs (single node) + bundled Vector collector.
+# Cluster-wide pod log aggregation, queryable from Grafana (datasource lives in
+# the monitoring chart) and via its own google-auth-gated UI. See charts/victoria-logs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: victoria-logs
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://logs.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/victoria-logs
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: victoria-logs
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

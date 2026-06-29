@@ -1,0 +1,26 @@
+Sealed Secrets controller deployed in kube-system as `sealed-secrets-controller`. 🔐
+
+You can now commit ENCRYPTED secrets to this repo instead of creating them
+out-of-band. One-time client setup:
+
+  # Install the CLI (matches the controller version)
+  #   macOS:  brew install kubeseal
+  #   Linux:  download kubeseal v{{ .Chart.AppVersion }} from the GitHub releases
+
+Convert an existing out-of-band secret into a committable SealedSecret, e.g. the
+Cloudflare DNS token (see docs/secrets.md for the full list):
+
+  kubectl create secret generic cloudflare-dns -n kube-system \
+    --from-literal=token=CHANGEME --dry-run=client -o yaml \
+  | kubeseal --format yaml > charts/<chart>/templates/cloudflare-dns-sealed.yaml
+
+Because the controller runs in kube-system as `sealed-secrets-controller`,
+kubeseal finds it with NO flags. A SealedSecret can only be decrypted by THIS
+cluster's controller, so it is safe to commit.
+
+⚠️  Back up the controller's private key (losing it = unrecoverable secrets):
+
+  kubectl get secret -n kube-system \
+    -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml
+
+  (store this OFF the repo — it is the master decryption key, never commit it)

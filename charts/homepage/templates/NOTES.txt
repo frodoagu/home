@@ -1,0 +1,19 @@
+Homepage has been deployed! 🏠
+
+1. Access the dashboard (gated by Google sign-in) at:
+   https://{{ .Values.ingress.host }}
+
+   (DNS must resolve {{ .Values.ingress.host }} to your RPi's public/local IP)
+
+2. Edit the dashboard by changing `config.*` in charts/homepage/values.yaml
+   (services, widgets, bookmarks, settings) — ArgoCD rolls the pod on change.
+
+{{- if .Values.serviceDiscovery.enabled }}
+
+3. Kubernetes integration is ON: the cluster resource widget reads node/pod
+   metrics, and services annotated with `gethomepage.dev/*` are auto-discovered.
+{{- else }}
+
+3. Kubernetes integration is OFF (serviceDiscovery.enabled=false) — only the
+   static services list is shown.
+{{- end }}

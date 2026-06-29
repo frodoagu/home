@@ -69,6 +69,8 @@ blackboxTargets:
     - https://yaskia.com
   authGated:
     - https://grafana.agu.com.ar
+    - https://logs.agu.com.ar
+    - https://dash.agu.com.ar
 
 # ── prometheus-blackbox-exporter (upstream) ────────────────────────────────────
 prometheus-blackbox-exporter:
@@ -106,6 +108,17 @@ prometheus-blackbox-exporter:
 
 # ── victoria-metrics-k8s-stack (upstream) ──────────────────────────────────────
 victoria-metrics-k8s-stack:
+  # Grafana datasources. The stack auto-provisions VictoriaMetrics + Alertmanager;
+  # `extra` appends our own. Point at the VictoriaLogs server (charts/victoria-logs,
+  # in the victoria-logs namespace). Reads as unavailable until that app is synced.
+  defaultDatasources:
+    extra:
+      - name: VictoriaLogs
+        access: proxy
+        uid: VictoriaLogs
+        type: victoriametrics-logs-datasource
+        url: http://victoria-logs.victoria-logs.svc.cluster.local:9428
+
   # The operator that reconciles all the VM* CRDs below.
   victoria-metrics-operator:
     resources:
@@ -269,6 +282,12 @@ victoria-metrics-k8s-stack:
         memory: 128Mi
       limits:
         memory: 512Mi
+    # VictoriaLogs datasource plugin — query the log DB (charts/victoria-logs)
+    # from Grafana Explore alongside the metrics. The plugin is signed and
+    # fetched from grafana.com on pod start (needs egress). The datasource itself
+    # is provisioned via defaultDatasources.extra below.
+    plugins:
+      - victoriametrics-logs-datasource
     # Trust the X-Auth-Request-Email header set by the google-auth ForwardAuth
     # middleware → users are auto-created as Admin, no Grafana login page.
     grafana.ini:

@@ -1,0 +1,157 @@
+# Default values for homepage (gethomepage).
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/gethomepage/homepage
+  pullPolicy: IfNotPresent
+  # Pin explicitly (keep Chart.yaml appVersion in sync). Avoid floating tags.
+  tag: "v1.13.2"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Homepage serves on port 3000.
+service:
+  type: ClusterIP
+  port: 3000
+
+# Ingress via Traefik IngressRoute, gated by the google-auth ForwardAuth middleware.
+ingress:
+  enabled: true
+  host: dash.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy (Google sign-in). Mirrors charts/monitoring so the
+# IngressRoute can require sign-in without relying on Traefik cross-namespace
+# middleware references — a local copy is created in this namespace
+# (see templates/google-auth-middleware.yaml).
+googleAuth:
+  enabled: true
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# Homepage validates the request Host header (v1.x). It MUST allow the ingress
+# host; extra hosts can be appended here (comma-separated is built in the env).
+allowedHosts: []
+
+# Kubernetes service discovery + the cluster resource widget need read access to
+# the API. Set enabled: false to drop the ServiceAccount/ClusterRole and run
+# with the static services list only.
+serviceDiscovery:
+  enabled: true
+
+# RPi-sized resources.
+resources:
+  requests:
+    cpu: 25m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── Homepage config (rendered into the /app/config/*.yaml files) ───────────────
+# Edit these freely; each key becomes one file in the mounted ConfigMap. Icons
+# are fetched by name from the dashboard-icons CDN (needs egress).
+config:
+  # settings.yaml
+  settings:
+    title: "Agu home lab"
+    headerStyle: clean
+    theme: dark
+    color: slate
+    layout:
+      Infra:
+        style: row
+        columns: 3
+      Observability:
+        style: row
+        columns: 3
+      Home:
+        style: row
+        columns: 3
+      Sites:
+        style: row
+        columns: 3
+
+  # services.yaml — curated list (auto-discovery via k8s annotations also works
+  # when serviceDiscovery is enabled). Groups are ordered as the page layout.
+  services:
+    - Infra:
+        - ArgoCD:
+            href: https://argocd.agu.com.ar
+            description: GitOps deployments
+            icon: argocd.png
+        - Traefik:
+            href: https://traefik.agu.com.ar
+            description: Ingress / reverse proxy
+            icon: traefik.png
+    - Observability:
+        - Grafana:
+            href: https://grafana.agu.com.ar
+            description: Metrics & dashboards
+            icon: grafana.png
+        - VictoriaLogs:
+            href: https://logs.agu.com.ar
+            description: Cluster logs
+            icon: victoriametrics.png
+    - Home:
+        - Home Assistant:
+            href: https://home.agu.com.ar
+            description: Smart home
+            icon: home-assistant.png
+        - Pi-hole:
+            href: https://pihole.agu.com.ar
+            description: DNS ad-blocker / DHCP
+            icon: pi-hole.png
+    - Sites:
+        - agu.com.ar:
+            href: https://agu.com.ar
+            description: Landing SPA
+            icon: si-react
+        - yaskia.com:
+            href: https://yaskia.com
+            description: Landing SPA
+            icon: si-react
+
+  # widgets.yaml
+  widgets:
+    - greeting:
+        text_size: xl
+        text: "Agu home lab"
+    - search:
+        provider: duckduckgo
+        target: _blank
+    - resources:
+        cpu: true
+        memory: true
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: cluster
+        nodes:
+          show: false
+
+  # bookmarks.yaml
+  bookmarks:
+    - Repos:
+        - home:
+            - abbr: HM
+              href: https://github.com/frodoagu/home
+
+  # kubernetes.yaml — "cluster" uses the in-cluster ServiceAccount (RBAC below).
+  kubernetes:
+    mode: cluster
+
+  # docker.yaml — no Docker socket in k3s; left empty.
+  docker: {}

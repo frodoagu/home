@@ -1,0 +1,22 @@
+# Default values for the sealed-secrets chart.
+#
+# The actual manifest (controller, CRD, RBAC, Services) is vendored verbatim in
+# templates/controller.yaml from the upstream release; only the image and the
+# controller's resources are wired to the values below.
+
+image:
+  # The controller image is maintained by the sealed-secrets project (NOT the
+  # Bitnami application catalog), so it is unaffected by the bitnamilegacy
+  # migration and still pullable. If docker.io is ever rate-limited, mirror it.
+  repository: docker.io/bitnami/sealed-secrets-controller
+  pullPolicy: IfNotPresent
+  # Empty → defaults to Chart.AppVersion (0.38.1). Keep both in sync on bumps.
+  tag: ""
+
+# Controller resources — tiny; it only wakes up to unseal SealedSecrets.
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

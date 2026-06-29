@@ -1,0 +1,20 @@
+apiVersion: v2
+name: homepage
+description: >-
+  gethomepage — a single dashboard / start page for the home lab. Serves a
+  curated list of the cluster's services (with optional widgets) and can
+  auto-discover others via Kubernetes RBAC. Exposed via a Traefik IngressRoute
+  and gated by the same google-auth ForwardAuth as the other private services.
+type: application
+version: 0.1.0
+appVersion: "v1.13.2"
+keywords:
+  - homepage
+  - dashboard
+  - homelab
+  - gitops
+sources:
+  - https://github.com/gethomepage/homepage
+  - https://gethomepage.dev/
+maintainers:
+  - name: frodoagu

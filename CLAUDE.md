@@ -26,7 +26,15 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
                      (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes.
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
-                     ConfigMap; bundled defaultDashboards are off). See docs/monitoring.md.
+                     ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
+                     Grafana datasource (see victoria-logs below). See docs/monitoring.md.
+  pihole/            Pi-hole DNS ad-blocker + DHCP server (hostNetwork). UI at pihole.agu.com.ar (google-auth).
+  victoria-logs/     VictoriaLogs single + bundled Vector collector (wrapper chart). Cluster-wide log DB;
+                     UI (vmui) at logs.agu.com.ar (google-auth) + queryable from Grafana. SD-friendly retention.
+  sealed-secrets/    Bitnami Sealed Secrets controller, VENDORED from the upstream release manifest
+                     (its Helm repo 404s). In kube-system as `sealed-secrets-controller` (kubeseal zero-flag).
+  homepage/          gethomepage dashboard/start page at dash.agu.com.ar (google-auth). k8s service
+                     discovery + cluster resource widget via RBAC.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
                      section of external links (`privateLinks`) gated by client-side Google
@@ -63,7 +71,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex,
   Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`, `git-creds`)
   are created **out-of-band with `kubectl create secret`** and
-  referenced by name — never committed. Full list in `docs/secrets.md`.
+  referenced by name — never committed. Full list in `docs/secrets.md`. The
+  `sealed-secrets` controller (kube-system) offers a git-committable alternative:
+  `kubeseal` encrypts a Secret into a `SealedSecret` only this cluster can decrypt.
 - **SPA image auto-updates**: CI builds `site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
   `charts/agu-spa/values.yaml` via git write-back. The v1.x Image Updater
@@ -76,8 +86,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - Standard Helm scaffold: `Chart.yaml`, `values.yaml`, `templates/` with
   `_helpers.tpl` (name/fullname/chart/labels/selectorLabels), `deployment.yaml`,
   `service.yaml`, `ingress.yaml` (IngressRoute), `NOTES.txt`.
-- **Wrapper charts** (`oauth2-proxy`, `argocd-image-updater`, `argocd`, `monitoring`)
-  don't have their own `deployment.yaml`: they declare the real chart as a
+- **Wrapper charts** (`oauth2-proxy`, `argocd-image-updater`, `argocd`, `monitoring`,
+  `victoria-logs`) don't have their own `deployment.yaml`: they declare the real chart as a
   `Chart.yaml` dependency, forward config under a sub-key in `values.yaml`, and add
   only their own templates (IngressRoute, CRs, ConfigMaps). Run `helm dependency
   build charts/<name>` before templating locally. The fetched `charts/*/charts/`
@@ -90,6 +100,50 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - Ingress block shape: `ingress.{enabled, host, certResolver: letsencrypt, middlewares: []}`.
 - `resources` requests/limits are tuned small for the RPi.
 - `maintainers: [{name: frodoagu}]`, `repoURL: git@github.com:frodoagu/home.git`.
+
+## Per-chart gotchas (hard-won — don't re-investigate)
+
+- **monitoring — Grafana datasources/plugins.** The VM k8s-stack provisions
+  datasources via `victoria-metrics-k8s-stack.defaultDatasources` (it renders a
+  `grafana_datasource`-labelled ConfigMap that the Grafana sidecar imports), NOT
+  Grafana's native `grafana.additionalDataSources` (that key silently renders
+  nothing here). Add custom datasources under `defaultDatasources.extra` (a list
+  of full datasource objects, tpl-rendered). There's a built-in
+  `defaultDatasources.victorialogs`, but it only auto-derives a URL when the
+  stack deploys VL itself — we run VL separately, so we use `extra` with an
+  explicit `url`. Grafana plugins go under `grafana.plugins`; the VictoriaLogs
+  datasource plugin `victoriametrics-logs-datasource` is signed and fetched from
+  grafana.com at pod start (needs egress).
+- **victoria-logs.** The upstream `victoria-logs-single` chart bundles a **Vector**
+  agent (`vector.enabled: true`, DaemonSet) whose elasticsearch sink is
+  auto-wired to the server when both are enabled — no manual endpoint needed.
+  `server.fullnameOverride: victoria-logs` gives a stable Service `victoria-logs:9428`
+  (named port `http`) for the IngressRoute and the Grafana datasource URL
+  `http://victoria-logs.victoria-logs.svc.cluster.local:9428`. SD-card friendly:
+  bound BOTH `server.retentionPeriod` and `server.retentionDiskSpaceUsage`.
+- **sealed-secrets.** Its canonical Helm repo `bitnami-labs.github.io/sealed-secrets`
+  **404s** (post-2025 Bitnami/Broadcom catalog changes), so this chart is NOT a
+  wrapper — it **vendors** the upstream release `controller.yaml` into
+  `templates/controller.yaml`. Only image/`imagePullPolicy`/`resources` are
+  parameterized; controller + CRD + RBAC + Services stay verbatim in kube-system
+  with name `sealed-secrets-controller` (so kubeseal needs no flags). The image
+  `docker.io/bitnami/sealed-secrets-controller:<ver>` is still published (it's
+  maintained by the sealed-secrets project, NOT the Bitnami app catalog → not hit
+  by the bitnamilegacy migration). To bump: re-fetch
+  `…/releases/download/v<X.Y.Z>/controller.yaml`, re-apply the same 3 edits, sync
+  `appVersion`. Back up the controller key (Secret labelled
+  `sealedsecrets.bitnami.com/sealed-secrets-key`) — losing it = unrecoverable.
+- **homepage.** v1.x validates the request `Host` header, so set
+  `HOMEPAGE_ALLOWED_HOSTS` (built from `ingress.host`) AND use **TCP** probes —
+  HTTP probes fail because the kubelet sends the pod IP as Host. `LOG_TARGETS=stdout`
+  avoids writing to the read-only `/app/config` ConfigMap mount. Config files
+  (settings/services/widgets/bookmarks/kubernetes/docker.yaml) are rendered from
+  `config.*` values via `toYaml`. Traefik IngressRoutes aren't auto-discovered
+  like k8s Ingresses, so services are listed statically in `values.yaml`.
+- **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
+  `domains:` (the DDNS updater creates the Cloudflare A records).
+- Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
+  prometheus-community) are reachable for `helm dependency build`.
 
 ## Validating changes
 

@@ -30,6 +30,14 @@ interval, short retention, ephemeral Grafana). The Pi has 8 GB RAM, so the
 memory *limits* are generous — the earlier values were too tight and caused
 OOMKills.
 
+**Logs** live in a separate app, [VictoriaLogs](../charts/victoria-logs) (single
+node + a bundled Vector collector). This chart provisions the VictoriaLogs
+**Grafana datasource** (`victoria-metrics-k8s-stack.defaultDatasources.extra` →
+`http://victoria-logs.victoria-logs.svc.cluster.local:9428`) and installs the
+signed `victoriametrics-logs-datasource` plugin (`grafana.plugins`), so logs are
+queryable from Grafana Explore (LogsQL) alongside metrics. The VictoriaLogs UI
+(vmui) is also exposed at `logs.agu.com.ar` behind google-auth.
+
 ## Dashboards
 
 All custom dashboards live as JSON under
