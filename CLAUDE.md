@@ -44,6 +44,9 @@ site/                Source for the agu.com.ar landing SPA (Vite + React + Tailw
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      .github/workflows/site.yml builds ghcr.io/frodoagu/home-site:latest (arm64);
                      Argo CD Image Updater then pins the digest into charts/agu-spa/values.yaml via git.
+.github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for site/;
+                     release.yml (auto semver tag+release from Conventional Commits on push to main)
+                     and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -80,6 +83,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   controller only reconciles `ImageUpdater` CRs — NOT Application annotations.
 - **Instant sync**: a GitHub push webhook → `argocd.agu.com.ar/api/webhook`
   refreshes apps on push (no secret configured); otherwise ArgoCD polls ~3 min.
+- **Releases**: every change lands via **squash-merge of a Conventional-Commit
+  PR title** (`pr-lint.yml` enforces it). On push to `main`, `release.yml`
+  derives the next semver tag (`feat:`→minor, `fix:`→patch, `BREAKING CHANGE`→major)
+  and publishes a GitHub release. Tags are bookkeeping only — nothing deploys off
+  them. See "Commit & release conventions".
 
 ## Chart conventions (match these when adding/editing a chart)
 
@@ -166,6 +174,35 @@ npm run build       # production bundle (also catches import/JSX errors)
 When adding logic to a site app, keep the pure/computational part in a plain
 `.js` module beside the component (e.g. `mandelbrot.js`) and add a `*.test.js`
 next to it — components stay thin and the math gets covered.
+
+## Commit & release conventions
+
+**Always use [Conventional Commits](https://www.conventionalcommits.org/).** This
+isn't cosmetic — it drives the automated tag/release pipeline, and it's enforced.
+
+- **Squash-merge only** (merge & rebase are disabled on the repo). The repo is set
+  to use the **PR title as the squash commit subject**, so the PR title is what
+  lands on `main` and what the release tooling reads. `.github/workflows/pr-lint.yml`
+  (amannn/action-semantic-pull-request) **fails any PR whose title isn't a
+  Conventional Commit** — so write `feat: …`, `fix: …`, `docs: …`, not `add thing`.
+- **`release.yml`** (push to `main`, mathieudutour/github-tag-action +
+  softprops/action-gh-release) computes the next tag from the commits since the
+  last tag and publishes a GitHub release with the conventional-commit changelog:
+
+  | Commit type | Bump |
+  |---|---|
+  | `feat:` | minor |
+  | `fix:` | patch |
+  | `feat!:` / `BREAKING CHANGE:` footer | major |
+  | `build:` / `chore:` / `docs:` / Image Updater `build:` write-backs | **none** (no release) |
+
+  `default_bump: false` is why non-bumping types (and the Image Updater's automated
+  commits) cut no release — flip it to `patch` only if you want a tag on every push.
+- **Tags/releases are bookkeeping only** — nothing deploys off them. ArgoCD syncs
+  `main` directly; the SPA still updates by digest. Don't gate deploys on a tag.
+- Versioning started from a seeded **`v0.0.0`** genesis tag (gives the action a
+  real baseline; the implicit no-tag baseline would create nothing under
+  `default_bump: false`); the first release is **`v1.0.0`**.
 
 ## Deploying
 
