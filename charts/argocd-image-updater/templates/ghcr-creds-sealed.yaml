@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: ghcr-creds
+  namespace: argocd
+spec:
+  encryptedData:
+    .dockerconfigjson: AgDAsA7qCMeNfOwTLJluouvrL0oEGUG+faadIwAwQUff9Ii6wdE89BKpuJbKqm+6VcatXfH9IhB5YIRYD75PMwWSzfW3rMBDX7p1t1hKavaJsjQj68X+VN9pH0No3eH8Bc4engc48t151dOG6iVgT64vMKc7HFrgdqWHGXVkvoKaqPnfSPd1ZRu5w2U93pltA7aaDx1QQKfxKTAznkkh8tyJIeqj6QPZMRA0gJq3rEsk8zXeJFVGVgkl0vXnM7T3S+oLxZS7LvOQgmgtC6sjy7e0X6Qw58Nz9XBZ7qzWXs/bmjzC6zu5nRylzmwL4fON3WNcoNPrl6XI3WEghMMSx9WD0poA0UGejVihK/f1odiX1TOUOP9H0yVj2eGw1mY0zMPXE2AJdNPHjlngQwwsVJl2ajwF9pOeNV7exHIkG0MZJi7MSpsnWBc/74hkuPXXsIrphM1fLHHZWpHO1NSFYj9jTEWdsc0H9qGh6XdZmiPoT45fDtgck0VA6ZmNfBClfHOOgGhLoLG0u2y23QrCDRWIp17g7z6BPxfF76Ig0T5r+YGCNTNmJt0lNzV0ySiDAxC0fUVgKXd5N15CaGtKly3V94Bsv4f6O7NXHFeMfBlNPl7NcD4i0HD6cJBHFs6wHapuUBRiM3H3IZ0lJHoKcDEQBw7gNI2tACNI9jI7HUC0JVHDcEMFNTelJWOsdrz3bRa9x376OhZoyHHXzXwowwvqZ6MrJbnHUG8tq7YKFIDr2LREoqgnS/4nBp6NyBt7Ux0OT13RoogHzdCuingZ1ovWnzDrF6XEqYiq8WPYa2bcjCi1WtXATmfhd1GT86POgsXLDKosjeEC9831LIgTER1AIDV4YKVuwqamC/UCgFtjMi9giGUql4yGIeR9nkwCy7AoJh4p+ij9j79XYF3qUU+rfCQij3I0atzlrigMTNRYJWQ=
+  template:
+    metadata:
+      name: ghcr-creds
+      namespace: argocd
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: kubernetes.io/dockerconfigjson

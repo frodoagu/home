@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: traefik-cloudflare-token
+  namespace: kube-system
+spec:
+  encryptedData:
+    CF_DNS_API_TOKEN: AgAwhaXwYb429P3HQWAo7IXSnmW88dEw1OoAPxSMrLQUyVp7BCx7s6mKv4MHLI+urPYvY90z68MYG4X+DJYpPhahN78FvbMD/KHLmPoaCEV83V8fwahrMgnBhaNZrKgraj4ZaDc/4JSWwYTL35i4MiRy46nlJh0O15pgZsD5P7PMIigumPjCDSn1xIstQwGQdaRiVYCMNZJScnwB0EdqnlMU926N5w6AoLUPDk38+5LaJnyOsY0ieiTsHDGbZHeaRJM828hiY3lOeyHvpVvjH2ew4qPOiulsULhlC4dBj+yv9gper7czobKQ6VSXHALqf8NO6CwSgVTi8jYV++ISPZ2AnrfDu6wJWuMrVRRDcmo304fHMtRzU3lW3ajhujcrqUS/fsOQfhb1aUHvxtlXdtuhLRjR4UuhBigCkcc4w9B94QKlw7ELIlR/5FmSAsb1ZcBSmXMtbVP8b7zAx09ChRj5QT0IMVjUOE9tV3GIfovvT4M3zdKqkqt0ElvqB5z/3wDtivLK262JO2zwkbBYk1N6IG/7huYh+ovQOHyQ24z92Z3xJMLBehlgZP3zT12gpSeJSizc2VMhd0YS5osrIZuVIt/AbvexFjdH2QosYCvuVJHn8lYWtsJ9u+qSNBIG8IaLR8PpYz22n6gtpvYAeiBbhSJgJD73K05lXqnBAPY0CoVxh/TWAl67TZMJP8JAY9VjxUsq67xNTmBKgYzsr4kZO/ktTWfeclDI+4q6NlbGIKzDr+2WiA0FF7jtsZtKmO44oCgoug==
+  template:
+    metadata:
+      name: traefik-cloudflare-token
+      namespace: kube-system
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: Opaque

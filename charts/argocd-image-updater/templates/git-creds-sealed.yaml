@@ -1,0 +1,16 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: git-creds
+  namespace: argocd
+spec:
+  encryptedData:
+    password: AgAwIV4NZEZNJps5ASbpxygv4NLgpT5+EJwcETdwSwe8lQWMMLx0xCfGJ5G5TMgcXOIvtdYEHTFgHGobG9hWJT+qjOxbsBsJfXRuJQxllzdXXq63u+i9GrclrZXCnDzRNJFhdIoD94R8mzXsiKzMf0GqIS1L/EjZ1u40fnuoct4J+eZserl8rIm8/06cSzCW527gHkTb4SPtkvmDbhHXvFzyTXyOIzn2HPcBS1Tj5XRLZNlucEWIfxQQVxKCm19pBWDRGNPD3qHV76ejMnHEmhh+zuRbGB++XXi9OgPc3aT8xvt776FiNw0+EuUMmGAuz2zHTBYj+ZKYphnTBcXvoFZGbKPdKlSkjiotVex9JaSerqTa7GS5Pbt3Ec12dAOBp5gPwh/WULXaZdOR96xgq5but2eHgkZQg7sk07brIA5wWUBxjP8CVBY0GnNT72f+XBnp/8OoeOZxFBdYVYxpgEY1neH/V0ujoEGQtbnpXq/aYcT+iivFB/GgffV04vtqjf3/gtAZSptQSqvgbqi74wjesi2zotG7/bwpt3hC82XvCuCYO0N6ZObJ/F/ZhwOU9aPKpUgrQybeOQ0BmJ6qZn+/q9LyWEv6yGUpxGacT0SyyHsndDCNuCO8QaiB6x/7WMUnmYV2rbhfPRFr5LqYxAfsQq8Jbu5mbi1zdGWqQXwF3k0rqUGCmc9sxZd599PNvvSqzwtxJY2H3N5IgV8kDulnjYyLwh74MOlm2+J6/Y3SYqRJoM4u6PfH
+    username: AgAljyc3/VBHdBVbtTB/0/9CmF+PBq2RQdEfufF1szwVT2I/aw/F/joMqEcDB8f6OKU46Bvjt8OAKVE/JZXuAP8OgX0I07tbJ5hoowk6MOBjG069bgUAhY3OK27vhzCwvC5/t8Lo86LBk21prxQE7FcqXgRaRmIMjTKccEuKOzcEyVEf1eCN9AX4o1yDrU16nxDnmT48z89czY/dass/6cUFxCU7TmLAPebXyto28tw3X/9mMo7hiJJEGmqZXDghQtHoPvt9ZL0FzlGuSM++P+bwHeO60b1vV/cS1KuVfDtr287USYcPkve/zYLqrEqt2zJE/qE5SF85vfIoSs0SbiJy7USdi6xiPwoRF24cWoSWaSQ3FxuslkaTIYApaU1Denq1UngR8K+YNiJcjphHrBE9DslIO5m/yh4cWXMctts0sAhGFqyjcT+AsMaNgG8qFuYRin4w643rWK+tnkzlny7m9dI3hfvUzQHQdqq63Me3rNKWHroZRCUwzekgOO4rHU3Jh9w89ABFzf+dx8kez5lR+NI9/FB8gkMxY9WiXeBMV614VgstTu1LJQ7ilEQWWheBfkR+IV6YzQZvivg2dH15kII4OB5oaXgXL0uBSA3DqAeQd0/pdvtwuJnhLTcuQVHFH44TMZlc+Z9carZyeZ8HXhPjjbyl/QZOltBISlepgdo9o55yF2xZZ0vxxGcBNftTqJksUFx+IA==
+  template:
+    metadata:
+      name: git-creds
+      namespace: argocd
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: Opaque

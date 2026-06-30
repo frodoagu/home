@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: cloudflare-ddns-token
+  namespace: cloudflare-ddns
+spec:
+  encryptedData:
+    CLOUDFLARE_API_TOKEN: AgBpRiin+Z+FIglDYQd+wq4t7dkn07WuJmFh+5Kz9LdsU0b6Moz6Y3TOgU6jwpdAvs28UYiaXtVBBSFWTdxZwMkUl0tc8vp49mwnAD5gLrQMZ26UJxjiT3sGQ3uG4tisagSCUzBKUEERJ741E7utheyr7FxE4TNiBZcxWnkooUMnZTyIaBchVHOLxQfoyxVPx16PQ+X/JIArlgun90Yf+HickHPgK3dY+X5sy8sloaJA+bOiWnOfBOOSPVAtkKHMMoKQ1AW+jX4HoAmd99duqfn5vjO41BgYJvSe0fWDNTbsEo22acaT/3w761JxLy52VfZZst/kkyfiQqTzsOkvVjNoPyq5E0057HSRZ4tvj8I91v7vqBxr3txC/fmUpwxEeKLlY7wSyNhap1ZQc5H1DhJ74Hw+7TEtoYz6lfgbtlPM2Byt3LPgSzgnqjWWOKmk8TxocV/ZlaIY5UsTDgdHSi7NjBhM8RDdgCc61KMIhtgB7X63LzyXTTMF00X04fyejF3do67aUAitOlnjGl+DeNLxIWlmJdMUwwyluFg+8/X1gF0CAzYRxXzoxj3xkydf4pGzLbWDByZY5X8fn7mbLhul+kOLF6bMaElDEPubmo78I+1FQ80IIqBLMG84Ez7OwOZVtHH/dqaqoIcCvLCar+SBR8T8IdAglIRWZvBWg48JSj4KF6Wss14OOaIYPLOO90xqmaDi+/hNOAkmtEQdHWU+jsVmiqRJsjB8OzGTolT6qKe0UJl5Fc5b+5F9iNot7IajeJmt0Q==
+  template:
+    metadata:
+      name: cloudflare-ddns-token
+      namespace: cloudflare-ddns
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: Opaque

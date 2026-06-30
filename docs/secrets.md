@@ -1,12 +1,18 @@
 # Secrets
 
-No plaintext credentials live in git. Every chart that needs one references a
-Kubernetes Secret created **out-of-band** (the `existingSecret` / secret-name
-pattern), so ArgoCD never sees the sensitive value and won't prune a secret it
-doesn't track. Once the cluster is up, secrets can alternatively be committed to
-git **encrypted** via Sealed Secrets — see [Sealed Secrets](#sealed-secrets) below.
+No plaintext credentials live in git. Every secret below is committed
+**encrypted** as a `SealedSecret` (`charts/<chart>/templates/<name>-sealed.yaml`);
+the in-cluster `sealed-secrets-controller` decrypts each into a real Secret of
+the same name/namespace, owned by the SealedSecret. Only this cluster can
+decrypt them, so the committed form is safe — and the cluster is reproducible
+from this repo alone (given the controller key backup, below). See
+[Sealed Secrets](#sealed-secrets) for the workflow, fresh-Pi bootstrap order,
+and rotation.
 
-`kubeconfig` is also gitignored — see [.gitignore](../.gitignore).
+The imperative `kubectl create secret` commands under [Create them](#create-them)
+are still how you *mint* each secret's plaintext the first time (or recover one);
+you then **seal** that value instead of applying it. `kubeconfig` is gitignored —
+see [.gitignore](../.gitignore).
 
 ## Required secrets
 
@@ -24,6 +30,12 @@ git **encrypted** via Sealed Secrets — see [Sealed Secrets](#sealed-secrets) b
 | `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI) |
 
 ## Create them
+
+These commands mint each secret's **plaintext**. Rather than applying them
+directly, append `--dry-run=client -o yaml | kubeseal --format yaml > …` to
+commit the encrypted form (see
+[Add or rotate a sealed secret](#add-or-rotate-a-sealed-secret)); apply directly
+only when bootstrapping before the controller exists.
 
 **Traefik ACME (DNS-01) — Cloudflare token:** see [tls.md](tls.md).
 
@@ -138,39 +150,93 @@ the SSH `repoURL` (see the [README](../README.md)).
 
 ## Rotation
 
-These secrets are imperative (not GitOps-managed). To rotate, re-create with the
-same name (`kubectl create ... --dry-run=client -o yaml | kubectl apply -f -`)
-and restart the consuming workload. The two Cloudflare tokens can be the same
-token or separate ones — separate is cleaner for revocation.
+To rotate, re-seal the new value and commit — the controller overwrites the
+underlying Secret on sync. See [Add or rotate a sealed secret](#add-or-rotate-a-sealed-secret).
+Restart the consuming workload only if it caches the value (most re-read on the
+next mount projection). The two Cloudflare tokens can be the same token or
+separate ones — separate is cleaner for revocation.
 
 ## Sealed Secrets
 
 The `sealed-secrets` chart (`charts/sealed-secrets`) runs the Bitnami Sealed
-Secrets controller in `kube-system` as `sealed-secrets-controller`. It lets you
-manage secrets **from git** instead of imperatively: you commit an encrypted
-`SealedSecret`, ArgoCD applies it, and the controller decrypts it into a real
-`Secret` of the same name/namespace. Only this cluster's controller can decrypt
-it, so the encrypted form is safe to commit.
+Secrets controller in `kube-system` as `sealed-secrets-controller`. Every secret
+in the table above is committed as a `SealedSecret` and decrypted in-cluster, so
+secrets are managed **from git** like everything else. The encrypted blobs live
+beside the chart that consumes them:
 
-**Bootstrap caveat:** the secrets in the table above are still created
-out-of-band, because they must exist *before* the stack syncs — the controller
-isn't running yet at bootstrap. Sealed Secrets is for **new or rotated** secrets
-after the cluster is up.
+| Secret (ns) | File |
+|---|---|
+| `traefik-cloudflare-token` (kube-system) | `charts/traefik-config/templates/traefik-cloudflare-token-sealed.yaml` |
+| `traefik-dashboard-auth` (kube-system) | `charts/traefik-config/templates/traefik-dashboard-auth-sealed.yaml` |
+| `oauth2-proxy-secrets` (oauth2-proxy) | `charts/oauth2-proxy/templates/oauth2-proxy-secrets-sealed.yaml` |
+| `argocd-google-oidc` (argocd) | `charts/argocd/templates/argocd-google-oidc-sealed.yaml` |
+| `git-creds` (argocd) | `charts/argocd-image-updater/templates/git-creds-sealed.yaml` |
+| `ghcr-creds` (argocd) | `charts/argocd-image-updater/templates/ghcr-creds-sealed.yaml` |
+| `ghcr-creds` (agu-spa) | `charts/agu-spa/templates/ghcr-creds-sealed.yaml` |
+| `cloudflare-ddns-token` (cloudflare-ddns) | `charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml` |
+| `ha-google-sa` (home-assistant) | `charts/home-assistant/templates/ha-google-sa-sealed.yaml` |
+| `alertmanager-telegram` (monitoring) | `charts/monitoring/templates/alertmanager-telegram-sealed.yaml` |
+
+Install the CLI once, matching the controller's `appVersion` in
+`charts/sealed-secrets/Chart.yaml` (`brew install kubeseal`). The controller is
+at `kube-system/sealed-secrets-controller`, so `kubeseal` needs **no**
+`--controller-*` flags (it fetches the public key from the cluster).
+
+### Fresh-Pi bootstrap — restore the key FIRST
+
+The controller generates a **new** signing key on first start, which cannot
+decrypt any SealedSecret committed here. Before (or right after) the stack
+syncs, restore the backed-up key so the controller can decrypt:
 
 ```bash
-# Install the CLI once (match the controller's appVersion in
-# charts/sealed-secrets/Chart.yaml):  macOS: brew install kubeseal
-# The controller is at kube-system/sealed-secrets-controller, so kubeseal needs
-# NO --controller-* flags.
+kubectl apply -f sealed-secrets-key.backup.yaml          # the off-repo backup
+kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
+```
 
-# Build a Secret manifest WITHOUT applying it, pipe through kubeseal, commit:
+Until the key is restored the SealedSecrets stay `Synced=False` and the
+dependent workloads crash-loop; they self-heal once the controller can decrypt.
+If the backup is lost, fall back to [Create them](#create-them) to re-mint every
+value, then re-seal (next section).
+
+### Add or rotate a sealed secret
+
+Build the Secret manifest **without applying it**, pipe through `kubeseal`, and
+commit. To rotate, do the same with the new value — the new SealedSecret
+overwrites the Secret on sync:
+
+```bash
 kubectl create secret generic <name> -n <namespace> \
   --from-literal=<key>='<value>' --dry-run=client -o yaml \
 | kubeseal --format yaml > charts/<chart>/templates/<name>-sealed.yaml
 ```
 
-To rotate a sealed secret, re-run the command with the new value and commit the
-new `SealedSecret` (it overwrites the underlying `Secret` on sync).
+To re-seal from a secret **already live** in the cluster (no plaintext re-entry),
+strip server-side fields and **all annotations** first — a
+`kubectl.kubernetes.io/last-applied-configuration` annotation embeds the value in
+plaintext base64 and would leak into git:
+
+```bash
+kubectl get secret <name> -n <ns> -o json \
+| jq '{apiVersion:"v1", kind:"Secret",
+       metadata:({name:.metadata.name, namespace:.metadata.namespace}
+                 + (if .metadata.labels then {labels:.metadata.labels} else {} end)),
+       type:.type, data:.data}' \
+| kubeseal --format yaml > charts/<chart>/templates/<name>-sealed.yaml
+```
+
+### Adopting a pre-existing (imperative) Secret
+
+If a plain Secret of that name already exists, the controller refuses to
+overwrite it (`already exists and is not managed by SealedSecret`) unless the
+**existing Secret** carries `sealedsecrets.bitnami.com/managed: "true"`. Annotate
+it once, then apply the SealedSecret; the controller adopts it **in place** (sets
+an owner reference, value unchanged — no downtime). The committed manifests carry
+this annotation in `spec.template.metadata` so re-derived Secrets stay adoptable:
+
+```bash
+kubectl annotate secret <name> -n <ns> sealedsecrets.bitnami.com/managed=true --overwrite
+kubectl apply -f charts/<chart>/templates/<name>-sealed.yaml   # or let ArgoCD sync
+```
 
 ### Back up the controller key
 

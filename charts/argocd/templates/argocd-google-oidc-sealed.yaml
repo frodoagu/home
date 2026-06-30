@@ -1,0 +1,18 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: argocd-google-oidc
+  namespace: argocd
+spec:
+  encryptedData:
+    clientId: AgA57TjgoYD8liPY59BND5Py5fTkvxLBM9V5lqF5Q5zbQLhwC7sYEvSc8TLlyS6d1IbgKhfqQlFjvMc4q6USAAzvI2KuseaqlAb7R8x675WNZRfMwZHcwgfNXvTQH52npTNy5IiYRGbqXq31ap59i/TiDoA9DWcg1ikLdaukOPR9lBPIHcKuBaamQGtwrUNKmoiGKGiPyOdZjRVhdvh1r1xTREHqjf7QL9H+iyNPKLHumqrI9ImTDe+n89zRZFczPtTAbHdAKhXduPA4XJFVInqXELKxSw2W1GaU5pKyOXq7T0TrP8K+MXSKDodbHnYmiau4luK+4jWhhui1B7j62TFXRbwd+/rjWjuMTilFVsXiIdJsDIj5idvaYvrczaupbZup6v83Fb7xo8pqfuPdg2rJS/HR8OWQ/dzSjz2WTEZo4PMnFssD4oG3E13TXh6giWYIroM7f5iD7BeZTEnRcOOufr0Coa5eYqcDbw9GwUx7rqiS+eBcnoSGMNjH9I3Kw0/6Sk1IDe7/QxEsdiFaBdosl1onVR4d/u0cWOD0yDfi3yMOb4YT0qktxDijAc0dNFkIGP2d0BWt7sFcRFR5BKtGm214XT/A6rd+W4LFDly1gKp2idEfrP3vAftGJ1PYfjmKintJZheG4lPbHbVqHZW0q1dZx0twz+JSvJJMngi6rCvT4AoLFTXj8QIpWP08OfV6dmMOT+mEnLc/qOFL29moszHmToyhVgYZFvX2KysQqf3ZPfUbSli4RZUQjTOfrSXXpayTooLuX/7fhYmocHIgCLZKjCwVtHXp
+    clientSecret: AgB3YIOnJd9EYJ7H66/m1Q+1s7LX4C6uo4WqutJMT/K7U+1O9a2ramB60P7KuyAIy4EHyJs3F/6yKqixSiZfOXunF2OTcQ/qd7rgaz7aXxKtKu8Ar5Lt19ugFVIyYBasYQr/rxrBC+oeArPjFgwf+ZIJwuGklCfeerxS7xetCu7IyhqwBv9awQxK4khUCWrnh3qq8jvUqKpYRRlBA0iVE9CgRWB3ncA9F6EAdd9FcjhT65VnLn55rQXLPyySqDXzjSEQzCaQMjrKVnUz1RFkKoLqFkVt7HymUm8bzHEtRj0CWDg+9LElKfM7B8++1Qu446YoBpPny1iA4OOIYAC1FDkSpxIloc2fFuifrCOf6qfXGPuVaqt4/OkWOFnXS/v2s1/TQQPVH+u/3TnUHxtaq7E/xx6GlXO00/+252DQZEKArldgsCaaJgBaqGDNIqzZdJQoGfkU9T3BMXU2lYQIf7FveF5dedAQOSPE0m/+0aZqAlYMas9DvYrkXuH+IFcypVmnYf2uWcCkQaO3hXDH/jKG9EcAsHhoL330MMNg33Kc93HcDzdFJtcNbtl789YuQRQjd0K9unLHL+lEb3RLzAspcP0aVF012Ug1nwP1Wg/67ULiYU1hVVftbzwDXih7VhqQ/7gzHo0pWg1Aem4gQvIPfad/ImcHiL5xqkhS05LvBZAsxZGle90dRdNYUC0owrZS2I8VI3H9n6kCS6utevnq+0I6BI3rUv+4dLDtK3lOVtdeEQ==
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: argocd
+      name: argocd-google-oidc
+      namespace: argocd
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: Opaque

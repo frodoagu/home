@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: alertmanager-telegram
+  namespace: monitoring
+spec:
+  encryptedData:
+    bot-token: AgAayIjPB2XnJKorQLrNUwnr7gNAgujxFXFWZ9wtVjT8cd0uT1CLaBHXMeX8yAsABl/HtGK2YaCeFreni7poOqDU4jyu0/wOIeuYXPpx9+HffIhpi3kqHBXRU7YqqpziUNHUpjZx72cNLY2w86SqBalyLcDopiY22iWqdnqb+EwvehBQFhRQlMq3PS0PQ25TP7m/ywTqB5tMfSOd38zrA8B1tRId8/dk7pH+KX3WGGr4WPoyay/O8FAnyDr+l14Wkzsh9S8JwQuk2Oq3INBb7CRpCJOFxLNIAM3u4JT0qPFJDzCEHf1w0pjtnh2YnnGd+dIFfOE+5jumL9EUNp7OkBCOAW15qCMTdApbXxRC6d1B5+UULEtVXeNdDoo/+8cQRRvx+8qPjO+27/lVoexaDBM9ZwT0StuCK6XpzQyg3mg2rLgsn50DS9FpaV9EkQdbyKpG29eoYmevfWE0BaE/7lvlii5HW3cfvniRfjGC0tYhWInBvYe9QktDSabKgHoj1m/rluLVq/T9HZmTVrWzU4m9Nv6sL1OIHPXen46JNSBxsp5N6CnsLS5eDc5pO2HKM4i3Ct43gO3PXXK6smD399MZlyYMxADXp9Zkrn4X28CmbyqTgc7cy91wfGSocf67sB37xeLgmQkM7AyahPjT4GQpbXN64ALtymBtf/XU4ZNYx5FfZnq/osLjydTuqn8Jw6OURFc3MKW4lMTezt5ot/gT8s+nCL+oASq7zZgJJEsZI0E5pJR91T9ffi9pfXiX
+  template:
+    metadata:
+      name: alertmanager-telegram
+      namespace: monitoring
+      annotations:
+        sealedsecrets.bitnami.com/managed: 'true'
+    type: Opaque
