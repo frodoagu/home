@@ -37,6 +37,15 @@ export default [
     },
   },
   {
+    // Context providers intentionally colocate their hook/util exports with the
+    // Provider component. That trips react-refresh's fast-refresh heuristic but
+    // is an idiomatic pattern, so relax that one rule for *Provider.jsx files.
+    files: ["**/*Provider.jsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  {
     // Vitest runs with globals: true (see vite.config.js).
     files: ["**/*.test.{js,jsx}", "src/test/**"],
     languageOptions: {

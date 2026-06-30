@@ -937,7 +937,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language, a
       nPath: toStr(raw.n),
       yMax,
     };
-  }, [spectra, ampScaleMax]);
+  }, [spectra, ampScaleMax, cY, plotH, plotW]);
 
   const yS = (plotH / 2) / yMax;
   const y = (amp) => cY - amp * yS;
@@ -1053,7 +1053,7 @@ function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle,
       paths: PHASES.map((p) => ({ key: p.key, color: p.color, pts: toStr(raw[p.key]) })),
       yMax,
     };
-  }, [volt, spectra, R, Rn, faults, neutralOpen]);
+  }, [volt, spectra, R, Rn, faults, neutralOpen, cY, plotH, plotW]);
 
   const yS = (plotH / 2) / yMax;
   const y = (v) => cY - v * yS;
