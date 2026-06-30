@@ -1,0 +1,32 @@
+name: 🔤 PR · Conventional Commit Lint
+
+# Fail the check when a pull request title isn't a Conventional Commit, e.g.
+#   "add playlist"        → ❌
+#   "feat: add playlist"  → ✅
+#
+# This guards the Release workflow: with squash-merge, GitHub seeds the squash
+# commit message from the PR title, so a conventional title is exactly what
+# lands on `main` and drives the semver bump + changelog. If you use merge
+# commits instead, lint the individual commits with wagoid/commitlint-github-action
+# rather than the title (see the note in release.yml).
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+# Re-running on a new push/title-edit supersedes the in-flight check for the PR.
+concurrency:
+  group: pr-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔤 Lint PR title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
