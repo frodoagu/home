@@ -5,3 +5,12 @@ charts/*/Chart.lock
 # Cluster credentials – never commit
 kubeconfig
 *.kubeconfig
+
+# Secret material – never commit (critical now that this repo can go public).
+# The sealed-secrets controller private key decrypts EVERY committed SealedSecret.
+sealed-secrets-key*.yaml
+*.backup.yaml
+*.key
+*.pem
+*.env
+.env
