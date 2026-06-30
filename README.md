@@ -18,6 +18,7 @@ services running on a Raspberry Pi with k3s.
 | [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/agu-spa/` |
+| [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 | [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, blackbox uptime, Telegram alerts | `charts/monitoring/` |
@@ -46,10 +47,15 @@ flowchart TD
         Argo[Argo CD<br/>Google login · Dex/OIDC]
         IU[Argo CD<br/>Image Updater]
         OA2[oauth2-proxy<br/>Google ForwardAuth]
+        SS[sealed-secrets<br/>controller · decrypts git secrets]
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
         SPA[agu-spa<br/>React SPA]
+        YASKIA[yaskia-spa<br/>React SPA · ext. repo]
         DDNS[cloudflare-ddns]
+        PIHOLE[Pi-hole<br/>hostNetwork · DNS/DHCP]
         MON[monitoring<br/>VictoriaMetrics · Grafana<br/>node/RPi · blackbox]
+        VL[VictoriaLogs<br/>logs + Vector collector]
+        HP[homepage<br/>start page]
     end
 
     Router --> Traefik
@@ -57,20 +63,31 @@ flowchart TD
     Traefik -->|home.agu.com.ar| HA
     Traefik -->|agu.com.ar| SPA
     Traefik -->|www.agu.com.ar 301| SPA
+    Traefik -->|yaskia.com| YASKIA
     Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
     Traefik -->|auth.agu.com.ar| OA2
     Traefik -->|grafana.agu.com.ar| MON
-    Traefik -.->|ForwardAuth on<br/>dashboard + grafana| OA2
+    Traefik -->|logs.agu.com.ar| VL
+    Traefik -->|dash.agu.com.ar| HP
+    Traefik -->|pihole.agu.com.ar| PIHOLE
+    Traefik -.->|ForwardAuth on dashboard +<br/>grafana · logs · dash · pihole| OA2
 
     Argo -.->|App of Apps sync| Traefik
     Argo -.-> HA
     Argo -.-> SPA
+    Argo -.-> YASKIA
     Argo -.-> DDNS
     Argo -.-> IU
     Argo -.-> OA2
+    Argo -.-> SS
+    Argo -.-> PIHOLE
     Argo -.-> MON
+    Argo -.-> VL
+    Argo -.-> HP
 
+    SS -.->|unseal SealedSecrets| Argo
     MON -.->|alerts| TG([Telegram])
+    VL -.->|datasource| MON
 
     Traefik -->|ACME DNS-01| CF
     DDNS -->|update A records| CF
@@ -101,6 +118,13 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   - `traefik.agu.com.ar` → Traefik dashboard
   - `auth.agu.com.ar` → oauth2-proxy (Google sign-in for the dashboard)
   - `grafana.agu.com.ar` → Grafana (monitoring, gated by the same Google sign-in)
+  - `logs.agu.com.ar` → VictoriaLogs UI (google-auth gated)
+  - `dash.agu.com.ar` → homepage start page (google-auth gated)
+  - `pihole.agu.com.ar` → Pi-hole admin UI (google-auth gated)
+- A **second zone**, `yaskia.com`, if you run the `yaskia-spa` app. The same
+  `cloudflare-ddns` updater also tracks `yaskia.com` / `www.yaskia.com`, so the
+  DDNS token must have **Zone:DNS:Edit on both zones** (one token scoped to both,
+  or drop the `yaskia.com` entries from `charts/cloudflare-ddns/values.yaml`).
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
 
 ## Setup from a fresh Raspberry Pi OS
@@ -153,14 +177,16 @@ sudo k3s kubectl -n kube-system get deploy traefik
 # Helm
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
+# kubectl — k3s ships it as `k3s kubectl`, but the rest of this guide (and helm)
+# calls plain `kubectl`, so put a standalone binary on PATH. RPi 4 is arm64:
+curl -fsSLO "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl"
+sudo install -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+
 # Point kubectl/helm at the k3s cluster
 mkdir -p ~/.kube
 sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 sudo chown "$(id -u):$(id -g)" ~/.kube/config
-export KUBECONFIG=~/.kube/config
-
-# (k3s already provides kubectl as `k3s kubectl`; the line above lets the
-#  standalone kubectl/helm binaries reach the cluster too.)
+export KUBECONFIG=~/.kube/config   # add to ~/.bashrc to persist across sessions
 ```
 
 ### 5 – Clone this repo
@@ -184,169 +210,93 @@ helm upgrade --install argocd charts/argocd \
   --dependency-update
 ```
 
-### 2 – Bootstrap the stack (App of Apps)
+### 2 – Give ArgoCD access to the Git repo
 
-Edit the `repoURL` in `apps/root.yaml` (and other app manifests) to match your fork, then:
+Every `apps/*.yaml` (and `apps/root.yaml`) uses the **SSH** remote
+`git@github.com:frodoagu/home.git`, so ArgoCD needs an SSH key to read it — even
+for a public repo, SSH always authenticates. Add a **read-only deploy key** for
+your fork to ArgoCD (skip this only if you switch every `repoURL` to an
+anonymous `https://…` URL of a public repo):
+
+```bash
+ssh-keygen -t ed25519 -f argocd-repo -N '' -C 'argocd@home'
+# Add the PUBLIC key (argocd-repo.pub) as a Deploy key on the GitHub repo
+# (Settings → Deploy keys). Read-only is enough for sync; Image Updater
+# write-back uses git-creds (a PAT) separately.
+kubectl -n argocd create secret generic repo-home \
+  --from-literal=type=git \
+  --from-literal=url=git@github.com:frodoagu/home.git \
+  --from-file=sshPrivateKey=argocd-repo
+kubectl -n argocd label secret repo-home argocd.argoproj.io/secret-type=repository
+rm argocd-repo argocd-repo.pub   # private key now lives only in-cluster
+```
+
+### 3 – Bootstrap the stack (App of Apps)
+
+Edit the `repoURL` in `apps/root.yaml` (and the other app manifests) to match your fork, then:
 
 ```bash
 kubectl apply -f apps/root.yaml
 ```
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
-Let's Encrypt + the dashboard) and deploys the remaining apps (oauth2-proxy,
-Home Assistant, agu-spa, argocd-image-updater, cloudflare-ddns, monitoring).
+Let's Encrypt + the dashboard) and deploys the rest: `sealed-secrets`,
+`oauth2-proxy`, Home Assistant, `agu-spa`, `yaskia-spa`, `argocd-image-updater`,
+`cloudflare-ddns`, `monitoring`, `victoria-logs`, `homepage`, and `pihole`.
+Workloads whose secrets aren't decrypted yet stay `Synced`/crash-loop until the
+next step provides the Sealed Secrets key.
 
-### 3 – Create the required secrets
+### 4 – Provision secrets
 
-These hold credentials that must never live in git. See [docs/secrets.md](docs/secrets.md)
-for the full list, keys, and rotation notes.
+**You almost never run `kubectl create secret` here.** Every credential the stack
+needs is committed **encrypted** as a `SealedSecret`
+(`charts/<chart>/templates/<name>-sealed.yaml`); the `sealed-secrets` controller
+deployed in the previous step decrypts each into a real Secret automatically. So
+bootstrapping secrets means **giving the controller the right private key**, not
+creating ten secrets by hand.
 
-**Traefik ACME — Cloudflare token** (Zone:DNS:Edit on `agu.com.ar`; used for the
-DNS-01 challenge — see [docs/tls.md](docs/tls.md)):
-
-```bash
-kubectl create secret generic traefik-cloudflare-token -n kube-system \
-  --from-literal=CF_DNS_API_TOKEN='your-cloudflare-token'
-```
-
-**Google sign-in (oauth2-proxy + ArgoCD).** The Traefik dashboard and ArgoCD are
-both gated by Google. They share one Google OAuth client — add **three** redirect
-URIs to it in the Cloud Console: `https://auth.agu.com.ar/oauth2/callback`,
-`https://argocd.agu.com.ar/api/dex/callback` (and keep the SPA's existing one).
-The dashboard goes through `oauth2-proxy` (Traefik ForwardAuth); ArgoCD uses its
-own bundled Dex/OIDC.
+**If you have a controller-key backup** (existing cluster, re-flash, or you saved
+the key — see the warning below), restore it and let every SealedSecret decrypt:
 
 ```bash
-# oauth2-proxy — Google gate for the Traefik dashboard
-kubectl create namespace oauth2-proxy
-kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
-  --from-literal=client-id='<google-client-id>' \
-  --from-literal=client-secret='<google-client-secret>' \
-  --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
-
-# ArgoCD Dex — Google login (label is REQUIRED so ArgoCD resolves the $-refs)
-kubectl create secret generic argocd-google-oidc -n argocd \
-  --from-literal=clientId='<google-client-id>' \
-  --from-literal=clientSecret='<google-client-secret>'
-kubectl label secret argocd-google-oidc -n argocd app.kubernetes.io/part-of=argocd
+kubectl apply -f sealed-secrets-key.backup.yaml          # the off-repo backup
+kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
 ```
 
-> **Fallback — Traefik dashboard HTTP basic auth.** Only needed if you set
-> `googleAuth.enabled: false` + `dashboardAuth.enabled: true` in
-> `charts/traefik-config`. Needs `htpasswd` (`sudo apt install -y apache2-utils`):
->
-> ```bash
-> htpasswd -nb admin 'your-password' | \
->   kubectl create secret generic traefik-dashboard-auth \
->     -n kube-system --from-file=users=/dev/stdin
-> ```
+That's it — the committed SealedSecrets unseal into real Secrets and the
+crash-looping workloads self-heal.
 
-**Cloudflare DDNS** (API token with Zone:DNS:Edit on `agu.com.ar`):
+**If this is a brand-new fork** (no backup, and the committed blobs were sealed
+with someone else's key), you instead **mint each secret once and re-seal it into
+your repo**. [docs/secrets.md](docs/secrets.md) has the full list (Cloudflare
+tokens, the Google OAuth client for oauth2-proxy + ArgoCD Dex, GHCR/`git-creds`
+for the SPA pipeline, Telegram, optional Home Assistant HomeGraph) with the exact
+`kubectl create secret … | kubeseal` command for each. Two external setup steps
+aren't k8s secrets and are still required either way:
 
-```bash
-kubectl create namespace cloudflare-ddns
-kubectl create secret generic cloudflare-ddns-token \
-  -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-cloudflare-token'
-```
-
-The private SPA pipeline (`ghcr.io/frodoagu/home-site`) uses **one** GitHub
-**classic Personal Access Token** for everything. Create it at
-[github.com/settings/tokens](https://github.com/settings/tokens) with both
-scopes:
-
-- **`read:packages`** — pull the image / query its digest (GHCR has no usable
-  fine-grained-token path for container pulls; use a *classic* token).
-- **`repo`** — let Argo CD Image Updater push the digest write-back commit to
-  this private repo.
-
-**1. GHCR pull credentials** (`ghcr-creds`) — the same `docker-registry` secret
-in **two** namespaces: one for the kubelet to pull (`agu-spa`), one for Image
-Updater to query the digest (`argocd`):
-
-```bash
-GHCR_PAT='your-classic-PAT-with-repo+read:packages'
-for ns in agu-spa argocd; do
-  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
-  kubectl -n "$ns" create secret docker-registry ghcr-creds \
-    --docker-server=ghcr.io \
-    --docker-username=frodoagu \
-    --docker-password="$GHCR_PAT"
-done
-```
-
-**2. Image Updater write-back credentials** (`git-creds`) — Image Updater commits
-the pinned `latest@sha256:...` back to the repo over HTTPS, using the same token:
-
-```bash
-kubectl -n argocd create secret generic git-creds \
-  --from-literal=username=frodoagu \
-  --from-literal=password='your-classic-PAT-with-repo+read:packages'
-```
-
-> The write-back is already wired in the `ImageUpdater` CR
-> ([charts/argocd-image-updater/templates/agu-spa-imageupdater.yaml](charts/argocd-image-updater/templates/agu-spa-imageupdater.yaml)):
-> `method: git:secret:argocd/git-creds` plus an HTTPS `repository` override (the
-> app's own `repoURL` is SSH, which a PAT can't drive). No further config needed
-> once `git-creds` exists. The v1.x controller only reconciles `ImageUpdater`
-> resources, so each app that wants auto-updates gets one of these CRs.
->
-> _Prefer narrower scope?_ Drop `repo` from the token and instead give the Argo CD
-> repository a **read-write deploy key**; then set the CR's `method: git` and the
-> HTTPS `repository` back to the SSH remote so write-back uses it directly.
-
-**3. Alertmanager Telegram token** (`alertmanager-telegram`) — so monitoring
-alerts (RPi temperature/throttling, endpoint down, cert expiry, …) reach you.
-Create a bot via [@BotFather](https://t.me/BotFather), then set the numeric
-`chat_id` in `charts/monitoring/values.yaml`:
-
-```bash
-kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n monitoring create secret generic alertmanager-telegram \
-  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
-```
-
-See [docs/secrets.md](docs/secrets.md) for rotation notes.
-
-> The Google Assistant integration needs an extra secret (`ha-google-sa`) only
-> if you enable it — see [docs/google-assistant.md](docs/google-assistant.md).
-
-#### Committing secrets to git with Sealed Secrets
-
-The secrets above are created **out-of-band** because they must exist *before*
-the stack syncs (the Sealed Secrets controller isn't running yet at bootstrap).
-Once the cluster is up, the `sealed-secrets` controller (in `kube-system`) lets
-you manage any **new or rotated** secret from git instead: you commit an
-*encrypted* `SealedSecret` that only this cluster's controller can decrypt.
-
-```bash
-# One-time: install the CLI matching the controller (appVersion in
-# charts/sealed-secrets/Chart.yaml). macOS: brew install kubeseal
-# The controller runs in kube-system as `sealed-secrets-controller`, so kubeseal
-# finds it with NO flags.
-
-# Seal a secret straight into the repo (example: the Cloudflare DDNS token):
-kubectl create secret generic cloudflare-ddns-token -n cloudflare-ddns \
-  --from-literal=CLOUDFLARE_API_TOKEN='your-token' \
-  --dry-run=client -o yaml \
-| kubeseal --format yaml \
-  > charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml
-
-# Commit it; ArgoCD applies the SealedSecret and the controller unseals it into a
-# real Secret of the same name/namespace. The plaintext never touches git.
-```
+- **Google OAuth client** — add the redirect URIs
+  `https://auth.agu.com.ar/oauth2/callback` and
+  `https://argocd.agu.com.ar/api/dex/callback` in the Cloud Console (one client
+  backs both oauth2-proxy and ArgoCD Dex). See [docs/secrets.md](docs/secrets.md).
+- **Telegram `chat_id`** — set it in `charts/monitoring/values.yaml` (only the
+  bot token is a secret).
 
 > ⚠️ **Back up the controller's private key** — losing it makes every committed
-> `SealedSecret` unrecoverable:
+> `SealedSecret` permanently unrecoverable:
 >
 > ```bash
 > kubectl get secret -n kube-system \
 >   -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.backup.yaml
 > ```
 >
-> Store that file **off** the repo (it is the master decryption key). See
-> [docs/secrets.md](docs/secrets.md).
+> Store that file **off** the repo (it is the master decryption key). Full
+> rotation, adoption, and re-seal workflow in [docs/secrets.md](docs/secrets.md).
 
-### 4 – Customise values
+Log in to the ArgoCD UI at `argocd.agu.com.ar` to watch everything converge
+(initial admin password: `kubectl -n argocd get secret argocd-initial-admin-secret
+-o jsonpath='{.data.password}' | base64 -d`).
+
+### 5 – Customise values
 
 Hosts and email are already set for `agu.com.ar`. If you fork to another
 domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
@@ -364,7 +314,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/homepage/values.yaml` | `ingress.host`, `config.*` (services/widgets/bookmarks/settings), `serviceDiscovery.enabled` |
 | `charts/sealed-secrets/values.yaml` | `image.tag` (keep in sync with `Chart.yaml` appVersion), `resources` |
 
-### 5 – Instant sync (optional Git webhook)
+### 6 – Instant sync (optional Git webhook)
 
 By default ArgoCD polls git every ~3 min. To deploy on push instead, point a
 GitHub webhook at the ArgoCD server (already exposed at `argocd.agu.com.ar`):
@@ -393,10 +343,14 @@ webhook config (`-f config[secret]=...`).
 │   ├── argocd.yaml
 │   ├── argocd-image-updater.yaml
 │   ├── oauth2-proxy.yaml
+│   ├── sealed-secrets.yaml
 │   ├── home-assistant.yaml
 │   ├── agu-spa.yaml
+│   ├── yaskia-spa.yaml      # 2nd SPA — chart lives in the external frodoagu/yaskia repo
 │   ├── cloudflare-ddns.yaml
 │   ├── monitoring.yaml
+│   ├── victoria-logs.yaml
+│   ├── homepage.yaml
 │   └── pihole.yaml
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
@@ -404,24 +358,60 @@ webhook config (`-f config[secret]=...`).
     ├── argocd/              # Argo CD wrapper (upstream chart)
     ├── argocd-image-updater/ # Argo CD Image Updater wrapper (auto-deploys new SPA image digests)
     ├── oauth2-proxy/        # Google ForwardAuth backend gating the Traefik dashboard
+    ├── sealed-secrets/      # Sealed Secrets controller (vendored) — decrypts committed SealedSecrets
     ├── home-assistant/      # Home Assistant Helm chart
     ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
     ├── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
     ├── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
+    ├── victoria-logs/      # VictoriaLogs single-node + Vector collector (cluster-wide logs)
+    ├── homepage/           # gethomepage start page (dash.agu.com.ar, google-auth gated)
     └── pihole/             # Pi-hole DNS ad-blocker + LAN DHCP server (hostNetwork)
 ```
+
+> `yaskia-spa` has no `charts/` entry here — its Helm chart and site source live
+> in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo;
+> only its ArgoCD `Application` ([apps/yaskia-spa.yaml](apps/yaskia-spa.yaml))
+> lives in this repo, pointing ArgoCD at that external chart.
+
+## Releases & commit conventions
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/), which
+drives automated tagging and releases:
+
+- **Squash-merge only.** The repo allows only squash-merge, and is configured so the
+  **PR title becomes the squash commit** on `main`. The PR title therefore **must**
+  be a Conventional Commit — [`.github/workflows/pr-lint.yml`](.github/workflows/pr-lint.yml)
+  fails the PR otherwise (so `feat: add playlist`, not `add playlist`).
+- **Auto tag + release.** On push to `main`,
+  [`.github/workflows/release.yml`](.github/workflows/release.yml) reads the
+  Conventional Commits since the last tag and cuts the next semver tag + a GitHub
+  release (with a conventional-commit changelog):
+
+  | Commit type | Bump |
+  |---|---|
+  | `feat:` | minor |
+  | `fix:` | patch |
+  | `feat!:` / `BREAKING CHANGE:` | major |
+  | `build:` / `chore:` / `docs:` / Image Updater write-backs | none (no release) |
+
+- **Tags are bookkeeping only** — nothing deploys off them. ArgoCD still syncs
+  `main` directly and the SPA image still updates by digest; releases just give a
+  human-readable changelog.
+
+Versioning started from a `v0.0.0` genesis tag; the first release is `v1.0.0`.
 
 ## Documentation
 
 Per-topic guides live in [docs/](docs/):
 
 - [docs/monitoring.md](docs/monitoring.md) — VictoriaMetrics + Grafana stack: dashboards, Telegram alerts, blackbox probing, Traefik metrics, operating notes
-- [docs/secrets.md](docs/secrets.md) — all out-of-band secrets and how to create them
+- [docs/secrets.md](docs/secrets.md) — every secret as a committed `SealedSecret`: the controller-key bootstrap, minting/rotation/adoption, and the off-repo key backup
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
+- [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
 
 ## Let's Encrypt notes
 

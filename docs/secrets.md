@@ -83,7 +83,9 @@ kubectl create secret generic argocd-google-oidc -n argocd \
 kubectl label secret argocd-google-oidc -n argocd app.kubernetes.io/part-of=argocd
 ```
 
-**cloudflare-ddns token:**
+**cloudflare-ddns token.** `charts/cloudflare-ddns/values.yaml` `domains:` spans
+**two zones** — `agu.com.ar` *and* `yaskia.com` (for `yaskia-spa`) — so this token
+needs **Zone:DNS:Edit on both zones** (or drop the `yaskia.com` entries):
 
 ```bash
 kubectl create namespace cloudflare-ddns

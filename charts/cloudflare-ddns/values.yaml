@@ -14,7 +14,8 @@ image:
   pullPolicy: IfNotPresent
 
 cloudflare:
-  # Cloudflare API token with Zone:DNS:Edit on the agu.com.ar zone.
+  # Cloudflare API token with Zone:DNS:Edit. The domains below span TWO zones
+  # (agu.com.ar AND yaskia.com), so the token must cover both.
   # Create the secret out-of-band so the token never lives in git:
   #   kubectl create secret generic cloudflare-ddns-token \
   #     -n cloudflare-ddns --from-literal=CLOUDFLARE_API_TOKEN='your-token'
