@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit config for the agu home-lab GitOps repo.
+# Docs: https://docs.coderabbit.ai/getting-started/configure-coderabbit
+language: en-US
+early_access: false
+
+reviews:
+  # "chill" keeps noise low for a solo home-lab repo; bump to "assertive" for stricter nits.
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  # Paths excluded from review (vendored deps, generated bundles, big JSON, secrets).
+  path_filters:
+    - "!kubeconfig"
+    - "!charts/*/charts/**"        # Helm deps fetched at sync time (gitignored)
+    - "!charts/*/Chart.lock"
+    - "!charts/monitoring/dashboards/**"  # large generated Grafana dashboard JSON
+    - "!site/package-lock.json"
+    - "!site/dist/**"
+
+  # Context fed to the reviewer per path. Mirrors CLAUDE.md conventions.
+  path_instructions:
+    - path: "charts/**"
+      instructions: >-
+        Helm charts deployed via ArgoCD to a single-node k3s Raspberry Pi.
+        Image tags must be pinned explicitly in values.yaml (no latest/stable) and
+        Chart.yaml appVersion kept in sync. Services expose themselves with a Traefik
+        IngressRoute (apiVersion traefik.io/v1alpha1, entryPoints [websecure],
+        tls.certResolver letsencrypt) — not a k8s Ingress. resources requests/limits
+        should stay small (RPi-sized). Wrapper charts declare the upstream chart as a
+        Chart.yaml dependency and only add their own templates. Flag any committed
+        secrets — secrets are managed out-of-band (kubectl create secret) or via
+        SealedSecrets, never plaintext in git.
+    - path: "apps/**"
+      instructions: >-
+        ArgoCD Application manifests (App-of-Apps), all in namespace argocd, one file
+        per workload pointing at a chart in charts/. Check destination namespace,
+        source path, and syncPolicy consistency.
+    - path: ".github/workflows/**"
+      instructions: >-
+        GitHub Actions building the site image (arm64) and running site tests.
+        Flag unpinned third-party actions and missing least-privilege permissions.
+    - path: "site/**"
+      instructions: >-
+        Vite + React + Tailwind SPA for agu.com.ar. Pure/computational logic lives in
+        plain .js modules beside the component (e.g. mandelbrot.js) and must have a
+        *.test.js[x] Vitest test. Components stay thin. privateLinks are gated by a
+        client-side Google sign-in (treat client-side auth as non-secret).
+
+  tools:
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    checkov:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
