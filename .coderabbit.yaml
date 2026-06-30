@@ -57,6 +57,8 @@ reviews:
         client-side Google sign-in (treat client-side auth as non-secret).
 
   tools:
+    eslint:
+      enabled: true
     yamllint:
       enabled: true
     markdownlint:
