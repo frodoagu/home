@@ -17,8 +17,8 @@ spec:
       kind: Rule
       {{- if .Values.googleAuth.enabled }}
       middlewares:
-        - name: google-auth
         - name: google-auth-signin
+        - name: google-auth
       {{- end }}
       services:
         - name: {{ .Release.Name }}-grafana
