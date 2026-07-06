@@ -1,5 +1,5 @@
 # Sealed Secrets controller — VENDORED from the upstream release manifest:
-#   https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.38.1/controller.yaml
+#   https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.38.4/controller.yaml
 #
 # Why vendored (not a wrapper chart like the others): the project's canonical
 # Helm repo (bitnami-labs.github.io/sealed-secrets) now 404s after the 2025
@@ -13,147 +13,14 @@
 # works with zero flags. To bump: re-fetch the release manifest for the new
 # tag, re-apply these same three edits, and update Chart.yaml appVersion.
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  annotations: {}
-  labels:
-    name: sealed-secrets-service-proxier
-  name: sealed-secrets-service-proxier
-  namespace: kube-system
-rules:
-- apiGroups:
-  - ""
-  resourceNames:
-  - sealed-secrets-controller
-  resources:
-  - services
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resourceNames:
-  - 'http:sealed-secrets-controller:'
-  - http:sealed-secrets-controller:http
-  - sealed-secrets-controller
-  resources:
-  - services/proxy
-  verbs:
-  - create
-  - get
----
 apiVersion: v1
-kind: Service
-metadata:
-  annotations: {}
-  labels:
-    name: sealed-secrets-controller-metrics
-  name: sealed-secrets-controller-metrics
-  namespace: kube-system
-spec:
-  ports:
-  - port: 8081
-    targetPort: 8081
-  selector:
-    name: sealed-secrets-controller
-  type: ClusterIP
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ServiceAccount
 metadata:
   annotations: {}
   labels:
     name: sealed-secrets-controller
   name: sealed-secrets-controller
   namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: sealed-secrets-key-admin
-subjects:
-- kind: ServiceAccount
-  name: sealed-secrets-controller
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  annotations: {}
-  labels:
-    name: sealed-secrets-controller
-  name: sealed-secrets-controller
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: secrets-unsealer
-subjects:
-- kind: ServiceAccount
-  name: sealed-secrets-controller
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  annotations: {}
-  labels:
-    name: secrets-unsealer
-  name: secrets-unsealer
-rules:
-- apiGroups:
-  - bitnami.com
-  resources:
-  - sealedsecrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - bitnami.com
-  resources:
-  - sealedsecrets/status
-  verbs:
-  - update
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - create
-  - update
-  - delete
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  annotations: {}
-  labels:
-    name: sealed-secrets-service-proxier
-  name: sealed-secrets-service-proxier
-  namespace: kube-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: sealed-secrets-service-proxier
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: system:authenticated
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -407,6 +274,85 @@ kind: Role
 metadata:
   annotations: {}
   labels:
+    name: sealed-secrets-service-proxier
+  name: sealed-secrets-service-proxier
+  namespace: kube-system
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - sealed-secrets-controller
+  resources:
+  - services
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resourceNames:
+  - 'http:sealed-secrets-controller:'
+  - http:sealed-secrets-controller:http
+  - sealed-secrets-controller
+  resources:
+  - services/proxy
+  verbs:
+  - create
+  - get
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {}
+  labels:
+    name: sealed-secrets-controller-metrics
+  name: sealed-secrets-controller-metrics
+  namespace: kube-system
+spec:
+  ports:
+  - port: 8081
+    targetPort: 8081
+  selector:
+    name: sealed-secrets-controller
+  type: ClusterIP
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations: {}
+  labels:
+    name: sealed-secrets-service-proxier
+  name: sealed-secrets-service-proxier
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sealed-secrets-service-proxier
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations: {}
+  labels:
+    name: sealed-secrets-controller
+  name: sealed-secrets-controller
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sealed-secrets-key-admin
+subjects:
+- kind: ServiceAccount
+  name: sealed-secrets-controller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations: {}
+  labels:
     name: sealed-secrets-key-admin
   name: sealed-secrets-key-admin
   namespace: kube-system
@@ -419,11 +365,65 @@ rules:
   - create
   - list
 ---
-apiVersion: v1
-kind: ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
 metadata:
   annotations: {}
   labels:
     name: sealed-secrets-controller
   name: sealed-secrets-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: secrets-unsealer
+subjects:
+- kind: ServiceAccount
+  name: sealed-secrets-controller
   namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations: {}
+  labels:
+    name: secrets-unsealer
+  name: secrets-unsealer
+rules:
+- apiGroups:
+  - bitnami.com
+  resources:
+  - sealedsecrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - bitnami.com
+  resources:
+  - sealedsecrets/status
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - delete
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get

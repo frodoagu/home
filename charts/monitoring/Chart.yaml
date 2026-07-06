@@ -24,8 +24,8 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: victoria-metrics-k8s-stack
-    version: "0.85.2"
+    version: "0.85.10"
     repository: https://victoriametrics.github.io/helm-charts/
   - name: prometheus-blackbox-exporter
-    version: "11.13.0"
+    version: "11.15.1"
     repository: https://prometheus-community.github.io/helm-charts

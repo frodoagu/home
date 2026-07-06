@@ -3,7 +3,7 @@ name: oauth2-proxy
 description: Wrapper Helm chart for oauth2-proxy — Google OAuth2 ForwardAuth backend for Traefik on k3s
 type: application
 version: 0.1.0
-appVersion: "v7.6.0"
+appVersion: "v7.15.3"
 keywords:
   - oauth2
   - authentication
@@ -16,5 +16,5 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: oauth2-proxy
-    version: "7.7.1"
+    version: "10.7.0"
     repository: https://oauth2-proxy.github.io/manifests
