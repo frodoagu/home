@@ -197,6 +197,57 @@ doesn't even blink). Two fixes:
 > `climate:` blocks above + re-pairing the Broadlinks in the UI restores it;
 > SmartIR re-downloads the code JSONs automatically.
 
+## LG webOS TVs — Wake on LAN turn-on
+
+Two LG webOS TVs are added via the `webostv` integration (`media_player.sala_de_estar`,
+`media_player.dormitorio`). The integration controls a TV that's already on and can
+turn it **off**, but **turning it on is not built in** — this HA version's `webostv`
+exposes a *turn-on trigger* (`webostv.turn_on`) and leaves the actual wake to you.
+So `media_player.turn_on` only works once you wire an automation that sends a
+**Wake-on-LAN** magic packet. Until such an automation exists the media_player
+doesn't even advertise the `TURN_ON` feature.
+
+Two pieces make it work (both hand-added to `/config`, like the ACs):
+
+1. **`wake_on_lan:`** in `configuration.yaml` — registers the
+   `wake_on_lan.send_magic_packet` service.
+2. **Two automations** in `automations.yaml`, one per TV, triggered by
+   `webostv.turn_on` and calling `send_magic_packet` with the TV's MAC:
+
+   ```yaml
+   - id: tv_sala_wake_on_lan
+     alias: TV Sala - Wake on LAN
+     trigger:
+       - platform: webostv.turn_on
+         entity_id: media_player.sala_de_estar
+     action:
+       - action: wake_on_lan.send_magic_packet
+         data:
+           mac: "4c:ba:d7:11:bb:12"
+     mode: single
+   # ...and tv_dormitorio_wake_on_lan → media_player.dormitorio, mac 44:cb:8b:e4:44:c8
+   ```
+
+**On the TV itself (mandatory):** LG TVs kill the NIC on power-off unless network
+standby is enabled, so no magic packet can reach them. Enable *General → Devices
+→ "Mobile TV On" / "Turn on via Wi-Fi" + "Turn on via Ethernet"* (and Quick Start+).
+Wired Ethernet is far more reliable for WoL than Wi-Fi.
+
+**Static IPs (Pi-hole DHCP).** WoL targets the MAC so it survives IP changes, but
+the `webostv` connection addresses the TV by **IP** — and a DHCP renewal had already
+moved the bedroom TV off its configured `.10`. Both TVs are now pinned in
+[`charts/pihole` `dhcp.reservations`](../charts/pihole/values.yaml) so their IPs
+(and the `webostv` config-entry host) stay put:
+
+| TV | IP | MAC |
+|---|---|---|
+| Sala de estar | `192.168.0.221` | `4c:ba:d7:11:bb:12` |
+| Dormitorio | `192.168.0.155` | `44:cb:8b:e4:44:c8` |
+
+> The `webostv` config entries, the `wake_on_lan:` line and the automations all
+> live on the `/config` PVC (not git); only the DHCP reservations are in the repo.
+> On a fresh PVC, re-pair the TVs and re-add the two automations above.
+
 ## Probes
 
 A `startupProbe` tolerates HA's slow boot (up to ~150s) while keeping the
