@@ -6,7 +6,7 @@ description: >-
   consumed by the k3s helm-controller plus the supporting middleware/secret.
 type: application
 version: 0.3.0
-appVersion: "v3.7.5"
+appVersion: "v3.7.6"
 keywords:
   - traefik
   - k3s

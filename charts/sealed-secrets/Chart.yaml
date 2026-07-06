@@ -10,7 +10,7 @@ description: >-
   `sealed-secrets-controller` so `kubeseal` works with zero flags.
 type: application
 version: 0.1.0
-appVersion: "0.38.1"
+appVersion: "0.38.4"
 keywords:
   - sealed-secrets
   - secrets
