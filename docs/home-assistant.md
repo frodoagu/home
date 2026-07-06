@@ -248,6 +248,160 @@ moved the bedroom TV off its configured `.10`. Both TVs are now pinned in
 > live on the `/config` PVC (not git); only the DHCP reservations are in the repo.
 > On a fresh PVC, re-pair the TVs and re-add the two automations above.
 
+## LG webOS TVs — unified webOS + IR entity
+
+On top of the `webostv` (IP) integration, each TV also has an **IR** path through
+the room's **Broadlink RM4 mini** (the same blasters the ACs use), and the two are
+merged into **one** `media_player` per room. Google Home / the dashboard see only
+that single unified entity. Like the ACs and the WoL bits, all of this lives on the
+`/config` PVC (not git) — treat this as the recovery runbook.
+
+**Why IR at all.** `webostv` needs the TV reachable by IP; when a TV is off (LG
+kills the NIC unless network standby holds) or the network is down, IP control and
+even WoL can fail. The IR blaster is a hardware fallback that always reaches the TV,
+and gives full manual control (volume, sources, nav, apps) when IP is unavailable.
+
+**The three layers per TV** (all in `/config/configuration.yaml` + `scripts.yaml`):
+
+1. **IR entity — SmartIR `media_player`, LG `device_code: 1042`.** Same pattern as
+   the ACs (SmartIR + Broadlink), just the `media_player` platform. `1042` is the LG
+   webOS profile (43UM7510 / OLED B8/B9) and — key for reliability — it has
+   **discrete `on` and `off`** codes (not a power toggle), plus volume/mute/channels
+   and a full `sources` map (Input, Home, Back, Netflix, Prime, Settings, OK, arrows,
+   Play/Pause, Info, digits). `controller_data` is the room's Broadlink:
+
+   ```yaml
+   media_player:
+     - platform: smartir
+       name: "TV Sala IR"
+       unique_id: tv_sala_ir
+       device_code: 1042
+       controller_data: remote.control_living
+     - platform: smartir
+       name: "TV Dormitorio IR"
+       unique_id: tv_dormitorio_ir
+       device_code: 1042
+       controller_data: remote.control_dormitorio
+   ```
+
+   SmartIR auto-downloads `codes/media_player/1042.json` on first use (needs egress).
+   If `1042` ever mismatches a set, the other LG codes are `1040/1041/1043` — compare
+   IR waveforms like the ACs (see the AC section).
+
+2. **Unified entity — `universal` `media_player`** (`media_player.tv_sala`,
+   `media_player.tv_dormitorio`). State and rich control (apps, sources, real volume
+   level) come from the **webOS child**; `turn_on`/`turn_off` are overridden to
+   scripts that do WoL/webOS **first** and fall back to IR:
+
+   ```yaml
+     - platform: universal
+       name: "TV Sala"
+       unique_id: tv_sala
+       device_class: tv
+       children:
+         - media_player.sala_de_estar
+       commands:
+         turn_on: { action: script.tv_sala_turn_on }
+         turn_off: { action: script.tv_sala_turn_off }
+       attributes:
+         state: media_player.sala_de_estar
+     # ...tv_dormitorio -> media_player.dormitorio, script.tv_dormitorio_turn_*
+   ```
+
+3. **Fallback scripts** (`scripts.yaml`). `turn_on` calls `media_player.turn_on` on
+   the webOS entity (which fires the existing `webostv.turn_on` → WoL automation),
+   waits ~4s, and **only if the TV is still off/unavailable** sends the IR `on`.
+   Because IR `on`/`off` are discrete, the guard makes the fallback safe — no toggle
+   can flip an already-on TV. `turn_off` mirrors it (webOS off → if still on, IR off):
+
+   ```yaml
+   tv_sala_turn_on:
+     sequence:
+       - action: media_player.turn_on
+         target: { entity_id: media_player.sala_de_estar }
+       - delay: "00:00:04"
+       - if:
+           - condition: state
+             entity_id: media_player.sala_de_estar
+             state: ["off", "unavailable", "standby"]
+         then:
+           - action: media_player.turn_on
+             target: { entity_id: media_player.tv_sala_ir }
+     mode: single
+   # ...tv_sala_turn_off, tv_dormitorio_turn_on/off analogous
+   ```
+
+**One entity to Google.** `expose_by_default: true` would surface all three
+media_players per room, so the `webostv` children and the `*_ir` entities are hidden
+via `google_assistant.entity_config`, leaving only the unified `tv_sala`/`tv_dormitorio`:
+
+```yaml
+google_assistant:
+  entity_config:
+    media_player.sala_de_estar: { expose: false }
+    media_player.tv_sala_ir: { expose: false }
+    media_player.dormitorio: { expose: false }
+    media_player.tv_dormitorio_ir: { expose: false }
+```
+
+**One entity in the HA UI too.** `entity_config` only affects Google — the HA
+auto-dashboards and entity pickers still list all six media_players. To leave a single
+tile per TV, the four auxiliaries are marked **hidden** in the entity registry
+(`hidden_by: user` on `sala_de_estar`, `dormitorio`, `tv_sala_ir`, `tv_dormitorio_ir`),
+leaving only `tv_sala`/`tv_dormitorio` visible. Hidden entities still function fully —
+the universal player reads its (hidden) webOS child and the remote pad drives the
+(hidden) IR entity; they just drop out of listings. Normally you'd toggle this in the
+UI (entity → settings → *Hidden*); off-PVC it's a `hidden_by` field in
+`.storage/core.entity_registry`. **Editing that file directly requires HA to not
+rewrite it on graceful shutdown** — either edit via the UI, or edit the file and
+`kubectl delete pod --grace-period=0 --force` (a graceful stop flushes the in-memory
+registry over your edit).
+
+**Gotcha — `webostv` stalls HA when a TV is unreachable.** If an LG TV is off/off-net,
+this HA/`aiowebostv` version blocks the event loop in `is_connected()` on update,
+which shows up as `TimeoutError` spam and **failing liveness/readiness probes** (the
+pod stays Running, doesn't crash-loop). It clears once the TV is reachable again. It's
+independent of the IR/unified config above; the unified `turn_on` (WoL + IR fallback)
+is precisely what recovers an off/off-net TV.
+
+> Fresh-PVC recovery: re-add the `media_player:` block (SmartIR IR + universal) and the
+> four `tv_*_turn_on/off` scripts, plus the `google_assistant.entity_config` hides, and
+> re-hide the four auxiliary entities (UI → entity → *Hidden*). The WoL automations and
+> `wake_on_lan:` from the section above are prerequisites; the `1042.json` re-downloads
+> itself.
+
+### IR remote dashboard (universal-remote-card)
+
+A dedicated **storage-mode dashboard** "TVs" (`url_path: tv-remotes`, in the sidebar)
+renders a physical-remote-style pad per TV using the
+[`universal-remote-card`](https://github.com/Nerwyn/android-tv-card) custom card.
+Every button is a `custom_actions` entry calling the IR `media_player` (SmartIR) —
+power via `turn_on`/`turn_off`, volume via `volume_up`/`down`/`volume_mute`, channels
+via `media_next/previous_track`, and all nav/apps (Home, Back, OK, arrows, Netflix,
+Prime, Settings, Input, Play/Pause) via `media_player.select_source` with the source
+names from the `1042` code. So the pad drives the TV over **IR**, independent of the
+network.
+
+The card is **not installed through HACS** — it was added manually (equivalent effect,
+but HACS won't track it for updates):
+
+- JS lives at `/config/www/universal-remote-card.min.js` (v4.11.3), served at
+  `/local/universal-remote-card.min.js` and registered as a `module` resource in
+  `.storage/lovelace_resources`.
+- The dashboard config is `.storage/lovelace.tv-remotes` (+ its registry entry in
+  `.storage/lovelace_dashboards`).
+
+Gotchas:
+- After (re)registering the resource, **hard-refresh the browser** (Ctrl-Shift-R) or
+  the card shows "Configuration error" / "Custom element doesn't exist" against the
+  stale cached JS — it's not actually a config problem.
+- Lovelace resources are read at startup in storage mode, so a new resource needs an
+  HA restart to load.
+
+> Fresh-PVC recovery: re-download the JS into `/config/www/`, re-add the resource +
+> dashboard registry + `lovelace.tv-remotes` config, restart, hard-refresh. Or just
+> install "Universal Remote Card" from HACS and rebuild the two cards.
+
 ## Probes
 
 A `startupProbe` tolerates HA's slow boot (up to ~150s) while keeping the
