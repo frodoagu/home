@@ -267,12 +267,13 @@ So `media_player.turn_on` only works once you wire an automation that sends a
 **Wake-on-LAN** magic packet. Until such an automation exists the media_player
 doesn't even advertise the `TURN_ON` feature.
 
-Two pieces make it work (both hand-added to `/config`, like the ACs):
+Two pieces make it work (both versioned in git in
+[`packages/tv.yaml`](../charts/home-assistant/packages/tv.yaml), see
+[Versioned config](#versioned-config-ha-packages)):
 
-1. **`wake_on_lan:`** in `configuration.yaml` — registers the
-   `wake_on_lan.send_magic_packet` service.
-2. **Two automations** in `automations.yaml`, one per TV, triggered by
-   `webostv.turn_on` and calling `send_magic_packet` with the TV's MAC:
+1. **`wake_on_lan:`** — registers the `wake_on_lan.send_magic_packet` service.
+2. **Two automations**, one per TV, triggered by `webostv.turn_on` and calling
+   `send_magic_packet` with the TV's MAC:
 
    ```yaml
    - id: tv_sala_wake_on_lan
