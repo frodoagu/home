@@ -113,6 +113,7 @@ dhcp:
   reservations:
     - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.101", name: "broadlink-1" }
     - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.186", name: "broadlink-2" }
+    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.172", name: "broadlink-3" }
     - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.56",  name: "esphome-btproxy" }
 ```
 
