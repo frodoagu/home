@@ -1,0 +1,19 @@
+{{- if .Values.packages.enabled }}
+# Versioned Home Assistant packages. Each YAML under packages/ is bundled here as
+# a separate data key and mounted read-only at /config/packages, where HA merges
+# it via `homeassistant: packages: !include_dir_named packages` (added by the
+# init container). This keeps the hand-authored climate/media_player/script/
+# automation config in git without HA giving up ownership of configuration.yaml.
+# Loaded via .Files.Get so the raw YAML survives Helm templating untouched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-packages
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "packages/*.yaml" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

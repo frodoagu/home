@@ -77,6 +77,17 @@ googleAssistant:
   # Optional PIN Google must speak before actuating "secure" devices (locks,
   # garage doors, ...). Leave empty to disable.
   secureDevicesPin: ""
+  # Per-entity Google exposure overrides, rendered into the generated
+  # google_assistant block. Used to hide the webOS (IP) + IR children so only the
+  # unified per-room media_player surfaces in Google Home (see the TV packages in
+  # packages/tv.yaml and docs/home-assistant.md). Map of entity_id -> config map.
+  # NOTE: like the rest of the google_assistant block, this is written once by the
+  # init container; on an existing PVC it only applies on a fresh /config.
+  entityConfig:
+    media_player.sala_de_estar: { expose: false }
+    media_player.tv_sala_ir: { expose: false }
+    media_player.dormitorio: { expose: false }
+    media_player.tv_dormitorio_ir: { expose: false }
   # HomeGraph service-account JSON. OPTIONAL: leave secretName empty to run
   # without it (account linking and device control still work; only report_state
   # and request_sync are unavailable). To enable it, create the Secret in this
@@ -96,6 +107,15 @@ hacs:
   enabled: true
   # Pin to a concrete HACS release tag from github.com/hacs/integration.
   version: "2.0.5"
+
+# Versioned Home Assistant packages. Every YAML under this chart's packages/ dir
+# is bundled into a ConfigMap and mounted read-only at /config/packages; the init
+# container adds `homeassistant: packages: !include_dir_named packages` so HA
+# merges them WITHOUT giving up ownership of configuration.yaml. This is how the
+# hand-authored climate/media_player/script/automation config lives in git.
+# See docs/home-assistant.md.
+packages:
+  enabled: true
 
 # Resource requests/limits – tune for RPi
 resources:

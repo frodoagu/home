@@ -23,12 +23,60 @@ so the written YAML is correct regardless of template indentation:
    `trusted_proxies`) if not already present.
 3. Appends `homeassistant: external_url:` from `.Values.externalUrl`, guarded so
    it never creates a duplicate top-level `homeassistant:` key.
-4. Appends the `google_assistant:` block when that integration is enabled.
-5. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
+4. Ensures `homeassistant: packages: !include_dir_named packages` (inserted under
+   the existing `homeassistant:` block via `awk`, or appended fresh) so HA merges
+   the versioned `/config/packages` ConfigMap — see [Versioned config](#versioned-config-ha-packages).
+5. Appends the `google_assistant:` block when that integration is enabled
+   (including the `entity_config` exposure hides from `.Values.googleAssistant.entityConfig`).
+6. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
 
 Each block is written **once** and skipped if already present. To change a block
 after first sync, edit it in `/config/configuration.yaml` (or delete the block
 and restart the pod to let the init container regenerate it).
+
+## Versioned config (HA packages)
+
+The hand-authored declarative config — the **AC `climate:` entities, the TV
+`media_player:` (IR + unified), the TV `script:`s, the WoL `automation:`s, and the
+`smartir:`/`wake_on_lan:` activations** — lives in git as **[Home Assistant
+packages](https://www.home-assistant.io/docs/configuration/packages/)**, not by
+hand on the PVC. HA still **owns** `configuration.yaml`; packages are the supported
+way to add config-as-code alongside it (a previous attempt to own the whole
+`configuration.yaml` from a ConfigMap broke — see *"Why not a ConfigMap?"* below).
+
+How it works:
+
+- YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
+  (`climate.yaml`, `tv.yaml`) are globbed into a ConfigMap
+  (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
+  and mounted **read-only** at `/config/packages/`.
+- The init container ensures `homeassistant: packages: !include_dir_named packages`
+  in `configuration.yaml`, so HA loads every file in that dir as a package and
+  **merges** it into the main config. Toggle with `.Values.packages.enabled`.
+- Because they're merged (not owned), package config **coexists** with HA's own
+  files: `script:`/`automation:` from the packages load *alongside* anything you
+  create in the UI (which still writes to the PVC's `scripts.yaml`/`automations.yaml`).
+  The package entries are **read-only in the UI** (they're not in those files).
+
+**Consequence for a fresh `/config` PVC:** climate/media_player/scripts/automations
+now come back **automatically** from git — no re-adding by hand. What still lives
+only in `.storage` (and must be recreated) is the *stateful* stuff the UI owns:
+the webOS/Broadlink **config entries** (re-pair the devices), entity **hides**
+(`hidden_by`) and any **disables**, and the Lovelace dashboards. SmartIR re-downloads
+its code JSONs on first use as before.
+
+**Editing the versioned config:** change the file under `charts/home-assistant/packages/`
+and let ArgoCD sync (the ConfigMap update propagates to the mount; HA picks it up on
+its next restart). Do **not** hand-edit these blocks in `/config/configuration.yaml`
+anymore — they're no longer there.
+
+> **Migration gotcha (one-time).** When these blocks moved out of
+> `configuration.yaml` into packages, the live PVC copy had to be stripped of the
+> now-duplicated `climate:`/`media_player:`/`smartir:`/`wake_on_lan:` keys and the
+> `scripts.yaml`/`automations.yaml` entries **before** the pod rolled with the
+> packages mounted — otherwise HA sees the same entities twice (duplicate
+> `unique_id`s, and a fatal duplicate `script` key). Order: strip the PVC first
+> (the running pod keeps its in-memory config), then deploy.
 
 ## HACS default bootstrap
 
@@ -112,9 +160,10 @@ Requires `hostNetwork: true` and a working `bluetooth`/`bluez` service on the Pi
 
 The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4
 mini** blasters and the **[SmartIR](https://github.com/smartHomeHub/SmartIR)**
-custom component (installed through HACS). This is **not** managed by the chart —
-it lives entirely in the on-PVC `/config`, so treat this section as the recovery
-runbook if the PVC is ever lost.
+custom component (installed through HACS). The `climate:` entities are **versioned in
+git** as an HA package ([`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml),
+see [Versioned config](#versioned-config-ha-packages)); the Broadlink pairing and
+SmartIR code cache still live on the PVC. Treat this section as the recovery runbook.
 
 **What lives where:**
 
@@ -127,8 +176,9 @@ runbook if the PVC is ever lost.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
   first use.
-- **`climate:` blocks** — added **by hand** to `/config/configuration.yaml` (the
-  init container never touches them). Current config:
+- **`climate:` blocks** — versioned in
+  [`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml)
+  (merged via HA packages; no longer hand-edited in `configuration.yaml`):
 
   ```yaml
   climate:
@@ -202,8 +252,9 @@ doesn't even blink). Two fixes:
   ArgoCD `selfHeal` reverts a manual `kubectl scale --replicas=0`, so this path
   is fiddly; prefer the new-`unique_id` approach.
 
-> Because none of this is in git, a fresh `/config` PVC loses it. Re-adding the
-> `climate:` blocks above + re-pairing the Broadlinks in the UI restores it;
+> On a fresh `/config` PVC the `climate:` blocks come back **from git** (the
+> [`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml) package).
+> You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist);
 > SmartIR re-downloads the code JSONs automatically.
 
 ## LG webOS TVs — Wake on LAN turn-on
@@ -253,17 +304,21 @@ moved the bedroom TV off its configured `.10`. Both TVs are now pinned in
 | Sala de estar | `192.168.0.221` | `4c:ba:d7:11:bb:12` |
 | Dormitorio | `192.168.0.155` | `44:cb:8b:e4:44:c8` |
 
-> The `webostv` config entries, the `wake_on_lan:` line and the automations all
-> live on the `/config` PVC (not git); only the DHCP reservations are in the repo.
-> On a fresh PVC, re-pair the TVs and re-add the two automations above.
+> The `wake_on_lan:` activation and the two WoL automations are **versioned in git**
+> ([`packages/tv.yaml`](../charts/home-assistant/packages/tv.yaml), see
+> [Versioned config](#versioned-config-ha-packages)) — a fresh PVC restores them
+> automatically. Only the `webostv` **config entries** stay on the PVC (re-pair the
+> TVs on a fresh PVC); the DHCP reservations are in `charts/pihole`.
 
 ## LG webOS TVs — unified webOS + IR entity
 
 On top of the `webostv` (IP) integration, each TV also has an **IR** path through
 the room's **Broadlink RM4 mini** (the same blasters the ACs use), and the two are
 merged into **one** `media_player` per room. Google Home / the dashboard see only
-that single unified entity. Like the ACs and the WoL bits, all of this lives on the
-`/config` PVC (not git) — treat this as the recovery runbook.
+that single unified entity. The `media_player:` (IR + universal) and the fallback
+`script:`s are **versioned in git** ([`packages/tv.yaml`](../charts/home-assistant/packages/tv.yaml),
+see [Versioned config](#versioned-config-ha-packages)); the `webostv` config entries
+and the entity **hides** stay on the PVC. Treat this as the recovery runbook.
 
 **Why IR at all.** `webostv` needs the TV reachable by IP; when a TV is off (LG
 kills the NIC unless network standby holds) or the network is down, IP control and
@@ -317,9 +372,10 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
      # ...tv_dormitorio -> media_player.dormitorio, script.tv_dormitorio_turn_*
    ```
 
-3. **Fallback scripts** (`scripts.yaml`). `turn_on` calls `media_player.turn_on` on
-   the webOS entity (which fires the existing `webostv.turn_on` → WoL automation),
-   waits ~4s, and **only if the TV is still off/unavailable** sends the IR `on`.
+3. **Fallback scripts** (`packages/tv.yaml`, under `script:`). `turn_on` calls
+   `media_player.turn_on` on the webOS entity (which fires the existing
+   `webostv.turn_on` → WoL automation), waits ~4s, and **only if the TV is still
+   off/unavailable** sends the IR `on`.
    Because IR `on`/`off` are discrete, the guard makes the fallback safe — no toggle
    can flip an already-on TV. `turn_off` mirrors it (webOS off → if still on, IR off):
 
@@ -342,11 +398,14 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
 
 **One entity to Google.** `expose_by_default: true` would surface all three
 media_players per room, so the `webostv` children and the `*_ir` entities are hidden
-via `google_assistant.entity_config`, leaving only the unified `tv_sala`/`tv_dormitorio`:
+via `google_assistant.entity_config`, leaving only the unified `tv_sala`/`tv_dormitorio`.
+This is now driven from **`.Values.googleAssistant.entityConfig`** (rendered into the
+generated `google_assistant:` block by the init container), so it's in git:
 
 ```yaml
-google_assistant:
-  entity_config:
+# values.yaml
+googleAssistant:
+  entityConfig:
     media_player.sala_de_estar: { expose: false }
     media_player.tv_sala_ir: { expose: false }
     media_player.dormitorio: { expose: false }
@@ -373,11 +432,12 @@ pod stays Running, doesn't crash-loop). It clears once the TV is reachable again
 independent of the IR/unified config above; the unified `turn_on` (WoL + IR fallback)
 is precisely what recovers an off/off-net TV.
 
-> Fresh-PVC recovery: re-add the `media_player:` block (SmartIR IR + universal) and the
-> four `tv_*_turn_on/off` scripts, plus the `google_assistant.entity_config` hides, and
-> re-hide the four auxiliary entities (UI → entity → *Hidden*). The WoL automations and
-> `wake_on_lan:` from the section above are prerequisites; the `1042.json` re-downloads
-> itself.
+> Fresh-PVC recovery: the `media_player:` block (SmartIR IR + universal), the four
+> `tv_*_turn_on/off` scripts, the WoL automations and `wake_on_lan:` all come back
+> **from git** ([`packages/tv.yaml`](../charts/home-assistant/packages/tv.yaml)), and
+> the `entity_config` hides from `values.yaml`. What you still redo by hand: re-pair
+> the TVs (webOS config entries) and **re-hide** the four auxiliary entities
+> (UI → entity → *Hidden*). The `1042.json` re-downloads itself.
 
 ### IR remote dashboard (universal-remote-card)
 

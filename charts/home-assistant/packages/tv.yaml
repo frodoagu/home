@@ -1,0 +1,174 @@
+# HA package: unified webOS + IR TV control.
+#
+# Versioned config that HA merges via `homeassistant: packages:`. Rendered into
+# the {{ fullname }}-packages ConfigMap and mounted read-only at /config/packages.
+# See docs/home-assistant.md ("LG webOS TVs"). No secrets — MACs and private LAN
+# references only (also in charts/pihole and the docs).
+#
+# The `script:`/`automation:` here are read-only from the UI (they live in this
+# package, not scripts.yaml/automations.yaml). New UI-created ones still work —
+# they land in the still-writable /config/{scripts,automations}.yaml.
+
+# Registers wake_on_lan.send_magic_packet, used by the WoL automations below.
+wake_on_lan:
+
+media_player:
+  # --- Entidades IR puras (SmartIR, LG code 1042: on/off discretos) ---
+  # Blaster LG completo (power, volumen, mute, canales, sources/nav). Sirven de
+  # fuente del power IR de respaldo y de control manual total cuando la red cae.
+  - platform: smartir
+    name: "TV Sala IR"
+    unique_id: tv_sala_ir
+    device_code: 1042  # LG webOS (43UM7510 / OLED B8/B9)
+    controller_data: remote.control_living
+  - platform: smartir
+    name: "TV Dormitorio IR"
+    unique_id: tv_dormitorio_ir
+    device_code: 1042  # LG webOS
+    controller_data: remote.control_dormitorio
+
+  # --- Entidades unificadas (una por ambiente) ---
+  # Estado on/off y control rico (apps, sources, volumen con nivel) los da el
+  # webOS por IP; encendido/apagado usan scripts WoL/webOS-primero + IR de
+  # respaldo. Es la unica entidad expuesta a Google Home.
+  - platform: universal
+    name: "TV Sala"
+    unique_id: tv_sala
+    device_class: tv
+    children:
+      - media_player.sala_de_estar
+    commands:
+      turn_on: { action: script.tv_sala_turn_on }
+      turn_off: { action: script.tv_sala_turn_off }
+    attributes:
+      state: media_player.sala_de_estar
+  - platform: universal
+    name: "TV Dormitorio"
+    unique_id: tv_dormitorio
+    device_class: tv
+    children:
+      - media_player.dormitorio
+    commands:
+      turn_on: { action: script.tv_dormitorio_turn_on }
+      turn_off: { action: script.tv_dormitorio_turn_off }
+    attributes:
+      state: media_player.dormitorio
+
+# turn_on: webOS/WoL primero, IR de respaldo si sigue apagada tras ~4s (los
+# codigos IR on/off son discretos, asi el guard no puede togglear una TV ya
+# encendida). turn_off es el espejo.
+script:
+  tv_sala_turn_on:
+    alias: TV Sala - Encender (WoL + IR fallback)
+    sequence:
+      - action: media_player.turn_on
+        target:
+          entity_id: media_player.sala_de_estar
+      - delay: "00:00:04"
+      - if:
+          - condition: state
+            entity_id: media_player.sala_de_estar
+            state:
+              - "off"
+              - "unavailable"
+              - "standby"
+        then:
+          - action: media_player.turn_on
+            target:
+              entity_id: media_player.tv_sala_ir
+    mode: single
+
+  tv_sala_turn_off:
+    alias: TV Sala - Apagar (webOS + IR fallback)
+    sequence:
+      - action: media_player.turn_off
+        target:
+          entity_id: media_player.sala_de_estar
+      - delay: "00:00:04"
+      - if:
+          - condition: state
+            entity_id: media_player.sala_de_estar
+            state:
+              - "on"
+              - "playing"
+              - "paused"
+              - "idle"
+        then:
+          - action: media_player.turn_off
+            target:
+              entity_id: media_player.tv_sala_ir
+    mode: single
+
+  tv_dormitorio_turn_on:
+    alias: TV Dormitorio - Encender (WoL + IR fallback)
+    sequence:
+      - action: media_player.turn_on
+        target:
+          entity_id: media_player.dormitorio
+      - delay: "00:00:04"
+      - if:
+          - condition: state
+            entity_id: media_player.dormitorio
+            state:
+              - "off"
+              - "unavailable"
+              - "standby"
+        then:
+          - action: media_player.turn_on
+            target:
+              entity_id: media_player.tv_dormitorio_ir
+    mode: single
+
+  tv_dormitorio_turn_off:
+    alias: TV Dormitorio - Apagar (webOS + IR fallback)
+    sequence:
+      - action: media_player.turn_off
+        target:
+          entity_id: media_player.dormitorio
+      - delay: "00:00:04"
+      - if:
+          - condition: state
+            entity_id: media_player.dormitorio
+            state:
+              - "on"
+              - "playing"
+              - "paused"
+              - "idle"
+        then:
+          - action: media_player.turn_off
+            target:
+              entity_id: media_player.tv_dormitorio_ir
+    mode: single
+
+# Encienden la LG webOS por Wake on LAN: media_player.turn_on dispara el trigger
+# webostv.turn_on, que manda el magic packet a la MAC. Requiere network standby
+# activo en la TV ("Encender via Wi-Fi/Ethernet").
+automation:
+  - id: tv_sala_wake_on_lan
+    alias: TV Sala - Wake on LAN
+    description: >-
+      Enciende la LG webOS de la sala. media_player.turn_on dispara el trigger
+      webostv.turn_on, que manda el magic packet a la MAC de la TV. Requiere que
+      en la TV esté activado "Encender vía Wi-Fi/Ethernet" (network standby).
+    trigger:
+      - platform: webostv.turn_on
+        entity_id: media_player.sala_de_estar
+    action:
+      - action: wake_on_lan.send_magic_packet
+        data:
+          mac: "4c:ba:d7:11:bb:12"
+    mode: single
+
+  - id: tv_dormitorio_wake_on_lan
+    alias: TV Dormitorio - Wake on LAN
+    description: >-
+      Enciende la LG webOS del dormitorio vía Wake on LAN cuando se llama a
+      media_player.turn_on (trigger webostv.turn_on).
+    trigger:
+      - platform: webostv.turn_on
+        entity_id: media_player.dormitorio
+    action:
+      - action: wake_on_lan.send_magic_packet
+        data:
+          mac: "44:cb:8b:e4:44:c8"
+    mode: single

@@ -65,6 +65,15 @@ spec:
                   {{- with .Values.googleAssistant.secureDevicesPin }}
                   secure_devices_pin: {{ . | quote }}
                   {{- end }}
+                  {{- with .Values.googleAssistant.entityConfig }}
+                  entity_config:
+                  {{- range $entity, $cfg := . }}
+                    {{ $entity }}:
+                    {{- range $k, $v := $cfg }}
+                      {{ $k }}: {{ $v }}
+                    {{- end }}
+                  {{- end }}
+                  {{- end }}
             {{- end }}
           {{- end }}
           command:
@@ -94,6 +103,20 @@ spec:
                  && ! grep -q '^homeassistant:' "$CONFIG"; then
                 printf '\nhomeassistant:\n  external_url: "%s"\n' "$EXTERNAL_URL" >> "$CONFIG"
               fi
+              {{- if .Values.packages.enabled }}
+
+              # HA packages: ensure `homeassistant: packages: !include_dir_named
+              # packages` so HA merges the versioned /config/packages ConfigMap
+              # (climate/media_player/scripts/automations). Idempotent: inserted
+              # under an existing homeassistant: block via awk, or appended fresh.
+              if ! grep -q 'packages: !include_dir_named packages' "$CONFIG"; then
+                if grep -q '^homeassistant:' "$CONFIG"; then
+                  awk '{print} /^homeassistant:/{print "  packages: !include_dir_named packages"}' "$CONFIG" > "$CONFIG.tmp" && mv "$CONFIG.tmp" "$CONFIG"
+                else
+                  printf '\nhomeassistant:\n  packages: !include_dir_named packages\n' >> "$CONFIG"
+                fi
+              fi
+              {{- end }}
 
               # Google Assistant block (written verbatim from the env var, which
               # already carries correct YAML indentation). Appended once.
@@ -193,6 +216,13 @@ spec:
               subPath: {{ .Values.googleAssistant.serviceAccount.secretKey }}
               readOnly: true
             {{- end }}
+            {{- if .Values.packages.enabled }}
+            # Versioned HA packages, merged via `homeassistant: packages:`.
+            # Read-only ConfigMap dir overlaid onto the /config PVC.
+            - name: packages
+              mountPath: /config/packages
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -208,6 +238,11 @@ spec:
         - name: google-sa
           secret:
             secretName: {{ .Values.googleAssistant.serviceAccount.secretName }}
+        {{- end }}
+        {{- if .Values.packages.enabled }}
+        - name: packages
+          configMap:
+            name: {{ include "home-assistant.fullname" . }}-packages
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

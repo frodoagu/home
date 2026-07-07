@@ -1,0 +1,31 @@
+# HA package: split-AC climate entities (SmartIR + Broadlink IR).
+#
+# Versioned config that HA merges via `homeassistant: packages:`. Rendered into
+# the {{ fullname }}-packages ConfigMap and mounted read-only at /config/packages.
+# See docs/home-assistant.md ("Air conditioners"). No secrets here — device codes,
+# entity ids and private LAN references only.
+
+# Activates the SmartIR custom component (installed via HACS). Shared by the AC
+# climate entities here and the TV IR media_players in tv.yaml.
+smartir:
+
+climate:
+  - platform: smartir
+    name: "Aire Living"
+    unique_id: aire_living
+    device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air)
+    controller_data: remote.control_living
+    temperature_sensor: sensor.atc_29a8_temperatura
+    humidity_sensor: sensor.atc_29a8_humedad
+  - platform: smartir
+    name: "Aire Dormitorio"
+    unique_id: aire_dormitorio
+    device_code: 5140  # Mitsubishi Electric MSC-A12WV (compatible con el Philco físico)
+    controller_data: remote.control_dormitorio
+    temperature_sensor: sensor.dormitorio_atc_b6d2_temperatura
+    humidity_sensor: sensor.dormitorio_atc_b6d2_humedad
+  - platform: smartir
+    name: "Aire Cocina"
+    unique_id: aire_cocina
+    device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air) - mismo equipo que el living
+    controller_data: remote.broadlink_cocina
