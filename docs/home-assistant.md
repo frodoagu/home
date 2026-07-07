@@ -110,7 +110,7 @@ Requires `hostNetwork: true` and a working `bluetooth`/`bluez` service on the Pi
 
 ## Air conditioners (SmartIR + Broadlink)
 
-The two split ACs (living room + bedroom) are IR-controlled via **Broadlink RM4
+The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4
 mini** blasters and the **[SmartIR](https://github.com/smartHomeHub/SmartIR)**
 custom component (installed through HACS). This is **not** managed by the chart —
 it lives entirely in the on-PVC `/config`, so treat this section as the recovery
@@ -122,6 +122,7 @@ runbook if the PVC is ever lost.
   They register as `remote.*` entities:
   - `remote.control_living` — living-room blaster (`192.168.0.186`)
   - `remote.control_dormitorio` — bedroom blaster (`192.168.0.101`)
+  - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.172`)
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
@@ -145,11 +146,19 @@ runbook if the PVC is ever lost.
       controller_data: remote.control_dormitorio
       temperature_sensor: sensor.dormitorio_atc_b6d2_temperatura
       humidity_sensor: sensor.dormitorio_atc_b6d2_humedad
+    - platform: smartir
+      name: "Aire Cocina"
+      unique_id: aire_cocina
+      device_code: 1382              # Midea MSY-12HRDN1 (BGH Silent Air) — same unit as the living room
+      controller_data: remote.broadlink_cocina
+      # No ATC BLE thermometer in the kitchen yet, so no temperature/humidity sensor.
   ```
 
   The `sensor.*_temperatura`/`_humedad` entities are the per-room ATC BLE
   thermometers (Xiaomi/ATC), which SmartIR shows on the thermostat card as the
-  real ambient reading (the IR AC reports nothing back).
+  real ambient reading (the IR AC reports nothing back). The kitchen has no ATC
+  thermometer yet, so `Aire Cocina` runs without one (its card shows no ambient
+  reading until a sensor is added).
 
 **Finding the right `device_code`.** Neither AC matched its labelled brand:
 
