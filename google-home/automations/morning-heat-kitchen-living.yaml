@@ -1,0 +1,44 @@
+metadata:
+  name: Turn on kitchen and living room - weekdays 8am / weekends 9am
+  description: Turn on kitchen and living room at 8am weekdays, 9am weekends, only if the living room is 17°C or colder
+automations:
+  - starters:
+      - type: time.schedule
+        at: 8:00
+        weekdays:
+          - MON
+          - TUE
+          - WED
+          - THU
+          - FRI
+      - type: time.schedule
+        at: 9:00
+        weekdays:
+          - SAT
+          - SUN
+    condition:
+      type: and
+      conditions:
+        - type: home.state.HomePresence
+          state: homePresenceMode
+          is: HOME
+        - type: device.state.TemperatureControl
+          device: Living - Salón
+          state: temperatureAmbient
+          lessThanOrEqualTo: 17C
+    actions:
+      - type: device.command.OnOff
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+        on: true
+      - type: device.command.ThermostatSetMode
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+        thermostatMode: heat
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+        thermostatTemperatureSetpoint: 21C

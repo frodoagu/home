@@ -1,0 +1,24 @@
+metadata:
+  name: Turn off ACs once it's 19C outside (winter only)
+  description: >-
+    Turn off all ACs once the outside temperature reaches 19C, but only while
+    they're actively heating. Checking thermostatMode instead of a fixed date
+    range means it never touches them in summer, when they're in cool mode.
+automations:
+  - starters:
+      - type: device.state.TemperatureControl
+        device: Temperatura Exterior - Afuera
+        state: temperatureAmbient
+        is: 19C
+    condition:
+      type: device.state.TemperatureSetting
+      device: Aire Living - Salón
+      state: thermostatMode
+      is: heat
+    actions:
+      - type: device.command.ThermostatSetMode
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+          - Aire Dormitorio - Dormitorio
+        thermostatMode: "off"
