@@ -47,7 +47,7 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`climate.yaml`, `tv.yaml`) are globbed into a ConfigMap
+  (`climate.yaml`, `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
 - The init container ensures `homeassistant: packages: !include_dir_named packages`

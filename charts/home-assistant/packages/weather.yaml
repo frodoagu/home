@@ -1,0 +1,22 @@
+# HA package: outdoor temperature sensor derived from the `met` weather
+# integration (weather.forecast_casa, Rio Ceballos, Cordoba).
+#
+# Versioned config that HA merges via `homeassistant: packages:`. Rendered into
+# the {{ fullname }}-packages ConfigMap and mounted read-only at /config/packages.
+# See docs/home-assistant.md ("Versioned config (HA packages)"). No secrets here.
+#
+# Why this exists: Google Assistant's `google_assistant` integration (see
+# docs/google-assistant.md) does not expose the `weather` domain at all — only
+# `sensor` entities with device_class: temperature (among a few others). This
+# mirrors weather.forecast_casa's `temperature` attribute into a plain sensor so
+# it can be exposed to Google Home as a TemperatureControl device and used as a
+# condition in Google Home automations (e.g. "only run if outside <= 10C").
+template:
+  - sensor:
+      - name: "Temperatura Exterior"
+        unique_id: temperatura_exterior
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ state_attr('weather.forecast_casa', 'temperature') }}"
+        availability: "{{ states('weather.forecast_casa') not in ['unavailable', 'unknown'] }}"
