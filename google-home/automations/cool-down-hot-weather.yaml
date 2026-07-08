@@ -1,0 +1,34 @@
+metadata:
+  name: Turn on ACs (cool, 24C) on hot days
+  description: >-
+    Start all ACs in cool mode at 24C when it's over 30C outside and the
+    living room is already over 24C inside, but only while someone's home.
+automations:
+  - starters:
+      - type: device.state.TemperatureControl
+        device: Temperatura Exterior - Afuera
+        state: temperatureAmbient
+        greaterThan: 30C
+    condition:
+      type: and
+      conditions:
+        - type: home.state.HomePresence
+          state: homePresenceMode
+          is: HOME
+        - type: device.state.TemperatureControl
+          device: Living - Salón
+          state: temperatureAmbient
+          greaterThan: 24C
+    actions:
+      - type: device.command.ThermostatSetMode
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+          - Aire Dormitorio - Dormitorio
+        thermostatMode: cool
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices:
+          - Aire Cocina - Cocina
+          - Aire Living - Salón
+          - Aire Dormitorio - Dormitorio
+        thermostatTemperatureSetpoint: 24C

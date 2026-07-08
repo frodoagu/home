@@ -9,7 +9,7 @@ automations:
       - type: device.state.TemperatureControl
         device: Temperatura Exterior - Afuera
         state: temperatureAmbient
-        is: 19C
+        greaterThanOrEqualTo: 19C
     condition:
       type: device.state.TemperatureSetting
       device: Aire Living - Salón

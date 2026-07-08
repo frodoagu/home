@@ -28,3 +28,6 @@ valid options in its error messages if you get a name wrong).
   see [`charts/home-assistant/packages/weather.yaml`](../charts/home-assistant/packages/weather.yaml))
   reaches the heating setpoint, gated on the ACs actually being in heat mode so
   it never fires in summer.
+- [`automations/cool-down-hot-weather.yaml`](automations/cool-down-hot-weather.yaml) —
+  starts all ACs in cool mode at 24C when it's over 30C outside and the living
+  room is already over 24C inside, gated on presence.
