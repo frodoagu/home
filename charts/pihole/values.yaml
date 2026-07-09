@@ -121,6 +121,10 @@ dhcp:
     # packet target) never drift when the DHCP lease renews.
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.221", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.155", name: "tv-dormitorio" }
+    # Shelly Mini 1 Gen4 controlando la puerta de la escalera exterior.
+    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.215", name: "shelly-escalera" }
+    # Shelly Mini 1 Gen4 controlando la puerta principal.
+    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
 
 # Resource requests/limits – tuned small for the RPi.
 resources:
