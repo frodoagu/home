@@ -105,8 +105,8 @@ its own (see the chicken-and-egg section above).
 ## Static DHCP reservations
 
 Devices that must keep their current IP — **Broadlink** (Home Assistant addresses it
-by IP) and **ESPHome Bluetooth proxies** — get MAC→IP reservations in
-`dhcp.reservations`:
+by IP), **ESPHome Bluetooth proxies**, and **Shelly** door switches — get MAC→IP
+reservations in `dhcp.reservations`:
 
 ```yaml
 dhcp:
@@ -115,7 +115,13 @@ dhcp:
     - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.186", name: "broadlink-2" }
     - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.172", name: "broadlink-3" }
     - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.56",  name: "esphome-btproxy" }
+    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.215", name: "shelly-escalera" }
+    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
 ```
+
+To find a new Shelly's MAC/IP: it registers on the LAN with no reverse-DNS hostname
+(`nmap -sn 192.168.0.0/24`), and its local HTTP API confirms the model —
+`curl http://<ip>/shelly`.
 
 These render into `FTLCONF_dhcp_hosts` as `mac,ip,name` entries joined by `;`. A
 reserved IP may sit inside or outside the pool. To find a device's MAC: the router's
