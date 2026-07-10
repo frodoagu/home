@@ -84,6 +84,26 @@ dns:
   # ALL is safe here: :53 is not exposed to the internet (no port-forward).
   listeningMode: "all"
   dnssec: false
+  # Local DNS records (split-horizon DNS): on the LAN, these hostnames resolve
+  # straight to the Pi's own IP instead of Cloudflare's, so traffic to
+  # *.agu.com.ar never has to leave the network and come back. Traefik on the
+  # Pi still does the host-based routing, so this only shortcuts the path —
+  # behavior is identical to the public route. Off-LAN devices are unaffected
+  # (they don't use this resolver). Each entry is one IP with the hostnames
+  # that share it.
+  localRecords:
+    - ip: "192.168.0.100"
+      hosts:
+        - agu.com.ar
+        - www.agu.com.ar
+        - home.agu.com.ar
+        - argocd.agu.com.ar
+        - traefik.agu.com.ar
+        - auth.agu.com.ar
+        - grafana.agu.com.ar
+        - pihole.agu.com.ar
+        - logs.agu.com.ar
+        - dash.agu.com.ar
 
 # DHCP server. Pi-hole replaces the router's DHCP so every device gets Pi-hole as
 # its DNS automatically.

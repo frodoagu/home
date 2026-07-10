@@ -145,9 +145,47 @@ Everything is driven by `FTLCONF_*` env vars rendered from `values.yaml`:
 | `dns.upstreams` | `FTLCONF_dns_upstreams` | Cloudflare `1.1.1.1;1.0.0.1` |
 | `dns.listeningMode` | `FTLCONF_dns_listeningMode` | `all` (safe — :53 isn't internet-exposed) |
 | `dns.dnssec` | `FTLCONF_dns_dnssec` | `false` |
+| `dns.localRecords` | `FTLCONF_dns_hosts` | see below |
 | `webPort` | `FTLCONF_webserver_port` | `8080` |
 | `dhcp.{start,end,router,leaseTime}` | `FTLCONF_dhcp_*` | `.150 / .250 / .1 / 24h` |
 | `dhcp.reservations` | `FTLCONF_dhcp_hosts` | see above |
+
+## Local DNS records (split-horizon)
+
+`dns.localRecords` makes Pi-hole answer `*.agu.com.ar` with the Pi's own LAN IP
+instead of forwarding upstream and getting back Cloudflare's public IP. Traefik on
+the Pi does the same host-based routing either way, so this only shortcuts the
+path (no NAT hairpin out to the internet and back) — behavior is identical to the
+public route. Devices not using Pi-hole as their resolver are unaffected.
+
+```yaml
+dns:
+  localRecords:
+    - ip: "192.168.0.100"
+      hosts:
+        - agu.com.ar
+        - www.agu.com.ar
+        - home.agu.com.ar
+        - argocd.agu.com.ar
+        - traefik.agu.com.ar
+        - auth.agu.com.ar
+        - grafana.agu.com.ar
+        - pihole.agu.com.ar
+        - logs.agu.com.ar
+        - dash.agu.com.ar
+```
+
+Renders into `FTLCONF_dns_hosts` as one `IP host1 host2 ...` entry per `ip` (hosts-file
+syntax), multiple `ip` groups joined by `;`. Verify after deploying:
+
+```bash
+dig @192.168.0.100 agu.com.ar +short          # -> 192.168.0.100 (from the LAN)
+dig @1.1.1.1 agu.com.ar +short                # -> Cloudflare's public IP (unchanged)
+```
+
+`yaskia.com` also runs on this Pi but was deliberately left out — it still
+resolves via Cloudflare even on the LAN. Add it to `localRecords` the same way if
+that hairpin ever becomes annoying.
 
 State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 `/etc/pihole`. Image is pinned in `values.yaml` (`pihole/pihole`, keep `Chart.yaml`
