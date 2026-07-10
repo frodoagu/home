@@ -71,6 +71,11 @@ spec:
               value: {{ .Values.dns.listeningMode | quote }}
             - name: FTLCONF_dns_dnssec
               value: {{ .Values.dns.dnssec | quote }}
+            {{- if .Values.dns.localRecords }}
+            # Split-horizon local DNS records (agu.com.ar -> the Pi's LAN IP).
+            - name: FTLCONF_dns_hosts
+              value: {{ include "pihole.dnsHosts" . | quote }}
+            {{- end }}
             {{- if .Values.admin.existingSecret }}
             - name: FTLCONF_webserver_api_password
               valueFrom:

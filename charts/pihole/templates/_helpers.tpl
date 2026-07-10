@@ -63,3 +63,18 @@ the commas inside each entry preserved.
 {{- end -}}
 {{- join ";" $entries -}}
 {{- end }}
+
+{{/*
+Render dns.localRecords into the value Pi-hole's FTLCONF_dns_hosts expects:
+semicolon-separated entries in hosts-file syntax, "IP host1 host2 ...", per
+Pi-hole's dns.hosts config key (FTL parses env-var arrays on ";" or "\n").
+*/}}
+{{- define "pihole.dnsHosts" -}}
+{{- $entries := list -}}
+{{- range .Values.dns.localRecords -}}
+{{- $ip := required "each dns local record needs an ip" .ip -}}
+{{- $hosts := required "each dns local record needs at least one host" .hosts -}}
+{{- $entries = append $entries (printf "%s %s" $ip (join " " $hosts)) -}}
+{{- end -}}
+{{- join ";" $entries -}}
+{{- end }}
