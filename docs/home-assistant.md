@@ -257,6 +257,22 @@ doesn't even blink). Two fixes:
 > You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist);
 > SmartIR re-downloads the code JSONs automatically.
 
+**Quick-access scenes.** The same package ships four `script:`s for one-tap
+presets — they show up as `script.*` entities (buttons on the HA app / dashboard
+cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes in
+Google Home:
+
+- `aires_todos_encender` — all three ACs to **heat 21 °C**.
+- `aires_todos_frio` — all three ACs to **cool 24 °C**.
+- `aires_solo_pieza` — bedroom to **heat 21 °C**, living + kitchen **off**.
+- `aires_todos_apagar` — all three **off**.
+
+Turn-on presets fix mode+temperature in a single `climate.set_temperature` call
+(passing `hvac_mode`): IR sends the whole state frame each time, so one blast
+lands the unit in the target state. To add a button to the phone, drop an
+`entities`/`button` card pointing at the `script.*` entity, or add it to the
+Google Home app once linked.
+
 ## LG webOS TVs — Wake on LAN turn-on
 
 Two LG webOS TVs are added via the `webostv` integration (`media_player.sala_de_estar`,
