@@ -29,3 +29,69 @@ climate:
     unique_id: aire_cocina
     device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air) - mismo equipo que el living
     controller_data: remote.broadlink_cocina
+
+# Escenas de acceso rápido para los aires. Aparecen como entidades script.*
+# (botones en la app HA / cards del dashboard) y, al estar `script` en
+# googleAssistant.exposedDomains, también como escenas en Google Home.
+# Encender fija modo+temperatura en UNA llamada (climate.set_temperature con
+# hvac_mode): con IR cada envío manda el frame completo, así un solo blast deja
+# el equipo en el estado deseado. Apagar usa climate.turn_off.
+script:
+  aires_todos_encender:
+    alias: Aires - Encender todos (calor 21)
+    icon: mdi:air-conditioner
+    sequence:
+      - action: climate.set_temperature
+        target:
+          entity_id:
+            - climate.aire_living
+            - climate.aire_dormitorio
+            - climate.aire_cocina
+        data:
+          hvac_mode: heat
+          temperature: 21
+    mode: single
+
+  aires_todos_frio:
+    alias: Aires - Encender todos (frío 24)
+    icon: mdi:snowflake
+    sequence:
+      - action: climate.set_temperature
+        target:
+          entity_id:
+            - climate.aire_living
+            - climate.aire_dormitorio
+            - climate.aire_cocina
+        data:
+          hvac_mode: cool
+          temperature: 24
+    mode: single
+
+  aires_solo_pieza:
+    alias: Aires - Solo la pieza (calor 21)
+    icon: mdi:bed
+    sequence:
+      - action: climate.turn_off
+        target:
+          entity_id:
+            - climate.aire_living
+            - climate.aire_cocina
+      - action: climate.set_temperature
+        target:
+          entity_id: climate.aire_dormitorio
+        data:
+          hvac_mode: heat
+          temperature: 21
+    mode: single
+
+  aires_todos_apagar:
+    alias: Aires - Apagar todos
+    icon: mdi:air-conditioner
+    sequence:
+      - action: climate.turn_off
+        target:
+          entity_id:
+            - climate.aire_living
+            - climate.aire_dormitorio
+            - climate.aire_cocina
+    mode: single
