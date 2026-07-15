@@ -15,6 +15,15 @@ spec:
     metadata:
       labels:
         {{- include "home-assistant.selectorLabels" . | nindent 8 }}
+      {{- if .Values.packages.enabled }}
+      annotations:
+        # Roll the pod when the packages ConfigMap changes. Without this the
+        # Deployment spec is identical across package edits, so k8s never
+        # restarts HA and it keeps serving the stale /config/packages mount
+        # until a manual restart. Hashing the rendered ConfigMap ties the pod
+        # template to the package content, triggering a Recreate on any change.
+        checksum/packages: {{ include (print $.Template.BasePath "/configmap-packages.yaml") . | sha256sum }}
+      {{- end }}
     spec:
       hostNetwork: {{ .Values.hostNetwork }}
       {{- if .Values.hostNetwork }}

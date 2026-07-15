@@ -95,3 +95,69 @@ script:
             - climate.aire_dormitorio
             - climate.aire_cocina
     mode: single
+
+  # Un solo botón idempotente: solo apaga cuando los TRES están prendidos; en
+  # cualquier otro estado (mezclado o todo apagado) prende los tres en calor 21.
+  # Así un estado mezclado primero se lleva a "todo prendido" y recién el próximo
+  # toque apaga. El estado que ve HA es el asumido (IR es unidireccional).
+  aires_toggle_calor:
+    alias: Aires - Toggle todos (calor 21 / off)
+    icon: mdi:fire
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id:
+                    - climate.aire_living
+                    - climate.aire_dormitorio
+                    - climate.aire_cocina
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id:
+                - climate.aire_living
+                - climate.aire_dormitorio
+                - climate.aire_cocina
+            data:
+              hvac_mode: heat
+              temperature: 21
+    mode: single
+
+  # Igual que aires_toggle_calor pero prende en frío 24 (para el verano): solo
+  # apaga cuando los tres están prendidos; en cualquier otro estado los pone en frío 24.
+  aires_toggle_frio:
+    alias: Aires - Toggle todos (frío 24 / off)
+    icon: mdi:snowflake
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id:
+                    - climate.aire_living
+                    - climate.aire_dormitorio
+                    - climate.aire_cocina
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id:
+                - climate.aire_living
+                - climate.aire_dormitorio
+                - climate.aire_cocina
+            data:
+              hvac_mode: cool
+              temperature: 24
+    mode: single

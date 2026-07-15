@@ -266,6 +266,12 @@ Google Home:
 - `aires_todos_frio` — all three ACs to **cool 24 °C**.
 - `aires_solo_pieza` — bedroom to **heat 21 °C**, living + kitchen **off**.
 - `aires_todos_apagar` — all three **off**.
+- `aires_toggle_calor` — one-button toggle. Only turns **off** when **all
+  three** ACs are on; in any other state (mixed, or all off) it turns all on to
+  heat 21 °C. So a mixed state is first driven to "all on" and only the next tap
+  turns everything off. Ideal for a single Android home-screen widget / iOS Shortcut.
+- `aires_toggle_frio` — same one-button toggle, but the "on" side sets **cool
+  24 °C** (summer preset).
 
 Turn-on presets fix mode+temperature in a single `climate.set_temperature` call
 (passing `hvac_mode`): IR sends the whole state frame each time, so one blast
