@@ -288,6 +288,7 @@ victoria-metrics-k8s-stack:
     # is provisioned via defaultDatasources.extra below.
     plugins:
       - victoriametrics-logs-datasource
+      - victoriametrics-metrics-datasource
     # Grafana is ephemeral (no PVC), so its SQLite DB — and anything stored only
     # there — is wiped on every pod restart. Playlists aren't file-provisionable
     # the way dashboards/datasources are, so this sidecar re-creates the
