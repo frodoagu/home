@@ -17,7 +17,7 @@ services running on a Raspberry Pi with k3s.
 | [Argo CD](https://argo-cd.readthedocs.io/) | GitOps continuous delivery (Google login via bundled Dex/OIDC) | `charts/argocd/` |
 | [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
-| [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `site/` into a GHCR image) | `charts/agu-spa/` |
+| [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `images/home-site/` into a GHCR image) | `charts/agu-spa/` |
 | [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
@@ -95,7 +95,7 @@ flowchart TD
     HA -->|mDNS/SSDP discovery| LAN([LAN devices])
 
     %% SPA build & auto-update pipeline
-    Repo -->|push site/| GHA
+    Repo -->|push images/home-site/| GHA
     GHA -->|push :latest arm64| GHCR
     GHCR -.->|watch digest| IU
     IU -->|pin digest write-back| Repo
@@ -361,8 +361,9 @@ webhook config (`-f config[secret]=...`).
 │   ├── homepage.yaml
 │   ├── pihole.yaml
 │   └── origin-firewall.yaml
-├── images/                  # Dockerfiles/build contexts for CI-built images (origin-firewall base)
-├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
+├── images/                  # CI-built container images (one dir per image = its build context)
+│   ├── home-site/           # agu.com.ar SPA (Vite + React) + Dockerfile → GHCR image
+│   └── origin-firewall/     # Debian + nftables/curl base for the firewall DaemonSet → GHCR
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
     ├── argocd/              # Argo CD wrapper (upstream chart)
@@ -420,7 +421,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, versioned device config (HA packages: split-AC climate via SmartIR/Broadlink, unified webOS+IR TVs + WoL), device discovery (host networking), Bluetooth
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
-- [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
+- [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `images/home-site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
 - [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)

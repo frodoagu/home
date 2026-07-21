@@ -2,8 +2,8 @@
 
 Agu's home-lab **GitOps** repository: Helm charts + ArgoCD `Application`s for
 services running on a Raspberry Pi with **k3s**. Mostly Kubernetes/Helm
-manifests; the exceptions are `site/`, the source for the agu.com.ar landing
-SPA (built into an image by CI — see below), and `esphome/`, ESP32 firmware
+manifests; the exceptions are `images/`, build contexts for CI-built images
+(incl. `home-site/`, the agu.com.ar landing SPA source — see below), and `esphome/`, ESP32 firmware
 configs flashed out-of-band (not deployed by ArgoCD). The README has the full operator
 runbook (fresh-Pi setup, secrets, DNS); this file is the orientation for editing.
 
@@ -43,18 +43,17 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      that programs a host nftables table dropping direct-to-public-IP hits on 80/443
                      (accepts only Cloudflare + LAN/cluster). Runs a prebuilt image (images/origin-firewall
                      → GHCR, digest pinned by Image Updater). See docs/origin-firewall.md + gotchas.
-site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
-                     Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
-                     section of external links (`privateLinks`) gated by client-side Google
-                     sign-in (src/auth/). Pure logic lives in plain .js modules next to each
-                     component (mandelbrot.js, neutralCurrent.js, auth.js) and is unit-tested
-                     with Vitest (*.test.js[x]).
+images/              Dockerfiles + build contexts for CI-built container images (one dir per image).
+  home-site/         The agu.com.ar landing SPA (Vite + React + Tailwind) AND its Dockerfile.
+                     Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private section of
+                     external links (`privateLinks`) gated by client-side Google sign-in (src/auth/).
+                     Pure logic lives in plain .js modules next to each component (mandelbrot.js,
+                     neutralCurrent.js, auth.js) and is unit-tested with Vitest (*.test.js[x]).
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
-                     .github/workflows/site.yml builds ghcr.io/frodoagu/home-site:latest (arm64);
-                     Argo CD Image Updater then pins the digest into charts/agu-spa/values.yaml via git.
-images/              Dockerfiles / build contexts for CI-built container images.
-                     origin-firewall/ is the firewall base (Debian + nftables/curl) → GHCR.
-.github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for site/;
+                     site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
+                     Updater then pins the digest into charts/agu-spa/values.yaml via git.
+  origin-firewall/   Firewall base image (Debian + nftables/curl) → GHCR.
+.github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for images/home-site/;
                      origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
@@ -90,14 +89,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   google-auth (the mobile app / Google Assistant webhook need direct access) —
   it keeps its own login, fronted by a Traefik `rateLimit` on `/auth/*`
   (`charts/home-assistant`). The site's `privateLinks` use a separate,
-  purely client-side Google sign-in (`site/src/auth/`) — unrelated to oauth2-proxy.
+  purely client-side Google sign-in (`images/home-site/src/auth/`) — unrelated to oauth2-proxy.
 - **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex,
   Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`, `git-creds`)
   are created **out-of-band with `kubectl create secret`** and
   referenced by name — never committed. Full list in `docs/secrets.md`. The
   `sealed-secrets` controller (kube-system) offers a git-committable alternative:
   `kubeseal` encrypts a Secret into a `SealedSecret` only this cluster can decrypt.
-- **SPA image auto-updates**: CI builds `site/` → `ghcr.io/frodoagu/home-site:latest`;
+- **SPA image auto-updates**: CI builds `images/home-site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
   `charts/agu-spa/values.yaml` via git write-back. The v1.x Image Updater
   controller only reconciles `ImageUpdater` CRs — NOT Application annotations.
@@ -201,10 +200,10 @@ helm template t charts/<name>            # render with defaults
 helm template t charts/<name> --set k=v  # exercise conditional paths
 ```
 
-Site (`site/`) — CI runs these on PRs/pushes, but run them locally too:
+Site (`images/home-site/`) — CI runs these on PRs/pushes, but run them locally too:
 
 ```bash
-cd site
+cd images/home-site
 npm test            # Vitest unit + component tests (vitest run)
 npm run build       # production bundle (also catches import/JSX errors)
 ```
