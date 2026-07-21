@@ -37,6 +37,38 @@ ingress:
   # Additional Traefik middlewares to attach (e.g. auth, rate-limit)
   middlewares: []
 
+# Traefik rate-limiting for the Home Assistant IngressRoute. HA is the one
+# private service NOT behind the google-auth SSO layer — it keeps its own login
+# so the mobile app and Google Assistant webhook keep working — so this adds a
+# brute-force throttle in front of its login form as defence-in-depth.
+#
+# IMPORTANT: all traffic is proxied through Cloudflare (charts/cloudflare-ddns,
+# proxied: true), so the peer IP Traefik sees is a Cloudflare edge IP. Left as-is
+# every visitor would share ONE bucket. We therefore key the limit on the real
+# client IP carried in the Cf-Connecting-IP header. This trusts that header,
+# which is only safe while the origin is reachable exclusively via Cloudflare
+# (i.e. not directly by IP). Requests lacking the header (a direct-to-origin
+# bypass) fall back to a single shared bucket, which still throttles them.
+rateLimit:
+  enabled: true
+  # Header carrying the real client IP (set by Cloudflare). Empty string keys the
+  # limit on the direct peer IP instead — correct ONLY if not behind a proxy.
+  clientIPHeader: Cf-Connecting-IP
+  # Generous global limit for normal traffic. The HA frontend and its WebSocket
+  # reconnects are chatty, so keep this well above real single-user usage; it
+  # only exists to cap volumetric abuse. average = requests per `period`, burst =
+  # bucket depth for short spikes.
+  global:
+    average: 60
+    burst: 120
+    period: 1s
+  # Tight limit scoped to the auth endpoints (/auth/* — login_flow, token) to
+  # throttle credential brute-force: ~20 attempts/min per client IP, burst 10.
+  auth:
+    average: 20
+    burst: 10
+    period: 1m
+
 # Home Assistant external URL – tells HA its canonical public HTTPS URL.
 # Prevents redirect loops when behind a reverse proxy (Traefik).
 # If unset, Home Assistant creates this from the ingress.host value.
