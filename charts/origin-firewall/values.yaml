@@ -22,8 +22,21 @@ webPorts:
   - 80
   - 443
 
+# Keep the nftables Cloudflare sets fresh by periodically fetching the published
+# ranges. The lists below are still applied as the baked-in FALLBACK (used at
+# boot and whenever a fetch fails/looks invalid), so the firewall always has a
+# known-good allowlist even with no egress. Fetches replace only the cloudflare_v4
+# /v6 sets, atomically, and only after validation — a bad response changes nothing.
+cloudflareAutoUpdate:
+  enabled: true
+  # How often to re-fetch (seconds). CF ranges change very rarely; 12h is plenty.
+  interval: 43200
+  ipv4Url: https://www.cloudflare.com/ips-v4
+  ipv6Url: https://www.cloudflare.com/ips-v6
+
 # Cloudflare edge ranges — the only public sources allowed to reach the origin.
-# Keep in sync with https://www.cloudflare.com/ips/.
+# Baked-in fallback / initial value; kept fresh at runtime when cloudflareAutoUpdate
+# is enabled. Sync manually from https://www.cloudflare.com/ips/ if auto-update is off.
 cloudflareIPv4:
   - 173.245.48.0/20
   - 103.21.244.0/22

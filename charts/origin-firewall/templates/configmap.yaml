@@ -68,20 +68,62 @@ data:
     set -eu
     RULESET=/etc/origin-firewall/origin-firewall.nft
     INTERVAL="${RECONCILE_INTERVAL:-30}"
+    CF_AUTO_UPDATE="${CF_AUTO_UPDATE:-true}"
+    CF_UPDATE_INTERVAL="${CF_UPDATE_INTERVAL:-43200}"
+    CF_V4_URL="${CF_V4_URL:-https://www.cloudflare.com/ips-v4}"
+    CF_V6_URL="${CF_V6_URL:-https://www.cloudflare.com/ips-v6}"
 
-    # nftables isn't in the base image; install it (retry until egress is up).
-    until command -v nft >/dev/null 2>&1 || apk add --no-cache nftables; do
-      echo "origin-firewall: waiting to install nftables..."; sleep 5
+    # Base image is bare; install nft (+ curl/CA certs for auto-update). Retry
+    # until egress is up. The firewall only filters INBOUND 80/443, so egress
+    # (apk, the CF fetch) is never blocked by it.
+    until command -v nft >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 \
+        || apk add --no-cache nftables curl ca-certificates; do
+      echo "origin-firewall: waiting to install tools..."; sleep 5
     done
 
-    apply() { nft -f "$RULESET" && echo "origin-firewall: ruleset applied"; }
+    # Load the full table (chains + the baked-in fallback CF/local sets).
+    apply_base() { nft -f "$RULESET" && echo "origin-firewall: base ruleset applied"; }
 
-    # Apply once at startup so ConfigMap changes take effect when pods roll.
-    apply
+    # Fetch one CF list, validate it, and ATOMICALLY replace its set. Any failure
+    # (network, garbage response, too few entries) returns non-zero and changes
+    # NOTHING, so the last-known-good set — or the baked fallback — is preserved.
+    refresh_cf_set() {
+      name="$1"; url="$2"; family="$3"   # family: ip | ip6
+      data="$(curl -fsS --max-time 20 "$url" 2>/dev/null)" || return 1
+      if [ "$family" = "ip" ]; then
+        ranges="$(printf '%s\n' "$data" | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' || true)"
+      else
+        ranges="$(printf '%s\n' "$data" | grep -E '^[0-9a-fA-F:]+/[0-9]{1,3}$' || true)"
+      fi
+      count="$(printf '%s\n' "$ranges" | grep -c . || true)"
+      [ "$count" -ge 3 ] || return 1   # sanity floor: never accept an empty/short list
+      elements="$(printf '%s\n' "$ranges" | tr '\n' ',' | sed 's/,*$//')"
+      printf 'flush set inet origin_fw %s\nadd element inet origin_fw %s { %s }\n' \
+        "$name" "$name" "$elements" | nft -f - || return 1
+      echo "origin-firewall: $name refreshed from Cloudflare ($count ranges)"
+    }
 
-    # Self-heal: re-apply only if our table vanished (keeps counters otherwise).
+    refresh_cf() {
+      [ "$CF_AUTO_UPDATE" = "true" ] || return 0
+      refresh_cf_set cloudflare_v4 "$CF_V4_URL" ip  || echo "origin-firewall: v4 refresh skipped (keeping current)"
+      refresh_cf_set cloudflare_v6 "$CF_V6_URL" ip6 || echo "origin-firewall: v6 refresh skipped (keeping current)"
+    }
+
+    apply_base          # ConfigMap changes take effect when pods roll
+    refresh_cf
+    last_cf="$(date +%s)"
+
     while true; do
       sleep "$INTERVAL"
-      nft list table inet origin_fw >/dev/null 2>&1 \
-        || { echo "origin-firewall: table missing, re-applying"; apply; }
+      # Self-heal: if our table vanished, reload it (reverts CF sets to the
+      # fallback), then force a fresh CF fetch on the next tick.
+      if ! nft list table inet origin_fw >/dev/null 2>&1; then
+        echo "origin-firewall: table missing, re-applying"; apply_base; last_cf=0
+      fi
+      if [ "$CF_AUTO_UPDATE" = "true" ]; then
+        now="$(date +%s)"
+        if [ "$(( now - last_cf ))" -ge "$CF_UPDATE_INTERVAL" ]; then
+          refresh_cf; last_cf="$now"
+        fi
+      fi
     done

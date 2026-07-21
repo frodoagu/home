@@ -37,6 +37,14 @@ spec:
           env:
             - name: RECONCILE_INTERVAL
               value: {{ .Values.reconcileInterval | quote }}
+            - name: CF_AUTO_UPDATE
+              value: {{ .Values.cloudflareAutoUpdate.enabled | quote }}
+            - name: CF_UPDATE_INTERVAL
+              value: {{ .Values.cloudflareAutoUpdate.interval | quote }}
+            - name: CF_V4_URL
+              value: {{ .Values.cloudflareAutoUpdate.ipv4Url | quote }}
+            - name: CF_V6_URL
+              value: {{ .Values.cloudflareAutoUpdate.ipv6Url | quote }}
           securityContext:
             {{- if .Values.privileged }}
             privileged: true
