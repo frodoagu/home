@@ -16,8 +16,11 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends nftables curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# Sanity-check the tools exist at build time.
-RUN nft --version && curl --version >/dev/null
+# Sanity-check the tools are INSTALLED — but don't execute nft here: under QEMU
+# (arm64 cross-build) `nft --version` opens a Netlink socket the build sandbox
+# doesn't support ("Protocol not supported"), which fails the build. Checking
+# they're on PATH is enough; the entrypoint verifies nft works at runtime.
+RUN command -v nft && command -v curl
 
 # The DaemonSet overrides this with the ConfigMap entrypoint; kept as a hint.
 CMD ["/bin/sh", "-c", "echo 'run via the origin-firewall chart (mounts entrypoint.sh)'; sleep infinity"]
