@@ -40,6 +40,18 @@ argo-cd:
     # Google OAuth client's Authorized redirect URIs.
     cm:
       url: https://argocd.agu.com.ar
+      # -- Disable the built-in local `admin` account. It's the only
+      # password-based login on argocd.agu.com.ar (Dex/Google below is
+      # delegated, oauth2-proxy does NOT gate ArgoCD), so leaving it enabled
+      # exposes a brute-forceable `POST /api/v1/session` endpoint whose bcrypt
+      # check is CPU-costly on the RPi. Sign-in is now Google-only via Dex; the
+      # CLI still works with `argocd login argocd.agu.com.ar --sso`.
+      # RECOVERY: if Dex/Google auth ever breaks you have no local fallback —
+      # re-enable by reverting this to "true" in git (or, in a pinch,
+      # `kubectl -n argocd patch cm argocd-cm --type merge -p
+      # '{"data":{"admin.enabled":"true"}}'` then restart argocd-server), and
+      # read the password from the argocd-initial-admin-secret.
+      admin.enabled: "false"
       dex.config: |
         connectors:
           - type: oidc
