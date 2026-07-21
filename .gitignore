@@ -14,3 +14,4 @@ sealed-secrets-key*.yaml
 *.pem
 *.env
 .env
+esphome/secrets.yaml

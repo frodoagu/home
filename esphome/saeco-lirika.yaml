@@ -1,0 +1,187 @@
+substitutions:
+  name: saeco-lirika
+  friendly_name: "Cafetera Saeco"
+  press_duration: "220ms"      # duración del "toque" de un botón
+  power_press: "220ms"         # subir si Encender/Apagar necesita pulsación larga
+  double_gap: "400ms"          # separación entre las 2 pulsaciones del café doble
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key        # generá con: openssl rand -base64 32
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Saeco-Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+# ---------- Solo para pruebas de banco: botones clickeables desde el navegador ----------
+# Sacar (o comentar) una vez terminadas las pruebas de los canales del PC817.
+web_server:
+  port: 80
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  frequency: 100kHz
+
+# ---------- Salidas a los optos PC817 (botones) ----------
+output:
+  - platform: gpio
+    pin: GPIO32
+    id: out_cafe_corto
+  - platform: gpio
+    pin: GPIO33
+    id: out_cafe_largo
+  - platform: gpio
+    pin: GPIO25
+    id: out_power
+  - platform: gpio
+    pin: GPIO26
+    id: out_vapor
+  - platform: gpio
+    pin: GPIO27
+    id: out_agua_te
+
+button:
+  - platform: template
+    name: "Café corto"
+    icon: "mdi:coffee"
+    on_press:
+      - output.turn_on: out_cafe_corto
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_corto
+
+  - platform: template
+    name: "Café largo"
+    icon: "mdi:coffee-outline"
+    on_press:
+      - output.turn_on: out_cafe_largo
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_largo
+
+  # Café doble = 2 pulsaciones seguidas del mismo botón (timing local en el ESP32)
+  - platform: template
+    name: "Doble café corto"
+    icon: "mdi:coffee"
+    on_press:
+      - output.turn_on: out_cafe_corto
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_corto
+      - delay: ${double_gap}
+      - output.turn_on: out_cafe_corto
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_corto
+
+  - platform: template
+    name: "Doble café largo"
+    icon: "mdi:coffee-outline"
+    on_press:
+      - output.turn_on: out_cafe_largo
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_largo
+      - delay: ${double_gap}
+      - output.turn_on: out_cafe_largo
+      - delay: ${press_duration}
+      - output.turn_off: out_cafe_largo
+
+  - platform: template
+    name: "Vapor"
+    icon: "mdi:kettle-steam"
+    on_press:
+      - output.turn_on: out_vapor
+      - delay: ${press_duration}
+      - output.turn_off: out_vapor
+
+  - platform: template
+    name: "Agua para té"
+    icon: "mdi:cup-water"
+    on_press:
+      - output.turn_on: out_agua_te
+      - delay: ${press_duration}
+      - output.turn_off: out_agua_te
+
+  - platform: template
+    name: "Encender / Apagar"
+    icon: "mdi:power"
+    on_press:
+      - output.turn_on: out_power
+      - delay: ${power_press}
+      - output.turn_off: out_power
+
+# ---------- Sensor de color del backlight ----------
+sensor:
+  - platform: tcs34725
+    address: 0x29
+    integration_time: 154ms
+    gain: 16x
+    update_interval: 2s
+    red_channel:
+      name: "Backlight R"
+      id: bl_r
+    green_channel:
+      name: "Backlight G"
+      id: bl_g
+    blue_channel:
+      name: "Backlight B"
+      id: bl_b
+    clear_channel:
+      name: "Backlight clear"
+      id: bl_clear
+    illuminance:
+      name: "Backlight brillo"
+      id: bl_lux
+    color_temperature:
+      name: "Backlight temp color"
+
+text_sensor:
+  - platform: template
+    name: "Estado cafetera"
+    id: estado_cafetera
+    icon: "mdi:coffee-maker"
+    update_interval: 2s
+    lambda: |-
+      // --- CALIBRAR con lecturas reales (ver §9) ---
+      const float LUX_ENCENDIDA = 20.0;   // umbral apagada/encendida
+      if (id(bl_lux).state < LUX_ENCENDIDA) {
+        return {"apagada"};
+      }
+      float r = id(bl_r).state;
+      float g = id(bl_g).state;
+      float b = id(bl_b).state;
+      // Clasificación por dominancia de canal:
+      if (g > r && g > b) {
+        return {"verde"};                 // operación normal
+      } else if (r > g && r > b) {
+        return {"rojo"};                  // no operable
+      } else if (r > b && g > b) {
+        return {"amarillo"};              // warning, operable
+      }
+      return {"desconocido"};
+
+binary_sensor:
+  - platform: template
+    name: "Cafetera encendida"
+    id: cafetera_encendida
+    device_class: power
+    lambda: |-
+      return id(bl_lux).state >= 20.0;    // mismo umbral que arriba
