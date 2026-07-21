@@ -3,7 +3,7 @@
 
 replicaCount: 1
 image:
-  # The agu.com.ar SPA, built from site/ and baked into an nginx image by the
+  # The agu.com.ar SPA, built from images/home-site/ and baked into an nginx image by the
   # build-site GitHub Action (.github/workflows/site.yml). CI pushes the mutable
   # `latest` tag; Argo CD Image Updater watches its digest and rewrites `tag`
   # below to `latest@sha256:...` via git (see the ImageUpdater CR in

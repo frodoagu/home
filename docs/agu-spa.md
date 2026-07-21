@@ -41,8 +41,8 @@ a new rollout via ArgoCD.
 
 ### How this repo actually ships it
 
-The live `agu.com.ar` SPA is the React app in [`site/`](../site). On every push
-to `site/`, the [`build-site`](../.github/workflows/site.yml) GitHub Action builds
+The live `agu.com.ar` SPA is the React app in [`images/home-site/`](../images/home-site). On every push
+to `images/home-site/`, the [`build-site`](../.github/workflows/site.yml) GitHub Action builds
 an **arm64** image and pushes `ghcr.io/frodoagu/home-site:latest`. Argo CD Image
 Updater (see [charts/argocd-image-updater](../charts/argocd-image-updater)) watches
 that tag's digest and writes the pinned `image.tag: latest@sha256:...` back into
@@ -67,23 +67,23 @@ finos (orquestan render/interacción) y el cálculo queda cubierto. Convención 
 agregar una app: extraé la matemática a un `.js` y sumá su `*.test.js`.
 
 CI corre los tests y el build en cada **push** y **pull request** que toque
-`site/` ([`test-site`](../.github/workflows/site-test.yml)); el build de la
+`images/home-site/` ([`test-site`](../.github/workflows/site-test.yml)); el build de la
 imagen ([`build-site`](../.github/workflows/site.yml)) sigue aparte, sólo en push
 a `main`.
 
 ## Public vs. private apps (Google sign-in)
 
-The landing has two halves (see [`site/src/Landing.jsx`](../site/src/Landing.jsx)):
+The landing has two halves (see [`images/home-site/src/Landing.jsx`](../images/home-site/src/Landing.jsx)):
 
 - **Públicas** — the existing grid of in-app tools, visible to everyone. Source of
-  truth: `apps` in [`site/src/apps/registry.jsx`](../site/src/apps/registry.jsx).
+  truth: `apps` in [`images/home-site/src/apps/registry.jsx`](../images/home-site/src/apps/registry.jsx).
 - **Privadas** — external links to other self-hosted services (Traefik dashboard,
   Home Assistant, ArgoCD), revealed only after a Google sign-in with an allowed
   email. Source of truth: `privateLinks` in the same registry — adjust the
   placeholder `*.agu.com.ar` URLs to your real hostnames.
 
 Auth is **client-side** Google Identity Services
-([`site/src/auth/AuthProvider.jsx`](../site/src/auth/AuthProvider.jsx)): no backend,
+([`images/home-site/src/auth/AuthProvider.jsx`](../images/home-site/src/auth/AuthProvider.jsx)): no backend,
 just a signed Google ID token decoded in the browser and checked against an
 allowlist. This is a **UX gate** — it hides the existence/URLs of internal services
 from casual visitors; the real authentication still lives on each linked service
@@ -95,7 +95,7 @@ from casual visitors; the real authentication still lives on each linked service
    of type *Web application*. Under **Authorized JavaScript origins** add
    `https://agu.com.ar` (and `http://localhost:5173` for `npm run dev`). No redirect
    URIs are needed — GIS uses popup/one-tap.
-2. Put the client ID in [`site/src/auth/config.js`](../site/src/auth/config.js)
+2. Put the client ID in [`images/home-site/src/auth/config.js`](../images/home-site/src/auth/config.js)
    (or build with `VITE_GOOGLE_CLIENT_ID=...`). The client ID is **public by
    design**, so committing it is fine.
 3. List the allowed emails in `ALLOWED_EMAILS` in the same file.

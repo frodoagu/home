@@ -1,0 +1,32 @@
+# Per-app image-update config for the origin-firewall DaemonSet. The v1.x
+# controller only reconciles ImageUpdater CRs (it ignores Application
+# annotations), so each app that wants auto-updates gets one of these.
+#
+# Tracks the digest of the mutable `latest` tag CI pushes to GHCR and writes the
+# pinned `latest@sha256:...` back to charts/origin-firewall/values.yaml over
+# HTTPS using the git-creds secret. Registry auth comes from the registries.conf
+# credentials in this chart's values.yaml (same GHCR creds as the SPA).
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: origin-firewall
+  namespace: {{ .Release.Namespace }}
+spec:
+  writeBackConfig:
+    method: "git:secret:argocd/git-creds"
+    gitConfig:
+      repository: "https://github.com/frodoagu/home.git"
+      branch: main
+      # Relative to the origin-firewall Application's source path (charts/origin-firewall).
+      writeBackTarget: "helmvalues:./values.yaml"
+  applicationRefs:
+    - namePattern: origin-firewall
+      images:
+        - alias: fw
+          imageName: ghcr.io/frodoagu/origin-firewall:latest
+          commonUpdateSettings:
+            updateStrategy: digest
+          manifestTargets:
+            helm:
+              name: image.repository
+              tag: image.tag
