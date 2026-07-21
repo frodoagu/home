@@ -80,12 +80,14 @@ localIPv6:
 # on your kernel, set privileged: true.
 privileged: false
 
-# Small footprint for the RPi.
+# Small at steady state (~15Mi), but the startup `apt-get install` peaks at
+# ~160Mi (measured on-node) — the limit must clear that or the container is
+# OOMKilled (exit 137) mid-install and never applies the ruleset. 256Mi gives
+# comfortable headroom; requests stay low since the spike is brief.
 resources:
   requests:
     cpu: 10m
-    memory: 16Mi
+    memory: 32Mi
   limits:
     cpu: 100m
-    # Headroom for the apt install on startup (apt/dpkg spikes above steady state).
-    memory: 128Mi
+    memory: 256Mi
