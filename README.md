@@ -26,6 +26,7 @@ services running on a Raspberry Pi with k3s.
 | [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
 | [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
 | [homepage](https://gethomepage.dev/) | Dashboard / start page for the lab (Google sign-in gated) | `charts/homepage/` |
+| [nftables](https://nftables.org/) | Cloudflare-only origin firewall — DaemonSet dropping direct-to-public-IP hits on 80/443 | `charts/origin-firewall/` |
 
 ## Architecture
 
@@ -126,6 +127,10 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   DDNS token must have **Zone:DNS:Edit on both zones** (one token scoped to both,
   or drop the `yaskia.com` entries from `charts/cloudflare-ddns/values.yaml`).
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
+  - Recommended hardening: since every service is Cloudflare-proxied, lock the
+    origin to Cloudflare's IP ranges so nobody can reach it by raw IP — deployed
+    as the `origin-firewall` app (nftables DaemonSet), see
+    [docs/origin-firewall.md](docs/origin-firewall.md).
 
 ## Setup from a fresh Raspberry Pi OS
 
@@ -354,7 +359,8 @@ webhook config (`-f config[secret]=...`).
 │   ├── monitoring.yaml
 │   ├── victoria-logs.yaml
 │   ├── homepage.yaml
-│   └── pihole.yaml
+│   ├── pihole.yaml
+│   └── origin-firewall.yaml
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
@@ -368,7 +374,8 @@ webhook config (`-f config[secret]=...`).
     ├── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
     ├── victoria-logs/      # VictoriaLogs single-node + Vector collector (cluster-wide logs)
     ├── homepage/           # gethomepage start page (dash.agu.com.ar, google-auth gated)
-    └── pihole/             # Pi-hole DNS ad-blocker + LAN DHCP server (hostNetwork)
+    ├── pihole/             # Pi-hole DNS ad-blocker + LAN DHCP server (hostNetwork)
+    └── origin-firewall/    # Cloudflare-only origin firewall (nftables DaemonSet, kube-system)
 ```
 
 > `yaskia-spa` has no `charts/` entry here — its Helm chart and site source live
@@ -414,6 +421,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
+- [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
 
 ## Let's Encrypt notes
