@@ -13,7 +13,8 @@ Deployed like everything else in this repo — an ArgoCD `Application`
 ## How it works
 
 A privileged, `hostNetwork` **DaemonSet** in `kube-system` runs on every node. On
-start it `apk add`s `nftables` and loads a small ruleset into its own
+start it `apt`-installs `nftables` (Debian base — Alpine's musl `nft` segfaults on
+aarch64) and loads a small ruleset into its own
 `inet origin_fw` table, then self-heals (re-applies only if the table vanishes,
 so per-rule counters keep accumulating). The ruleset and an entrypoint script are
 rendered from `values.yaml` into a ConfigMap; a `checksum/config` annotation rolls

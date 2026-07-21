@@ -5,10 +5,12 @@
 # See docs/origin-firewall.md for how it works and the router-SNAT caveat.
 
 image:
-  # Base image; nftables is apk-installed into it on start (needs egress, which
-  # this firewall never blocks — it only filters inbound 80/443).
-  repository: alpine
-  tag: "3.21"
+  # Debian (glibc), NOT Alpine: Alpine's musl-based nft segfaults on aarch64/ARM
+  # when loading a ruleset (verified on this Pi — SIGSEGV/exit 139). Debian's nft
+  # applies the same ruleset cleanly. nftables/curl are apt-installed on start;
+  # egress is never blocked by this firewall (it only filters inbound 80/443).
+  repository: debian
+  tag: "trixie-slim"
   pullPolicy: IfNotPresent
 
 # Seconds between self-heal checks (re-applies the table only if it vanished, so
@@ -85,4 +87,5 @@ resources:
     memory: 16Mi
   limits:
     cpu: 100m
-    memory: 64Mi
+    # Headroom for the apt install on startup (apt/dpkg spikes above steady state).
+    memory: 128Mi
