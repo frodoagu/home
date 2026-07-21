@@ -5,13 +5,22 @@
 # See docs/origin-firewall.md for how it works and the router-SNAT caveat.
 
 image:
-  # Debian (glibc), NOT Alpine: Alpine's musl-based nft segfaults on aarch64/ARM
-  # when loading a ruleset (verified on this Pi — SIGSEGV/exit 139). Debian's nft
-  # applies the same ruleset cleanly. nftables/curl are apt-installed on start;
-  # egress is never blocked by this firewall (it only filters inbound 80/443).
-  repository: debian
-  tag: "trixie-slim"
+  # Prebuilt by CI (images/origin-firewall/Dockerfile → GHCR) with nftables/curl
+  # baked in, so nothing is installed on pod (re)start. Debian base, NOT Alpine:
+  # Alpine's musl nft segfaults on aarch64 (verified on the Pi). Argo CD Image
+  # Updater pins `latest`'s digest into image.tag (like agu-spa), so what runs is
+  # an immutable digest — do not hand-edit image.tag.
+  repository: ghcr.io/frodoagu/origin-firewall
+  tag: "latest"
   pullPolicy: IfNotPresent
+
+# Pull secret(s) for the private GHCR image. Create out-of-band in kube-system
+# (never commit), same token as agu-spa's ghcr-creds:
+#   kubectl -n kube-system create secret docker-registry ghcr-creds \
+#     --docker-server=ghcr.io --docker-username=frodoagu --docker-password=<PAT>
+# Set to [] if you make the GHCR package public instead.
+imagePullSecrets:
+  - name: ghcr-creds
 
 # Seconds between self-heal checks (re-applies the table only if it vanished, so
 # per-rule counters keep accumulating between pod restarts).
@@ -80,14 +89,12 @@ localIPv6:
 # on your kernel, set privileged: true.
 privileged: false
 
-# Small at steady state (~15Mi), but the startup `apt-get install` peaks at
-# ~160Mi (measured on-node) — the limit must clear that or the container is
-# OOMKilled (exit 137) mid-install and never applies the ruleset. 256Mi gives
-# comfortable headroom; requests stay low since the spike is brief.
+# Tiny: tools are baked into the image now (no apt spike), so steady-state RSS is
+# ~15Mi. The earlier 256Mi was only to survive the on-start apt install.
 resources:
   requests:
     cpu: 10m
-    memory: 32Mi
+    memory: 16Mi
   limits:
     cpu: 100m
-    memory: 256Mi
+    memory: 64Mi

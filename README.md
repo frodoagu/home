@@ -361,6 +361,7 @@ webhook config (`-f config[secret]=...`).
 │   ├── homepage.yaml
 │   ├── pihole.yaml
 │   └── origin-firewall.yaml
+├── images/                  # Dockerfiles/build contexts for CI-built images (origin-firewall base)
 ├── site/                    # Source for the agu.com.ar SPA (Vite + React) → built to a GHCR image by CI
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)

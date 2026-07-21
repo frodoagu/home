@@ -41,7 +41,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      discovery + cluster resource widget via RBAC.
   origin-firewall/   Cloudflare-only origin firewall: a privileged hostNetwork DaemonSet (kube-system)
                      that programs a host nftables table dropping direct-to-public-IP hits on 80/443
-                     (accepts only Cloudflare + LAN/cluster). See docs/origin-firewall.md + gotchas.
+                     (accepts only Cloudflare + LAN/cluster). Runs a prebuilt image (images/origin-firewall
+                     → GHCR, digest pinned by Image Updater). See docs/origin-firewall.md + gotchas.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
                      section of external links (`privateLinks`) gated by client-side Google
@@ -51,7 +52,10 @@ site/                Source for the agu.com.ar landing SPA (Vite + React + Tailw
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      .github/workflows/site.yml builds ghcr.io/frodoagu/home-site:latest (arm64);
                      Argo CD Image Updater then pins the digest into charts/agu-spa/values.yaml via git.
+images/              Dockerfiles / build contexts for CI-built container images.
+                     origin-firewall/ is the firewall base (Debian + nftables/curl) → GHCR.
 .github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for site/;
+                     origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a

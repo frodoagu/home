@@ -1,0 +1,82 @@
+name: 🧱 Origin-firewall · Build & Publish Image
+
+# Build the origin-firewall base image (Debian + nftables/curl/CA certs) and
+# push it to GHCR as `latest` (plus an immutable `sha-<commit>` tag). Argo CD
+# Image Updater watches `latest`'s digest and writes the pinned digest back to
+# charts/origin-firewall/values.yaml, which rolls out the DaemonSet. CI does not
+# touch git.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "images/origin-firewall/**"
+      - ".github/workflows/origin-firewall-image.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/frodoagu/origin-firewall
+
+jobs:
+  build:
+    name: Build & push arm64 image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to checkout the (private) repo
+      packages: write # to push to GHCR
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Compute image tag
+        id: tag
+        run: echo "sha=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: 🧰 Set up QEMU
+        # Needed to cross-build the arm64 image on amd64 runners (the k3s node
+        # is a Raspberry Pi / arm64).
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔑 Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build & push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./images/origin-firewall
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 📦 Image summary
+        if: always()
+        run: |
+          {
+            echo "## 🧱 Published image"
+            echo ""
+            if [ -n "${{ steps.build.outputs.digest }}" ]; then
+              echo "✅ Image built (\`linux/arm64\`) and pushed to GHCR."
+              echo ""
+              echo "| Field | Value |"
+              echo "| --- | --- |"
+              echo "| Repository | \`${IMAGE}\` |"
+              echo "| Tags | \`${{ steps.tag.outputs.sha }}\`, \`latest\` |"
+              echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+              echo "| Commit | \`${GITHUB_SHA::12}\` |"
+              echo ""
+              echo "Argo CD Image Updater will detect the new \`latest\` digest and pin it into \`charts/origin-firewall/values.yaml\` for the rollout."
+            else
+              echo "⚠️ The build did not complete."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

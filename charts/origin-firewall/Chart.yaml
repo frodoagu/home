@@ -7,8 +7,9 @@ description: >-
   where the real source IP is still visible. See docs/origin-firewall.md.
 type: application
 version: 0.1.0
-# Tracks the base image tag (nftables is installed into it at runtime).
-appVersion: "trixie-slim"
+# The runtime image is our own (images/origin-firewall → GHCR), digest-pinned by
+# Image Updater into values.image.tag, so appVersion isn't used for the image ref.
+appVersion: "1.0.0"
 keywords:
   - firewall
   - nftables

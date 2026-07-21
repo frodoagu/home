@@ -12,9 +12,12 @@ Deployed like everything else in this repo — an ArgoCD `Application`
 
 ## How it works
 
-A privileged, `hostNetwork` **DaemonSet** in `kube-system` runs on every node. On
-start it `apt`-installs `nftables` (Debian base — Alpine's musl `nft` segfaults on
-aarch64) and loads a small ruleset into its own
+A privileged, `hostNetwork` **DaemonSet** in `kube-system` runs on every node. It
+uses a **prebuilt image** (`images/origin-firewall/Dockerfile` → GHCR, built by
+CI) with `nftables`/`curl` baked in — nothing is installed at pod start. Debian
+base, not Alpine (Alpine's musl `nft` segfaults on aarch64). Argo CD Image Updater
+pins the image digest into `values.yaml`, like the SPA. On start it loads a small
+ruleset into its own
 `inet origin_fw` table, then self-heals (re-applies only if the table vanishes,
 so per-rule counters keep accumulating). The ruleset and an entrypoint script are
 rendered from `values.yaml` into a ConfigMap; a `checksum/config` annotation rolls

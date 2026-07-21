@@ -66,7 +66,6 @@ data:
   entrypoint.sh: |
     #!/bin/sh
     set -eu
-    export DEBIAN_FRONTEND=noninteractive
     RULESET=/etc/origin-firewall/origin-firewall.nft
     INTERVAL="${RECONCILE_INTERVAL:-30}"
     CF_AUTO_UPDATE="${CF_AUTO_UPDATE:-true}"
@@ -74,14 +73,10 @@ data:
     CF_V4_URL="${CF_V4_URL:-https://www.cloudflare.com/ips-v4}"
     CF_V6_URL="${CF_V6_URL:-https://www.cloudflare.com/ips-v6}"
 
-    # Debian base is bare; apt-install nft (+ curl/CA certs for auto-update).
-    # Retry until egress is up. The firewall only filters INBOUND 80/443, so
-    # egress (apt, the CF fetch) is never blocked by it. NB: Debian, not Alpine —
-    # Alpine's musl nft segfaults on aarch64 (see values.yaml image comment).
-    until command -v nft >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 \
-        || { apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-             nftables curl ca-certificates; }; do
-      echo "origin-firewall: waiting to install tools..."; sleep 5
+    # nft + curl are baked into the image (images/origin-firewall/Dockerfile) —
+    # nothing is installed at runtime. Fail loudly if the image is wrong.
+    for bin in nft curl; do
+      command -v "$bin" >/dev/null 2>&1 || { echo "origin-firewall: '$bin' missing from image"; exit 1; }
     done
 
     # Load the full table (chains + the baked-in fallback CF/local sets).

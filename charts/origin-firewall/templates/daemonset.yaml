@@ -19,6 +19,10 @@ spec:
         # Roll the pods when the ruleset changes so the new rules are applied.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       # Share the host network namespace so nft programs the HOST's ruleset.
       hostNetwork: true
       # ClusterFirstWithHostNet so DNS (for the apk install) still resolves.
