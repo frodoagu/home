@@ -1,25 +1,44 @@
 {{- if .Values.ingress.enabled }}
+{{- $fullName := include "home-assistant.fullname" . }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: {{ include "home-assistant.fullname" . }}
+  name: {{ $fullName }}
   labels:
     {{- include "home-assistant.labels" . | nindent 4 }}
 spec:
   entryPoints:
     - websecure
   routes:
+    {{- if .Values.rateLimit.enabled }}
+    # Login endpoints get the tight brute-force limit. This rule is longer than
+    # the catch-all below, so Traefik prefers it for /auth/* (login_flow, token).
+    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/auth/`)
+      kind: Rule
+      middlewares:
+        - name: {{ $fullName }}-auth-ratelimit
+        - name: {{ $fullName }}-ratelimit
+        {{- range .Values.ingress.middlewares }}
+        - name: {{ . }}
+        {{- end }}
+      services:
+        - name: {{ $fullName }}
+          port: {{ .Values.service.port }}
+    {{- end }}
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
-      services:
-        - name: {{ include "home-assistant.fullname" . }}
-          port: {{ .Values.service.port }}
-      {{- if .Values.ingress.middlewares }}
+      {{- if or .Values.rateLimit.enabled .Values.ingress.middlewares }}
       middlewares:
+        {{- if .Values.rateLimit.enabled }}
+        - name: {{ $fullName }}-ratelimit
+        {{- end }}
         {{- range .Values.ingress.middlewares }}
         - name: {{ . }}
         {{- end }}
       {{- end }}
+      services:
+        - name: {{ $fullName }}
+          port: {{ .Values.service.port }}
   tls:
     certResolver: {{ .Values.ingress.certResolver }}
 {{- end }}

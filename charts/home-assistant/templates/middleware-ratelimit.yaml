@@ -1,0 +1,41 @@
+{{- if and .Values.ingress.enabled .Values.rateLimit.enabled }}
+# Traefik rate-limit middlewares for Home Assistant (see values.yaml rateLimit).
+# Two buckets, both keyed on the real client IP behind Cloudflare:
+#   <fullname>-ratelimit       – generous, attached to every route (volumetric cap)
+#   <fullname>-auth-ratelimit  – tight, attached only to the /auth/* login route
+{{- $src := dict }}
+{{- if .Values.rateLimit.clientIPHeader }}
+{{- $src = dict "requestHeaderName" .Values.rateLimit.clientIPHeader }}
+{{- end }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-ratelimit
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.rateLimit.global.average }}
+    burst: {{ .Values.rateLimit.global.burst }}
+    period: {{ .Values.rateLimit.global.period }}
+    {{- if $src }}
+    sourceCriterion:
+      {{- toYaml $src | nindent 6 }}
+    {{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-auth-ratelimit
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.rateLimit.auth.average }}
+    burst: {{ .Values.rateLimit.auth.burst }}
+    period: {{ .Values.rateLimit.auth.period }}
+    {{- if $src }}
+    sourceCriterion:
+      {{- toYaml $src | nindent 6 }}
+    {{- end }}
+{{- end }}
