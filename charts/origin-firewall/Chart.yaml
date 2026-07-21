@@ -8,7 +8,7 @@ description: >-
 type: application
 version: 0.1.0
 # Tracks the base image tag (nftables is installed into it at runtime).
-appVersion: "3.21"
+appVersion: "trixie-slim"
 keywords:
   - firewall
   - nftables
