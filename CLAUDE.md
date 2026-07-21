@@ -2,8 +2,9 @@
 
 Agu's home-lab **GitOps** repository: Helm charts + ArgoCD `Application`s for
 services running on a Raspberry Pi with **k3s**. Mostly Kubernetes/Helm
-manifests; the one exception is `site/`, the source for the agu.com.ar landing
-SPA (built into an image by CI — see below). The README has the full operator
+manifests; the exceptions are `site/`, the source for the agu.com.ar landing
+SPA (built into an image by CI — see below), and `esphome/`, ESP32 firmware
+configs flashed out-of-band (not deployed by ArgoCD). The README has the full operator
 runbook (fresh-Pi setup, secrets, DNS); this file is the orientation for editing.
 
 ## Layout
@@ -13,13 +14,16 @@ apps/                ArgoCD Application manifests (App-of-Apps). One file per wo
   root.yaml          Root app — points at apps/ itself; `kubectl apply -f` this once to bootstrap.
   <name>.yaml        One Application per chart, all in namespace `argocd`.
 charts/              Helm charts, one dir per service. Each app/<name>.yaml -> charts/<name>.
-  argocd/            ArgoCD itself (app-of-apps deploys ArgoCD from here). Google login via bundled Dex/OIDC.
+  argocd/            ArgoCD itself (app-of-apps deploys ArgoCD from here). Google login via bundled Dex/OIDC;
+                     the local `admin` account is disabled (`admin.enabled: "false"`) so sign-in is Google-only.
   traefik-config/    Configures the k3s-BUNDLED Traefik via HelmChartConfig (does NOT install it). Targets kube-system.
                      Also ships the dashboard IngressRoute + auth middlewares (google-auth ForwardAuth,
                      dashboard-auth basic-auth fallback) and the www→apex redirect.
   oauth2-proxy/      Google OAuth2 ForwardAuth backend (wrapper chart over upstream). Backs the
                      `google-auth` Traefik middleware that gates the dashboard. Host: auth.agu.com.ar.
-  home-assistant/    Home Assistant + Google Assistant integration.
+  home-assistant/    Home Assistant + Google Assistant integration. The ONLY private service not behind
+                     google-auth (its own login stays, so the mobile app / Google Assistant webhook keep
+                     working); a Traefik rateLimit on /auth/* throttles login brute-force (see gotchas).
   cloudflare-ddns/   Dynamic DNS updater.
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
@@ -47,6 +51,10 @@ site/                Source for the agu.com.ar landing SPA (Vite + React + Tailw
 .github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for site/;
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
+esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
+                     Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
+                     Lirika coffee machine (see docs/cafetera-saeco-lirika.md). Secrets via !secret
+                     (secrets.yaml gitignored; secrets.yaml.example is the template).
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -69,7 +77,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   sign-in covers all subdomains; authorization is an explicit email allowlist
   (`authenticatedEmailsFile.restricted_access` in `charts/oauth2-proxy/values.yaml`),
   NOT `--email-domain`. (2) **ArgoCD** logs in via its bundled **Dex/OIDC**
-  (`charts/argocd/values.yaml`). The site's `privateLinks` use a separate,
+  (`charts/argocd/values.yaml`); its local `admin` account is disabled
+  (`admin.enabled: "false"`), so Google is the only sign-in and the email must
+  be mapped to `role:admin`. **Home Assistant** is deliberately NOT behind
+  google-auth (the mobile app / Google Assistant webhook need direct access) —
+  it keeps its own login, fronted by a Traefik `rateLimit` on `/auth/*`
+  (`charts/home-assistant`). The site's `privateLinks` use a separate,
   purely client-side Google sign-in (`site/src/auth/`) — unrelated to oauth2-proxy.
 - **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex,
   Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`, `git-creds`)
@@ -148,6 +161,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (settings/services/widgets/bookmarks/kubernetes/docker.yaml) are rendered from
   `config.*` values via `toYaml`. Traefik IngressRoutes aren't auto-discovered
   like k8s Ingresses, so services are listed statically in `values.yaml`.
+- **home-assistant — rate-limit source IP.** All traffic is proxied through
+  Cloudflare (`proxied: true`), so Traefik sees a Cloudflare edge IP as the peer.
+  The HA login `rateLimit` middlewares therefore key on the real client IP via
+  `sourceCriterion.requestHeaderName: Cf-Connecting-IP` (`rateLimit.clientIPHeader`);
+  keying on the peer IP would lump every visitor into one shared bucket. This
+  trusts that header — sound only while the origin is reachable exclusively via
+  Cloudflare. The tight limit is scoped to a dedicated `/auth/*` route (longer
+  rule → Traefik prefers it); the catch-all gets a generous volumetric cap.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

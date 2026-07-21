@@ -292,9 +292,12 @@ aren't k8s secrets and are still required either way:
 > Store that file **off** the repo (it is the master decryption key). Full
 > rotation, adoption, and re-seal workflow in [docs/secrets.md](docs/secrets.md).
 
-Log in to the ArgoCD UI at `argocd.agu.com.ar` to watch everything converge
-(initial admin password: `kubectl -n argocd get secret argocd-initial-admin-secret
--o jsonpath='{.data.password}' | base64 -d`).
+Log in to the ArgoCD UI at `argocd.agu.com.ar` to watch everything converge —
+click **Log in via Google**. The built-in local `admin` account is disabled
+(`admin.enabled: "false"` in `charts/argocd/values.yaml`), so sign-in is
+Dex/OIDC only; your Google email must be mapped to `role:admin` there
+(`rbac.policy.csv`). The `argocd` CLI still works with
+`argocd login argocd.agu.com.ar --sso`.
 
 ### 5 – Customise values
 
