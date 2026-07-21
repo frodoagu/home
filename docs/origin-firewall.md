@@ -1,4 +1,4 @@
-# Cloudflare-only origin firewall (nftables)
+# Cloudflare-only origin firewall (`charts/origin-firewall`)
 
 Blocks direct hits to the Pi's public IP: inbound `tcp/80` and `tcp/443` are
 accepted only from **Cloudflare's edge ranges** and the **local LAN/cluster**,
@@ -7,12 +7,23 @@ and dropped for everyone else. All `*.agu.com.ar` services are Cloudflare-proxie
 ever comes from Cloudflare; anything hitting the raw IP is bypassing Cloudflare
 (and any per-service auth/rate-limit that trusts CF-supplied headers).
 
-Files live in [`host/nftables/`](../host/nftables/):
+Deployed like everything else in this repo — an ArgoCD `Application`
+(`apps/origin-firewall.yaml`) syncing a chart. No manual SSH steps.
 
-- `origin-firewall.nft` — the ruleset (own `inet origin_fw` table)
-- `origin-firewall.service` — systemd unit that loads it at boot
+## How it works
 
-## Why this is a host firewall and not a Traefik middleware
+A privileged, `hostNetwork` **DaemonSet** in `kube-system` runs on every node. On
+start it `apk add`s `nftables` and loads a small ruleset into its own
+`inet origin_fw` table, then self-heals (re-applies only if the table vanishes,
+so per-rule counters keep accumulating). The ruleset and an entrypoint script are
+rendered from `values.yaml` into a ConfigMap; a `checksum/config` annotation rolls
+the pods when you change it. The `preStop` hook deletes the table when the app is
+pruned, so disabling the ArgoCD app cleanly removes the firewall.
+
+Because the pod shares the host network namespace, `nft` programs the **host's**
+ruleset, not a pod-local one.
+
+## Why a DaemonSet and not a Traefik `IPAllowList`
 
 k3s's klipper `svclb` SNATs every external connection to the node's CNI bridge
 (`10.42.0.1`) **before** Traefik sees it, so at Traefik, Cloudflare traffic and a
@@ -21,80 +32,59 @@ only thing carrying the real client is the `Cf-Connecting-Ip` / `X-Forwarded-For
 headers — which a direct attacker can forge. An `IPAllowList` middleware therefore
 cannot block direct hits.
 
-nftables at `prerouting priority raw` (-300) runs **before** klipper's `dstnat`
-(-100) and any POSTROUTING masquerade, so it still sees the real source IP and the
-original destination port. That's the only layer on the box that can tell the two
-apart.
+The nftables rule runs at `prerouting priority -300` — **before** klipper's
+`dstnat` (-100) and any POSTROUTING masquerade — where the real source IP and the
+original destination port are still visible. That's the only layer on the box that
+can tell the two apart, and a DaemonSet is how we program it under GitOps.
 
-## ⚠️ Router caveat — verify before trusting it
+## Safety
+
+- The ruleset **only ever matches `tcp/80,443`**. SSH (22), the k8s API (6443),
+  and everything else are never touched — a bad ruleset can't lock you out.
+- If the pod dies after applying, the kernel rules persist (fail-closed, still
+  blocking). If it never starts (e.g. image pull fails), no rules exist and
+  services stay reachable (fail-open) — same exposure as not having the firewall.
+- `NET_ADMIN`+`NET_RAW` on a hostNetwork pod is enough to program nftables. If the
+  DaemonSet logs show `nft` permission errors on your kernel, set
+  `privileged: true` in `values.yaml`.
+
+## ⚠️ Router caveat — verify it actually sees real source IPs
 
 This only works if your router **preserves the internet source IP** when it
 port-forwards 80/443 (plain DNAT). If the router SNATs forwarded traffic to its
 own LAN IP, every external request arrives at the Pi as `192.168.0.x`, matches
-`@local_v4`, and is accepted — the block does nothing. The counters below tell you
-which case you're in. If it's the SNAT case, filter at the router instead (allow
-WAN 80/443 only from the Cloudflare ranges).
-
-## Safe rollout (do this over SSH, with console/keyboard access as a backup)
-
-The ruleset only ever touches tcp/80,443 — SSH (22) and the k8s API (6443) are
-never matched, so this cannot lock you out of SSH. Still, roll out in two steps.
-
-### 1. Install in observe-only mode first
-
-Copy the files but make the last rule observe instead of drop, so nothing is
-blocked yet:
+`@local_v4`, and is accepted — the block does nothing. Verify:
 
 ```bash
-sudo install -D -m 0644 host/nftables/origin-firewall.nft /etc/nftables.d/origin-firewall.nft
-# temporarily neuter the drop: log what WOULD be dropped, but let it through
-sudo sed -i 's/^        counter drop$/        counter log prefix "origin-fw-would-drop " /' \
-    /etc/nftables.d/origin-firewall.nft
-sudo install -D -m 0644 host/nftables/origin-firewall.service /etc/systemd/system/origin-firewall.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now origin-firewall.service
+# 1. pods healthy on every node
+kubectl -n kube-system rollout status ds/origin-firewall
+
+# 2. from a device OFF your LAN (phone on mobile data), open a couple of
+#    services, e.g. https://grafana.agu.com.ar, then read the counters:
+kubectl -n kube-system exec ds/origin-firewall -- nft list table inet origin_fw
 ```
 
-### 2. Verify source IPs really reach the Pi
+- ✅ **Working:** the `@cloudflare_v4 … counter accept` packet count climbs when
+  you browse via Cloudflare; `@local_v4` climbs from on-LAN devices; `counter drop`
+  climbs from real direct-IP probes.
+- ❌ **Router is SNATing:** external browsing makes **`@local_v4`** climb (all
+  traffic looks like `192.168.0.x`) and `@cloudflare_v4` stays at 0. The firewall
+  is a no-op — block at the router instead (allow WAN 80/443 only from the
+  Cloudflare ranges).
 
-From a device **off your LAN** (phone on mobile data), open a couple of services,
-e.g. `https://grafana.agu.com.ar`. Then check the per-rule counters:
-
-```bash
-sudo nft list table inet origin_fw
-```
-
-- ✅ **Working as intended:** the `@cloudflare_v4 … accept` counter climbs when you
-  browse via Cloudflare, and the LAN counter climbs from on-LAN devices. Any
-  `origin-fw-would-drop` lines in `journalctl -k` are real direct-IP probes.
-- ❌ **Router is SNATing:** external browsing makes the **`@local_v4`** counter
-  climb (everything looks like `192.168.0.x`) and `@cloudflare_v4` stays at 0.
-  Stop here (`sudo systemctl disable --now origin-firewall.service && sudo nft
-  delete table inet origin_fw`) and block at the router instead.
-
-### 3. Arm it (enable the drop)
-
-Once step 2 confirms real Cloudflare IPs are seen, restore the drop and reload:
-
-```bash
-sudo cp host/nftables/origin-firewall.nft /etc/nftables.d/origin-firewall.nft
-sudo systemctl reload origin-firewall.service
-```
-
-Re-run the off-LAN test against a raw-IP URL to confirm a direct hit is now
-refused while `https://<host>.agu.com.ar` (via Cloudflare) still works.
+> `nft` lives inside the pod, so query counters via `kubectl exec` as above rather
+> than on the host.
 
 ## Rollback
 
-```bash
-sudo systemctl disable --now origin-firewall.service
-sudo nft delete table inet origin_fw      # remove immediately, no reboot
-```
+Remove `apps/origin-firewall.yaml` (or disable the ArgoCD app). The `preStop` hook
+runs `nft delete table inet origin_fw` on pod termination, removing the block
+immediately — no reboot. (A DaemonSet has no replica count to scale to zero, so
+deleting the app is the clean off switch.)
 
 ## Maintenance
 
-Cloudflare's ranges change rarely. When they do, update the `cloudflare_v4` /
-`cloudflare_v6` sets from <https://www.cloudflare.com/ips/> and
-`sudo systemctl reload origin-firewall.service`. If your LAN isn't
-`192.168.0.0/24`, adjust `@local_v4`; add a `local_v6` set if you use IPv6 on the
-LAN.
+Cloudflare's ranges change rarely. Update `cloudflareIPv4` / `cloudflareIPv6` in
+`charts/origin-firewall/values.yaml` from <https://www.cloudflare.com/ips/> and
+commit — the ConfigMap checksum rolls the pods, which re-apply. If your LAN isn't
+`192.168.0.0/24`, adjust `localIPv4`; drop `localIPv6` if you don't use IPv6.

@@ -1,0 +1,19 @@
+origin-firewall (Cloudflare-only) is deployed as a DaemonSet in {{ .Release.Namespace }}.
+
+It programs an nftables table `inet origin_fw` on each node that accepts inbound
+tcp/{{ .Values.webPorts | join "," }} only from Cloudflare + LAN/cluster and drops the rest.
+
+Verify (see docs/origin-firewall.md for the full check + router-SNAT caveat):
+
+  # pods up on every node
+  kubectl -n {{ .Release.Namespace }} rollout status ds/{{ include "origin-firewall.fullname" . }}
+
+  # ruleset + live per-rule counters (needs the pod's netns tools; easiest via logs)
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/name={{ include "origin-firewall.name" . }} --tail=20
+
+  # from OFF your LAN, browse https://grafana.agu.com.ar (via Cloudflare) then
+  # confirm the cloudflare_v4 counter climbed (not local_v4). If only local_v4
+  # moves, your router is SNATing → filter at the router instead.
+
+Roll back by disabling the ArgoCD app (or `helm uninstall`): the preStop hook
+removes the `inet origin_fw` table on pod termination.

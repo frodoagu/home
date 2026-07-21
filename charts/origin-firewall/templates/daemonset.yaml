@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "origin-firewall.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "origin-firewall.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "origin-firewall.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "origin-firewall.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the ruleset changes so the new rules are applied.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # Share the host network namespace so nft programs the HOST's ruleset.
+      hostNetwork: true
+      # ClusterFirstWithHostNet so DNS (for the apk install) still resolves.
+      dnsPolicy: ClusterFirstWithHostNet
+      # Come up early and resist eviction — it's a security control.
+      priorityClassName: system-node-critical
+      # Run on every node, including any control-plane/tainted ones.
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: origin-firewall
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "/etc/origin-firewall/entrypoint.sh"]
+          env:
+            - name: RECONCILE_INTERVAL
+              value: {{ .Values.reconcileInterval | quote }}
+          securityContext:
+            {{- if .Values.privileged }}
+            privileged: true
+            {{- else }}
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+            {{- end }}
+          lifecycle:
+            preStop:
+              exec:
+                # Remove ONLY our table when the DaemonSet is pruned/updated.
+                command: ["/bin/sh", "-c", "nft delete table inet origin_fw || true"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/origin-firewall
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "origin-firewall.fullname" . }}

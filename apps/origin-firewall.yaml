@@ -1,0 +1,26 @@
+---
+# ArgoCD Application – deploys the Cloudflare-only origin firewall DaemonSet.
+# Host-level networking infra (like sealed-secrets), so it lives in kube-system.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: origin-firewall
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/origin-firewall
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

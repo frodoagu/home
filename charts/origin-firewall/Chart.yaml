@@ -1,0 +1,20 @@
+apiVersion: v2
+name: origin-firewall
+description: >-
+  Cloudflare-only origin firewall for the home-lab. A privileged, host-networked
+  DaemonSet programs an nftables table on the node that drops direct-to-public-IP
+  hits on 80/443 (accepts only Cloudflare + LAN/cluster), below klipper's SNAT
+  where the real source IP is still visible. See docs/origin-firewall.md.
+type: application
+version: 0.1.0
+# Tracks the base image tag (nftables is installed into it at runtime).
+appVersion: "3.21"
+keywords:
+  - firewall
+  - nftables
+  - cloudflare
+  - security
+sources:
+  - https://github.com/frodoagu/home
+maintainers:
+  - name: frodoagu

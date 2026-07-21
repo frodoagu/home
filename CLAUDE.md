@@ -39,6 +39,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      (its Helm repo 404s). In kube-system as `sealed-secrets-controller` (kubeseal zero-flag).
   homepage/          gethomepage dashboard/start page at dash.agu.com.ar (google-auth). k8s service
                      discovery + cluster resource widget via RBAC.
+  origin-firewall/   Cloudflare-only origin firewall: a privileged hostNetwork DaemonSet (kube-system)
+                     that programs a host nftables table dropping direct-to-public-IP hits on 80/443
+                     (accepts only Cloudflare + LAN/cluster). See docs/origin-firewall.md + gotchas.
 site/                Source for the agu.com.ar landing SPA (Vite + React + Tailwind).
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private
                      section of external links (`privateLinks`) gated by client-side Google
@@ -55,10 +58,6 @@ esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices ou
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
                      Lirika coffee machine (see docs/cafetera-saeco-lirika.md). Secrets via !secret
                      (secrets.yaml gitignored; secrets.yaml.example is the template).
-host/                Node-level (non-Kubernetes) host config applied out-of-band on the Pi.
-                     nftables/ is the Cloudflare-only origin firewall (systemd + nft ruleset) that
-                     drops direct-to-public-IP hits on 80/443 — see docs/origin-firewall.md. Lives
-                     here (not a chart) because klipper SNATs source IPs before Traefik sees them.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -173,6 +172,16 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   trusts that header — sound only while the origin is reachable exclusively via
   Cloudflare. The tight limit is scoped to a dedicated `/auth/*` route (longer
   rule → Traefik prefers it); the catch-all gets a generous volumetric cap.
+- **origin-firewall — why a DaemonSet, not a Traefik middleware.** k3s klipper
+  `svclb` SNATs every external connection to the node CNI bridge (`10.42.0.1`)
+  before Traefik sees it, so at Traefik, Cloudflare and a direct-IP attacker are
+  indistinguishable and the CF headers are attacker-forgeable — no `IPAllowList`
+  can block direct hits. The firewall instead runs on the host at nftables
+  `prerouting priority -300` (before klipper's dstnat -100), where the real source
+  IP is still visible; a privileged hostNetwork DaemonSet programs it (own
+  `inet origin_fw` table, only touches 80/443 so SSH/6443 are safe). Effectiveness
+  hinges on the ROUTER preserving the source IP on port-forward — verify via the
+  rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
