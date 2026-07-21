@@ -126,6 +126,9 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   DDNS token must have **Zone:DNS:Edit on both zones** (one token scoped to both,
   or drop the `yaskia.com` entries from `charts/cloudflare-ddns/values.yaml`).
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
+  - Recommended hardening: since every service is Cloudflare-proxied, lock the
+    origin to Cloudflare's IP ranges so nobody can reach it by raw IP — see
+    [docs/origin-firewall.md](docs/origin-firewall.md) (host nftables firewall).
 
 ## Setup from a fresh Raspberry Pi OS
 
@@ -414,6 +417,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
+- [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only host nftables firewall: block direct-to-public-IP hits on 80/443 below klipper's SNAT, with a safe observe-first rollout and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
 
 ## Let's Encrypt notes

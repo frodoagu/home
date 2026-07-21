@@ -55,6 +55,10 @@ esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices ou
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
                      Lirika coffee machine (see docs/cafetera-saeco-lirika.md). Secrets via !secret
                      (secrets.yaml gitignored; secrets.yaml.example is the template).
+host/                Node-level (non-Kubernetes) host config applied out-of-band on the Pi.
+                     nftables/ is the Cloudflare-only origin firewall (systemd + nft ruleset) that
+                     drops direct-to-public-IP hits on 80/443 — see docs/origin-firewall.md. Lives
+                     here (not a chart) because klipper SNATs source IPs before Traefik sees them.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
