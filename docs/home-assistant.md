@@ -494,6 +494,67 @@ Gotchas:
 > dashboard registry + `lovelace.tv-remotes` config, restart, hard-refresh. Or just
 > install "Universal Remote Card" from HACS and rebuild the two cards.
 
+## Outdoor lights — wall switches ganged, app independent
+
+The **front door** and **stairs door** lights each sit on a **Shelly 1 Mini Gen4**:
+
+| Light | `switch.*` | Input (wall switch) | IP |
+|---|---|---|---|
+| Puerta Principal | `switch.afuera_interruptor_puerta_principal` | `binary_sensor.afuera_interruptor_puerta_principal_entrada_0` | 192.168.0.222 |
+| Puerta Escalera | `switch.afuera_interruptor_puerta_escalera` | `binary_sensor.afuera_interruptor_puerta_escalera_entrada_0` | 192.168.0.215 |
+
+The behaviour is **deliberately asymmetric**:
+
+- **App / Google Home**: each light is a plain, independent `switch`.
+- **Either wall switch**: drives **both** lights, as an idempotent toggle — if
+  either light is off, a flip turns **both on**; only with both already on does a
+  flip turn them off. So a mixed state left by the app is first normalised to
+  "both on", and the next flip turns them off.
+
+Two halves, both required:
+
+1. **On the Shellys** (device config — lives on the device, *not* in git):
+   `Switch.SetConfig` with `in_mode: "detached"` and `initial_state: "restore_last"`.
+
+   ```bash
+   # from anything on the LAN (the HA pod is hostNetwork, so it works)
+   CFG='%7B%22id%22%3A0%2C%22in_mode%22%3A%22detached%22%2C%22initial_state%22%3A%22restore_last%22%7D'
+   curl "http://192.168.0.215/rpc/Switch.SetConfig?id=0&config=$CFG"
+   curl "http://192.168.0.222/rpc/Switch.SetConfig?id=0&config=$CFG"
+   curl 'http://192.168.0.215/rpc/Switch.GetConfig?id=0'   # verify
+   ```
+
+   **Apply this only once the package below is deployed.** In `detached` the wall
+   switches do nothing until the automation exists — flipping the device config
+   first leaves them dead for the whole ArgoCD round-trip.
+
+   > **Why `detached` and not the factory `follow`, or `flip`.** In `follow` the
+   > relay tracks the wall switch *position*; in `flip` every change of the wall
+   > switch toggles its own relay. Either way the Shelly has **already decided
+   > locally** before HA gets a say, so "if either is off, turn both on" arrives
+   > late and you see the light the Shelly just switched off flicker back on.
+   > `detached` reduces the wall switch to a pure sensor
+   > (`binary_sensor.…_entrada_0`) and leaves the relay solely to HA.
+   > `restore_last` (instead of `match_input`) restores the last state after a
+   > power cut rather than each wall switch's position — which means nothing once
+   > the input is detached.
+
+2. **In HA**: the `luces_afuera_tecla_fisica` automation in
+   [`packages/lights.yaml`](../charts/home-assistant/packages/lights.yaml). It
+   triggers on the Shelly **inputs**, not on the relay states — that is what keeps
+   it out of the way of the app and of Google Home automations: turning a single
+   light on from there does not fire it. The `choose` turns both off only when
+   both are on, and turns both on in every other case — the same pattern as
+   `aires_toggle_calor` in `climate.yaml`. `from`/`to` are pinned to `on`/`off` so
+   an `unavailable → on` reconnect is ignored, and `mode: single` +
+   `max_exceeded: silent` swallow wall-switch contact bounce.
+
+> **The cost of `detached`:** with **HA down the wall switches do nothing** — the
+> relay has no local path left. That is the price of deciding in HA. A power cut
+> is still covered (`restore_last`). To go back to local behaviour, the same
+> `Switch.SetConfig` with `"in_mode":"follow"` (each wall switch drives its own
+> light) or `"flip"`, and drop the package.
+
 ## Probes
 
 A `startupProbe` tolerates HA's slow boot (up to ~150s) while keeping the
