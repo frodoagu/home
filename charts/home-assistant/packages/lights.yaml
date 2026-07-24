@@ -1,0 +1,73 @@
+# HA package: las dos luces de afuera (Shelly 1 Mini Gen4).
+#
+# Versioned config that HA merges via `homeassistant: packages:`. Rendered into
+# the {{ fullname }}-packages ConfigMap and mounted read-only at /config/packages.
+# See docs/home-assistant.md ("Luces de afuera"). No secrets — entity ids only.
+#
+# Comportamiento buscado:
+#   - Desde la app / Google Home: cada luz se maneja INDEPENDIENTE (son dos
+#     `switch.*` normales; acá no hay grupo ni espejo de estado que lo impida).
+#   - Desde cualquiera de las DOS teclas físicas: las dos luces juntas, con un
+#     toggle idempotente — si alguna está apagada el toque PRENDE las dos; recién
+#     con las dos prendidas el toque las apaga. Así un estado mezclado (dejado
+#     por la app) se normaliza a "todo prendido" y el siguiente toque ya apaga.
+#     Mismo patrón que `aires_toggle_calor` en climate.yaml.
+#
+# La mitad que NO está acá vive en los Shelly (config de dispositivo, fuera de
+# git): ambos relés en `in_mode: "detached"` + `initial_state: "restore_last"`.
+# Detached = la tecla NO maneja su propio relé, solo cambia de nivel y llega a HA
+# como `binary_sensor.…_entrada_0`; el relé lo maneja únicamente HA. Es lo que
+# permite decidir "prendé las dos" en vez de que el Shelly ya haya toggleado la
+# suya localmente. CONTRACARA: con HA caído las teclas no hacen nada (el corte de
+# luz sí queda cubierto: `restore_last` devuelve el último estado). Ver
+# docs/home-assistant.md para el RPC exacto y cómo volver atrás.
+
+automation:
+  - id: luces_afuera_tecla_fisica
+    alias: Luces afuera - Tecla física maneja las dos
+    description: >-
+      Cualquiera de las dos teclas físicas (puerta principal / escalera) maneja
+      las DOS luces. Toggle idempotente: solo apaga cuando las dos están
+      prendidas; en cualquier otro estado (mezclado o todo apagado) prende las
+      dos. No toca los comandos de la app ni de Google Home — dispara por la
+      ENTRADA del Shelly, no por el estado de los relés, así que prender una sola
+      luz desde la app o desde una automatización de Google Home no lo activa.
+    # Con las dos teclas hay rebote mecánico posible; `single` + silent descarta
+    # el re-disparo inmediato en vez de encolar un segundo toggle.
+    mode: single
+    max_exceeded: silent
+    trigger:
+      # Tecla tipo llave (no pulsador): cada accionamiento cambia el nivel de la
+      # entrada, en cualquier sentido. `from`/`to` acotados a on/off para ignorar
+      # los `unavailable → on` de reconexión del Shelly.
+      - platform: state
+        entity_id:
+          - binary_sensor.afuera_interruptor_puerta_principal_entrada_0
+          - binary_sensor.afuera_interruptor_puerta_escalera_entrada_0
+        from:
+          - "on"
+          - "off"
+        to:
+          - "on"
+          - "off"
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: switch.afuera_interruptor_puerta_principal
+                state: "on"
+              - condition: state
+                entity_id: switch.afuera_interruptor_puerta_escalera
+                state: "on"
+            sequence:
+              - action: switch.turn_off
+                target:
+                  entity_id:
+                    - switch.afuera_interruptor_puerta_principal
+                    - switch.afuera_interruptor_puerta_escalera
+        default:
+          - action: switch.turn_on
+            target:
+              entity_id:
+                - switch.afuera_interruptor_puerta_principal
+                - switch.afuera_interruptor_puerta_escalera
