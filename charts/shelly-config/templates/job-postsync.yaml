@@ -1,0 +1,36 @@
+# Applies a git change to the devices immediately instead of waiting for the next
+# CronJob tick. Runs as an ArgoCD PostSync hook, i.e. after the ConfigMaps holding
+# the reconciler and the scripts are already updated in the cluster.
+#
+# `BeforeHookCreation` deletes the previous hook Job before creating this one, so
+# the fixed name can be reused every sync and the last run stays inspectable
+# (`kubectl logs job/<name>-sync`).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "shelly-config.fullname" . }}-sync
+  labels:
+    {{- include "shelly-config.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: {{ .Values.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "shelly-config.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "shelly-config.podSpec" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

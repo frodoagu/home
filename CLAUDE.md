@@ -43,6 +43,10 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      that programs a host nftables table dropping direct-to-public-IP hits on 80/443
                      (accepts only Cloudflare + LAN/cluster). Runs a prebuilt image (images/origin-firewall
                      → GHCR, digest pinned by Image Updater). See docs/origin-firewall.md + gotchas.
+  shelly-config/     Declarative config for the LAN Shelly relays, reconciled onto them over their
+                     local RPC by a CronJob (self-heal) + PostSync hook Job (apply a git change now).
+                     Deploys NO device: it ships switch settings (values.yaml) and mJS scripts
+                     (scripts/*.js, incl. the outdoor-lights gang). See docs/shelly.md + gotchas.
 images/              Dockerfiles + build contexts for CI-built container images (one dir per image).
   home-site/         The agu.com.ar landing SPA (Vite + React + Tailwind) AND its Dockerfile.
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private section of
@@ -185,6 +189,17 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `inet origin_fw` table, only touches 80/443 so SSH/6443 are safe). Effectiveness
   hinges on the ROUTER preserving the source IP on port-forward — verify via the
   rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
+- **shelly-config — exactly ONE controller per wall switch.** The outdoor lights
+  run `in_mode: "detached"` (the wall switch does not drive its own relay) and an
+  on-device mJS script gangs the two. Do NOT also add a Home Assistant automation
+  on the same `binary_sensor.…_entrada_0` inputs: two controllers both toggling
+  produce intermittent, race-dependent nonsense (lights blink off and back on)
+  that looks like a double input event but isn't — one actuation delivers exactly
+  one `toggle`. Two more device-side traps: scripts must be **pure ASCII** (the
+  device corrupts multi-byte UTF-8 on upload and then fails with a misleading
+  `ReferenceError`), and `Script.PutCode` must be chunked by BYTES and **verified
+  with a `Script.GetCode` readback** — a truncated upload looks like it worked.
+  Full story in docs/shelly.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

@@ -1,0 +1,75 @@
+# Default values for shelly-config.
+#
+# Declarative config for the LAN Shelly devices, reconciled onto them over their
+# local RPC by a CronJob (periodic self-heal) plus a PostSync hook Job (applies a
+# git change on the spot). Pods reach the devices by IP straight over the LAN, so
+# no host networking is needed. See docs/home-assistant.md ("Outdoor lights").
+
+# Image running charts/shelly-config/files/reconcile.py. Plain python, no deps.
+image:
+  repository: python
+  # Pin explicitly (keep Chart.yaml appVersion in sync). No floating tags.
+  tag: "3.13-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# How often to re-check the devices. This is self-heal, not the delivery path:
+# a git change is applied immediately by the PostSync hook Job, so this only has
+# to catch drift (someone changing a setting in the Shelly app, a factory reset,
+# a device replaced). Every 30 min is plenty and stays gentle on the RPi.
+schedule: "*/30 * * * *"
+successfulJobsHistoryLimit: 1
+failedJobsHistoryLimit: 3
+# Don't fire a pile of catch-up runs if the node was down at the scheduled time.
+startingDeadlineSeconds: 300
+# The reconcile is idempotent, so a retry is always safe.
+backoffLimit: 3
+
+# Seconds to wait on each device RPC call.
+rpcTimeout: 15
+
+# The device inventory. Per device:
+#   host     - LAN IP (DHCP reservation in charts/pihole).
+#   name     - label for the logs only.
+#   switch   - Switch.SetConfig keys to enforce on channel 0. Only the listed
+#              keys are compared/written; anything else is left as the device
+#              has it.
+#   scripts  - mJS scripts from charts/shelly-config/scripts/<name>.js to keep
+#              uploaded, enabled and running on that device.
+devices:
+  # Both outdoor lights: the wall switches are detached (they do NOT drive their
+  # own relay) and luces-afuera.js gangs the two, so either wall switch drives
+  # both lights while the app and Google Home keep them independent.
+  - name: luz-puerta-escalera
+    host: 192.168.0.215
+    switch:
+      # detached: the relay is driven only by the script (and by HA/Google).
+      in_mode: detached
+      # restore_last: after a power cut both come back to their last state, which
+      # was in sync. `match_input` would restore each wall switch's position,
+      # which means nothing once the input is detached.
+      initial_state: restore_last
+    scripts:
+      - luces-afuera
+  - name: luz-puerta-principal
+    host: 192.168.0.222
+    switch:
+      in_mode: detached
+      initial_state: restore_last
+    scripts:
+      - luces-afuera
+
+# Resource requests/limits - tune for RPi. A run is a handful of HTTP calls.
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

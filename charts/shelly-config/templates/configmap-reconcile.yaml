@@ -1,0 +1,10 @@
+# The reconciler itself, mounted read-only at /app.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shelly-config.fullname" . }}-reconcile
+  labels:
+    {{- include "shelly-config.labels" . | nindent 4 }}
+data:
+  reconcile.py: |-
+{{ .Files.Get "files/reconcile.py" | indent 4 }}

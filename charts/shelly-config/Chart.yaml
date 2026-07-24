@@ -1,0 +1,14 @@
+apiVersion: v2
+name: shelly-config
+description: Reconciles declarative config (switch settings + mJS scripts) onto Shelly Gen2+ devices over their local RPC
+type: application
+version: 0.1.0
+appVersion: "3.13-alpine"
+keywords:
+  - shelly
+  - home-automation
+  - iot
+sources:
+  - https://shelly-api-docs.shelly.cloud/gen2/
+maintainers:
+  - name: frodoagu
