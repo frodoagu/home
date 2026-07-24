@@ -1,0 +1,27 @@
+---
+# ArgoCD Application - reconciles declarative config onto the LAN Shelly devices.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shelly-config
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/shelly-config
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shelly-config
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

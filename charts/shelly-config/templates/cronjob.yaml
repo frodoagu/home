@@ -1,0 +1,38 @@
+# Periodic self-heal: re-asserts the declared switch config and scripts on every
+# device. Idempotent -- a run with nothing to do logs "in sync" and writes
+# nothing. This is what brings back a device that was factory-reset or changed by
+# hand in the Shelly app; the delivery path for a git change is the PostSync hook
+# Job next to this.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "shelly-config.fullname" . }}
+  labels:
+    {{- include "shelly-config.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "shelly-config.selectorLabels" . | nindent 12 }}
+        spec:
+          {{- include "shelly-config.podSpec" . | nindent 10 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

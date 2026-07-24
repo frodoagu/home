@@ -1,0 +1,18 @@
+# The mJS scripts uploaded to the devices. Every .js under this chart's scripts/
+# dir is bundled here as its own data key (same pattern as the Home Assistant
+# packages and the monitoring dashboards) and mounted read-only at /scripts.
+# Loaded via .Files.Get so the raw source survives Helm templating untouched.
+#
+# ASCII ONLY: the devices mangle multi-byte UTF-8 on upload. reconcile.py refuses
+# to upload a script with non-ASCII rather than corrupt it silently.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shelly-config.fullname" . }}-scripts
+  labels:
+    {{- include "shelly-config.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "scripts/*.js" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

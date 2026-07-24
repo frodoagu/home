@@ -1,0 +1,17 @@
+shelly-config deployed.
+
+Devices under management ({{ len .Values.devices }}):
+{{- range .Values.devices }}
+  - {{ .name }} ({{ .host }}){{ if .scripts }} - scripts: {{ join ", " .scripts }}{{ end }}
+{{- end }}
+
+The PostSync hook Job has already reconciled them. Check what it did:
+
+  kubectl -n {{ .Release.Namespace }} logs job/{{ include "shelly-config.fullname" . }}-sync
+
+Drift is re-checked on schedule ({{ .Values.schedule }}). To force a run now:
+
+  kubectl -n {{ .Release.Namespace }} create job --from=cronjob/{{ include "shelly-config.fullname" . }} shelly-reconcile-manual
+
+Reminder: scripts under charts/shelly-config/scripts/ must be pure ASCII -- the
+devices corrupt multi-byte UTF-8 on upload.
