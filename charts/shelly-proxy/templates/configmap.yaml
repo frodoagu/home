@@ -1,0 +1,211 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shelly-proxy.fullname" . }}
+  labels:
+    {{- include "shelly-proxy.labels" . | nindent 4 }}
+data:
+  # ── nginx: serve the control panel + one reverse-proxy PathPrefix per device ──
+  default.conf: |
+    server {
+        listen       80;
+        listen       [::]:80;
+        server_name  _;
+
+        root   /usr/share/nginx/html;
+        index  index.html;
+
+        # k8s probes (no auth, never proxied to a device).
+        location = /healthz {
+            access_log off;
+            add_header Content-Type text/plain;
+            return 200 "ok\n";
+        }
+
+        # Control panel (served here, same origin as the RPC below).
+        location = / {
+            add_header Cache-Control "no-cache";
+            try_files /index.html =404;
+        }
+        location = /app.js {
+            add_header Cache-Control "no-cache";
+        }
+        location = /devices.json {
+            default_type application/json;
+            add_header Cache-Control "no-cache";
+        }
+
+        # One PathPrefix per device. The trailing slash on proxy_pass strips the
+        # /<path>/ prefix, so /<path>/rpc/Switch.Set -> device /rpc/Switch.Set.
+        {{- range .Values.devices }}
+        # {{ .label }} ({{ .host }})
+        location = /{{ .path }} { return 302 /{{ .path }}/; }
+        location /{{ .path }}/ {
+            proxy_pass          http://{{ .host }}/;
+            proxy_http_version  1.1;
+            proxy_set_header    Host {{ .host }};
+            proxy_connect_timeout {{ $.Values.proxyTimeout }}s;
+            proxy_read_timeout    {{ $.Values.proxyTimeout }}s;
+            proxy_send_timeout    {{ $.Values.proxyTimeout }}s;
+        }
+        {{- end }}
+    }
+
+  # ── The device list the panel renders (path + label only; hosts stay server-side) ──
+  devices.json: |
+    {{- $list := list }}
+    {{- range .Values.devices }}
+    {{- $list = append $list (dict "path" .path "label" .label) }}
+    {{- end }}
+    {{ $list | toJson }}
+
+  # ── The control panel (vanilla JS; speaks the same-origin RPC PathPrefixes) ──
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="es" data-theme="dark">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="color-scheme" content="dark">
+      <title>Shelly - Luces de afuera</title>
+      <style>
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0; min-height: 100vh;
+          background: #020617; color: #e2e8f0;
+          font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+          -webkit-font-smoothing: antialiased;
+        }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 64px; }
+        header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        header .dot { width: 10px; height: 10px; border-radius: 999px; background: #f59e0b; box-shadow: 0 0 12px #f59e0b88; }
+        h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: .2px; }
+        .sub { color: #64748b; font-size: 13px; margin: 0 0 28px 20px; }
+        .grid { display: grid; gap: 14px; }
+        .card {
+          border: 1px solid #1e293b; background: #0f172a; border-radius: 14px;
+          padding: 18px 18px; display: flex; align-items: center; gap: 16px;
+        }
+        .card .info { flex: 1; min-width: 0; }
+        .card .name { font-weight: 600; color: #f1f5f9; }
+        .card .meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .state { font-weight: 600; }
+        .state.on  { color: #22c55e; }
+        .state.off { color: #64748b; }
+        .state.err { color: #ef4444; }
+        /* Toggle */
+        .toggle {
+          --w: 56px; --h: 30px; position: relative; width: var(--w); height: var(--h);
+          flex: 0 0 auto; border-radius: 999px; border: 1px solid #334155;
+          background: #1e293b; cursor: pointer; transition: background .18s, border-color .18s;
+          padding: 0;
+        }
+        .toggle[disabled] { opacity: .4; cursor: progress; }
+        .toggle .knob {
+          position: absolute; top: 2px; left: 2px; width: 24px; height: 24px;
+          border-radius: 999px; background: #94a3b8; transition: transform .18s, background .18s;
+        }
+        .toggle[aria-pressed="true"] { background: #14532d; border-color: #22c55e; }
+        .toggle[aria-pressed="true"] .knob { transform: translateX(26px); background: #22c55e; }
+        footer { margin-top: 32px; text-align: center; color: #475569; font-size: 12px; }
+        footer a { color: #64748b; }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <header>
+          <span class="dot"></span>
+          <h1>Shelly &middot; Luces de afuera</h1>
+        </header>
+        <p class="sub">Control directo de los reles. Un toque = un cambio.</p>
+        <div id="grid" class="grid" aria-live="polite"></div>
+        <footer>agu.com.ar &middot; <a href="https://agu.com.ar">volver</a></footer>
+      </div>
+      <script src="/app.js"></script>
+    </body>
+    </html>
+
+  app.js: |
+    // Talks to the same-origin per-device PathPrefix proxy: /<path>/rpc/<Method>.
+    // No CORS, no mixed content — the page and the RPC share this host.
+    const RPC_TIMEOUT_MS = 4000;
+    const POLL_MS = 4000;
+
+    async function rpc(path, method, params) {
+      const qs = new URLSearchParams({ id: "0", ...(params || {}) }).toString();
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), RPC_TIMEOUT_MS);
+      try {
+        const res = await fetch(`/${path}/rpc/${method}?${qs}`, {
+          signal: ctrl.signal, cache: "no-store",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    function card(dev) {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.innerHTML = `
+        <div class="info">
+          <div class="name"></div>
+          <div class="meta">…</div>
+        </div>
+        <button class="toggle" aria-pressed="false" aria-label="encender/apagar" disabled>
+          <span class="knob"></span>
+        </button>`;
+      el.querySelector(".name").textContent = dev.label;
+      const meta = el.querySelector(".meta");
+      const btn = el.querySelector(".toggle");
+
+      let on = null;
+
+      function paint(status, err) {
+        if (err) {
+          meta.innerHTML = '<span class="state err">sin conexion</span>';
+          btn.disabled = true;
+          return;
+        }
+        on = !!status.output;
+        btn.setAttribute("aria-pressed", String(on));
+        btn.disabled = false;
+        const tC = status.temperature && status.temperature.tC;
+        const temp = typeof tC === "number" ? ` &middot; ${tC.toFixed(1)} &deg;C` : "";
+        meta.innerHTML =
+          `<span class="state ${on ? "on" : "off"}">${on ? "Encendida" : "Apagada"}</span>${temp}`;
+      }
+
+      async function refresh() {
+        try { paint(await rpc(dev.path, "Switch.GetStatus")); }
+        catch (e) { paint(null, e); }
+      }
+
+      btn.addEventListener("click", async () => {
+        if (on === null) return;
+        btn.disabled = true;
+        try {
+          await rpc(dev.path, "Switch.Set", { on: String(!on) });
+        } catch (e) { /* refresh will surface the error */ }
+        await refresh();
+      });
+
+      refresh();
+      setInterval(refresh, POLL_MS);
+      return el;
+    }
+
+    (async function main() {
+      const grid = document.getElementById("grid");
+      let devices = [];
+      try {
+        devices = await (await fetch("/devices.json", { cache: "no-store" })).json();
+      } catch (e) {
+        grid.textContent = "No se pudo cargar la lista de dispositivos.";
+        return;
+      }
+      for (const dev of devices) grid.appendChild(card(dev));
+    })();

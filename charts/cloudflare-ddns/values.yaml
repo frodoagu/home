@@ -38,6 +38,7 @@ domains:
   - pihole.agu.com.ar
   - logs.agu.com.ar
   - dash.agu.com.ar
+  - shelly.agu.com.ar
   - www.yaskia.com
   - yaskia.com
 

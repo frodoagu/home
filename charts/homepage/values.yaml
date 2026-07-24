@@ -111,6 +111,10 @@ config:
             href: https://pihole.agu.com.ar
             description: DNS ad-blocker / DHCP
             icon: pi-hole.png
+        - Shelly:
+            href: https://shelly.agu.com.ar
+            description: Outdoor lights control
+            icon: shelly.png
     - Sites:
         - agu.com.ar:
             href: https://agu.com.ar

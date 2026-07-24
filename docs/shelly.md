@@ -119,3 +119,40 @@ CFG='%7B%22id%22%3A0%2C%22in_mode%22%3A%22follow%22%7D'
 curl "http://192.168.0.215/rpc/Switch.SetConfig?id=0&config=$CFG"
 curl 'http://192.168.0.215/rpc/Script.Delete?id=1'
 ```
+
+## Reaching the devices from outside (`charts/shelly-proxy`)
+
+`charts/shelly-config` only reconciles config *onto* the devices — it does not
+expose them. External access lives in a separate app,
+[`charts/shelly-proxy`](../charts/shelly-proxy), at **`https://shelly.agu.com.ar`**,
+gated by the `google-auth` ForwardAuth (Google sign-in, oauth2-proxy allowlist),
+and its hostname is in `charts/cloudflare-ddns`. It's linked from the site's
+private section (`images/home-site`) and the homepage dash.
+
+An nginx pod does two things on that host:
+
+- serves a small self-hosted **control panel** at `/` (on/off + status per light);
+- reverse-proxies **one PathPrefix per device** — `/escalera/…` → `192.168.0.215`,
+  `/principal/…` → `192.168.0.222` — so `/<path>/rpc/<Method>` hits the device's
+  `/rpc/<Method>`.
+
+**Why a custom panel and not the device's own web UI:** the Shelly Gen4 admin UI
+drives the device over a *hardcoded* `ws://…/rpc` WebSocket (`"ws://"+location.host`,
+no `wss://` fallback). Served over HTTPS the browser blocks that socket as mixed
+content, so the native UI loads but is dead — no state, no toggles. The plain HTTP
+RPC (`GET /rpc/Switch.GetStatus`, `Switch.Set`) works fine through the proxy, so the
+panel speaks *that* from the **same origin** — no CORS, no mixed content, and the
+google-auth cookie applies for free.
+
+These devices have their own auth disabled (`auth_en:false`), so google-auth on
+`shelly.agu.com.ar` is the **only** gate in front of them from the outside. Adding
+a device is a `devices:` edit in
+[`charts/shelly-proxy/values.yaml`](../charts/shelly-proxy/values.yaml) (path +
+label + host); the panel and the nginx routes are generated from it. The panel
+only ever sends explicit, user-initiated `Switch.Set` calls, so it does not create
+a second competing controller (see the "exactly one controller" note above).
+
+```bash
+# hit a device's RPC through the proxy (after signing in)
+curl 'https://shelly.agu.com.ar/escalera/rpc/Switch.GetStatus?id=0'
+```
