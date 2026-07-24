@@ -94,6 +94,7 @@ data:
         .state.on  { color: #22c55e; }
         .state.off { color: #64748b; }
         .state.err { color: #ef4444; }
+        .temp { cursor: help; border-bottom: 1px dotted #334155; }
         /* Toggle */
         .toggle {
           --w: 56px; --h: 30px; position: relative; width: var(--w); height: var(--h);
@@ -174,7 +175,9 @@ data:
         btn.setAttribute("aria-pressed", String(on));
         btn.disabled = false;
         const tC = status.temperature && status.temperature.tC;
-        const temp = typeof tC === "number" ? ` &middot; ${tC.toFixed(1)} &deg;C` : "";
+        const temp = typeof tC === "number"
+          ? ` &middot; <span class="temp" title="Temperatura interna del rele, no del ambiente">rele ${tC.toFixed(1)} &deg;C</span>`
+          : "";
         meta.innerHTML =
           `<span class="state ${on ? "on" : "off"}">${on ? "Encendida" : "Apagada"}</span>${temp}`;
       }
