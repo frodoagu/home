@@ -31,6 +31,16 @@ describe("Landing", () => {
     expect(screen.getByText("Zona privada")).toBeInTheDocument();
   });
 
+  it("muestra los links de contacto en el footer", () => {
+    renderLanding();
+    const linkedin = screen.getByRole("link", { name: /LinkedIn/i });
+    expect(linkedin).toHaveAttribute("href", expect.stringContaining("linkedin.com/in/"));
+    expect(screen.getByRole("link", { name: /fede@agu\.com\.ar/i })).toHaveAttribute(
+      "href",
+      "mailto:fede@agu.com.ar",
+    );
+  });
+
   it("filtra las apps al hacer clic en una categoría", async () => {
     const user = userEvent.setup();
     renderLanding();

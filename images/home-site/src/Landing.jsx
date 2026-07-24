@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Linkedin, Mail } from "lucide-react";
 import { apps, CATEGORIES, getCategoryLabel, privateLinks } from "./apps/registry";
 import PrivateSection from "./PrivateSection";
 import LanguageToggle from "./components/LanguageToggle";
@@ -108,8 +108,24 @@ export default function Landing() {
         {/* Private half — external links to self-hosted services, gated by Google sign-in. */}
         <PrivateSection active={active} />
 
-        <footer className="mt-16 text-xs text-slate-600">
-          {txt.footer} 🍓
+        <footer className="mt-16 flex flex-col gap-3 border-t border-slate-900 pt-6 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+          <span>{txt.footer} 🍓</span>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://www.linkedin.com/in/%E2%96%BAfederico-ag%C3%BA-75a85a60/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 transition-colors hover:text-slate-300"
+            >
+              <Linkedin size={14} /> LinkedIn
+            </a>
+            <a
+              href="mailto:fede@agu.com.ar"
+              className="flex items-center gap-1.5 transition-colors hover:text-slate-300"
+            >
+              <Mail size={14} /> fede@agu.com.ar
+            </a>
+          </div>
         </footer>
       </div>
     </div>
