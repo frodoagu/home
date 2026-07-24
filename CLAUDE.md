@@ -47,6 +47,11 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      local RPC by a CronJob (self-heal) + PostSync hook Job (apply a git change now).
                      Deploys NO device: it ships switch settings (values.yaml) and mJS scripts
                      (scripts/*.js, incl. the outdoor-lights gang). See docs/shelly.md + gotchas.
+  shelly-proxy/      External access to the Shelly relays at shelly.agu.com.ar (google-auth). An nginx
+                     pod serves a small self-hosted control panel AND reverse-proxies one PathPrefix
+                     per device (/escalera, /principal) to that device's LAN HTTP RPC. Does NOT link the
+                     device's native UI (it hardcodes ws:// → dead behind HTTPS); the panel speaks the
+                     same-origin RPC instead. Separate from shelly-config. See docs/shelly.md + gotchas.
 images/              Dockerfiles + build contexts for CI-built container images (one dir per image).
   home-site/         The agu.com.ar landing SPA (Vite + React + Tailwind) AND its Dockerfile.
                      Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private section of
@@ -200,6 +205,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `ReferenceError`), and `Script.PutCode` must be chunked by BYTES and **verified
   with a `Script.GetCode` readback** — a truncated upload looks like it worked.
   Full story in docs/shelly.md.
+- **shelly-proxy — don't link the device's native UI behind HTTPS.** The Shelly
+  Gen4 admin UI drives the device over a HARDCODED `ws://…/rpc` WebSocket
+  (`"ws://"+location.host`, no `wss://` fallback), so served from `https://` it's
+  blocked as mixed content and the page loads dead — no state, no toggles. The
+  device's plain HTTP RPC (`GET /rpc/Switch.GetStatus`, `Switch.Set`) works fine
+  through the proxy, so `charts/shelly-proxy` serves its OWN panel that speaks it
+  from the SAME origin (no CORS, no mixed content, google-auth cookie just works).
+  These devices have their own auth disabled (`auth_en:false`) — google-auth on
+  `shelly.agu.com.ar` is the only gate in front of them from the outside.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

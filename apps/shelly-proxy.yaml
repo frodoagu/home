@@ -1,0 +1,31 @@
+---
+# ArgoCD Application - external access to the LAN Shelly relays (control panel +
+# per-device RPC reverse proxy behind google-auth). See charts/shelly-proxy.
+# (charts/shelly-config is a separate app: it reconciles config ONTO the devices.)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shelly-proxy
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://shelly.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/shelly-proxy
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shelly-proxy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

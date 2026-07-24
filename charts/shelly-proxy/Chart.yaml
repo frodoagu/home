@@ -1,0 +1,16 @@
+apiVersion: v2
+name: shelly-proxy
+description: External access to the LAN Shelly relays — nginx serving a small control panel plus a per-device reverse proxy to their local RPC, gated by google-auth
+type: application
+version: 0.1.0
+# Pinned to the nginx image tag (keep in sync with values.yaml image.tag).
+appVersion: "1.27-alpine"
+keywords:
+  - shelly
+  - home-automation
+  - iot
+  - proxy
+sources:
+  - https://shelly-api-docs.shelly.cloud/gen2/
+maintainers:
+  - name: frodoagu

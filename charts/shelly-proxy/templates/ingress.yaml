@@ -1,0 +1,32 @@
+{{- if .Values.ingress.enabled }}
+# Traefik IngressRoute for shelly.agu.com.ar, gated by the google-auth ForwardAuth
+# middleware (Google sign-in, allowlist enforced by oauth2-proxy). The whole host
+# is gated — both the control panel and every device PathPrefix behind it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "shelly-proxy.fullname" . }}
+  labels:
+    {{- include "shelly-proxy.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      {{- if .Values.googleAuth.enabled }}
+      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+      # sign-in redirect.
+      middlewares:
+        - name: google-auth-signin
+        - name: google-auth
+      {{- end }}
+      services:
+        - name: {{ include "shelly-proxy.fullname" . }}
+          port: {{ .Values.service.port }}
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.

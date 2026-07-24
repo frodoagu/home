@@ -1,4 +1,4 @@
-import { Activity, GitBranch, Home, LayoutDashboard, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -151,6 +151,19 @@ export const privateLinks = [
     tag: { es: "Logs", en: "Logs" },
     icon: ScrollText,
     accent: "#14b8a6",
+  },
+  {
+    slug: "shelly",
+    title: { es: "Shelly", en: "Shelly" },
+    description: {
+      es: "Control de las luces de afuera (prender/apagar y estado).",
+      en: "Control the outdoor lights (on/off and status).",
+    },
+    href: "https://shelly.agu.com.ar",
+    categories: ["devops", "dad"],
+    tag: { es: "Hogar", en: "Home" },
+    icon: Lightbulb,
+    accent: "#eab308",
   },
   {
     slug: "homepage",

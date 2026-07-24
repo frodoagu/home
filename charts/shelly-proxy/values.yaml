@@ -1,0 +1,82 @@
+# Default values for shelly-proxy.
+#
+# External access to the LAN Shelly relays from agu.com.ar. A tiny nginx pod
+# serves a self-hosted control panel at the site root AND reverse-proxies one
+# PathPrefix per device to that device's local HTTP RPC. The whole host sits
+# behind the google-auth ForwardAuth (Google sign-in, oauth2-proxy allowlist).
+#
+# Why a custom panel instead of linking the device's own web UI: the Shelly
+# Gen4 admin UI drives the device over a HARDCODED `ws://` WebSocket
+# (`"ws://"+location.host+"/rpc"`, no wss:// fallback), so behind HTTPS the
+# browser blocks it as mixed content and the page loads dead. The devices'
+# plain HTTP RPC (GET /rpc/Switch.GetStatus, Switch.Set) works fine through the
+# proxy, so we serve our own page that speaks it — SAME ORIGIN, so no CORS, no
+# mixed content, and the google-auth cookie just works.
+
+replicaCount: 1
+
+image:
+  repository: nginx
+  # Pin explicitly (keep Chart.yaml appVersion in sync). No floating tags.
+  tag: "1.27-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# nginx serves the panel + proxy on port 80.
+service:
+  type: ClusterIP
+  port: 80
+
+# The device inventory. Per device:
+#   path   - URL PathPrefix under the host: /<path>/... is stripped and proxied
+#            to the device (so /<path>/rpc/... hits the device's /rpc/...).
+#            Also the id the control panel uses. Keep it short + kebab-case.
+#   label  - human name shown on the control panel.
+#   host   - device LAN IP (DHCP reservation in charts/pihole; also the inventory
+#            in charts/shelly-config — keep the three in sync).
+# NOTE: these Shellys have their own auth DISABLED (auth_en:false); the only gate
+# in front of them from the outside is google-auth on this host.
+devices:
+  - path: escalera
+    label: Luz puerta escalera
+    host: 192.168.0.215
+  - path: principal
+    label: Luz puerta principal
+    host: 192.168.0.222
+
+# Seconds nginx waits on each device before giving up (a relay on the LAN answers
+# in milliseconds; a short timeout keeps a powered-off device from hanging the UI).
+proxyTimeout: 5
+
+# Ingress via Traefik IngressRoute, gated by the google-auth ForwardAuth middleware.
+ingress:
+  enabled: true
+  host: shelly.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy (Google sign-in). Mirrors charts/homepage: a local
+# copy of the middleware is created in THIS namespace because Traefik does not
+# allow cross-namespace middleware references from an IngressRoute by default.
+googleAuth:
+  enabled: true
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# RPi-sized resources. nginx serving one page + proxying a few RPC calls is cheap.
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

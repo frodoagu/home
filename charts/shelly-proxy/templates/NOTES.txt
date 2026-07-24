@@ -1,0 +1,17 @@
+shelly-proxy deployed.
+
+Control panel + per-device RPC proxy at:
+
+  https://{{ .Values.ingress.host }}/   (google-auth: {{ if .Values.googleAuth.enabled }}on{{ else }}OFF{{ end }})
+
+Devices exposed ({{ len .Values.devices }}):
+{{- range .Values.devices }}
+  - {{ .label }}: https://{{ $.Values.ingress.host }}/{{ .path }}/  ->  {{ .host }}
+{{- end }}
+
+Quick check (from inside the cluster or after signing in):
+
+  curl https://{{ .Values.ingress.host }}/{{ (index .Values.devices 0).path }}/rpc/Switch.GetStatus?id=0
+
+Remember: {{ .Values.ingress.host }} must be in charts/cloudflare-ddns/values.yaml
+`domains:` so the Cloudflare A record exists.
