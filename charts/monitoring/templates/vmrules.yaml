@@ -92,6 +92,26 @@ spec:
             summary: "node-exporter target is down"
             description: {{ `node-exporter on {{ $labels.instance }} has been unreachable for 5m.` | quote }}
 
+    - name: workloads.jobs
+      rules:
+        # The shelly-config CronJob self-heals every 30m (charts/shelly-config);
+        # a single missed run is usually just a Shelly briefly off the LAN and
+        # is already absorbed by the reconciler's own per-call retries. Only
+        # page if it hasn't managed a successful run in a while, i.e. several
+        # consecutive scheduled runs in a row failed -- 3 missed runs (90m) plus
+        # slack for a delayed tick. The default KubeJobFailed alert (fires 15m
+        # after any single failed run) is muted for this CronJob's own runs in
+        # the alertmanager routes below so this is the only signal for it; it
+        # still fires normally for the shelly-config-sync PostSync hook, where
+        # one failure (a git change not applied) is worth paging on immediately.
+        - alert: ShellyConfigNotReconciling
+          expr: time() - kube_cronjob_status_last_successful_time{namespace="shelly-config", cronjob="shelly-config"} > 100 * 60
+          labels:
+            severity: warning
+          annotations:
+            summary: "shelly-config hasn't reconciled successfully in a while"
+            description: {{ `shelly-config CronJob has had no successful run for over 100m (several consecutive ticks) -- the outdoor light Shellys may be out of sync or unreachable.` | quote }}
+
     - name: blackbox.uptime
       rules:
         - alert: ProbeDown

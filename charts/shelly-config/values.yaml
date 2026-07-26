@@ -29,6 +29,12 @@ backoffLimit: 3
 
 # Seconds to wait on each device RPC call.
 rpcTimeout: 15
+# A device RPC call that fails (e.g. the device briefly drops off the LAN) is
+# retried this many times, waiting rpcRetryDelay seconds between attempts,
+# before the whole run gives up on that device. The reconcile is idempotent,
+# so retrying is always safe.
+rpcRetries: 3
+rpcRetryDelay: 5
 
 # The device inventory. Per device:
 #   host     - LAN IP (DHCP reservation in charts/pihole).

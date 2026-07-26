@@ -34,6 +34,11 @@ import urllib.request
 SCRIPTS_DIR = os.environ.get("SCRIPTS_DIR", "/scripts")
 DEVICES = json.loads(os.environ["SHELLY_DEVICES"])
 TIMEOUT = int(os.environ.get("RPC_TIMEOUT", "15"))
+# A device that's mid-reboot or briefly off the LAN looks the same as one
+# that's actually gone; retrying a few times before giving up the whole run
+# absorbs that without waiting for the next scheduled tick.
+RETRIES = int(os.environ.get("RPC_RETRIES", "3"))
+RETRY_DELAY = int(os.environ.get("RPC_RETRY_DELAY", "5"))
 # Conservative: the device rejects oversized RPC bodies, and a rejected chunk
 # would leave half a script behind.
 CHUNK = 700
@@ -44,18 +49,33 @@ class DeviceError(Exception):
 
 
 def rpc(host, method, params=None):
-    """One JSON-RPC call to http://<host>/rpc. Raises DeviceError on failure."""
+    """One JSON-RPC call to http://<host>/rpc, retried on transient failure.
+
+    Raises DeviceError once RETRIES attempts are exhausted.
+    """
     payload = json.dumps({"id": 1, "method": method, "params": params or {}})
-    req = urllib.request.Request(
-        "http://%s/rpc" % host,
-        data=payload.encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            body = json.load(resp)
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-        raise DeviceError("%s failed: %s" % (method, exc)) from exc
+    attempt = 0
+    while True:
+        attempt += 1
+        req = urllib.request.Request(
+            "http://%s/rpc" % host,
+            data=payload.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                body = json.load(resp)
+            break
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            if attempt > RETRIES:
+                raise DeviceError("%s failed: %s" % (method, exc)) from exc
+            print(
+                "%s: %s failed (attempt %d/%d), retrying in %ds: %s"
+                % (host, method, attempt, RETRIES + 1, RETRY_DELAY, exc),
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(RETRY_DELAY)
     if "error" in body:
         raise DeviceError("%s returned %s" % (method, body["error"]))
     return body.get("result", {})

@@ -250,6 +250,15 @@ victoria-metrics-k8s-stack:
           - receiver: blackhole
             matchers:
               - alertname =~ "Watchdog|InfoInhibitor"
+          # A single failed shelly-config self-heal run (job names like
+          # shelly-config-<timestamp>) is noise -- see ShellyConfigNotReconciling
+          # in templates/vmrules.yaml, which pages only after several consecutive
+          # runs fail. This does NOT match shelly-config-sync (the PostSync hook,
+          # fixed name), so a failed git-change apply still pages immediately.
+          - receiver: blackhole
+            matchers:
+              - alertname = "KubeJobFailed"
+              - job_name =~ "shelly-config-[0-9]+"
       receivers:
         - name: blackhole
         - name: telegram
