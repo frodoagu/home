@@ -70,6 +70,10 @@ containers:
         value: {{ .Values.devices | toJson | quote }}
       - name: RPC_TIMEOUT
         value: {{ .Values.rpcTimeout | quote }}
+      - name: RPC_RETRIES
+        value: {{ .Values.rpcRetries | quote }}
+      - name: RPC_RETRY_DELAY
+        value: {{ .Values.rpcRetryDelay | quote }}
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
