@@ -88,14 +88,33 @@ tasa de advertisement — el payload trae los flags `sync_pressed` y
 > pares tiempo/amplitud de 5 bits empaquetados, y ahí el orden de bits es
 > delicado — no vale la pena replicarlo fuera del firmware.
 
-Validación local antes de commitear:
+Validación local antes de commitear, y flasheo por USB la primera vez (después ya
+es OTA):
 
 ```bash
-esphome config esphome/mopeka-gas.yaml
+esphome config esphome/mopeka-gas.yaml            # valida
+esphome compile esphome/mopeka-gas.yaml           # primer build de esp-idf: tarda
+esphome upload esphome/mopeka-gas.yaml --device /dev/ttyUSB0
+esphome logs esphome/mopeka-gas.yaml              # verificar que ve el sensor
 ```
 
 El ESP32 va **cerca del tubo** (el BLE es el enlace corto), y necesita WiFi de
 casa. El sensor `WiFi` (RSSI) está justamente para diagnosticar ese lado.
+
+### Emparejarlo con Home Assistant
+
+Esto **no está en git**, como todo lo que HA guarda en `.storage`: la config
+entry de ESPHome la crea el config flow de la UI, igual que las de webOS y
+Broadlink (ver [home-assistant.md](home-assistant.md#versioned-config-ha-packages)).
+
+HA lo descubre solo por mDNS — funciona porque el pod corre con
+`hostNetwork: true` y queda en la LAN física. Cuando aparezca en *Ajustes →
+Dispositivos y servicios*, pide la **clave de cifrado de la API**: es
+`mopeka_api_key` de `esphome/secrets.yaml` (gitignoreado).
+
+Recién ahí existen las entidades `sensor.gas_tubo_*`, que son las que consume
+`packages/gas.yaml`. Hasta entonces los templates de ese package se ven como no
+disponibles, que es exactamente lo que corresponde.
 
 ---
 
