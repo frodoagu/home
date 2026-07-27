@@ -27,6 +27,7 @@ see [.gitignore](../.gitignore).
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
+| `ha-telegram` | `home-assistant` | Home Assistant `notify.telegram` (gas-level alerts) | **Same** bot token as `alertmanager-telegram`, under key `bot-token` — re-created in this namespace |
 | `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI) |
 
 ## Create them
@@ -142,6 +143,18 @@ a secret; the chat id goes in `charts/monitoring/values.yaml`
 ```bash
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n monitoring create secret generic alertmanager-telegram \
+  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
+```
+
+**Home Assistant → Telegram bot token.** HA sends the gas-level alerts through
+the **same bot**, but a Secret cannot be read across namespaces, so the token has
+to exist in `home-assistant` too. Same deal on the chat id: not a secret, it
+lives inline in `charts/home-assistant/packages/telegram.yaml`. HA reads the
+token via `!env_var TELEGRAM_BOT_TOKEN`, injected from this Secret — see
+[gas-mopeka.md](gas-mopeka.md#el-token) for why an env var and not a Helm value.
+
+```bash
+kubectl -n home-assistant create secret generic ha-telegram \
   --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
 ```
 

@@ -1,0 +1,105 @@
+# Receptor BLE del sensor Mopeka del tubo de gas (45 kg).
+#
+# POR QUÉ EXISTE ESTE ESP32: el sensor es un Mopeka M1001 ("Standard Check"),
+# y la integración nativa `mopeka` de Home Assistant NO lo soporta — su parser
+# (mopeka-iot-ble) sólo conoce los model bytes de la familia Pro y además exige
+# el "Pro service UUID" en el advertisement. El Standard anuncia el service UUID
+# 0xADA0 con manufacturer id 0x000D, así que HA lo descarta como "Unsupported
+# device". Un bluetooth_proxy tampoco sirve: sólo retransmite advertisements que
+# HA sigue rechazando. La plataforma `mopeka_std_check` de ESPHome es la única
+# que decodifica este sensor, así que el parseo pasa a hacerse acá y a HA le
+# llegan sensores ya digeridos por la API de ESPHome.
+#
+# Ver docs/gas-mopeka.md para el flasheo, la calibración y los gotchas.
+
+substitutions:
+  name: mopeka-gas
+  friendly_name: "Gas Tubo"
+
+  # MAC del sensor Mopeka. PLACEHOLDER: reemplazar por la MAC real antes de
+  # flashear (docs/gas-mopeka.md explica cómo obtenerla de los logs del ESP32).
+  # Se deja una MAC sintácticamente válida para que `esphome config` valide.
+  mopeka_mac: "00:00:00:00:00:00"
+
+  # Calibración del tubo de 45 kg — ver "tank_type: CUSTOM" más abajo.
+  distance_empty: "38mm"
+  distance_full: "860mm"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret mopeka_api_key      # generá con: openssl rand -base64 32
+
+ota:
+  - platform: esphome
+    password: !secret mopeka_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Mopeka-Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+# El Mopeka es un beacon puro: emite advertisements y nunca acepta conexiones,
+# así que el scan pasivo alcanza (active: true sólo agregaría scan requests
+# inútiles y ruido de radio).
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+sensor:
+  - platform: mopeka_std_check
+    mac_address: ${mopeka_mac}
+
+    # tank_type CUSTOM es OBLIGATORIO acá: los presets de ESPHome llegan hasta
+    # NORTH_AMERICA_40LB_VERTICAL (full 508mm) y EUROPE_14KG (467mm), muy por
+    # debajo de un tubo de 45 kg. Todos los presets usan empty = 38mm, que es la
+    # zona muerta del sensor, así que se reusa ese valor.
+    #
+    # full = 860mm es la columna TEÓRICA de un tubo de 45 kg lleno (~88 L de
+    # propano sobre un diámetro interno de ~36 cm). Es un punto de partida para
+    # recalibrar con el sensor `distance` crudo una vez montado — ver
+    # docs/gas-mopeka.md. OJO: 860mm excede el rango que Mopeka especifica para
+    # este sensor, así que con el tubo lleno el nivel se va a quedar pegado en
+    # 100% y recién se vuelve fiel a medida que baja.
+    tank_type: CUSTOM
+    custom_distance_empty: ${distance_empty}
+    custom_distance_full: ${distance_full}
+
+    # Propano puro (el gas envasado local). Entra en la fórmula de velocidad del
+    # sonido con la que se convierte tiempo de vuelo a distancia.
+    propane_butane_mix: 100%
+
+    level:
+      name: "Nivel"
+      id: gas_level
+    # El `distance` crudo se expone A PROPÓSITO, por dos razones: es lo que
+    # permite recalibrar custom_distance_full con datos reales, y es el único
+    # discriminador de lecturas malas — ante mala calidad el componente publica
+    # distance = 0 Y level = 0, que si no es indistinguible de "tubo vacío".
+    # Los templates de HA filtran por distance > 0 (charts/home-assistant/packages/gas.yaml).
+    distance:
+      name: "Distancia"
+      id: gas_distance
+    temperature:
+      name: "Temperatura sensor"
+    battery_level:
+      name: "Batería sensor"
+
+  # Diagnóstico del enlace: el ESP32 va cerca del tubo, no del router.
+  - platform: wifi_signal
+    name: "WiFi"
+    update_interval: 60s

@@ -1,0 +1,246 @@
+# Nivel del tubo de gas (Mopeka M1001 + ESP32/ESPHome)
+
+Monitoreo del nivel del **tubo de 45 kg** con un sensor ultrasónico **Mopeka
+M1001** ("Standard Check"), que se pega con imanes abajo del tanque y mide por
+tiempo de vuelo la altura de la columna de propano líquido.
+
+| Pieza | Dónde vive |
+|---|---|
+| Firmware del receptor BLE | [`esphome/mopeka-gas.yaml`](../esphome/mopeka-gas.yaml) |
+| Sensores derivados + alertas | [`charts/home-assistant/packages/gas.yaml`](../charts/home-assistant/packages/gas.yaml) |
+| Bot de Telegram | [`charts/home-assistant/packages/telegram.yaml`](../charts/home-assistant/packages/telegram.yaml) |
+| Plumbing del token | `telegram.*` en [`charts/home-assistant/values.yaml`](../charts/home-assistant/values.yaml) |
+
+```
+  Mopeka M1001  ──BLE advertisement──>  ESP32 (ESPHome)  ──API ESPHome──>  Home Assistant
+  (bajo el tubo)   0xADA0 / mfr 0x000D   mopeka_std_check                   packages/gas.yaml
+                                                                                  │
+                                                                            notify.telegram
+```
+
+---
+
+## 1. Por qué hay un ESP32 y no se usa la integración nativa de HA
+
+**La integración `mopeka` de Home Assistant no soporta el M1001.** No es un
+problema de configuración ni de alcance: es que el parser directamente lo
+descarta. Vale la pena dejarlo escrito para no volver a investigarlo.
+
+- El parser es [`mopeka-iot-ble`](https://github.com/Bluetooth-Devices/mopeka-iot-ble),
+  y su tabla `DEVICE_TYPES` sólo conoce model bytes de la familia **Pro**: `0x3`
+  Pro Check, `0x4` Pro-200, `0x5` Pro H2O, `0x6` Lippert BottleCheck, `0x8`/`0x9`
+  Pro Plus, `0xA`/`0xB` TD40/TD200, `0xC` Pro Check Universal, `0x12` Pro-200B.
+  El Standard no está.
+- Además exige el **Pro service UUID** en el advertisement. El Standard anuncia
+  el service UUID `0xADA0` con manufacturer id `0x000D` — otro protocolo.
+- Resultado: HA lo loguea como *"Unsupported device"* y no crea ninguna entidad.
+
+**Un `bluetooth_proxy` tampoco sirve.** Un proxy sólo retransmite los
+advertisements hacia HA; el parser los sigue rechazando por lo mismo. No hay
+posición del proxy que arregle esto.
+
+**La integración HACS alternativa tampoco.**
+[`phurth/ha-mopeka`](https://github.com/phurth/ha-mopeka) es también Pro-only
+(Pro Check / Pro Plus / Pro H2O) y es un proyecto de 3 estrellas.
+
+Lo único que decodifica este sensor es la plataforma
+[`mopeka_std_check`](https://esphome.io/components/sensor/mopeka_std_check/) de
+**ESPHome** (soporta los tipos `STANDARD`, `XL`, `ETRAILER`, `STANDARD_ALT`), así
+que el parseo se hace en un ESP32 y a HA le llegan sensores ya digeridos por la
+API de ESPHome. El Bluetooth de la Pi sigue sirviendo para los termómetros ATC
+(ver [home-assistant.md](home-assistant.md#bluetooth)); para el Mopeka no.
+
+---
+
+## 2. Flasheo del ESP32
+
+Los secretos van en `esphome/secrets.yaml` (gitignoreado; la plantilla es
+`secrets.yaml.example`). Cada dispositivo tiene sus propias claves — las de este
+son `mopeka_api_key` / `mopeka_ota_password`:
+
+```bash
+openssl rand -base64 32   # -> mopeka_api_key
+```
+
+**Antes de flashear hay que poner la MAC real del sensor**: `mopeka-gas.yaml`
+trae `mopeka_mac: "00:00:00:00:00:00"`, un placeholder sintácticamente válido
+para que `esphome config` valide. Para obtener la MAC:
+
+1. Flashear igual con el placeholder (el `esp32_ble_tracker` escanea todo).
+2. `esphome logs esphome/mopeka-gas.yaml` y mirar los advertisements que el
+   tracker va listando.
+3. Apretar el **botón verde de sync** del sensor: sube la tasa de emisión (el
+   advertisement trae un flag `sync_pressed` y otro `slow_update_rate`), así que
+   el dispositivo que empieza a aparecer seguido es el Mopeka. Ojo: el sensor
+   **emite igual sin apretar nada**, sólo que más lento — el sync no lo
+   "habilita", únicamente lo acelera para encontrarlo.
+4. Poner esa MAC en `mopeka_mac` y volver a flashear.
+
+Validación local antes de commitear:
+
+```bash
+esphome config esphome/mopeka-gas.yaml
+```
+
+El ESP32 va **cerca del tubo** (el BLE es el enlace corto), y necesita WiFi de
+casa. El sensor `WiFi` (RSSI) está justamente para diagnosticar ese lado.
+
+---
+
+## 3. Calibración del tubo de 45 kg
+
+`tank_type: CUSTOM` es **obligatorio**. Los presets de ESPHome no llegan ni
+cerca:
+
+| Preset | Distancia lleno |
+|---|---|
+| `NORTH_AMERICA_20LB_VERTICAL` | 254 mm |
+| `NORTH_AMERICA_30LB_VERTICAL` | 381 mm |
+| `NORTH_AMERICA_40LB_VERTICAL` | 508 mm |
+| `EUROPE_6KG` / `EUROPE_11KG` / `EUROPE_14KG` | 336 / 366 / 467 mm |
+| **tubo 45 kg (este)** | **~860 mm** |
+
+Todos los presets usan `empty = 38 mm` — es la zona muerta del sensor, no una
+propiedad del tanque — así que se reusa ese valor. El `full = 860 mm` inicial es
+**teórico**: ~88 L de propano (45 kg / 0,51 kg·L⁻¹) sobre un diámetro interno de
+~36 cm.
+
+El `%` sale de una regla de tres lineal sobre esa ventana, con tope en 100:
+
+```
+level = 100 / (full_mm - empty_mm) * (distance - empty_mm)
+```
+
+**Para recalibrar** con datos reales, mirar el sensor `sensor.gas_tubo_distancia`
+(el crudo en mm, expuesto justamente para esto) con el tubo recién cambiado y
+poner esa lectura en `distance_full`. Es un cambio en el YAML del ESP32 y un
+reflasheo; los kilos, en cambio, se derivan en el package de HA, así que ese lado
+se ajusta con un commit y un sync de ArgoCD.
+
+### ⚠️ El tubo de 45 kg excede el rango del sensor
+
+Mopeka especifica el Standard para tanques del orden de los 40 lb (~508 mm de
+columna). Un tubo de 45 kg lleno tiene ~860 mm. Consecuencia práctica: **con el
+tubo lleno el nivel se queda pegado cerca de 100 % y recién se vuelve fiel a
+medida que baja.** El firmware ya topea en 100 % cuando `distance >= full_mm`.
+
+Para "¿cuándo pido gas?" eso alcanza, porque la mitad útil es justamente la de
+abajo. Si con datos reales molesta, la alternativa es calibrar `distance_full`
+contra la **lectura máxima real** en vez de la teórica: el `%` pasa a ser fiel en
+toda la banda legible, a costa de que "100 %" ya no signifique "lleno".
+
+### Montaje
+
+El sensor se sostiene con imanes contra la chapa del fondo del tanque, y necesita
+un par de centímetros de despeje. En un tubo de 45 kg eso depende del hueco del
+**aro de la base**. Tiene que ser acero (no sirve en cilindros de material
+compuesto) y la superficie tiene que estar limpia: el acoplamiento acústico es
+todo.
+
+---
+
+## 4. Gotcha: una lectura mala publica **0**, no "unavailable"
+
+El gotcha central de este sensor, y la razón de cómo está escrito
+`packages/gas.yaml`.
+
+Cuando la calidad del eco es pobre, `mopeka_std_check` **no** marca el sensor
+como no disponible: publica `distance = 0` **y** `level = 0` (en
+`mopeka_std_check.cpp`: *"Poor read quality. Setting distance to 0."*). Es decir
+que **un rebote feo es indistinguible de un tubo vacío**, y tomado en serio
+dispararía la alerta de gas bajo con el tubo lleno.
+
+El discriminador es la **distancia**: en un tubo realmente vacío la distancia cae
+por debajo de los 38 mm de zona muerta pero **sigue siendo > 0**; sólo la lectura
+mala publica exactamente `0`. Por eso todas las entidades derivadas cuelgan de:
+
+```yaml
+availability: "{{ states('sensor.gas_tubo_distancia') | float(0) > 0 }}"
+```
+
+Con una lectura mala se marcan **no disponibles** en lugar de mentir un 0 %. Ese
+mismo template cubre gratis el caso de que el ESP32 se caiga.
+
+Encima de eso hay debounce temporal, porque el líquido chapotea y el eco varía
+entre advertisements: el `binary_sensor.gas_bajo` exige `delay_on: 02:00:00` y el
+aviso crítico un `for: 02:00:00`.
+
+---
+
+## 5. Entidades
+
+Las publica el ESP32 (`friendly_name: "Gas Tubo"`):
+
+| Entidad | Qué es |
+|---|---|
+| `sensor.gas_tubo_nivel` | % crudo — **puede caer a 0 por lectura mala** |
+| `sensor.gas_tubo_distancia` | mm crudos — el discriminador de §4 y la base de la calibración |
+| `sensor.gas_tubo_temperatura_sensor` | temperatura del sensor (entra en la velocidad del sonido) |
+| `sensor.gas_tubo_bateria_sensor` | CR2032, en % |
+| `sensor.gas_tubo_wifi` | RSSI del ESP32 |
+
+Y las derivadas, del package de HA:
+
+| Entidad | Qué es |
+|---|---|
+| `sensor.gas_nivel` | el % **filtrado** (sin los ceros espurios) |
+| `sensor.gas_restante` | kg restantes (`% × 45`) |
+| `binary_sensor.gas_bajo` | `problem`, < 20 % sostenido 2 h |
+
+`sensor` ya está en `googleAssistant.exposedDomains`, así que el nivel también
+queda disponible en Google Home sin tocar nada.
+
+---
+
+## 6. Alertas por Telegram
+
+Cuatro automations en `packages/gas.yaml`, todas a `notify.telegram`:
+
+| Automation | Dispara |
+|---|---|
+| `gas_aviso_bajo` | transición de `binary_sensor.gas_bajo` (< 20 % por 2 h) |
+| `gas_aviso_critico` | `sensor.gas_nivel` < 10 % por 2 h |
+| `gas_aviso_bateria_sensor` | CR2032 < 15 % por 1 h |
+| `gas_aviso_sin_datos` | 12 h sin lecturas (ESP32 caído, sensor despegado) |
+
+Las dos últimas existen para que el monitoreo **no se muera en silencio**: sin
+ellas, el modo de falla es quedarse sin gas *y* sin aviso.
+
+### El token
+
+Se reusa el mismo bot que Alertmanager, pero el Secret hay que recrearlo en el
+namespace `home-assistant` (ver [secrets.md](secrets.md)):
+
+```bash
+kubectl -n home-assistant create secret generic ha-telegram \
+  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
+```
+
+**Por qué una variable de entorno y no un valor de Helm.** Los packages se
+bundlean en el ConfigMap con un `.Files.Get` **crudo** —
+`templates/configmap-packages.yaml` dice literalmente *"so the raw YAML survives
+Helm templating untouched"*— así que no hay forma de templatear un valor adentro
+de un package. El token entra entonces como `TELEGRAM_BOT_TOKEN` (inyectado desde
+el Secret en `deployment.yaml`) y el package lo lee con el tag `!env_var` de HA.
+
+El default (`!env_var TELEGRAM_BOT_TOKEN unset`) es a propósito: sin el Secret,
+la integración de Telegram no levanta pero el YAML **sigue parseando**. Sin
+default, un token faltante haría fallar la carga de *toda* la config de HA.
+
+El **chat id va en claro** en el package. No es un descuido: no es sensible (ya
+está así en `charts/monitoring/values.yaml` para el receiver de Alertmanager) y
+además `!env_var` devuelve string donde HA espera un int.
+
+---
+
+## 7. Validar cambios
+
+```bash
+esphome config esphome/mopeka-gas.yaml
+helm lint charts/home-assistant
+helm template t charts/home-assistant
+helm template t charts/home-assistant --set telegram.enabled=false   # camino condicional
+```
+
+Los packages se propagan al mount del ConfigMap con el sync de ArgoCD, pero HA
+los relee **al reiniciar el pod**.

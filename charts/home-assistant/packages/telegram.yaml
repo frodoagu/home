@@ -1,0 +1,36 @@
+# HA package: bot de Telegram para las notificaciones salientes de Home Assistant.
+#
+# Versioned config que HA mergea vía `homeassistant: packages:`. Se renderiza en
+# el ConfigMap {{ fullname }}-packages y se monta read-only en /config/packages.
+# Ver docs/home-assistant.md ("Versioned config (HA packages)").
+#
+# Está separado de gas.yaml a propósito: es una facilidad general — cualquier
+# package futuro puede mandar a `notify.telegram` sin volver a cablear nada.
+#
+# CÓMO ENTRA EL TOKEN SIN COMMITEARLO. Los packages se cargan con `.Files.Get`
+# CRUDO (templates/configmap-packages.yaml dice explícitamente "so the raw YAML
+# survives Helm templating untouched"), así que Helm no puede inyectarles
+# valores. El token viaja entonces como variable de entorno desde el secret
+# `ha-telegram` (values.yaml -> `telegram.*`, inyectado en deployment.yaml) y se
+# lee acá con el tag !env_var de HA.
+#
+# El default `unset` es deliberado: si el secret no está, la integración de
+# Telegram no levanta pero el YAML SIGUE PARSEANDO. Sin default, un token
+# faltante haría fallar la carga de toda la config de HA, no sólo de este bloque.
+#
+# El chat id va en claro y no es un descuido: no es sensible (ya está así en
+# charts/monitoring/values.yaml para el receiver de Alertmanager, con el mismo
+# bot) y además !env_var devuelve string donde HA espera un int.
+
+telegram_bot:
+  # `polling` es puramente saliente (long-poll contra api.telegram.org): no
+  # necesita ingress, ni webhook público, ni tocar Traefik.
+  - platform: polling
+    api_key: !env_var TELEGRAM_BOT_TOKEN unset
+    allowed_chat_ids:
+      - 5676033362
+
+notify:
+  - platform: telegram
+    name: telegram
+    chat_id: 5676033362
