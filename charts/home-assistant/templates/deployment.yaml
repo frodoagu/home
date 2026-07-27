@@ -183,22 +183,9 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.env (and .Values.telegram.enabled .Values.telegram.secretName) }}
+          {{- with .Values.env }}
           env:
-            {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
-            {{- end }}
-            {{- if and .Values.telegram.enabled .Values.telegram.secretName }}
-            # Telegram bot token, read back in packages/telegram.yaml via HA's
-            # `!env_var TELEGRAM_BOT_TOKEN` tag. Packages are bundled into the
-            # ConfigMap with a raw .Files.Get (no Helm templating), so an env var
-            # is the ONLY way to get a secret into one.
-            - name: TELEGRAM_BOT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.telegram.secretName }}
-                  key: {{ .Values.telegram.secretKey }}
-            {{- end }}
           {{- end }}
           # Startup probe tolerates slow HA boot; liveness/readiness stay lean so
           # the pod is marked Ready as soon as HA actually responds.

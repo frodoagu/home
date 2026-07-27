@@ -140,25 +140,12 @@ hacs:
   # Pin to a concrete HACS release tag from github.com/hacs/integration.
   version: "2.0.5"
 
-# Telegram notifications from Home Assistant (`notify.telegram`), used by the
-# gas-level alerts in packages/gas.yaml. The bot itself is configured in
-# packages/telegram.yaml — this block only plumbs the secret.
-#
-# WHY AN ENV VAR: packages are bundled into the ConfigMap with a raw
-# `.Files.Get` (templates/configmap-packages.yaml keeps the YAML untouched by
-# Helm), so values cannot be templated into them. The token is therefore
-# injected as env var TELEGRAM_BOT_TOKEN and read back with HA's `!env_var` tag.
-# The chat id is NOT here: it is not sensitive and lives inline in the package
-# (same as charts/monitoring/values.yaml does for the Alertmanager receiver).
-#
-# The secret ships with the chart as templates/ha-telegram-sealed.yaml. It holds
-# the SAME bot token Alertmanager uses, re-sealed for this namespace: SealedSecret
-# ciphertext is strict-scoped, so monitoring's blob does not decrypt here and the
-# two files must be re-sealed together on rotation (see docs/secrets.md).
-telegram:
-  enabled: true
-  secretName: "ha-telegram"
-  secretKey: "bot-token"
+# NOTE: there is deliberately no `telegram:` block here. Telegram is NOT
+# configurable from this chart: since 2026.7 the `telegram_bot` integration is
+# `config_flow: true`, so the bot (and one notify entity per chat id) is created
+# from the UI and its token lives in /config/.storage, not in git. The gas alerts
+# in packages/gas.yaml just call the resulting `notify.telegram_casa` entity.
+# See docs/gas-mopeka.md.
 
 # Versioned Home Assistant packages. Every YAML under this chart's packages/ dir
 # is bundled into a ConfigMap and mounted read-only at /config/packages; the init

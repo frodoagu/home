@@ -27,7 +27,6 @@ see [.gitignore](../.gitignore).
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
-| `ha-telegram` | `home-assistant` | Home Assistant `notify.telegram` (gas-level alerts) | **Same** bot token as `alertmanager-telegram`, under key `bot-token` — re-created in this namespace |
 | `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI) |
 
 ## Create them
@@ -146,28 +145,15 @@ kubectl -n monitoring create secret generic alertmanager-telegram \
   --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
 ```
 
-**Home Assistant → Telegram bot token.** HA sends the gas-level alerts through
-the **same bot** as Alertmanager, but a Secret cannot be read across namespaces,
-so the token must also exist in `home-assistant`. Already sealed and committed as
-`charts/home-assistant/templates/ha-telegram-sealed.yaml` — nothing to do unless
-you rotate the bot.
+**Home Assistant → Telegram: deliberately NOT a secret here.** HA also sends the
+gas-level alerts through this bot, but there is no `ha-telegram` Secret and there
+cannot be one: since 2026.7 the `telegram_bot` integration is `config_flow: true`,
+so the bot is created from the UI and its token is stored in `/config/.storage`
+on the PVC. It can no longer be supplied from YAML, which rules out feeding it
+from a Secret. Only Alertmanager's copy above lives in git.
 
-Note the ciphertext is **not** copyable between the two files: SealedSecrets are
-strict-scoped by default, so each blob only decrypts under its own
-name+namespace. **Rotating the bot means re-sealing both.** To re-derive the HA
-one from the live cluster without the token ever hitting the terminal:
-
-```bash
-kubectl -n monitoring get secret alertmanager-telegram -o jsonpath='{.data.bot-token}' | base64 -d \
-  | kubectl -n home-assistant create secret generic ha-telegram \
-      --dry-run=client -o yaml --from-file=bot-token=/dev/stdin \
-  | kubeseal --format yaml > charts/home-assistant/templates/ha-telegram-sealed.yaml
-```
-
-Same deal on the chat id: not a secret, it lives inline in
-`charts/home-assistant/packages/telegram.yaml`. HA reads the token via
-`!env_var TELEGRAM_BOT_TOKEN`, injected from this Secret — see
-[gas-mopeka.md](gas-mopeka.md#el-token) for why an env var and not a Helm value.
+Consequence for a fresh `/config` PVC: the Telegram bot must be re-added by hand,
+like the other UI-owned config entries. See [gas-mopeka.md](gas-mopeka.md#el-token).
 
 GHCR has no usable fine-grained-token path for container pulls — use a *classic*
 token. Prefer narrower scope? Drop `repo` and give the Argo CD repository a
@@ -202,7 +188,6 @@ beside the chart that consumes them:
 | `cloudflare-ddns-token` (cloudflare-ddns) | `charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml` |
 | `ha-google-sa` (home-assistant) | `charts/home-assistant/templates/ha-google-sa-sealed.yaml` |
 | `alertmanager-telegram` (monitoring) | `charts/monitoring/templates/alertmanager-telegram-sealed.yaml` |
-| `ha-telegram` (home-assistant) | `charts/home-assistant/templates/ha-telegram-sealed.yaml` |
 
 Install the CLI once, matching the controller's `appVersion` in
 `charts/sealed-secrets/Chart.yaml` (`brew install kubeseal`). The controller is

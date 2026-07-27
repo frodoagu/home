@@ -232,11 +232,21 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   liquid) needs `tank_type: CUSTOM` and still **exceeds the sensor's rated range**,
   so the level pins near 100% until it drains. Full story in docs/gas-mopeka.md.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
-  `configmap-packages.yaml`), so a secret can only reach one as an **env var** read
-  back with HA's `!env_var` tag — that's how the Telegram bot token gets in
-  (`values.yaml` `telegram.*` → `deployment.yaml` → `packages/telegram.yaml`).
-  Always give `!env_var` a default: without one, a missing var fails the parse of
-  HA's *entire* config, not just that block.
+  `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
+  could only reach a package as an **env var** read back with HA's `!env_var` tag,
+  and that tag always needs a default — without one a missing var fails the parse
+  of HA's *entire* config, not just that block.
+- **Telegram is UI-only now; don't try to configure it from a package.** Since
+  2026.7 `telegram_bot` is `config_flow: true`, so a `telegram_bot:` block in a
+  package dies with *"cannot be merged, expected a dict"* (HA's package merger
+  rejects a list for a non-list integration) and the token can only live in
+  `/config/.storage` — hence no `ha-telegram` Secret. The legacy `notify.telegram`
+  service is also deprecated (breaks in 2026.8.0): the modern form is one **notify
+  entity per chat id**, created as a config-entry *subentry*, called via
+  `notify.send_message` with `target.entity_id`. That action takes **only
+  `message`** — there is no `title`. The entity id comes from the subentry title,
+  so `packages/gas.yaml` and the UI share an unenforceable contract: the subentry
+  must be named "Telegram casa" → `notify.telegram_casa`.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
