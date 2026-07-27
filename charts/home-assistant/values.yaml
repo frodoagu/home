@@ -140,13 +140,6 @@ hacs:
   # Pin to a concrete HACS release tag from github.com/hacs/integration.
   version: "2.0.5"
 
-# NOTE: there is deliberately no `telegram:` block here. Telegram is NOT
-# configurable from this chart: since 2026.7 the `telegram_bot` integration is
-# `config_flow: true`, so the bot (and one notify entity per chat id) is created
-# from the UI and its token lives in /config/.storage, not in git. The gas alerts
-# in packages/gas.yaml just call the resulting `notify.telegram_casa` entity.
-# See docs/gas-mopeka.md.
-
 # Versioned Home Assistant packages. Every YAML under this chart's packages/ dir
 # is bundled into a ConfigMap and mounted read-only at /config/packages; the init
 # container adds `homeassistant: packages: !include_dir_named packages` so HA

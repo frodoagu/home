@@ -145,16 +145,6 @@ kubectl -n monitoring create secret generic alertmanager-telegram \
   --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
 ```
 
-**Home Assistant → Telegram: deliberately NOT a secret here.** HA also sends the
-gas-level alerts through this bot, but there is no `ha-telegram` Secret and there
-cannot be one: since 2026.7 the `telegram_bot` integration is `config_flow: true`,
-so the bot is created from the UI and its token is stored in `/config/.storage`
-on the PVC. It can no longer be supplied from YAML, which rules out feeding it
-from a Secret. Only Alertmanager's copy above lives in git.
-
-Consequence for a fresh `/config` PVC: the Telegram bot must be re-added by hand,
-like the other UI-owned config entries. See [gas-mopeka.md](gas-mopeka.md#el-token).
-
 GHCR has no usable fine-grained-token path for container pulls — use a *classic*
 token. Prefer narrower scope? Drop `repo` and give the Argo CD repository a
 read-write deploy key instead, then point the `ImageUpdater` CR's write-back at
