@@ -151,10 +151,10 @@ hacs:
 # The chat id is NOT here: it is not sensitive and lives inline in the package
 # (same as charts/monitoring/values.yaml does for the Alertmanager receiver).
 #
-# Create the secret out-of-band — the same bot Alertmanager uses, re-created in
-# this namespace (see docs/secrets.md):
-#   kubectl -n home-assistant create secret generic ha-telegram \
-#     --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
+# The secret ships with the chart as templates/ha-telegram-sealed.yaml. It holds
+# the SAME bot token Alertmanager uses, re-sealed for this namespace: SealedSecret
+# ciphertext is strict-scoped, so monitoring's blob does not decrypt here and the
+# two files must be re-sealed together on rotation (see docs/secrets.md).
 telegram:
   enabled: true
   secretName: "ha-telegram"

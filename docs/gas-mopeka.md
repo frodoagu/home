@@ -62,19 +62,31 @@ son `mopeka_api_key` / `mopeka_ota_password`:
 openssl rand -base64 32   # -> mopeka_api_key
 ```
 
-**Antes de flashear hay que poner la MAC real del sensor**: `mopeka-gas.yaml`
-trae `mopeka_mac: "00:00:00:00:00:00"`, un placeholder sintácticamente válido
-para que `esphome config` valide. Para obtener la MAC:
+La MAC del sensor (`mopeka_mac`) ya está puesta: **`34:14:B5:4B:A1:02`**. Si
+alguna vez hay que reidentificarlo (sensor de repuesto, segundo tubo), **no hace
+falta flashear a ciegas** — se lo encuentra desde cualquier máquina con BLE,
+porque su firma es inconfundible: **manufacturer id `0x000D` con exactamente 23
+bytes** de payload.
 
-1. Flashear igual con el placeholder (el `esp32_ble_tracker` escanea todo).
-2. `esphome logs esphome/mopeka-gas.yaml` y mirar los advertisements que el
-   tracker va listando.
-3. Apretar el **botón verde de sync** del sensor: sube la tasa de emisión (el
-   advertisement trae un flag `sync_pressed` y otro `slow_update_rate`), así que
-   el dispositivo que empieza a aparecer seguido es el Mopeka. Ojo: el sensor
-   **emite igual sin apretar nada**, sólo que más lento — el sync no lo
-   "habilita", únicamente lo acelera para encontrarlo.
-4. Poner esa MAC en `mopeka_mac` y volver a flashear.
+```bash
+bluetoothctl --timeout 15 scan le
+```
+
+y buscar el device cuyo `ManufacturerData.Key` sea `0x000d`. Para confirmar que
+es un Standard y no un Pro, el **segundo byte** del payload enmascarado con
+`0xCF` tiene que dar `0x02` (`STANDARD`; los otros valores válidos son `0x03` XL,
+`0x44` STANDARD_ALT, `0x46` ETRAILER).
+
+El **botón verde de sync** no hace falta para esto: el sensor **emite igual sin
+apretar nada**, sólo que más lento. El sync no lo "habilita", únicamente sube la
+tasa de advertisement — el payload trae los flags `sync_pressed` y
+`slow_update_rate` en los bits 7 y 6 del byte 3.
+
+> Del mismo payload salen directo, sin ambigüedad de bitfields: batería
+> (`(byte2/256·2+1,5)` V, escalada sobre 2,2–2,85 V para la CR2032) y temperatura
+> (`(byte3 & 0x3F − 25) × 1,776964` °C). La distancia, en cambio, sale de 12
+> pares tiempo/amplitud de 5 bits empaquetados, y ahí el orden de bits es
+> delicado — no vale la pena replicarlo fuera del firmware.
 
 Validación local antes de commitear:
 
@@ -150,6 +162,11 @@ como no disponible: publica `distance = 0` **y** `level = 0` (en
 que **un rebote feo es indistinguible de un tubo vacío**, y tomado en serio
 dispararía la alerta de gas bajo con el tubo lleno.
 
+Esto no es teórico: escaneando el sensor **apoyado sobre la mesa**, sin acoplar a
+ningún tanque, las 12 amplitudes del advertisement vienen en cero — o sea que un
+sensor despegado del tubo cae exactamente en este modo de falla y reportaría
+"0 %" con toda tranquilidad.
+
 El discriminador es la **distancia**: en un tubo realmente vacío la distancia cae
 por debajo de los 38 mm de zona muerta pero **sigue siendo > 0**; sólo la lectura
 mala publica exactamente `0`. Por eso todas las entidades derivadas cuelgan de:
@@ -208,13 +225,15 @@ ellas, el modo de falla es quedarse sin gas *y* sin aviso.
 
 ### El token
 
-Se reusa el mismo bot que Alertmanager, pero el Secret hay que recrearlo en el
-namespace `home-assistant` (ver [secrets.md](secrets.md)):
+Se reusa el mismo bot que Alertmanager, pero como los Secrets no cruzan
+namespaces el token también tiene que existir en `home-assistant`. Ya está
+sellado y commiteado en `charts/home-assistant/templates/ha-telegram-sealed.yaml`
+— no hay nada que hacer a mano.
 
-```bash
-kubectl -n home-assistant create secret generic ha-telegram \
-  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
-```
+Ojo con una trampa de SealedSecrets: el ciphertext **no se puede copiar** entre
+los dos archivos. Son *strict-scoped* por default, así que cada blob descifra
+únicamente bajo su propio name+namespace. **Rotar el bot implica re-sellar los
+dos** (el comando está en [secrets.md](secrets.md)).
 
 **Por qué una variable de entorno y no un valor de Helm.** Los packages se
 bundlean en el ConfigMap con un `.Files.Get` **crudo** —

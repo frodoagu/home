@@ -16,10 +16,10 @@ substitutions:
   name: mopeka-gas
   friendly_name: "Gas Tubo"
 
-  # MAC del sensor Mopeka. PLACEHOLDER: reemplazar por la MAC real antes de
-  # flashear (docs/gas-mopeka.md explica cómo obtenerla de los logs del ESP32).
-  # Se deja una MAC sintácticamente válida para que `esphome config` valide.
-  mopeka_mac: "00:00:00:00:00:00"
+  # MAC del sensor Mopeka, identificada escaneando desde la notebook: es el único
+  # BLE que anuncia manufacturer id 0x000D con 23 bytes de payload, y el byte de
+  # hardware id del advertisement da 0x02 = STANDARD. Ver docs/gas-mopeka.md.
+  mopeka_mac: "34:14:B5:4B:A1:02"
 
   # Calibración del tubo de 45 kg — ver "tank_type: CUSTOM" más abajo.
   distance_empty: "38mm"

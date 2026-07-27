@@ -147,16 +147,27 @@ kubectl -n monitoring create secret generic alertmanager-telegram \
 ```
 
 **Home Assistant → Telegram bot token.** HA sends the gas-level alerts through
-the **same bot**, but a Secret cannot be read across namespaces, so the token has
-to exist in `home-assistant` too. Same deal on the chat id: not a secret, it
-lives inline in `charts/home-assistant/packages/telegram.yaml`. HA reads the
-token via `!env_var TELEGRAM_BOT_TOKEN`, injected from this Secret — see
-[gas-mopeka.md](gas-mopeka.md#el-token) for why an env var and not a Helm value.
+the **same bot** as Alertmanager, but a Secret cannot be read across namespaces,
+so the token must also exist in `home-assistant`. Already sealed and committed as
+`charts/home-assistant/templates/ha-telegram-sealed.yaml` — nothing to do unless
+you rotate the bot.
+
+Note the ciphertext is **not** copyable between the two files: SealedSecrets are
+strict-scoped by default, so each blob only decrypts under its own
+name+namespace. **Rotating the bot means re-sealing both.** To re-derive the HA
+one from the live cluster without the token ever hitting the terminal:
 
 ```bash
-kubectl -n home-assistant create secret generic ha-telegram \
-  --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
+kubectl -n monitoring get secret alertmanager-telegram -o jsonpath='{.data.bot-token}' | base64 -d \
+  | kubectl -n home-assistant create secret generic ha-telegram \
+      --dry-run=client -o yaml --from-file=bot-token=/dev/stdin \
+  | kubeseal --format yaml > charts/home-assistant/templates/ha-telegram-sealed.yaml
 ```
+
+Same deal on the chat id: not a secret, it lives inline in
+`charts/home-assistant/packages/telegram.yaml`. HA reads the token via
+`!env_var TELEGRAM_BOT_TOKEN`, injected from this Secret — see
+[gas-mopeka.md](gas-mopeka.md#el-token) for why an env var and not a Helm value.
 
 GHCR has no usable fine-grained-token path for container pulls — use a *classic*
 token. Prefer narrower scope? Drop `repo` and give the Argo CD repository a
@@ -191,6 +202,7 @@ beside the chart that consumes them:
 | `cloudflare-ddns-token` (cloudflare-ddns) | `charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml` |
 | `ha-google-sa` (home-assistant) | `charts/home-assistant/templates/ha-google-sa-sealed.yaml` |
 | `alertmanager-telegram` (monitoring) | `charts/monitoring/templates/alertmanager-telegram-sealed.yaml` |
+| `ha-telegram` (home-assistant) | `charts/home-assistant/templates/ha-telegram-sealed.yaml` |
 
 Install the CLI once, matching the controller's `appVersion` in
 `charts/sealed-secrets/Chart.yaml` (`brew install kubeseal`). The controller is
