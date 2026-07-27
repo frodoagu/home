@@ -64,6 +64,22 @@ template:
         state: "{{ states('sensor.gas_tubo_nivel') | float(101) < 20 }}"
         delay_on: "02:00:00"
 
+# ────────────────────────────────────────────────────────────────────────────
+# CÓMO SE MANDA A TELEGRAM. NO por `notify.telegram` ni por un `telegram_bot:`
+# en YAML: desde 2026.7 la integración es `config_flow: true` (no se puede
+# configurar por YAML, un bloque `telegram_bot:` en un package falla con
+# "cannot be merged, expected a dict") y el servicio `notify.telegram` quedó
+# deprecado — se rompe en 2026.8.0.
+#
+# La forma actual es una ENTIDAD notify por chat id, creada como *subentry* del
+# config entry de Telegram desde la UI, y disparada con `notify.send_message`.
+# El entity_id sale del título que se le ponga al subentry, así que hay un
+# contrato con la UI: el subentry tiene que llamarse "Telegram casa" para que
+# quede `notify.telegram_casa`. Ver docs/gas-mopeka.md.
+#
+# OJO: `notify.send_message` NO acepta `title` (sólo `message`), por eso el
+# título va plegado dentro del mensaje.
+# ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: gas_aviso_bajo
     alias: Gas - Aviso de nivel bajo
@@ -77,11 +93,12 @@ automation:
         from: "off"
         to: "on"
     action:
-      - action: notify.telegram
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
         data:
-          title: "Gas bajo"
           message: >-
-            El tubo está al {{ states('sensor.gas_nivel') }}%
+            Gas bajo: el tubo está al {{ states('sensor.gas_nivel') }}%
             (~{{ states('sensor.gas_restante') }} kg). Ir pidiendo el recambio.
     mode: single
 
@@ -97,11 +114,12 @@ automation:
         below: 10
         for: "02:00:00"
     action:
-      - action: notify.telegram
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
         data:
-          title: "Gas crítico"
           message: >-
-            El tubo está al {{ states('sensor.gas_nivel') }}%
+            Gas crítico: el tubo está al {{ states('sensor.gas_nivel') }}%
             (~{{ states('sensor.gas_restante') }} kg). Se acaba.
     mode: single
 
@@ -116,11 +134,12 @@ automation:
         below: 15
         for: "01:00:00"
     action:
-      - action: notify.telegram
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
         data:
-          title: "Sensor de gas"
           message: >-
-            La batería del sensor Mopeka está al
+            Sensor de gas: la batería del Mopeka está al
             {{ states('sensor.gas_tubo_bateria_sensor') }}%. Cambiar la CR2032.
     mode: single
 
@@ -138,10 +157,11 @@ automation:
           - "unknown"
         for: "12:00:00"
     action:
-      - action: notify.telegram
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
         data:
-          title: "Sensor de gas"
           message: >-
-            Hace 12 h que no llegan lecturas del tubo. Revisar el ESP32
-            (mopeka-gas) o el sensor.
+            Sensor de gas: hace 12 h que no llegan lecturas del tubo. Revisar el
+            ESP32 (mopeka-gas) o el sensor.
     mode: single

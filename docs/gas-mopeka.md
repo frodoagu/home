@@ -230,7 +230,8 @@ queda disponible en Google Home sin tocar nada.
 
 ## 6. Alertas por Telegram
 
-Cuatro automations en `packages/gas.yaml`, todas a `notify.telegram`:
+Cuatro automations en `packages/gas.yaml`, todas contra la entidad
+`notify.telegram_casa`:
 
 | Automation | Dispara |
 |---|---|
@@ -244,30 +245,34 @@ ellas, el modo de falla es quedarse sin gas *y* sin aviso.
 
 ### El token
 
-Se reusa el mismo bot que Alertmanager, pero como los Secrets no cruzan
-namespaces el token también tiene que existir en `home-assistant`. Ya está
-sellado y commiteado en `charts/home-assistant/templates/ha-telegram-sealed.yaml`
-— no hay nada que hacer a mano.
+**Telegram no se configura desde este repo, y no se puede.** Desde 2026.7 la
+integración `telegram_bot` es `config_flow: true`: no acepta configuración por
+YAML, y un bloque `telegram_bot:` dentro de un package falla con
 
-Ojo con una trampa de SealedSecrets: el ciphertext **no se puede copiar** entre
-los dos archivos. Son *strict-scoped* por default, así que cada blob descifra
-únicamente bajo su propio name+namespace. **Rotar el bot implica re-sellar los
-dos** (el comando está en [secrets.md](secrets.md)).
+```
+Setup of package 'telegram' ... integration 'telegram_bot' cannot be merged, expected a dict
+```
 
-**Por qué una variable de entorno y no un valor de Helm.** Los packages se
-bundlean en el ConfigMap con un `.Files.Get` **crudo** —
-`templates/configmap-packages.yaml` dice literalmente *"so the raw YAML survives
-Helm templating untouched"*— así que no hay forma de templatear un valor adentro
-de un package. El token entra entonces como `TELEGRAM_BOT_TOKEN` (inyectado desde
-el Secret en `deployment.yaml`) y el package lo lee con el tag `!env_var` de HA.
+Como el token sólo se puede cargar por la UI, vive en `/config/.storage` (en el
+PVC), no en git — por eso **no** hay un Secret `ha-telegram`. En un PVC nuevo hay
+que volver a agregar el bot a mano, como el resto de las config entries que HA se
+guarda para sí (webOS, Broadlink, ESPHome).
 
-El default (`!env_var TELEGRAM_BOT_TOKEN unset`) es a propósito: sin el Secret,
-la integración de Telegram no levanta pero el YAML **sigue parseando**. Sin
-default, un token faltante haría fallar la carga de *toda* la config de HA.
+### El contrato con la UI: `notify.telegram_casa`
 
-El **chat id va en claro** en el package. No es un descuido: no es sensible (ya
-está así en `charts/monitoring/values.yaml` para el receiver de Alertmanager) y
-además `!env_var` devuelve string donde HA espera un int.
+El servicio viejo `notify.telegram` **también** quedó deprecado (HA lo avisa con
+un *repair* y deja de funcionar en 2026.8.0). La forma actual es una **entidad
+notify por chat id**, creada como *subentry* del config entry de Telegram, y
+disparada con `notify.send_message`.
+
+El `entity_id` sale del **título del subentry**, que lo pone quien lo crea en la
+UI. O sea que hay un contrato que git no puede forzar: el subentry tiene que
+llamarse **"Telegram casa"** para que quede `notify.telegram_casa`, que es lo que
+referencian las automations. Si se le pone otro nombre, las alertas fallan en
+silencio.
+
+> `notify.send_message` acepta **sólo** `message` — no hay campo `title`. Por eso
+> los mensajes llevan el título plegado adentro ("Gas bajo: el tubo está al…").
 
 ---
 
