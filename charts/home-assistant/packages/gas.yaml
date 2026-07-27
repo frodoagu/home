@@ -1,0 +1,147 @@
+# HA package: nivel del tubo de gas de 45 kg (sensor Mopeka M1001).
+#
+# Versioned config que HA mergea vía `homeassistant: packages:`. Se renderiza en
+# el ConfigMap {{ fullname }}-packages y se monta read-only en /config/packages.
+# Ver docs/home-assistant.md ("Versioned config (HA packages)") y
+# docs/gas-mopeka.md para el sensor en sí. Sin secretos acá.
+#
+# De dónde vienen las entidades `sensor.gas_tubo_*`: NO de la integración nativa
+# `mopeka` de HA — no soporta el M1001 (ver esphome/mopeka-gas.yaml). Las publica
+# un ESP32 con ESPHome que decodifica el advertisement BLE y las expone por la
+# API de ESPHome.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# EL GOTCHA QUE ORDENA TODO ESTE ARCHIVO: una lectura mala NO es "unavailable",
+# es CERO. Cuando la calidad del eco es pobre, el componente mopeka_std_check
+# publica `distance = 0` Y `level = 0` (mopeka_std_check.cpp: "Poor read
+# quality. Setting distance to 0."). O sea que un rebote feo es indistinguible
+# de un tubo vacío, y tomado en serio dispararía la alerta de gas bajo con el
+# tubo lleno.
+#
+# El discriminador es `distance`: en un tubo REALMENTE vacío la distancia cae
+# por debajo de los 38mm de zona muerta pero sigue siendo > 0; sólo la lectura
+# mala publica exactamente 0. Por eso todas las entidades de acá cuelgan de
+# `availability: distancia > 0` — con una lectura mala se marcan no disponibles
+# en vez de mentir un 0%.
+# ────────────────────────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      # Nivel filtrado: el mismo % que publica el ESP32 pero sin los ceros
+      # espurios, así el historial y los gráficos no se llenan de caídas a 0.
+      - name: "Gas nivel"
+        unique_id: gas_nivel
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:propane-tank
+        availability: "{{ states('sensor.gas_tubo_distancia') | float(0) > 0 }}"
+        state: "{{ states('sensor.gas_tubo_nivel') | float(0) | round(0) }}"
+
+      # Kilos restantes. La conversión vive acá y no en el firmware a propósito:
+      # recalibrar es un commit + sync de ArgoCD, no reflashear el ESP32.
+      # Es lineal sobre el % (el tubo es un cilindro recto), así que hereda la
+      # exactitud del `level`, incluida la saturación en 100% con el tubo lleno
+      # que describe docs/gas-mopeka.md.
+      - name: "Gas restante"
+        unique_id: gas_restante
+        unit_of_measurement: "kg"
+        device_class: weight
+        state_class: measurement
+        icon: mdi:propane-tank
+        availability: "{{ states('sensor.gas_tubo_distancia') | float(0) > 0 }}"
+        state: "{{ (states('sensor.gas_tubo_nivel') | float(0) / 100 * 45) | round(1) }}"
+
+  - binary_sensor:
+      # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
+      # que exigir 2 h continuas bajo el umbral evita avisos por un solo mal
+      # advertisement. Si la entidad se vuelve no disponible el contador se
+      # reinicia, que es justo lo que se quiere.
+      - name: "Gas bajo"
+        unique_id: gas_bajo
+        device_class: problem
+        icon: mdi:propane-tank-outline
+        availability: "{{ states('sensor.gas_tubo_distancia') | float(0) > 0 }}"
+        state: "{{ states('sensor.gas_tubo_nivel') | float(101) < 20 }}"
+        delay_on: "02:00:00"
+
+automation:
+  - id: gas_aviso_bajo
+    alias: Gas - Aviso de nivel bajo
+    description: >-
+      Avisa por Telegram cuando el tubo baja del 20%. Dispara en la transición
+      del binary_sensor, que ya trae 2 h de debounce, así que manda un solo
+      mensaje por cruce de umbral y no repite mientras siga bajo.
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.gas_bajo
+        from: "off"
+        to: "on"
+    action:
+      - action: notify.telegram
+        data:
+          title: "Gas bajo"
+          message: >-
+            El tubo está al {{ states('sensor.gas_nivel') }}%
+            (~{{ states('sensor.gas_restante') }} kg). Ir pidiendo el recambio.
+    mode: single
+
+  - id: gas_aviso_critico
+    alias: Gas - Aviso de nivel crítico
+    description: >-
+      Segundo aviso al 10%. `for` de 2 h por la misma razón que el binary_sensor:
+      filtrar lecturas sueltas malas. numeric_state sólo dispara al cruzar el
+      umbral, así que no repite.
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.gas_nivel
+        below: 10
+        for: "02:00:00"
+    action:
+      - action: notify.telegram
+        data:
+          title: "Gas crítico"
+          message: >-
+            El tubo está al {{ states('sensor.gas_nivel') }}%
+            (~{{ states('sensor.gas_restante') }} kg). Se acaba.
+    mode: single
+
+  - id: gas_aviso_bateria_sensor
+    alias: Gas - Batería baja del sensor
+    description: >-
+      La CR2032 del Mopeka. Sin esto el monitoreo se muere en silencio: el
+      sensor deja de emitir y nadie se entera hasta quedarse sin gas.
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.gas_tubo_bateria_sensor
+        below: 15
+        for: "01:00:00"
+    action:
+      - action: notify.telegram
+        data:
+          title: "Sensor de gas"
+          message: >-
+            La batería del sensor Mopeka está al
+            {{ states('sensor.gas_tubo_bateria_sensor') }}%. Cambiar la CR2032.
+    mode: single
+
+  - id: gas_aviso_sin_datos
+    alias: Gas - Sin datos del sensor
+    description: >-
+      La otra forma de morir en silencio: el ESP32 se cae, se queda sin WiFi o
+      el sensor se despega del tubo. 12 h de tolerancia para no avisar por un
+      corte de luz corto o un reinicio.
+    trigger:
+      - platform: state
+        entity_id: sensor.gas_tubo_nivel
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "12:00:00"
+    action:
+      - action: notify.telegram
+        data:
+          title: "Sensor de gas"
+          message: >-
+            Hace 12 h que no llegan lecturas del tubo. Revisar el ESP32
+            (mopeka-gas) o el sensor.
+    mode: single

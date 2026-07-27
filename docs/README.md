@@ -10,6 +10,7 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [monitoring.md](monitoring.md) | VictoriaMetrics + Grafana stack: custom dashboards, Telegram alerts, blackbox uptime/TLS probes, Traefik metrics, operating notes |
 | [home-assistant.md](home-assistant.md) | Home Assistant chart specifics: config bootstrap, device discovery (host networking), Bluetooth, IR air conditioners (SmartIR + Broadlink) |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
+| [gas-mopeka.md](gas-mopeka.md) | Tank level of the 45 kg LPG cylinder: why the Mopeka M1001 needs an ESP32 (HA's `mopeka` integration can't read it), CUSTOM calibration, the "bad read publishes 0" trap, Telegram alerts |
 | [agu-spa.md](agu-spa.md) | SPA chart: how `images/home-site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
 | [pihole.md](pihole.md) | Pi-hole as DNS ad-blocker + LAN DHCP: hostNetwork, the static-IP cold-boot chicken-and-egg, phased rollout, MAC→IP reservations |
 | [email-migration.md](email-migration.md) | **Design / migration runbook (not yet deployed)** — self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + AWS SES relay) |

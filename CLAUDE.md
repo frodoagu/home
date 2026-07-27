@@ -68,8 +68,10 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
-                     Lirika coffee machine (see docs/cafetera-saeco-lirika.md). Secrets via !secret
-                     (secrets.yaml gitignored; secrets.yaml.example is the template).
+                     Lirika coffee machine (see docs/cafetera-saeco-lirika.md); mopeka-gas.yaml is a
+                     BLE receiver for the LPG tank sensor (see docs/gas-mopeka.md + gotchas).
+                     Secrets via !secret, PER DEVICE (each ESP32 has its own api_key/ota_password)
+                     — secrets.yaml gitignored; secrets.yaml.example is the template.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
@@ -214,6 +216,27 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   from the SAME origin (no CORS, no mixed content, google-auth cookie just works).
   These devices have their own auth disabled (`auth_en:false`) — google-auth on
   `shelly.agu.com.ar` is the only gate in front of them from the outside.
+- **gas (Mopeka M1001) — HA's `mopeka` integration CANNOT read this sensor, and no
+  proxy fixes that.** The M1001 is the *Standard* Check: `mopeka-iot-ble`'s
+  `DEVICE_TYPES` only lists Pro-family model bytes and additionally requires the
+  Pro service UUID, while the Standard advertises `0xADA0`/mfr `0x000D` → HA logs
+  "Unsupported device". A `bluetooth_proxy` only relays advertisements the parser
+  still rejects, and the HACS alternative (`phurth/ha-mopeka`) is Pro-only too. So
+  an ESP32 with ESPHome's `mopeka_std_check` does the decoding
+  (`esphome/mopeka-gas.yaml`) and HA gets finished sensors over the ESPHome API.
+  Second trap, which shapes `charts/home-assistant/packages/gas.yaml`: **a poor
+  read publishes `0`, not "unavailable"** — both `distance` and `level` go to 0,
+  making a bad echo indistinguishable from an empty tank. `distance` is the
+  discriminator (a truly empty tank still reads > 0), so every derived entity
+  hangs off `availability: distancia > 0`. Third: a 45 kg cylinder (~860 mm of
+  liquid) needs `tank_type: CUSTOM` and still **exceeds the sensor's rated range**,
+  so the level pins near 100% until it drains. Full story in docs/gas-mopeka.md.
+- **HA packages are NOT Helm-templated** (`.Files.Get` raw in
+  `configmap-packages.yaml`), so a secret can only reach one as an **env var** read
+  back with HA's `!env_var` tag — that's how the Telegram bot token gets in
+  (`values.yaml` `telegram.*` → `deployment.yaml` → `packages/telegram.yaml`).
+  Always give `!env_var` a default: without one, a missing var fails the parse of
+  HA's *entire* config, not just that block.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
@@ -227,6 +250,12 @@ Charts (no CI renders these — run helm locally before committing):
 helm lint charts/<name>
 helm template t charts/<name>            # render with defaults
 helm template t charts/<name> --set k=v  # exercise conditional paths
+```
+
+ESPHome configs (no CI either — the `esphome` CLI is installed locally):
+
+```bash
+esphome config esphome/<device>.yaml     # validates against the pinned components
 ```
 
 Site (`images/home-site/`) — CI runs these on PRs/pushes, but run them locally too:
