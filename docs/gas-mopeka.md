@@ -64,7 +64,9 @@ nombre del dispositivo):
 |---|---|
 | `sensor.pro_check_universal_5343_tank_level` | **distancia cruda en mm** (sensor → superficie) — NO es un %, ver §3 |
 | `sensor.pro_check_universal_5343_temperature` | temperatura del sensor |
-| `sensor.pro_check_universal_5343_battery` | batería (CR2032), en % — nombre inferido por el mismo prefijo, **confirmar en HA** |
+| `sensor.pro_check_universal_5343_battery` | batería (CR2032), en % — confirmado contra el recorder de HA |
+| `sensor.pro_check_universal_5343_reading_quality` | % de calidad del eco (no usado todavía por `packages/gas.yaml`, ver §4) |
+| `sensor.pro_check_universal_5343_battery_voltage`, `_position_x`, `_position_y`, `_signal_strength` | expuestas por la integración pero sin consumidor en este package |
 
 Y las derivadas, del package de HA:
 
@@ -120,6 +122,15 @@ cuelgan de `tank_level > 0`, así que con una lectura de `0` mm se marcan **no
 disponibles** en vez de reportar "tubo lleno" (que es justo lo que daría la
 fórmula del §3 si se tomara ese `0` en serio).
 
+Chequeando el recorder de HA directo (`states`/`states_meta` en
+`home-assistant_v2.db`) con el sensor ya montado en el tubo real, `tank_level`
+viene **estable en 584-586 mm** durante los primeros ~40 min — nada parecido al
+0 constante del M1001. Sí hay ruido en `reading_quality` (llegó a `0` /
+`unavailable` recién emparejado, después se estabilizó en 33-67 %), que
+`packages/gas.yaml` todavía no usa. Si en el futuro `tank_level` empieza a
+mostrar valores erráticos sin caer a 0, `reading_quality` es el candidato obvio
+para sumar al `availability`.
+
 ---
 
 ## 5. Alertas por Telegram
@@ -136,17 +147,30 @@ Cuatro automations en `packages/gas.yaml`, todas contra `notify.telegram_casa`:
 Las dos últimas existen para que el monitoreo **no se muera en silencio**: sin
 ellas, el modo de falla es quedarse sin gas *y* sin aviso.
 
-### El contrato con la UI: `notify.telegram_casa`
+### ⚠️ `notify.telegram_casa` NO está configurado (verificado, no asumido)
+
+**A diferencia de lo que decía una versión anterior de este documento**, no es
+que el subentry se haya renombrado: revisando directo `core.entity_registry` y
+`core.config_entries` en el pod, la integración de Telegram **no existe en
+absoluto** en esta instancia de HA. El PR #42 dejó documentado el contrato
+(`notify.telegram_casa`), pero eso no implica que el bot siga configurado en
+este momento — puede haberse perdido en algún reset del PVC, o nunca haberse
+vuelto a crear tras el revert del M1001. Las 4 automations de este package
+apuntan a esa entidad y **no van a mandar nada hasta que se configure**.
+
+Para configurarlo desde cero: **Ajustes → Dispositivos y servicios → Añadir
+integración → Telegram Bot**, con el token del bot (el mismo que usa
+Alertmanager en `charts/monitoring`, si se quiere reusar) y el chat id. Al
+crear el subentry de notificación hay que nombrarlo exactamente **"Telegram
+casa"** — el entity_id sale de ese título, y con otro nombre las automations de
+acá vuelven a fallar en silencio.
 
 Igual que documentado en [home-assistant.md](home-assistant.md): desde 2026.7
 `telegram_bot` es `config_flow: true` (no se puede configurar por YAML) y
 `notify.telegram` está deprecado. La forma actual es una entidad notify por chat
 id, creada como *subentry* del config entry de Telegram, disparada con
 `notify.send_message` (que sólo acepta `message`, no `title` — por eso los
-títulos van plegados adentro del mensaje). El subentry tiene que seguir
-llamándose **"Telegram casa"** para que el entity_id quede `notify.telegram_casa`
-— si no existe o se renombró, estas automations fallan en silencio. Esto ya
-estaba configurado desde el PR #42; no se tocó nada de ese lado para este sensor.
+títulos van plegados adentro del mensaje).
 
 ---
 
