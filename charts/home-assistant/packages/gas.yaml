@@ -94,11 +94,15 @@ template:
 # `telegram_bot:` en un package falla con "cannot be merged, expected a dict")
 # y el servicio `notify.telegram` quedó deprecado — se rompe en 2026.8.0.
 #
-# La forma actual es una ENTIDAD notify por chat id, creada como *subentry* del
-# config entry de Telegram desde la UI, y disparada con `notify.send_message`.
-# El entity_id sale del título que se le puso al subentry en el PR #42: tiene
-# que seguir llamándose "Telegram casa" para que quede `notify.telegram_casa` —
-# si el subentry no existe o se renombró, estas automations fallan en silencio.
+# La forma actual es una ENTIDAD notify por chat id, creada como *subentry*
+# (`allowed_chat_ids`) del config entry de Telegram desde la UI, disparada con
+# `notify.send_message`. El entity_id NO es un título que uno elige: sale de
+# `<nombre del device del bot>_<nombre del chat>`, los dos autocompletados por
+# Telegram (el nombre propio del bot vía `getMe()`, y el nombre del contacto al
+# agregarlo como chat permitido) — confirmado a mano en esta instancia, dio
+# `notify.afuera_telegram_gateway_fede_a` sin haber tipeado ninguna de las dos
+# partes. Si el bot se re-crea o se agrega otro chat, VERIFICAR el entity_id
+# real en HA en vez de asumirlo — no hay forma de fijarlo desde git.
 #
 # OJO: `notify.send_message` NO acepta `title` (sólo `message`), por eso el
 # título va plegado dentro del mensaje.
@@ -118,7 +122,7 @@ automation:
     action:
       - action: notify.send_message
         target:
-          entity_id: notify.telegram_casa
+          entity_id: notify.afuera_telegram_gateway_fede_a
         data:
           message: >-
             Gas bajo: el tubo está al {{ states('sensor.gas_nivel') }}%
@@ -139,7 +143,7 @@ automation:
     action:
       - action: notify.send_message
         target:
-          entity_id: notify.telegram_casa
+          entity_id: notify.afuera_telegram_gateway_fede_a
         data:
           message: >-
             Gas crítico: el tubo está al {{ states('sensor.gas_nivel') }}%
@@ -160,7 +164,7 @@ automation:
     action:
       - action: notify.send_message
         target:
-          entity_id: notify.telegram_casa
+          entity_id: notify.afuera_telegram_gateway_fede_a
         data:
           message: >-
             Sensor de gas: la batería del Mopeka está al
@@ -183,7 +187,7 @@ automation:
     action:
       - action: notify.send_message
         target:
-          entity_id: notify.telegram_casa
+          entity_id: notify.afuera_telegram_gateway_fede_a
         data:
           message: >-
             Sensor de gas: hace 12 h que no llegan lecturas del tubo (Mopeka Pro

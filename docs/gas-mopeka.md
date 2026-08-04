@@ -13,7 +13,7 @@ sin ESP32 ni ESPHome de por medio.
   Mopeka Pro Check Universal  ──BLE advertisement──>  Bluetooth del host (Pi)  ──D-Bus──>  Home Assistant
   (montado en el tubo)          integración nativa `mopeka`                                packages/gas.yaml
                                                                                                    │
-                                                                                             notify.telegram_casa
+                                                                    notify.afuera_telegram_gateway_fede_a
 ```
 
 ---
@@ -135,7 +135,8 @@ para sumar al `availability`.
 
 ## 5. Alertas por Telegram
 
-Cuatro automations en `packages/gas.yaml`, todas contra `notify.telegram_casa`:
+Cuatro automations en `packages/gas.yaml`, todas contra
+`notify.afuera_telegram_gateway_fede_a`:
 
 | Automation | Dispara |
 |---|---|
@@ -147,30 +148,37 @@ Cuatro automations en `packages/gas.yaml`, todas contra `notify.telegram_casa`:
 Las dos últimas existen para que el monitoreo **no se muera en silencio**: sin
 ellas, el modo de falla es quedarse sin gas *y* sin aviso.
 
-### ⚠️ `notify.telegram_casa` NO está configurado (verificado, no asumido)
+### El entity_id de Telegram no se elige, sale de datos de Telegram
 
-**A diferencia de lo que decía una versión anterior de este documento**, no es
-que el subentry se haya renombrado: revisando directo `core.entity_registry` y
-`core.config_entries` en el pod, la integración de Telegram **no existe en
-absoluto** en esta instancia de HA. El PR #42 dejó documentado el contrato
-(`notify.telegram_casa`), pero eso no implica que el bot siga configurado en
-este momento — puede haberse perdido en algún reset del PVC, o nunca haberse
-vuelto a crear tras el revert del M1001. Las 4 automations de este package
-apuntan a esa entidad y **no van a mandar nada hasta que se configure**.
+Se configuró la integración desde cero en esta sesión (**Ajustes →
+Dispositivos y servicios → Telegram Bot**, config entry "Agu Home", más un
+subentry `allowed_chat_ids` para el chat propio). Verificado directo contra
+`core.config_entries`/`core.entity_registry` en el pod, el resultado corrige
+una idea equivocada que traía este documento (y que sigue en el historial del
+PR #42): **el entity_id no sale de un título que uno tipea al crear el
+subentry**. En esta versión, el subentry `allowed_chat_ids` ni siquiera pide un
+título — su `title` se autocompleta con el nombre del contacto de Telegram (acá
+salió "Fede A"), y el entity_id combina eso con el nombre propio del device del
+bot (que sale de `getMe()` del lado de Telegram, acá "Afuera Telegram
+Gateway" — probablemente el nombre con el que se registró el bot en BotFather
+en algún momento anterior de este repo, no algo elegido en este flujo). El
+resultado, sin haber tipeado ninguna de las dos partes:
 
-Para configurarlo desde cero: **Ajustes → Dispositivos y servicios → Añadir
-integración → Telegram Bot**, con el token del bot (el mismo que usa
-Alertmanager en `charts/monitoring`, si se quiere reusar) y el chat id. Al
-crear el subentry de notificación hay que nombrarlo exactamente **"Telegram
-casa"** — el entity_id sale de ese título, y con otro nombre las automations de
-acá vuelven a fallar en silencio.
+```text
+notify.afuera_telegram_gateway_fede_a
+```
+
+**Moraleja para la próxima vez que se toque esto:** no asumir el entity_id por
+convención ni por lo que diga esta doc — confirmarlo en HA (Developer Tools →
+States, filtrando `notify.`) después de crear el bot o agregar un chat, porque
+tanto el nombre del bot como el del contacto vienen de Telegram, no de HA ni de
+git.
 
 Igual que documentado en [home-assistant.md](home-assistant.md): desde 2026.7
 `telegram_bot` es `config_flow: true` (no se puede configurar por YAML) y
-`notify.telegram` está deprecado. La forma actual es una entidad notify por chat
-id, creada como *subentry* del config entry de Telegram, disparada con
-`notify.send_message` (que sólo acepta `message`, no `title` — por eso los
-títulos van plegados adentro del mensaje).
+`notify.telegram` está deprecado. Se dispara con `notify.send_message`, que
+sólo acepta `message` (no `title`) — por eso los títulos van plegados adentro
+del mensaje.
 
 ---
 
