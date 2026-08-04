@@ -225,13 +225,20 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   rejects a list for a non-list integration) and the token can only live in
   `/config/.storage` — hence no `ha-telegram` Secret. The legacy `notify.telegram`
   service is also deprecated (breaks in 2026.8.0): the modern form is one **notify
-  entity per chat id**, created as a config-entry *subentry*, called via
-  `notify.send_message` with `target.entity_id`. That action takes **only
-  `message`** — there is no `title`. The entity id derives from the subentry
-  title, so any package calling it shares a contract with the UI that git cannot
-  enforce. Nothing in this repo notifies via Telegram today (only Alertmanager
-  does, from `charts/monitoring`); this is here so the next attempt doesn't
-  rediscover it the hard way.
+  entity per chat id**, created as a config-entry *subentry* (`subentry_type:
+  allowed_chat_ids`), called via `notify.send_message` with `target.entity_id`.
+  That action takes **only `message`** — there is no `title`. The entity id is
+  **not** a title you type in the UI: it's `<bot device name>_<chat display
+  name>`, both pulled from Telegram itself (the bot's own registered name via
+  `getMe()`, and the contact's Telegram display name when you add their chat id)
+  — confirmed empirically on this instance, entity came out as
+  `notify.afuera_telegram_gateway_fede_a` with nothing typed for either half. So
+  any package calling it shares a contract with Telegram-side naming that git
+  can't enforce *and* can't predict in advance — check the real entity_id in HA
+  after setup instead of assuming a name. See `packages/gas.yaml` +
+  `docs/gas-mopeka.md` for the one consumer that exists today (Alertmanager's
+  Telegram alerts from `charts/monitoring` go through its own bot API call, not
+  through this HA entity).
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
