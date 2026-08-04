@@ -1,0 +1,192 @@
+# HA package: nivel del tubo de gas de 45 kg (sensor Mopeka Pro Check Universal).
+#
+# Versioned config que HA mergea vía `homeassistant: packages:`. Se renderiza en
+# el ConfigMap {{ fullname }}-packages y se monta read-only en /config/packages.
+# Ver docs/home-assistant.md ("Versioned config (HA packages)") y
+# docs/gas-mopeka.md para el sensor en sí. Sin secretos acá.
+#
+# De dónde vienen las entidades `sensor.pro_check_universal_5343_*`: de la
+# integración NATIVA `mopeka` de HA vía Bluetooth (no ESPHome). A diferencia del
+# M1001 "Standard Check" (revertido antes: mopeka-iot-ble no lo soporta), el Pro
+# Check Universal sí es de la familia que la integración decodifica, y el config
+# entry se creó por descubrimiento automático desde la UI (Ajustes → Dispositivos
+# y servicios) — no está en git, vive en /config/.storage, mismo patrón que
+# webOS/Broadlink (ver docs/home-assistant.md). El chart ya trae el Bluetooth del
+# host habilitado (hostNetwork + D-Bus + NET_ADMIN/NET_RAW en values.yaml), así
+# que por ahora no hace falta ningún bluetooth_proxy ESPHome — si el alcance
+# desde la Pi no le llega al tubo, ver docs/gas-mopeka.md para la alternativa.
+#
+# "Universal" quiere decir que el sensor no conoce la geometría del tanque: solo
+# publica `tank_level` como DISTANCIA cruda en mm (sensor → superficie), no un
+# %. El % y los kg se calculan acá con dos constantes de calibración:
+#
+#   empty_mm = 1280  -- altura total de un tubo de 45 kg (fuente: fabricante,
+#                        ver docs/gas-mopeka.md). Es una aproximación: no se
+#                        restó el offset real de montaje del sensor porque no
+#                        se midió a mano.
+#   full_mm  = 190    -- 1280 * 0.15. Los envases de GLP no se cargan al 100%
+#                        del volumen (queda espacio de expansión de vapor); 15%
+#                        es la convención de la industria, no un dato verificado
+#                        para este tubo puntual.
+#
+# Estas dos constantes son un punto de partida, NO una calibración real. Falta
+# corregirlas con una lectura en vivo la próxima vez que carguen el tubo (anotar
+# el `tank_level` en mm con el tubo recién cargado = ese es el full_mm real).
+# Si se recalibra, actualizar el número en LAS DOS fórmulas de abajo (nivel y
+# restante están escritas independientes a propósito, no encadenadas entre sí,
+# para no depender del orden de inicialización de los template sensors).
+#
+# ────────────────────────────────────────────────────────────────────────────
+# Precaución heredada del M1001: ahí una lectura mala no daba "unavailable",
+# daba directamente `distance = 0`, indistinguible de un tubo vacío. No está
+# confirmado que la integración nativa `mopeka` tenga el mismo problema (es
+# otro codebase), pero por las dudas todas las entidades de acá también cuelgan
+# de `tank_level > 0` — con una lectura de 0mm se marcan no disponibles en vez
+# de reportar "tubo lleno" (que es lo que daría la fórmula si se toma 0 en serio).
+# ────────────────────────────────────────────────────────────────────────────
+
+template:
+  - sensor:
+      - name: "Gas nivel"
+        unique_id: gas_nivel
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:propane-tank
+        availability: >-
+          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
+             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+        state: >-
+          {{ min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) | round(0) }}
+
+      # Kilos restantes. Lineal sobre el %, así que hereda su exactitud
+      # (incluida la calibración provisoria de arriba).
+      - name: "Gas restante"
+        unique_id: gas_restante
+        unit_of_measurement: "kg"
+        device_class: weight
+        state_class: measurement
+        icon: mdi:propane-tank
+        availability: >-
+          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
+             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+        state: >-
+          {{ (min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) / 100 * 45) | round(1) }}
+
+  - binary_sensor:
+      # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
+      # que exigir 2 h continuas bajo el umbral evita avisos por un solo mal
+      # advertisement. Si la entidad se vuelve no disponible el contador se
+      # reinicia, que es justo lo que se quiere.
+      - name: "Gas bajo"
+        unique_id: gas_bajo
+        device_class: problem
+        icon: mdi:propane-tank-outline
+        availability: >-
+          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
+             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+        state: >-
+          {{ min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) < 20 }}
+        delay_on: "02:00:00"
+
+# ────────────────────────────────────────────────────────────────────────────
+# CÓMO SE MANDA A TELEGRAM. NO por `notify.telegram` ni por un `telegram_bot:`
+# en YAML: desde 2026.7 la integración es `config_flow: true` (un bloque
+# `telegram_bot:` en un package falla con "cannot be merged, expected a dict")
+# y el servicio `notify.telegram` quedó deprecado — se rompe en 2026.8.0.
+#
+# La forma actual es una ENTIDAD notify por chat id, creada como *subentry* del
+# config entry de Telegram desde la UI, y disparada con `notify.send_message`.
+# El entity_id sale del título que se le puso al subentry en el PR #42: tiene
+# que seguir llamándose "Telegram casa" para que quede `notify.telegram_casa` —
+# si el subentry no existe o se renombró, estas automations fallan en silencio.
+#
+# OJO: `notify.send_message` NO acepta `title` (sólo `message`), por eso el
+# título va plegado dentro del mensaje.
+# ────────────────────────────────────────────────────────────────────────────
+automation:
+  - id: gas_aviso_bajo
+    alias: Gas - Aviso de nivel bajo
+    description: >-
+      Avisa por Telegram cuando el tubo baja del 20%. Dispara en la transición
+      del binary_sensor, que ya trae 2 h de debounce, así que manda un solo
+      mensaje por cruce de umbral y no repite mientras siga bajo.
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.gas_bajo
+        from: "off"
+        to: "on"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
+        data:
+          message: >-
+            Gas bajo: el tubo está al {{ states('sensor.gas_nivel') }}%
+            (~{{ states('sensor.gas_restante') }} kg). Ir pidiendo el recambio.
+    mode: single
+
+  - id: gas_aviso_critico
+    alias: Gas - Aviso de nivel crítico
+    description: >-
+      Segundo aviso al 10%. `for` de 2 h por la misma razón que el binary_sensor:
+      filtrar lecturas sueltas malas. numeric_state sólo dispara al cruzar el
+      umbral, así que no repite.
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.gas_nivel
+        below: 10
+        for: "02:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
+        data:
+          message: >-
+            Gas crítico: el tubo está al {{ states('sensor.gas_nivel') }}%
+            (~{{ states('sensor.gas_restante') }} kg). Se acaba.
+    mode: single
+
+  - id: gas_aviso_bateria_sensor
+    alias: Gas - Batería baja del sensor
+    description: >-
+      La CR2032 del Mopeka. Sin esto el monitoreo se muere en silencio: el
+      sensor deja de emitir y nadie se entera hasta quedarse sin gas.
+      Entity_id inferido por el mismo prefijo que tank_level -- confirmar en HA.
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.pro_check_universal_5343_battery
+        below: 15
+        for: "01:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
+        data:
+          message: >-
+            Sensor de gas: la batería del Mopeka está al
+            {{ states('sensor.pro_check_universal_5343_battery') }}%. Cambiar la CR2032.
+    mode: single
+
+  - id: gas_aviso_sin_datos
+    alias: Gas - Sin datos del sensor
+    description: >-
+      La otra forma de morir en silencio: el sensor sale de rango Bluetooth, se
+      le agota la batería de golpe, o se despega del tubo. 12 h de tolerancia
+      para no avisar por un corte breve.
+    trigger:
+      - platform: state
+        entity_id: sensor.gas_nivel
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "12:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.telegram_casa
+        data:
+          message: >-
+            Sensor de gas: hace 12 h que no llegan lecturas del tubo (Mopeka Pro
+            Check Universal). Revisar el emparejamiento Bluetooth en HA o la
+            batería del sensor.
+    mode: single
