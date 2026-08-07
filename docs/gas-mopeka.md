@@ -62,7 +62,7 @@ nombre del dispositivo):
 
 | Entidad | Qué es |
 |---|---|
-| `sensor.pro_check_universal_5343_tank_level` | **distancia cruda en mm** (sensor → superficie) — NO es un %, ver §3 |
+| `sensor.pro_check_universal_5343_tank_level` | **altura de líquido en mm** sobre el sensor (que va pegado abajo del tubo) — NO es un %, ver §3 |
 | `sensor.pro_check_universal_5343_temperature` | temperatura del sensor |
 | `sensor.pro_check_universal_5343_battery` | batería (CR2032), en % — confirmado contra el recorder de HA |
 | `sensor.pro_check_universal_5343_reading_quality` | % de calidad del eco (no usado todavía por `packages/gas.yaml`, ver §4) |
@@ -85,25 +85,31 @@ queda disponible en Google Home sin tocar nada.
 
 "Universal" significa que el sensor no asume la geometría del tanque: a
 diferencia de otros Mopeka Pro pensados para tanques de forma conocida, éste
-sólo publica la **distancia cruda** (`tank_level`, en mm). El % y los kg se
-calculan en `packages/gas.yaml` con dos constantes:
+sólo publica la lectura cruda (`tank_level`, en mm). El % y los kg se calculan
+en `packages/gas.yaml`.
 
-```
-level% = clamp( (empty_mm - tank_level) / (empty_mm - full_mm) * 100, 0, 100)
+### `tank_level` es altura de líquido, no headspace
+
+El Mopeka va pegado **abajo** del tubo y dispara el ultrasonido **hacia
+arriba**, así que `tank_level` es la **altura de la columna de líquido sobre el
+sensor** — más gas ⇒ lectura más grande. No es la distancia desde el tope del
+tubo hasta la superficie. El tubo vacío es `0 mm`, así que hay **una sola**
+constante:
+
+```text
+level% = clamp( tank_level / full_mm * 100, 0, 100)
 ```
 
 | Constante | Valor actual | De dónde sale |
 |---|---|---|
-| `empty_mm` | **1280** | altura total de un tubo de 45 kg (dato de fabricante) — no se restó el offset real de montaje del sensor porque no se midió a mano |
-| `full_mm` | **190** (`1280 × 0.15`) | los envases de GLP no se cargan al 100 % del volumen (espacio de expansión de vapor); 15 % es convención de industria, no un dato verificado para este tubo |
+| `full_mm` | **1090** (`1280 × 0.85`) | altura de líquido con el tubo recién cargado: 1280 mm de alto útil de un tubo de 45 kg (dato de fabricante) × ~85 % de llenado — los envases de GLP no se cargan al 100 % del volumen (espacio de expansión de vapor), y 85 % es convención de industria, no un dato verificado para este tubo |
 
-**Son un punto de partida, no una calibración real.** Para corregir `full_mm`:
-anotar el `tank_level` en mm apenas carguen el tubo (recién cargado = lleno de
-verdad) y reemplazar el valor en **las dos** fórmulas de `packages/gas.yaml`
-(nivel y restante están escritas independientes a propósito — no encadenadas
-entre sí, para no depender del orden de inicialización de los template
-sensors). `empty_mm` sólo se podría corregir si el tubo llegara a vaciarse del
-todo con el sensor puesto y se registrara esa lectura.
+**Es un punto de partida, no una calibración real.** Para corregirlo: anotar el
+`tank_level` en mm apenas carguen el tubo (recién cargado = lleno de verdad) y
+reemplazar 1090 en **las tres** fórmulas de `packages/gas.yaml` (nivel, restante
+y el umbral del `binary_sensor` están escritas independientes a propósito — no
+encadenadas entre sí, para no depender del orden de inicialización de los
+template sensors).
 
 Es lineal sobre el %, así que `sensor.gas_restante` hereda la exactitud del
 `level`, calibración incluida.
@@ -119,8 +125,13 @@ alerta con el tubo lleno. **No está confirmado que la integración nativa
 distinto al `mopeka_std_check` de ESPHome), pero por las dudas
 `packages/gas.yaml` mantiene la misma defensa: todas las entidades derivadas
 cuelgan de `tank_level > 0`, así que con una lectura de `0` mm se marcan **no
-disponibles** en vez de reportar "tubo lleno" (que es justo lo que daría la
-fórmula del §3 si se tomara ese `0` en serio).
+disponibles** en vez de reportar un tubo vacío.
+
+El costo de esa guarda es que **un tubo realmente vacío también queda no
+disponible** — no dispara `gas_bajo`, sólo `gas_aviso_sin_datos` a las 12 h. Se
+acepta porque para cuando la lectura llega a `0` los avisos de 20 % y 10 % ya se
+mandaron: el aviso temprano no depende de la guarda, y filtrar el `0` espurio sí
+evita un falso "gas crítico".
 
 Chequeando el recorder de HA directo (`states`/`states_meta` en
 `home-assistant_v2.db`) con el sensor ya montado en el tubo real, `tank_level`

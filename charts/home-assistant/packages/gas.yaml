@@ -1,49 +1,17 @@
-# HA package: nivel del tubo de gas de 45 kg (sensor Mopeka Pro Check Universal).
+# HA package: nivel del tubo de gas de 45 kg (Mopeka Pro Check Universal, vía la
+# integración nativa `mopeka`). Contexto completo en docs/gas-mopeka.md.
 #
-# Versioned config que HA mergea vía `homeassistant: packages:`. Se renderiza en
-# el ConfigMap {{ fullname }}-packages y se monta read-only en /config/packages.
-# Ver docs/home-assistant.md ("Versioned config (HA packages)") y
-# docs/gas-mopeka.md para el sensor en sí. Sin secretos acá.
+# `tank_level` es la ALTURA DE LÍQUIDO en mm sobre el sensor (va pegado ABAJO del
+# tubo, dispara hacia arriba): más gas => lectura más grande, tubo vacío = 0 mm.
+# Única constante: full_mm = 1090 (1280 mm de alto útil × ~85 % de llenado). Es
+# una estimación, no una calibración: para corregirla, anotar el `tank_level` con
+# el tubo recién cargado y reemplazar 1090 en las TRES fórmulas de abajo (están
+# escritas independientes a propósito, no encadenadas entre sí, para no depender
+# del orden de inicialización de los template sensors).
 #
-# De dónde vienen las entidades `sensor.pro_check_universal_5343_*`: de la
-# integración NATIVA `mopeka` de HA vía Bluetooth (no ESPHome). A diferencia del
-# M1001 "Standard Check" (revertido antes: mopeka-iot-ble no lo soporta), el Pro
-# Check Universal sí es de la familia que la integración decodifica, y el config
-# entry se creó por descubrimiento automático desde la UI (Ajustes → Dispositivos
-# y servicios) — no está en git, vive en /config/.storage, mismo patrón que
-# webOS/Broadlink (ver docs/home-assistant.md). El chart ya trae el Bluetooth del
-# host habilitado (hostNetwork + D-Bus + NET_ADMIN/NET_RAW en values.yaml), así
-# que por ahora no hace falta ningún bluetooth_proxy ESPHome — si el alcance
-# desde la Pi no le llega al tubo, ver docs/gas-mopeka.md para la alternativa.
-#
-# "Universal" quiere decir que el sensor no conoce la geometría del tanque: solo
-# publica `tank_level` como DISTANCIA cruda en mm (sensor → superficie), no un
-# %. El % y los kg se calculan acá con dos constantes de calibración:
-#
-#   empty_mm = 1280  -- altura total de un tubo de 45 kg (fuente: fabricante,
-#                        ver docs/gas-mopeka.md). Es una aproximación: no se
-#                        restó el offset real de montaje del sensor porque no
-#                        se midió a mano.
-#   full_mm  = 190    -- 1280 * 0.15. Los envases de GLP no se cargan al 100%
-#                        del volumen (queda espacio de expansión de vapor); 15%
-#                        es la convención de la industria, no un dato verificado
-#                        para este tubo puntual.
-#
-# Estas dos constantes son un punto de partida, NO una calibración real. Falta
-# corregirlas con una lectura en vivo la próxima vez que carguen el tubo (anotar
-# el `tank_level` en mm con el tubo recién cargado = ese es el full_mm real).
-# Si se recalibra, actualizar el número en LAS DOS fórmulas de abajo (nivel y
-# restante están escritas independientes a propósito, no encadenadas entre sí,
-# para no depender del orden de inicialización de los template sensors).
-#
-# ────────────────────────────────────────────────────────────────────────────
-# Precaución heredada del M1001: ahí una lectura mala no daba "unavailable",
-# daba directamente `distance = 0`, indistinguible de un tubo vacío. No está
-# confirmado que la integración nativa `mopeka` tenga el mismo problema (es
-# otro codebase), pero por las dudas todas las entidades de acá también cuelgan
-# de `tank_level > 0` — con una lectura de 0mm se marcan no disponibles en vez
-# de reportar "tubo lleno" (que es lo que daría la fórmula si se toma 0 en serio).
-# ────────────────────────────────────────────────────────────────────────────
+# Todo cuelga de `tank_level > 0`: una lectura de 0 mm se marca no disponible en
+# vez de reportar tubo vacío (el M1001 daba 0 ante una lectura mala). El costo es
+# que un tubo realmente vacío también queda no disponible — ver docs §4.
 
 template:
   - sensor:
@@ -56,10 +24,9 @@ template:
           {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
              and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
         state: >-
-          {{ min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) | round(0) }}
+          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) | round(0) }}
 
-      # Kilos restantes. Lineal sobre el %, así que hereda su exactitud
-      # (incluida la calibración provisoria de arriba).
+      # Lineal sobre el %, así que hereda su exactitud (calibración incluida).
       - name: "Gas restante"
         unique_id: gas_restante
         unit_of_measurement: "kg"
@@ -70,13 +37,11 @@ template:
           {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
              and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
         state: >-
-          {{ (min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) / 100 * 45) | round(1) }}
+          {{ (min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) / 100 * 45) | round(1) }}
 
   - binary_sensor:
       # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
-      # que exigir 2 h continuas bajo el umbral evita avisos por un solo mal
-      # advertisement. Si la entidad se vuelve no disponible el contador se
-      # reinicia, que es justo lo que se quiere.
+      # que 2 h continuas bajo el umbral evitan avisos por un mal advertisement.
       - name: "Gas bajo"
         unique_id: gas_bajo
         device_class: problem
@@ -85,7 +50,7 @@ template:
           {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
              and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
         state: >-
-          {{ min(max((1280 - states('sensor.pro_check_universal_5343_tank_level') | float(0)) / (1280 - 190) * 100, 0), 100) < 20 }}
+          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) < 20 }}
         delay_on: "02:00:00"
 
 # ────────────────────────────────────────────────────────────────────────────
