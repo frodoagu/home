@@ -109,9 +109,10 @@ De ahí el arreglo, todo del lado de HA (UI, no git):
    plantilla*), llamado **"Nivel"**, con dispositivo "Gas" y estado
    `{{ states('sensor.gas_nivel') }}` (unidad `%`, clase de estado medición).
    Es un espejo de presentación: la fórmula, la calibración y las alertas
-   siguen en `packages/gas.yaml`. Como el entity_id se arma con el nombre del
-   dispositivo y `sensor.gas_nivel` ya existe, HA lo va a crear como
-   `sensor.gas_nivel_2` — se puede editar a mano en la entidad.
+   siguen en `packages/gas.yaml`. Las entidades de template no usan
+   `has_entity_name`, así que el entity_id sale del nombre solo
+   (`sensor.nivel`, sin chocar con `sensor.gas_nivel`) y la tarjeta muestra
+   "Nivel" pelado, sin el nombre del dispositivo adelante.
 4. Las entidades del package no deben tener **área** asignada (*Ajustes →
    Entidades*), o reaparece el grupo "Otras" al lado del de "Gas".
 
