@@ -156,6 +156,37 @@ the `hci` adapter directly. Two things make it work:
 
 Requires `hostNetwork: true` and a working `bluetooth`/`bluez` service on the Pi.
 
+### BLE proxies
+
+The Pi's own adapter does not reach the whole house, so two ESP32s relay
+advertisements over WiFi. They only **forward** packets — every device is still
+decoded by its own HA integration, so adding a proxy never needs a code change
+on the ESP32 side.
+
+| Proxy | Firmware | Where it lives |
+|---|---|---|
+| `BLE Proxy` (`30:76:F5:E6:AB:38`) | ours — [`esphome/ble-proxy.yaml`](../esphome/ble-proxy.yaml) | kitchen, in range of the gas tank |
+| `Bluetooth Proxy 4a0670` (`D4:D4:DA:4A:06:70`) | the prebuilt one from esphome.io's web installer — no YAML in this repo, it is not ours to build | bedroom |
+
+What currently arrives through them: the **Mopeka** gas sensor (integration
+`mopeka`, see [gas-mopeka.md](gas-mopeka.md)) and the two **BTHome/ATC**
+thermometers (living room + bedroom). Passive scanning is enough for all three —
+they broadcast, nothing connects to them, which is why `ble-proxy.yaml` runs
+`active: false` on both the tracker and the proxy.
+
+Our proxy's config was reconstructed from the validated copy ESPHome leaves in
+the (gitignored) `esphome/.esphome/` after a build — the original never made it
+into git. It is byte-for-byte equivalent to what is flashed, so re-flashing it
+changes nothing:
+
+```bash
+esphome config esphome/ble-proxy.yaml   # validar
+esphome run esphome/ble-proxy.yaml      # flashear / OTA
+```
+
+One leftover: the WiFi-signal sensor kept an old entity_id
+(`sensor.gas_tubo_wifi`) from a previous name of the device.
+
 ## Air conditioners (SmartIR + Broadlink)
 
 The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4

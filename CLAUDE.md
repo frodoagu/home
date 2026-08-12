@@ -68,8 +68,11 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
-                     Lirika coffee machine (see docs/cafetera-saeco-lirika.md). Secrets via !secret
-                     (secrets.yaml gitignored; secrets.yaml.example is the template).
+                     Lirika coffee machine (see docs/cafetera-saeco-lirika.md); ble-proxy.yaml is a
+                     Bluetooth proxy that relays the BLE devices out of the Pi's range — the Mopeka
+                     gas sensor and the BTHome thermometers (docs/home-assistant.md#ble-proxies).
+                     Secrets via !secret (secrets.yaml gitignored; secrets.yaml.example is the
+                     template) — one api_key/ota_password pair per device.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```
