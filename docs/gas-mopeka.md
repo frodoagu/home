@@ -10,8 +10,9 @@ sin ESP32 ni ESPHome de por medio.
 | Sensores derivados + alertas | [`charts/home-assistant/packages/gas.yaml`](../charts/home-assistant/packages/gas.yaml) |
 
 ```
-  Mopeka Pro Check Universal  ──BLE advertisement──>  Bluetooth del host (Pi)  ──D-Bus──>  Home Assistant
-  (montado en el tubo)          integración nativa `mopeka`                                packages/gas.yaml
+  Mopeka Pro Check Universal  ──BLE advertisement──>  ESP32 "BLE Proxy"  ──WiFi/API──>  Home Assistant
+  (montado en el tubo)                                (esphome/ble-proxy.yaml)          integración nativa `mopeka`
+                                                       reenvía, no decodifica            packages/gas.yaml
                                                                                                    │
                                                                     notify.afuera_telegram_gateway_fede_a
 ```
@@ -37,13 +38,16 @@ nativa de Bluetooth de HA — el chart ya la tiene habilitada (`hostNetwork: tru
 [home-assistant.md](home-assistant.md#bluetooth)) y no se tocó nada de eso para
 este sensor.
 
-**Si el alcance BLE de la Pi no le llega al tubo** (el escenario que en su
-momento no hizo falta explorar): la alternativa es un `bluetooth_proxy` de
-ESPHome cerca del tubo — mucho más simple que el receptor del M1001, porque sólo
-tiene que **retransmitir** advertisements (`esp32_ble_tracker` +
-`bluetooth_proxy: { active: true }`), no decodificarlos. A diferencia del M1001,
-acá un proxy sí sirve, porque el parser que finalmente decodifica el paquete es
-el mismo `mopeka-iot-ble` de HA, no algo corriendo en el ESP32.
+**El alcance BLE de la Pi no llega al tubo**, así que el advertisement entra por
+un `bluetooth_proxy` de ESPHome en la cocina
+([`esphome/ble-proxy.yaml`](../esphome/ble-proxy.yaml)) — mucho más simple que el
+receptor del M1001, porque sólo **retransmite** el paquete
+(`esp32_ble_tracker` + `bluetooth_proxy`, los dos en modo pasivo), no lo
+decodifica. A diferencia del M1001, acá un proxy sí sirve, porque el parser que
+finalmente decodifica es el mismo `mopeka-iot-ble` de HA y no algo corriendo en
+el ESP32; el mismo proxy le sirve igual a los termómetros BTHome de la casa. Los
+detalles de los dos proxies están en
+[home-assistant.md](home-assistant.md#ble-proxies).
 
 ### Emparejamiento
 

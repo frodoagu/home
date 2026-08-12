@@ -1,0 +1,66 @@
+# Bluetooth proxy: retransmite a Home Assistant los advertisements BLE que la Pi
+# no alcanza a escuchar. El ESP32 no decodifica nada — reenvía el paquete crudo
+# y lo parsea la integración que corresponda en HA. Cubre todo lo BLE que le
+# quede en rango, hoy el Mopeka del tubo de gas (integración `mopeka`,
+# docs/gas-mopeka.md) y los termómetros BTHome del living y el dormitorio.
+#
+# NO es el único proxy: también hay un "Bluetooth Proxy 4a0670" flasheado con el
+# firmware prearmado de esphome.io, que no tiene YAML acá porque no es nuestro.
+# Ver docs/home-assistant.md#bluetooth.
+#
+# Reconstruido a partir del config validado que quedó en `.esphome/` — el
+# original nunca se commiteó. Flashear con `esphome run esphome/ble-proxy.yaml`
+# NO cambia el comportamiento del que ya está corriendo.
+
+substitutions:
+  name: ble-proxy
+  friendly_name: BLE Proxy
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf        # menos RAM que arduino: el proxy necesita heap para BLE
+
+logger:
+
+api:
+  encryption:
+    key: !secret ble_proxy_api_key
+
+ota:
+  - platform: esphome
+    password: !secret ble_proxy_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "BLE-Proxy-Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+web_server:
+
+# Escucha pasiva: los advertisements del Mopeka llegan igual y el ESP32 no gasta
+# radio en scan activo.
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+    interval: 320ms
+    window: 30ms
+
+# `active: false` = sólo reenvía advertisements, no abre conexiones GATT en
+# nombre de HA. Alcanza para el Mopeka, que sólo emite.
+bluetooth_proxy:
+  active: false
+
+sensor:
+  - platform: wifi_signal
+    name: WiFi
+    update_interval: 60s
+    entity_category: diagnostic
