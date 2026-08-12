@@ -50,6 +50,36 @@ switches and drive them independently.
 network) the script falls back to toggling its own light. Worst case equals a
 plain wall switch, never a dead one.
 
+## How they show up in Home Assistant (one "Luces" group)
+
+The auto-generated dashboard (**home** strategy) builds one group **per device**,
+titled with the device name — so two relays meant two headings, and nothing about
+areas or labels changes that. To get a single **Luces** group with two tiles,
+the arrangement lives entirely in HA's registries (`.storage`, not git):
+
+| What | Value |
+|---|---|
+| Device `Interruptor Puerta Principal` | renamed (`name_by_user`) to **`Luces`** — it doubles as the group |
+| `switch.afuera_interruptor_puerta_principal` | renamed to **`Puerta Principal`** |
+| `switch.luz_escalera_espejo` | template **switch helper** named **`Escalera`**, attached to the `Luces` device, mirroring the other relay |
+| `switch.afuera_interruptor_puerta_escalera` | **hidden** — with it hidden its device has no non-diagnostic entity left, so the strategy renders no second group |
+
+The mirror forwards `switch.turn_on`/`turn_off` to the real entity and reads its
+state back (plus an `availability` on it). Verified end to end: flipping the
+mirror drives the Escalera relay and leaves Puerta Principal alone.
+
+**It is not a second controller.** The rule below — exactly one controller per
+wall switch — is about reacting to `input:0`; the mirror never looks at the
+inputs, it only relays a service call an operator already made. The on-device
+script stays the only thing that turns a wall-switch flip into relay changes.
+
+A YAML template switch in a HA package could not do this: package entities
+cannot be attached to a device at all (`device_id` exists only in the template
+integration's config-entry schema, and `entity_platform` rewrites the registry
+with `device_id=None` on every start). The long version, with the frontend code
+that decides the grouping, is in
+[gas-mopeka.md §2.1](gas-mopeka.md#21-cómo-queda-agrupado-en-el-dashboard-gas-no-otras).
+
 ## Gotchas (hard-won — don't re-investigate)
 
 - **Exactly ONE controller may act on the input.** This bit us: an HA automation
