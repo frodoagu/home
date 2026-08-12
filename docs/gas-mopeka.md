@@ -96,29 +96,43 @@ YAML — ponerlo es error de config. Escribirlo a mano en `core.entity_registry`
 tampoco sirve: `entity_platform` reescribe cada entidad al arrancar con
 `device_id=device.id if device else None`.
 
-De ahí el arreglo, todo del lado de HA (UI, no git):
+De ahí el arreglo, todo del lado de HA (`.storage`, no git). Está aplicado; esto
+es la receta para rehacerlo:
 
-1. El **dispositivo Mopeka se renombra a "Gas"** (*Ajustes → Dispositivos*).
-   Con eso el encabezado del grupo pasa a ser "Gas". Al renombrar, HA ofrece
-   renombrar también los entity_id: **decir que no**, o el package se queda
-   apuntando a `sensor.pro_check_universal_5343_*` inexistentes.
+1. El **dispositivo Mopeka se renombra a "Gas"** (*Ajustes → Dispositivos*),
+   `name_by_user`. Con eso el encabezado del grupo pasa a ser "Gas". Al
+   renombrar, HA ofrece renombrar también los entity_id: **decir que no**, o el
+   package se queda apuntando a `sensor.pro_check_universal_5343_*`
+   inexistentes.
 2. La temperatura de la integración se renombra a **"Temperatura"** — ya cuelga
-   del dispositivo, no hace falta espejarla.
-3. El nivel se muestra con un **helper de plantilla creado desde la UI**
-   (*Ajustes → Dispositivos y servicios → Ayudantes → Plantilla → Sensor de
-   plantilla*), llamado **"Nivel"**, con dispositivo "Gas" y estado
-   `{{ states('sensor.gas_nivel') }}` (unidad `%`, clase de estado medición).
-   Es un espejo de presentación: la fórmula, la calibración y las alertas
-   siguen en `packages/gas.yaml`. Las entidades de template no usan
-   `has_entity_name`, así que el entity_id sale del nombre solo
-   (`sensor.nivel`, sin chocar con `sensor.gas_nivel`) y la tarjeta muestra
-   "Nivel" pelado, sin el nombre del dispositivo adelante.
+   del dispositivo, no hace falta espejarla. Ojo: el nombre que se escribe
+   reemplaza el `friendly_name` **entero**, no la mitad propia (queda
+   "Temperatura", no "Gas Temperatura"), y la tarjeta muestra eso mismo.
+3. El nivel se muestra con un **helper de plantilla** (*Ajustes → Dispositivos y
+   servicios → Ayudantes → Plantilla → Sensor de plantilla*), llamado
+   **"Nivel"**, dispositivo "Gas", estado `{{ states('sensor.gas_nivel') |
+   float(0) }}`, unidad `%`, clase de estado medición, y en opciones avanzadas
+   `availability: {{ states('sensor.gas_nivel') not in ['unknown',
+   'unavailable'] }}`. Es un espejo de presentación: la fórmula, la calibración
+   y las alertas siguen en `packages/gas.yaml`.
+
+   A diferencia de las de YAML, estas entidades **sí** usan `has_entity_name`,
+   así que el `friendly_name` se compone con el del dispositivo ("Gas Nivel")
+   pero la tarjeta muestra sólo la parte propia ("Nivel"), y el entity_id se
+   autogenera con área y dispositivo adelante (salió
+   `sensor.cocina_gas_nivel`). Acá quedó renombrado a
+   **`sensor.gas_nivel_espejo`** para que se lea qué es.
 4. Las entidades del package no deben tener **área** asignada (*Ajustes →
    Entidades*), o reaparece el grupo "Otras" al lado del de "Gas".
 
-Resultado: un solo grupo "Gas" con "Temperatura" y "Nivel". Lo que no entra en
-git es el paso 3 (el helper vive en `.storage`, como el emparejamiento); si se
-pierde, se recrea con la línea de arriba.
+Resultado: un solo grupo "Gas" con "Temperatura" y "Nivel". Nada de esto entra
+en git (vive en `.storage`, como el emparejamiento) — de ahí que convenga tener
+backups de HA andando.
+
+Efecto colateral: `sensor.gas_nivel` y `sensor.gas_nivel_espejo` comparten
+`friendly_name` ("Gas Nivel") y los dos guardan estadísticas. Si molesta en los
+selectores, ocultar el del package (*Ajustes → Entidades → Ocultar*): las
+automatizaciones lo siguen usando igual.
 
 La batería no necesita tarjeta: la estrategia la muestra como badge en el
 encabezado del grupo (toma la primera entidad con `device_class: battery` del
@@ -129,8 +143,13 @@ dispositivo).
 `sensor.gas_nivel` redondea a 2 decimales **en el estado**, no en la UI: el
 schema YAML de `template` no acepta `suggested_display_precision` (está sólo en
 el de config entry), así que subir la precisión de la entidad desde *Ajustes →
-Entidades* sobre un estado entero muestra `33,00 %` y nada más. Si el helper
-"Nivel" del paso 3 espeja el estado tal cual, hereda los decimales.
+Entidades* sobre un estado entero muestra `33,00 %` y nada más. El helper
+"Nivel" espeja el estado tal cual, así que hereda los decimales (y tiene su
+`display_precision` en 2 para que la tarjeta los muestre).
+
+Son decimales de presentación, no de exactitud: la lectura de un mismo día se
+mueve ±20-40 mm por el chapoteo (≈ 2-4 puntos de %), bastante más que el 0,09 %
+que vale un mm.
 
 ---
 
