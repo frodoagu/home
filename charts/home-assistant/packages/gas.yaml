@@ -40,21 +40,6 @@ template:
         state: >-
           {{ (min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) / 100 * 45) | round(1) }}
 
-      # Espejo de la temperatura del Mopeka para que quede en el mismo grupo que
-      # el resto del gas: las entidades de template YAML no se pueden colgar de
-      # un dispositivo (`device_id` sólo existe en el schema de los helpers de
-      # la UI), así que el que se muda es el dato, no la entidad. Vale con el
-      # tubo vacío, así que no lleva la guarda de `tank_level > 0`.
-      - name: "Gas temperatura"
-        unique_id: gas_temperatura
-        unit_of_measurement: "°C"
-        device_class: temperature
-        state_class: measurement
-        availability: >-
-          {{ states('sensor.pro_check_universal_5343_temperature') not in ['unknown', 'unavailable'] }}
-        state: >-
-          {{ states('sensor.pro_check_universal_5343_temperature') | float }}
-
   - binary_sensor:
       # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
       # que 2 h continuas bajo el umbral evitan avisos por un mal advertisement.
