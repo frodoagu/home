@@ -16,6 +16,9 @@
 
 template:
   - sensor:
+      # Los decimales van en el estado: el schema YAML de template no tiene
+      # `suggested_display_precision`, así que subir la precisión en la UI sobre
+      # un estado entero sólo agrega ceros.
       - name: "Gas nivel"
         unique_id: gas_nivel
         unit_of_measurement: "%"
@@ -25,7 +28,7 @@ template:
           {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
              and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
         state: >-
-          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) | round(0) }}
+          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) | round(2) }}
 
       # Lineal sobre el %, así que hereda su exactitud (calibración incluida).
       - name: "Gas restante"
