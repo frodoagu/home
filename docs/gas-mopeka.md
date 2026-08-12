@@ -63,7 +63,7 @@ nombre del dispositivo):
 | Entidad | Qué es |
 |---|---|
 | `sensor.pro_check_universal_5343_tank_level` | **altura de líquido en mm** sobre el sensor (que va pegado abajo del tubo) — NO es un %, ver §3 |
-| `sensor.pro_check_universal_5343_temperature` | temperatura del sensor |
+| `sensor.pro_check_universal_5343_temperature` | temperatura del sensor — espejada como `sensor.gas_temperatura`, ver §2.1 |
 | `sensor.pro_check_universal_5343_battery` | batería (CR2032), en % — confirmado contra el recorder de HA |
 | `sensor.pro_check_universal_5343_reading_quality` | % de calidad del eco (no usado todavía por `packages/gas.yaml`, ver §4) |
 | `sensor.pro_check_universal_5343_battery_voltage`, `_position_x`, `_position_y`, `_signal_strength` | expuestas por la integración pero sin consumidor en este package |
@@ -74,10 +74,38 @@ Y las derivadas, del package de HA:
 |---|---|
 | `sensor.gas_nivel` | % calculado a partir de `tank_level` (ver §3) |
 | `sensor.gas_restante` | kg restantes (`% × 45`) |
+| `sensor.gas_temperatura` | espejo de la temperatura del Mopeka (ver §2.1) |
 | `binary_sensor.gas_bajo` | `problem`, < 20 % sostenido 2 h |
 
 `sensor` ya está en `googleAssistant.exposedDomains`, así que el nivel también
 queda disponible en Google Home sin tocar nada.
+
+## 2.1 Por qué el package espeja la temperatura
+
+La página del área agrupa **por dispositivo**: las entidades del Mopeka salen
+bajo "Pro Check Universal 5343" y las del package, que no tienen dispositivo,
+bajo "Otras" — o sea el gas partido en dos bloques.
+
+No se arregla desde git: en HA 2026.7.1 `device_id` está sólo en el schema de
+config entry de la integración `template`
+(`TEMPLATE_ENTITY_COMMON_CONFIG_ENTRY_SCHEMA`), no en el de YAML, así que una
+entidad de template declarada en un package **no se puede colgar de un
+dispositivo** (ponerle `device_id:` es error de config). Y editar el
+`device_id` a mano en `core.entity_registry` no sobrevive: `entity_platform`
+reescribe el registry con `device_id=device.id if device else None` en cada
+arranque.
+
+Por eso el que se muda es el dato: `sensor.gas_temperatura` copia la lectura y
+todo el gas queda junto. Del lado de HA (UI, no git) hay que sacar el
+dispositivo del área — *Ajustes → Dispositivos → Pro Check Universal 5343 →
+Área: ninguna* — así sus entidades dejan de aparecer en la página de Cocina, y
+asignar a Cocina las derivadas que se quieran ver. El bloque sigue titulándose
+"Otras" porque ese nombre lo pone HA; para un encabezado que diga "Gas" hay que
+armar una sección propia en un dashboard.
+
+La misma receta sirve para la batería (`_battery`) si se la quiere en el grupo
+en vez de perderla junto con el dispositivo — el aviso de batería baja de §5 no
+depende de eso, dispara contra la entidad de la integración.
 
 ---
 
