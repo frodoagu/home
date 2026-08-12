@@ -123,6 +123,14 @@ La batería no necesita tarjeta: la estrategia la muestra como badge en el
 encabezado del grupo (toma la primera entidad con `device_class: battery` del
 dispositivo).
 
+### Decimales
+
+`sensor.gas_nivel` redondea a 2 decimales **en el estado**, no en la UI: el
+schema YAML de `template` no acepta `suggested_display_precision` (está sólo en
+el de config entry), así que subir la precisión de la entidad desde *Ajustes →
+Entidades* sobre un estado entero muestra `33,00 %` y nada más. Si el helper
+"Nivel" del paso 3 espeja el estado tal cual, hereda los decimales.
+
 ---
 
 ## 3. Por qué "Universal" no da porcentaje solo, y cómo se calibra
