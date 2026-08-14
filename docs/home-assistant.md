@@ -47,13 +47,22 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`climate.yaml`, `gas.yaml`, `luces-afuera.yaml`, `salud.yaml`, `tv.yaml`,
+  (`climate.yaml`, `gas.yaml`, `luces_afuera.yaml`, `salud.yaml`, `tv.yaml`,
   `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
 - The init container ensures `homeassistant: packages: !include_dir_named packages`
   in `configuration.yaml`, so HA loads every file in that dir as a package and
   **merges** it into the main config. Toggle with `.Values.packages.enabled`.
+- **The filename is the package name, and it must be a valid slug** — letters,
+  digits and `_` only. `!include_dir_named` names each package after its file, so
+  `luces-afuera.yaml` is rejected whole with *"invalid slug luces-afuera (try
+  luces_afuera)"* and **the package silently doesn't load**: HA starts fine,
+  everything else works, that one file's entities just never appear. Use `_`, not
+  `-`. Nothing catches this before deploy — schema validation passes because the
+  file's *contents* are valid; only HA's own package loader looks at the name.
+  (Note this is the opposite of the repo's file-naming habit elsewhere —
+  `luces-afuera.js` on the Shelly devices keeps its hyphen.)
 - Because they're merged (not owned), package config **coexists** with HA's own
   files: `script:`/`automation:` from the packages load *alongside* anything you
   create in the UI (which still writes to the PVC's `scripts.yaml`/`automations.yaml`).
@@ -334,7 +343,7 @@ Notes that matter when editing them:
   thermometer (renamed "Living" in the registry) — not the AC entity. Google's
   `Living - Salón` device is that thermometer.
 - **No `homeassistant.start` catch-up**, unlike
-  [`luces-afuera.yaml`](../charts/home-assistant/packages/luces-afuera.yaml).
+  [`luces_afuera.yaml`](../charts/home-assistant/packages/luces_afuera.yaml).
   Deliberate: losing one AC cycle to a restart beats having a deploy start the
   units by itself.
 - **IR is one-way**, so `aires_apagar_templado`'s condition on
@@ -600,7 +609,7 @@ setup, is in [docs/shelly.md](shelly.md).
 
 ### Dusk/dawn schedule
 
-[`packages/luces-afuera.yaml`](../charts/home-assistant/packages/luces-afuera.yaml)
+[`packages/luces_afuera.yaml`](../charts/home-assistant/packages/luces_afuera.yaml)
 turns both on 15 min before sunset and off at sunrise. This used to be a **Google
 Home automation** (Google's cloud, nothing in git — see
 [google-home/README.md](../google-home/README.md)); if that one is still in the

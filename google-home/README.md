@@ -15,7 +15,7 @@ API, no GitOps path, no logs and no traces — when one silently stops firing th
 is nothing to inspect. In HA they're versioned, they show up in the automation
 traces, and they keep working when the internet is down. The outdoor-lights
 dusk automation lived here too and is now
-[`packages/luces-afuera.yaml`](../charts/home-assistant/packages/luces-afuera.yaml)
+[`packages/luces_afuera.yaml`](../charts/home-assistant/packages/luces_afuera.yaml)
 (it was never mirrored into this directory).
 
 ## How this directory worked
