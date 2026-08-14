@@ -1,0 +1,85 @@
+# HA package: prender las luces de afuera al atardecer y apagarlas al amanecer.
+# Los dos relés Shelly 1 Mini Gen4 de la puerta principal y la escalera — el
+# contexto completo del hardware está en docs/shelly.md.
+#
+# Antes esto vivía como automatización de Google Home (nube de Google, sin
+# API ni GitOps: ver google-home/README.md). Acá corre en HA, en el Pi, y queda
+# versionado.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# POR QUÉ NO PELEA CON EL SCRIPT DE LOS DEVICES. La regla de docs/shelly.md
+# ("exactamente UN controlador por tecla") es sobre `input:0`: el script mJS
+# `luces-afuera.js` es el único que reacciona al evento de la tecla de pared.
+# Estas automatizaciones no miran los inputs — llaman `switch.turn_on/off`
+# sobre los relés, igual que lo hace un operador desde la app o Google Home,
+# y eso NO genera un evento de input. Los dos relés se manejan explícitamente
+# acá, así que tampoco dependemos del gang del script.
+#
+# NO apuntar a `switch.luz_escalera_espejo`: es el helper de la UI que agrupa
+# las dos luces en el dashboard, vive en `.storage` (git no lo controla) y es
+# un espejo del relé de la escalera. Acá van los entity_id reales.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# POR QUÉ EL TRIGGER `homeassistant.start`. Un trigger de sol dispara una sola
+# vez: si HA está caído en ese instante (un OOMKill, un deploy, un reinicio del
+# Pi), el evento se pierde y no hay reintento — las luces se quedan como
+# estaban hasta el día siguiente. El trigger de arranque vuelve a evaluar la
+# condición al levantar y deja las luces en el estado que corresponde a la hora.
+#
+# Está acotado a propósito para no pisar una decisión manual:
+#   - prender: `after: sunset` sin `before` es true del atardecer a medianoche
+#     (semántica de la condición `sun` de HA), así que un reinicio a las 3 AM
+#     no prende las luces que alguien apagó a las 2.
+#   - apagar: sólo con el sol arriba, donde tenerlas prendidas no es una
+#     decisión deliberada.
+# ────────────────────────────────────────────────────────────────────────────
+automation:
+  - id: luces_afuera_prender_atardecer
+    alias: Luces afuera - Prender al atardecer
+    description: >-
+      Prende las dos luces de afuera 15 min antes del atardecer (a esa altura
+      ya oscureció) y las re-evalúa al arrancar HA por si el atardecer pasó
+      con HA caído.
+    trigger:
+      - platform: sun
+        event: sunset
+        offset: "-00:15:00"
+      - platform: homeassistant
+        event: start
+    condition:
+      # Sólo aplica al trigger de arranque; en el de sol ya es true por
+      # definición. De atardecer a medianoche — pasada esa ventana, si están
+      # apagadas es porque alguien las apagó.
+      - condition: sun
+        after: sunset
+        after_offset: "-00:15:00"
+    action:
+      - action: switch.turn_on
+        target:
+          entity_id:
+            - switch.afuera_interruptor_puerta_principal
+            - switch.afuera_interruptor_puerta_escalera
+    mode: single
+
+  - id: luces_afuera_apagar_amanecer
+    alias: Luces afuera - Apagar al amanecer
+    description: >-
+      Apaga las dos luces al amanecer, y también al arrancar HA si el sol ya
+      está arriba (mismo motivo que el de prender: el amanecer pudo haber
+      pasado con HA caído).
+    trigger:
+      - platform: sun
+        event: sunrise
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: sun
+        after: sunrise
+        before: sunset
+    action:
+      - action: switch.turn_off
+        target:
+          entity_id:
+            - switch.afuera_interruptor_puerta_principal
+            - switch.afuera_interruptor_puerta_escalera
+    mode: single

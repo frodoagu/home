@@ -161,3 +161,139 @@ script:
               hvac_mode: cool
               temperature: 24
     mode: single
+
+# ────────────────────────────────────────────────────────────────────────────
+# AUTOMATISMO DE LOS AIRES. Migrado 1:1 desde las automatizaciones de Google
+# Home (google-home/automations/*.yaml): mismos horarios, umbrales y guardas.
+# Si las de Google Home siguen activas en la app, BORRARLAS — si no, dos
+# planificadores mandan sobre los mismos equipos.
+#
+# Traducción de nombres: los YAML de Google hablan de dispositivos
+# `Nombre - Habitación`; acá van entity_id.
+#
+#   Aire Cocina/Living/Dormitorio  -> climate.aire_{cocina,living,dormitorio}
+#   Living - Salón                 -> sensor.atc_29a8_temperatura (renombrado
+#                                     "Living" en el registry, es el termómetro
+#                                     BTHome del living, no el aire)
+#   Temperatura Exterior - Afuera  -> sensor.temperatura_exterior (weather.yaml)
+#   home.state.HomePresence: HOME  -> zone.home > 0 (el estado de una zona es la
+#                                     cantidad de personas adentro; hay dos
+#                                     `person` con device_tracker del celular)
+#
+# Google separa prender / fijar modo / fijar setpoint en tres comandos; acá va
+# un solo `climate.set_temperature` con `hvac_mode`, por el mismo motivo que las
+# escenas de arriba: con IR cada envío manda el frame completo, así que un blast
+# deja el equipo prendido, en modo y en temperatura.
+#
+# Los triggers disparan por CRUCE de umbral y no se reevalúan al arrancar HA (a
+# diferencia de luces-afuera.yaml, que sí lleva un trigger `homeassistant.start`).
+# Es a propósito: perder un ciclo de aires por un reinicio es preferible a que un
+# deploy prenda los equipos solo.
+#
+# OJO con las condiciones sobre el estado de un `climate.*`: el IR es
+# unidireccional, así que HA reporta el estado que ASUME, no el del equipo. Si
+# alguien lo apagó con el control remoto, HA no se entera.
+# ────────────────────────────────────────────────────────────────────────────
+automation:
+  - id: aires_calor_manana
+    alias: Aires - Calor a la mañana (cocina + living)
+    description: >-
+      Prende cocina y living en calor 21 a las 8:00 de lunes a viernes y a las
+      9:00 los fines de semana, sólo si hay alguien en casa y el living está a
+      17 °C o menos.
+    trigger:
+      - platform: time
+        at: "08:00:00"
+        id: semana
+      - platform: time
+        at: "09:00:00"
+        id: finde
+    condition:
+      # El trigger sólo aporta la hora; qué días vale cada uno se filtra acá.
+      - condition: or
+        conditions:
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: semana
+              - condition: time
+                weekday: [mon, tue, wed, thu, fri]
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: finde
+              - condition: time
+                weekday: [sat, sun]
+      - condition: numeric_state
+        entity_id: zone.home
+        above: 0
+      # `lessThanOrEqualTo: 17C` en Google. `numeric_state: below` es estricto,
+      # así que el <= va por template. El default 99 deja la condición en false
+      # si el termómetro está caído: ante la duda no prende nada.
+      - condition: template
+        value_template: "{{ states('sensor.atc_29a8_temperatura') | float(99) <= 17 }}"
+    action:
+      - action: climate.set_temperature
+        target:
+          entity_id:
+            - climate.aire_cocina
+            - climate.aire_living
+        data:
+          hvac_mode: heat
+          temperature: 21
+    mode: single
+
+  - id: aires_apagar_templado
+    alias: Aires - Apagar cuando afuera llega a 19 °C
+    description: >-
+      Apaga los tres aires cuando la temperatura exterior llega a 19 °C, pero
+      sólo si están calefaccionando. Mirar el modo en vez de un rango de fechas
+      es lo que evita que toque los equipos en verano, cuando están en frío.
+    trigger:
+      # `greaterThanOrEqualTo: 19C` en Google. Va como template trigger y no
+      # como `numeric_state: above: 19` porque `above` es estricto y el `met`
+      # suele reportar valores con un decimal: un 19.0 clavado nunca dispararía.
+      # Un template trigger dispara en la transición false -> true, que es la
+      # misma semántica de cruce.
+      - platform: template
+        value_template: "{{ states('sensor.temperatura_exterior') | float(-99) >= 19 }}"
+    condition:
+      - condition: state
+        entity_id: climate.aire_living
+        state: heat
+    action:
+      - action: climate.turn_off
+        target:
+          entity_id:
+            - climate.aire_cocina
+            - climate.aire_living
+            - climate.aire_dormitorio
+    mode: single
+
+  - id: aires_frio_dia_caluroso
+    alias: Aires - Frío 24 en día caluroso
+    description: >-
+      Prende los tres aires en frío 24 cuando afuera pasa los 30 °C y adentro
+      el living ya pasó los 24 °C, sólo si hay alguien en casa.
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.temperatura_exterior
+        above: 30
+    condition:
+      - condition: numeric_state
+        entity_id: zone.home
+        above: 0
+      - condition: numeric_state
+        entity_id: sensor.atc_29a8_temperatura
+        above: 24
+    action:
+      - action: climate.set_temperature
+        target:
+          entity_id:
+            - climate.aire_cocina
+            - climate.aire_living
+            - climate.aire_dormitorio
+        data:
+          hvac_mode: cool
+          temperature: 24
+    mode: single

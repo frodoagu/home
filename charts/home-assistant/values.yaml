@@ -150,13 +150,23 @@ packages:
   enabled: true
 
 # Resource requests/limits – tune for RPi
+#
+# The 512Mi limit was too tight: steady-state RSS sits at ~490Mi (recorder +
+# SmartIR + HACS + the BLE/bluetooth stack), i.e. ~96% of the cap, and HA gets
+# OOMKilled every few days. A restart is not harmless — a `sun`/`time` trigger
+# that comes due while the pod is restarting is simply lost, which silently
+# skips that day's run (see packages/luces-afuera.yaml, which now carries a
+# `homeassistant.start` catch-up for exactly this).
+#
+# 1Gi leaves real headroom on an 8Gi node that runs ~4.7Gi total. Raise the
+# request too so the scheduler accounts for what HA actually uses.
 resources:
   requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 512Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi
 
 # Allow Home Assistant to use the host network for device discovery (mDNS, etc.)
 # Required for Zeroconf/mDNS (224.0.0.251) and SSDP (239.255.255.250) multicast
