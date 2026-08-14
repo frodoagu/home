@@ -1,0 +1,148 @@
+# HA package: avisos de salud de los sensores de los que dependen las otras
+# automatizaciones. Todo acá es NOTIFICACIÓN, no toca ningún equipo.
+#
+# Por qué existe: las automatizaciones de climate.yaml se disparan sobre los
+# termómetros BTHome, y las de gas.yaml sobre el Mopeka. Los tres son sensores
+# BLE a pila que llegan por el proxy Bluetooth ESPHome — cuando uno se muere, la
+# automatización que lo lee no falla con un error: simplemente deja de
+# dispararse. Sin estos avisos, "el aire ya no prende a la mañana" se descubre
+# semanas después y parece un problema de la automatización.
+#
+# El aviso va a la misma entidad notify de Telegram que gas.yaml, con la misma
+# advertencia: el entity_id lo arma Telegram (nombre del bot + nombre del chat),
+# no se puede fijar desde git — si el bot se re-crea, verificar el real en HA.
+# `notify.send_message` sólo acepta `message` (no hay `title`).
+automation:
+  - id: salud_termometro_living_sin_datos
+    alias: Salud - Termómetro del living sin datos
+    description: >-
+      El termómetro del living alimenta `aires_calor_manana` y
+      `aires_frio_dia_caluroso` (climate.yaml) además del `temperature_sensor`
+      del aire del living. Si se cae, esas automatizaciones dejan de dispararse
+      en silencio. 2 h de tolerancia para no avisar por un bache de BLE.
+    trigger:
+      - platform: state
+        entity_id: sensor.atc_29a8_temperatura
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "02:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          message: >-
+            Termómetro del living: hace 2 h que no manda temperatura. Los aires
+            no van a prender solos a la mañana hasta que vuelva. Revisar la pila
+            (CR2032) o el proxy Bluetooth.
+    mode: single
+
+  - id: salud_termometro_dormitorio_sin_datos
+    alias: Salud - Termómetro del dormitorio sin datos
+    description: >-
+      Mismo caso que el del living, pero este es el `temperature_sensor` del
+      aire del dormitorio: sin él el equipo no sabe a qué temperatura está.
+    trigger:
+      - platform: state
+        entity_id: sensor.dormitorio_atc_b6d2_temperatura
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "02:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          message: >-
+            Termómetro del dormitorio: hace 2 h que no manda temperatura.
+            Revisar la pila (CR2032) o el proxy Bluetooth.
+    mode: single
+
+  - id: salud_termometros_pila_baja
+    alias: Salud - Pila baja en un termómetro
+    description: >-
+      Las CR2032 de los dos termómetros BTHome. Avisa ANTES de que se corten,
+      que es lo que evita el escenario del aviso de arriba. Umbral 2.5 V: una
+      CR2032 sana da ~2.95 V (medido en los dos) y se cae rápido cerca de 2.4 V.
+      `for` de 2 h porque la tensión baja con el frío y se recupera.
+    trigger:
+      - platform: numeric_state
+        entity_id:
+          - sensor.atc_29a8_tension
+          - sensor.dormitorio_atc_b6d2_tension
+        below: 2.5
+        for: "02:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          # El friendly_name de estas entidades es "Termómetro Living Tensión",
+          # así que se arma el nombre a mano en vez de interpolarlo.
+          message: >-
+            Termómetro {{ 'del living' if trigger.entity_id == 'sensor.atc_29a8_tension'
+                          else 'del dormitorio' }}: la pila está en
+            {{ trigger.to_state.state }} V. Cambiar la CR2032 antes de que se corte.
+    mode: single
+
+  - id: salud_proxy_bluetooth_caido
+    alias: Salud - Proxy Bluetooth caído
+    description: >-
+      El proxy ESPHome que acerca los BLE fuera del alcance del Pi. Se lleva
+      puestos los DOS termómetros y el sensor de gas a la vez, así que tiene
+      aviso propio y más corto que el de cada sensor.
+
+      Dispara sobre la entidad `update` del firmware porque es lo único que el
+      device expone en HA (las otras son botones de config): ESPHome marca
+      TODAS sus entidades `unavailable` al perder la conexión, así que sirve de
+      señal de vida. Si algún día el device expone un sensor propio, es mejor
+      trigger que este.
+    trigger:
+      - platform: state
+        entity_id: update.bluetooth_proxy_4a0670_firmware
+        to:
+          - "unavailable"
+          - "unknown"
+        for: "01:00:00"
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          message: >-
+            Proxy Bluetooth: hace 1 h que no responde. Sin él se cortan los dos
+            termómetros y el sensor de gas. Revisar que el ESP32 tenga corriente
+            y esté en la WiFi.
+    mode: single
+
+  - id: salud_backup_atrasado
+    alias: Salud - Backup de HA atrasado
+    description: >-
+      El backup automático de HA corre todos los días a las 07:30. Si deja de
+      correr no avisa nadie y se descubre el día que hace falta restaurar.
+
+      Chequeo UNA vez por día y no por hora: un backup atrasado es un estado que
+      persiste, así que un trigger horario mandaría el mismo aviso cada hora
+      hasta que se arregle (`mode: single` no lo evita — sólo impide dos
+      ejecuciones simultáneas). Con un trigger diario el throttle sale gratis.
+      A las 10:00 el backup de las 07:30 ya tuvo tiempo de correr.
+    trigger:
+      - platform: time
+        at: "10:00:00"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.backup_last_successful_automatic_backup') not in ['unknown', 'unavailable']
+             and (now() - as_datetime(states('sensor.backup_last_successful_automatic_backup'))).total_seconds() > 172800 }}
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          message: >-
+            Backup de Home Assistant: el último que salió bien fue el
+            {{ as_timestamp(states('sensor.backup_last_successful_automatic_backup')) | timestamp_custom('%d/%m a las %H:%M') }}.
+            Hace más de 48 h. Revisar Ajustes -> Copias de seguridad.
+    mode: single

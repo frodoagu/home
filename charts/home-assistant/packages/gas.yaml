@@ -124,7 +124,6 @@ automation:
     description: >-
       La CR2032 del Mopeka. Sin esto el monitoreo se muere en silencio: el
       sensor deja de emitir y nadie se entera hasta quedarse sin gas.
-      Entity_id inferido por el mismo prefijo que tank_level -- confirmar en HA.
     trigger:
       - platform: numeric_state
         entity_id: sensor.pro_check_universal_5343_battery

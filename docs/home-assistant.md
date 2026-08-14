@@ -47,7 +47,8 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`climate.yaml`, `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
+  (`climate.yaml`, `gas.yaml`, `luces-afuera.yaml`, `salud.yaml`, `tv.yaml`,
+  `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
 - The init container ensures `homeassistant: packages: !include_dir_named packages`
@@ -310,6 +311,65 @@ lands the unit in the target state. To add a button to the phone, drop an
 `entities`/`button` card pointing at the `script.*` entity, or add it to the
 Google Home app once linked.
 
+### Automatic schedule (migrated from Google Home)
+
+The same package ships three `automation:`s, migrated 1:1 from the Google Home
+app (same times, thresholds and guards — see
+[google-home/README.md](../google-home/README.md)):
+
+- `aires_calor_manana` — kitchen + living to **heat 21 °C** at 08:00 on
+  weekdays / 09:00 on weekends, if someone's home and the living room is ≤ 17 °C.
+- `aires_apagar_templado` — all three **off** once it hits 19 °C outside, but
+  only while the living AC is in `heat`. Checking the mode instead of a date
+  range is what keeps it from firing in summer.
+- `aires_frio_dia_caluroso` — all three to **cool 24 °C** when it's over 30 °C
+  outside and over 24 °C in the living room, if someone's home.
+
+Notes that matter when editing them:
+
+- **Presence** is `zone.home > 0` (a zone's state is the number of people in it),
+  which is Google's `home.state.HomePresence: HOME`. Both `person`s have a
+  `device_tracker` from the mobile app.
+- **The living-room temperature is `sensor.atc_29a8_temperatura`**, the BTHome
+  thermometer (renamed "Living" in the registry) — not the AC entity. Google's
+  `Living - Salón` device is that thermometer.
+- **No `homeassistant.start` catch-up**, unlike
+  [`luces-afuera.yaml`](../charts/home-assistant/packages/luces-afuera.yaml).
+  Deliberate: losing one AC cycle to a restart beats having a deploy start the
+  units by itself.
+- **IR is one-way**, so `aires_apagar_templado`'s condition on
+  `climate.aire_living` reads the state HA *assumes*, not the unit's. Someone
+  using the physical remote desyncs it — same caveat as the toggle scripts.
+- Google's ≥/> comparisons don't all map onto `numeric_state`, whose `above`/
+  `below` are strict. Where the boundary matters (`≥ 19 °C` outside, `≤ 17 °C`
+  inside) the check is a template instead — the reasons are in the comments.
+
+## Sensor health alerts (`salud.yaml`)
+
+[`packages/salud.yaml`](../charts/home-assistant/packages/salud.yaml) is
+notification-only — it drives no device. It exists because the AC and gas
+automations trigger on **battery-powered BLE sensors reached through the ESPHome
+Bluetooth proxy**, and when one of those dies the automation reading it doesn't
+error: it just stops firing. Without an alert, "the ACs stopped turning on in the
+morning" surfaces weeks later and looks like a broken automation.
+
+| Automation | Fires when |
+| --- | --- |
+| `salud_termometro_living_sin_datos` | living thermometer unavailable 2 h (kills both AC automations) |
+| `salud_termometro_dormitorio_sin_datos` | bedroom thermometer unavailable 2 h |
+| `salud_termometros_pila_baja` | either CR2032 under 2.5 V for 2 h (healthy is ~2.95 V) |
+| `salud_proxy_bluetooth_caido` | BLE proxy unavailable 1 h — takes out both thermometers **and** the gas sensor at once |
+| `salud_backup_atrasado` | checked daily at 10:00; last successful HA backup older than 48 h |
+
+All of them notify through the same Telegram entity as `gas.yaml`, with the same
+caveat: the `entity_id` is assembled by Telegram (bot name + chat name) and can't
+be pinned from git.
+
+The BLE-proxy alert triggers on the device's `update.*` firmware entity because
+that's the only thing it exposes in HA — ESPHome marks *all* of a device's
+entities `unavailable` when the connection drops, so it works as a liveness
+signal. If the proxy ever exposes a real sensor, prefer it.
+
 ## LG webOS TVs — Wake on LAN turn-on
 
 Two LG webOS TVs are added via the `webostv` integration (`media_player.sala_de_estar`,
@@ -537,6 +597,27 @@ Do **not** add an HA automation on their inputs
 two controllers on the same input fight each other. That exact mistake produced a
 long, intermittent debugging session — the full story, and the rest of the Shelly
 setup, is in [docs/shelly.md](shelly.md).
+
+### Dusk/dawn schedule
+
+[`packages/luces-afuera.yaml`](../charts/home-assistant/packages/luces-afuera.yaml)
+turns both on 15 min before sunset and off at sunrise. This used to be a **Google
+Home automation** (Google's cloud, nothing in git — see
+[google-home/README.md](../google-home/README.md)); if that one is still in the
+app, delete it, otherwise two schedulers drive the same relays.
+
+It does not violate the one-controller rule above: that rule is about reacting to
+`input:0`, and these automations only call `switch.turn_on`/`turn_off` on the
+relays — the same thing an operator does from the app, which raises no input
+event. They target the two real entity ids, not the `switch.luz_escalera_espejo`
+dashboard mirror (that helper lives in `.storage`, outside git).
+
+Both automations also trigger on `homeassistant.start`. A sun trigger fires once
+and is not replayed, so an HA restart across the sunset moment (an OOMKill, a
+deploy, a Pi reboot) silently loses that day's switch — the restart trigger
+re-evaluates and corrects it. The conditions bound the catch-up so it never
+overrides a deliberate manual change: the on-side only applies between sunset and
+local midnight, the off-side only while the sun is up.
 
 ## Probes
 
