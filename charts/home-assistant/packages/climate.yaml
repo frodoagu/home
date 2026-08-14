@@ -186,7 +186,7 @@ script:
 # deja el equipo prendido, en modo y en temperatura.
 #
 # Los triggers disparan por CRUCE de umbral y no se reevalúan al arrancar HA (a
-# diferencia de luces-afuera.yaml, que sí lleva un trigger `homeassistant.start`).
+# diferencia de luces_afuera.yaml, que sí lleva un trigger `homeassistant.start`).
 # Es a propósito: perder un ciclo de aires por un reinicio es preferible a que un
 # deploy prenda los equipos solo.
 #
