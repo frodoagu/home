@@ -626,7 +626,23 @@ and is not replayed, so an HA restart across the sunset moment (an OOMKill, a
 deploy, a Pi reboot) silently loses that day's switch — the restart trigger
 re-evaluates and corrects it. The conditions bound the catch-up so it never
 overrides a deliberate manual change: the on-side only applies between sunset and
-local midnight, the off-side only while the sun is up.
+local midnight, the off-side only during the day.
+
+> **The two catch-up windows must not overlap.** Both automations trigger on
+> `homeassistant.start`, so any instant where both conditions hold is an instant
+> where starting HA runs *both* — one turning the lights on, the other off, with
+> the winner decided by a race. The first version had exactly that: the on-side
+> opened 15 min before sunset while the off-side's plain `before: sunset` stayed
+> open until sunset, leaving a **15-minute overlap** — and, worse, it sat right on
+> dusk, the window the catch-up exists to cover. The fix is `before_offset:
+> "-00:15:00"` on the off-side, so its window closes where the on-side's opens.
+>
+> That means the **15-minute offset appears in three places** — the on-side's sun
+> trigger `offset`, the on-side condition's `after_offset`, and the off-side
+> condition's `before_offset`. Change one, change all three. (A single-microsecond
+> overlap remains at the exact boundary instant; reaching it needs HA to start on
+> that precise microsecond, so it's left alone rather than papered over with
+> mismatched offsets.)
 
 ## Probes
 

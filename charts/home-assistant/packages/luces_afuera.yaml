@@ -32,6 +32,20 @@
 #     no prende las luces que alguien apagó a las 2.
 #   - apagar: sólo con el sol arriba, donde tenerlas prendidas no es una
 #     decisión deliberada.
+#
+# LAS DOS VENTANAS NO SE PUEDEN SOLAPAR. Las dos automatizaciones disparan en
+# `homeassistant.start`, así que si sus condiciones son true a la vez, arrancar
+# HA en ese rato ejecuta LAS DOS: una prende y la otra apaga, y queda lo que
+# gane la carrera. Pasó: `before: sunset` a secas dejaba la ventana de apagar
+# abierta hasta el atardecer real, mientras la de prender ya abría 15 min antes
+# -> 15 min de solape, justo el rato que el catch-up existe para cubrir.
+#
+# Por eso el -00:15:00 aparece TRES veces y las tres tienen que coincidir:
+#   1. trigger de sol de prender  (`offset`)        -> cuándo prende
+#   2. condición de prender       (`after_offset`)  -> desde cuándo vale prender
+#   3. condición de apagar        (`before_offset`) -> hasta cuándo vale apagar
+# Si se cambia el adelanto, se cambian los tres. Las ventanas quedan pegadas
+# (apagar termina donde prender empieza) y no se pisan.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: luces_afuera_prender_atardecer
@@ -73,9 +87,14 @@ automation:
       - platform: homeassistant
         event: start
     condition:
+      # `before_offset` cierra esta ventana 15 min antes del atardecer, o sea
+      # exactamente donde abre la de prender. Sin él las dos son true entre
+      # atardecer-15min y el atardecer, y un arranque de HA ahí dispara las dos
+      # (ver el comentario de arriba).
       - condition: sun
         after: sunrise
         before: sunset
+        before_offset: "-00:15:00"
     action:
       - action: switch.turn_off
         target:
