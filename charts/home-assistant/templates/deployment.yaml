@@ -42,12 +42,11 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or .Values.ingress.enabled .Values.hacs.enabled }}
       initContainers:
         # Home Assistant owns configuration.yaml (it writes default_config etc.
         # on first boot). We never replace it — we only idempotently ensure the
-        # bits needed to sit behind the Traefik reverse proxy are present.
-        - name: ensure-proxy-config
+        # few blocks the deployment needs are present.
+        - name: ensure-config
           image: busybox:1.38
           {{- if or .Values.externalUrl .Values.googleAssistant.enabled }}
           env:
@@ -98,12 +97,10 @@ spec:
                 printf 'default_config:\n' > "$CONFIG"
               fi
 
-              # Reverse-proxy headers: trust the cluster/LAN CIDRs so HA accepts
-              # X-Forwarded-For from Traefik (the source IP is the node/pod IP).
-              # printf writes exact bytes, so YAML indentation here is irrelevant.
-              if ! grep -q "trusted_proxies:" "$CONFIG"; then
-                printf '\nhttp:\n  use_x_forwarded_for: true\n  trusted_proxies:\n    - 10.0.0.0/8\n    - 172.16.0.0/12\n    - 192.168.0.0/16\n' >> "$CONFIG"
-              fi
+              # No `http:` block: since 2026.8 the reverse-proxy settings
+              # (use_x_forwarded_for/trusted_proxies) are a UI-managed config
+              # entry in .storage, and a YAML block only raises a deprecation
+              # repair. Set them in Settings > System > Network (docs/home-assistant.md).
 
               # external_url (only if requested and not already configured, and
               # no homeassistant: block exists — avoids a duplicate top-level key).
@@ -170,7 +167,6 @@ spec:
             - name: config
               mountPath: /config
         {{- end }}
-      {{- end }}
       containers:
         - name: home-assistant
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

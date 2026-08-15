@@ -12,23 +12,24 @@ integration see [google-assistant.md](google-assistant.md).
 Home Assistant **owns** `/config/configuration.yaml` — it writes
 `default_config:` and friends on first boot and rewrites the file as you change
 things in the UI. The chart therefore never replaces that file. Instead, an init
-container (`ensure-proxy-config` in
+container (`ensure-config` in
 [templates/deployment.yaml](../charts/home-assistant/templates/deployment.yaml))
 *idempotently ensures* only the few blocks the deployment needs, using `printf`
 so the written YAML is correct regardless of template indentation:
 
 1. Seeds a minimal `default_config:` only if no config file exists yet (so a
    fresh PVC still boots with the default integrations enabled).
-2. Appends the `http:` reverse-proxy block (`use_x_forwarded_for` +
-   `trusted_proxies`) if not already present.
-3. Appends `homeassistant: external_url:` from `.Values.externalUrl`, guarded so
+2. Appends `homeassistant: external_url:` from `.Values.externalUrl`, guarded so
    it never creates a duplicate top-level `homeassistant:` key.
-4. Ensures `homeassistant: packages: !include_dir_named packages` (inserted under
+3. Ensures `homeassistant: packages: !include_dir_named packages` (inserted under
    the existing `homeassistant:` block via `awk`, or appended fresh) so HA merges
    the versioned `/config/packages` ConfigMap — see [Versioned config](#versioned-config-ha-packages).
-5. Appends the `google_assistant:` block when that integration is enabled
+4. Appends the `google_assistant:` block when that integration is enabled
    (including the `entity_config` exposure hides from `.Values.googleAssistant.entityConfig`).
-6. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
+5. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
+
+It does **not** write an `http:` block anymore — see
+[`trusted_proxies`](#trusted_proxies-and-host-networking) below.
 
 Each block is written **once** and skipped if already present. To change a block
 after first sync, edit it in `/config/configuration.yaml` (or delete the block
@@ -71,7 +72,9 @@ How it works:
 **Consequence for a fresh `/config` PVC:** climate/media_player/scripts/automations
 now come back **automatically** from git — no re-adding by hand. What still lives
 only in `.storage` (and must be recreated) is the *stateful* stuff the UI owns:
-the webOS/Broadlink **config entries** (re-pair the devices), entity **hides**
+the webOS/Broadlink **config entries** (re-pair the devices), the **network
+settings** (`use_x_forwarded_for`/`trusted_proxies` — see
+[`trusted_proxies`](#trusted_proxies-and-host-networking)), entity **hides**
 (`hidden_by`) and any **disables**, and the Lovelace dashboards. SmartIR re-downloads
 its code JSONs on first use as before.
 
@@ -117,21 +120,48 @@ To upgrade/downgrade HACS, bump `.Values.hacs.version` to another release tag.
 ## `trusted_proxies` and host networking
 
 HA sits behind Traefik, so it must trust the proxy's source IP to honour
-`X-Forwarded-For`. Because the pod runs with `hostNetwork: true` (below), the
-source IP HA sees for proxied requests is the node/pod IP, so the block trusts
-the cluster + LAN ranges:
+`X-Forwarded-For` — without it every request looks like it came from the node
+and the login IP-ban / rate-limit buckets are meaningless. Because the pod runs
+with `hostNetwork: true` (below), the source IP HA sees for proxied requests is
+the node/pod IP, so it trusts the cluster + LAN ranges:
 
-```yaml
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 10.0.0.0/8
-    - 172.16.0.0/12
-    - 192.168.0.0/16
+```text
+use_x_forwarded_for: true
+trusted_proxies: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
 ```
 
-`externalUrl` (`https://home.agu.com.ar`) is also set so HA knows its canonical
-public URL and avoids redirect loops behind the proxy.
+**This is UI state, not YAML.** Since **2026.8** the `http` integration is a
+config flow: HA imported the old `http:` block into a config entry
+(`/config/.storage/http`, `yaml_migration_done: true`) and now raises a
+deprecation repair for any `http:` block left in `configuration.yaml`
+(*"stops working in 2027.2.0"*). The settings live in **Settings > System >
+Network**, and nothing in git can set them — a config entry only exists in
+`.storage`. So the init container no longer writes the block, and:
+
+- **On a fresh `/config` PVC** (or a restore from before the migration) this is a
+  manual post-onboarding step: set the two fields in the UI, like the
+  webOS/Broadlink re-pairing above.
+- **Removing the block is a one-time PVC edit** — the import already happened, so
+  deleting it changes no behaviour:
+
+  ```bash
+  kubectl -n home-assistant exec deploy/home-assistant -c home-assistant -- python -c "
+  import re, shutil
+  p = '/config/configuration.yaml'
+  shutil.copy(p, p + '.bak-http')
+  s = open(p).read()
+  out = re.sub(r'\n\nhttp:\n(?:[ \t].*\n)*', '\n', s)
+  assert out != s and '\nhttp:' not in out
+  open(p, 'w').write(out)"
+  ```
+
+  **Order matters**: strip the PVC *without* restarting (the running pod keeps
+  its in-memory config), and only let the pod roll once the init-container change
+  above is on `main` and synced. Restart against the old init container and it
+  re-appends the block, because its guard is `grep -q "trusted_proxies:"`.
+
+`externalUrl` (`https://home.agu.com.ar`) is still set from git so HA knows its
+canonical public URL and avoids redirect loops behind the proxy.
 
 ## Device discovery — `hostNetwork: true`
 
