@@ -1,6 +1,8 @@
 {{- /* Build a []string of ports so join renders "80, 443" from int values. */ -}}
 {{- $ports := list }}
 {{- range .Values.webPorts }}{{ $ports = append $ports (printf "%v" .) }}{{- end }}
+{{- $quicPorts := list }}
+{{- range .Values.quicPorts }}{{ $quicPorts = append $quicPorts (printf "%v" .) }}{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,7 +15,7 @@ data:
     # Rendered from charts/origin-firewall/values.yaml — do not edit in-cluster.
     # Cloudflare-only origin firewall. Runs at prerouting priority -300, BEFORE
     # klipper's dstnat (-100) and any POSTROUTING masquerade, so it sees the real
-    # source IP. Only tcp/{{ $ports | join "," }} are policed; SSH/6443/etc. untouched.
+    # source IP. Only tcp/{{ $ports | join "," }}{{ if $quicPorts }} and udp/{{ $quicPorts | join "," }}{{ end }} are policed; SSH/6443/DNS/DHCP/etc. untouched.
     #
     # Idempotent (re)load: create-then-delete so `nft -f` can run repeatedly.
     add table inet origin_fw
@@ -45,8 +47,11 @@ data:
 
         chain prerouting {
             type filter hook prerouting priority -300; policy accept;
-            # Only inbound web ports enter the filter; everything else is accepted.
+            # Only inbound web ports enter the filters; everything else is accepted.
             tcp dport { {{ $ports | join ", " }} } jump web_filter
+            {{- if $quicPorts }}
+            udp dport { {{ $quicPorts | join ", " }} } jump quic_filter
+            {{- end }}
         }
 
         chain web_filter {
@@ -61,6 +66,23 @@ data:
             # Not Cloudflare, not local → a direct-to-origin bypass. Drop it.
             counter drop
         }
+        {{- if $quicPorts }}
+
+        # QUIC (HTTP/3) is a LAN-only path: Traefik answers udp/443 so on-LAN
+        # browsers can honour the `alpn=h3` in the zone's Cloudflare HTTPS record,
+        # while internet visitors terminate h3 at the Cloudflare edge — which
+        # reaches this origin over TCP. So there is no legitimate QUIC from the
+        # edge ranges, and this chain allows local sources ONLY.
+        chain quic_filter {
+            ip  saddr @local_v4 counter accept
+            {{- if .Values.localIPv6 }}
+            ip6 saddr @local_v6 counter accept
+            {{- else }}
+            ip6 saddr ::1       counter accept
+            {{- end }}
+            counter drop
+        }
+        {{- end }}
     }
 
   entrypoint.sh: |

@@ -54,6 +54,27 @@ still forward:
 - **TCP 443** → RPi — serves all the apps over HTTPS.
 - **TCP 80** → RPi — optional; only used to redirect plain-HTTP visitors to HTTPS.
 
+### HTTP/3 (udp/443) — LAN only
+
+`http3.enabled: true` in [charts/traefik-config/values.yaml](../charts/traefik-config/values.yaml)
+renders `--entryPoints.websecure.http3`, which adds a **udp/443** port
+(`websecure-http3`) to Traefik's LoadBalancer Service — klipper opens the matching
+host port — and makes the entrypoint advertise `Alt-Svc: h3=":443"`. Same
+entrypoint, same Let's Encrypt certificate, just also over QUIC.
+
+It exists for on-LAN clients. Pi-hole's split-horizon records point `*.agu.com.ar`
+at the Pi, but the zone's Cloudflare **HTTPS (SVCB, type 65)** record — which
+Pi-hole forwards upstream, because local records only cover A/AAAA — advertises
+`alpn="h3,h2"`. Browsers therefore try QUIC against Traefik and, with nothing
+listening on udp/443, Chromium surfaces `ERR_QUIC_PROTOCOL_ERROR` instead of
+falling back to TCP. See
+[pihole.md](pihole.md#caveat-the-https-svcb-record-still-comes-from-cloudflare).
+
+**Do not port-forward UDP 443 on the router.** Internet visitors terminate HTTP/3
+at the Cloudflare edge, which reaches this origin over TCP, so inbound QUIC from
+the internet has no legitimate use — `charts/origin-firewall` drops udp/443 from
+every non-local source ([origin-firewall.md](origin-firewall.md)).
+
 ## Troubleshooting
 
 - **Cert stuck / not issued:** check Traefik logs in `kube-system` for lego/ACME

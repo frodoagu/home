@@ -194,9 +194,22 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   can block direct hits. The firewall instead runs on the host at nftables
   `prerouting priority -300` (before klipper's dstnat -100), where the real source
   IP is still visible; a privileged hostNetwork DaemonSet programs it (own
-  `inet origin_fw` table, only touches 80/443 so SSH/6443 are safe). Effectiveness
+  `inet origin_fw` table, only touches tcp/80,443 + udp/443 so SSH/6443/DNS are
+  safe; the udp/443 `quic_filter` chain is LAN-only — see the next bullet). Effectiveness
   hinges on the ROUTER preserving the source IP on port-forward — verify via the
   rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
+- **traefik-config + pihole — split-horizon DNS does NOT cover the HTTPS (SVCB)
+  record.** Pi-hole's `localRecords` are hosts-file entries, so they override
+  A/AAAA only; the type-65 HTTPS query is forwarded and Cloudflare answers
+  `alpn="h3,h2"`. On the LAN a browser therefore resolves to the Pi but attempts
+  QUIC, and Chromium fails with `ERR_QUIC_PROTOCOL_ERROR` rather than falling back
+  to TCP. The fix is Traefik actually serving QUIC (`http3.enabled` →
+  `--entryPoints.websecure.http3`, adds udp/443 to the LB Service), NOT suppressing
+  the record: a global dnsmasq `filter-rr=65` kills ECH LAN-wide, and a scoped
+  `local=/home.agu.com.ar/` also swallows `_acme-challenge.home.agu.com.ar` and
+  breaks that cert's DNS-01 renewal. udp/443 stays LAN-only — Cloudflare reaches
+  the origin over TCP, so origin-firewall's `quic_filter` drops non-local QUIC and
+  the router must not forward UDP 443. See docs/tls.md + docs/pihole.md.
 - **shelly-config — exactly ONE controller per wall switch.** The outdoor lights
   run `in_mode: "detached"` (the wall switch does not drive its own relay) and an
   on-device mJS script gangs the two. Do NOT also add a Home Assistant automation

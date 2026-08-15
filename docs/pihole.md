@@ -187,6 +187,28 @@ dig @1.1.1.1 agu.com.ar +short                # -> Cloudflare's public IP (uncha
 resolves via Cloudflare even on the LAN. Add it to `localRecords` the same way if
 that hairpin ever becomes annoying.
 
+### Caveat: the HTTPS (SVCB) record still comes from Cloudflare
+
+`localRecords` are hosts-file entries, so they override **A/AAAA only**. Browsers
+also query the **HTTPS record (type 65)**, and that one is forwarded upstream and
+answered by Cloudflare — advertising `alpn="h3,h2"` (plus an ECH config):
+
+```bash
+dig @192.168.0.100 A      home.agu.com.ar +short   # -> 192.168.0.100 (local record)
+dig @192.168.0.100 TYPE65 home.agu.com.ar +short   # -> alpn="h3,h2" ... (from Cloudflare)
+```
+
+So on the LAN a browser connects to the Pi while believing the origin speaks
+HTTP/3. Traefik must actually serve QUIC on udp/443 (`http3.enabled` in
+`charts/traefik-config`, see [tls.md](tls.md#http3-udp443--lan-only)) or Chromium
+fails with `ERR_QUIC_PROTOCOL_ERROR` instead of falling back to TCP.
+
+Suppressing the record instead is the wrong lever: a global dnsmasq `filter-rr=65`
+disables ECH for the whole LAN, and scoping it per host with `local=/home.agu.com.ar/`
+also swallows `_acme-challenge.home.agu.com.ar`, breaking DNS-01 renewal for that
+certificate. (ECH itself stays dormant here — Chrome only attempts it when the
+HTTPS record arrives over DoH, which bypasses Pi-hole anyway.)
+
 State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 `/etc/pihole`. Image is pinned in `values.yaml` (`pihole/pihole`, keep `Chart.yaml`
 `appVersion` in sync).

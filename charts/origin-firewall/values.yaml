@@ -29,6 +29,12 @@ reconcileInterval: 30
 webPorts:
 - 80
 - 443
+# UDP ports to police — HTTP/3 / QUIC, served by Traefik for LAN clients only
+# (charts/traefik-config `http3`). These get a STRICTER chain than the TCP ports:
+# Cloudflare reaches the origin over TCP, never QUIC, so the edge ranges are not
+# allowed here and only @local_v4/v6 pass. Empty the list to stop filtering UDP.
+quicPorts:
+- 443
 # Keep the nftables Cloudflare sets fresh by periodically fetching the published
 # ranges. The lists below are still applied as the baked-in FALLBACK (used at
 # boot and whenever a fetch fails/looks invalid), so the firewall always has a

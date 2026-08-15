@@ -7,6 +7,9 @@ and dropped for everyone else. All `*.agu.com.ar` services are Cloudflare-proxie
 ever comes from Cloudflare; anything hitting the raw IP is bypassing Cloudflare
 (and any per-service auth/rate-limit that trusts CF-supplied headers).
 
+Inbound `udp/443` (HTTP/3) is policed too, and more strictly — **LAN/cluster
+only**, see [QUIC](#quic-http3-on-udp443-is-lan-only) below.
+
 Deployed like everything else in this repo — an ArgoCD `Application`
 (`apps/origin-firewall.yaml`) syncing a chart. No manual SSH steps.
 
@@ -46,6 +49,20 @@ Set `cloudflareAutoUpdate.enabled: false` to pin to the static lists instead. Th
 firewall never blocks its own egress (it only filters inbound 80/443), so the
 fetch always has a path out.
 
+## QUIC (HTTP/3) on udp/443 is LAN-only
+
+Traefik also serves HTTP/3 (`http3.enabled` in `charts/traefik-config`), which
+opens **udp/443** on the host. That port exists for on-LAN browsers, which learn
+`alpn=h3` from the zone's Cloudflare HTTPS record even though Pi-hole resolves the
+name to the Pi ([tls.md](tls.md#http3-udp443--lan-only)).
+
+Internet visitors never need it: they terminate HTTP/3 at the Cloudflare edge, and
+Cloudflare reaches this origin over **TCP**. So there is no such thing as
+legitimate QUIC from the edge ranges, and the `quic_filter` chain is deliberately
+stricter than `web_filter` — it accepts `@local_v4`/`@local_v6` and drops
+everything else, Cloudflare included. Keep the router forwarding **TCP only**;
+`quicPorts: []` in `values.yaml` turns the UDP rule off entirely.
+
 ## Why a DaemonSet and not a Traefik `IPAllowList`
 
 k3s's klipper `svclb` SNATs every external connection to the node's CNI bridge
@@ -62,8 +79,9 @@ can tell the two apart, and a DaemonSet is how we program it under GitOps.
 
 ## Safety
 
-- The ruleset **only ever matches `tcp/80,443`**. SSH (22), the k8s API (6443),
-  and everything else are never touched — a bad ruleset can't lock you out.
+- The ruleset **only ever matches `tcp/80,443` and `udp/443`**. SSH (22), the k8s
+  API (6443), DNS/DHCP (53/67) and everything else are never touched — a bad
+  ruleset can't lock you out.
 - If the pod dies after applying, the kernel rules persist (fail-closed, still
   blocking). If it never starts (e.g. image pull fails), no rules exist and
   services stay reachable (fail-open) — same exposure as not having the firewall.
@@ -87,9 +105,11 @@ kubectl -n kube-system rollout status ds/origin-firewall
 kubectl -n kube-system exec ds/origin-firewall -- nft list table inet origin_fw
 ```
 
-- ✅ **Working:** the `@cloudflare_v4 … counter accept` packet count climbs when
-  you browse via Cloudflare; `@local_v4` climbs from on-LAN devices; `counter drop`
-  climbs from real direct-IP probes.
+- ✅ **Working:** in `web_filter`, the `@cloudflare_v4 … counter accept` packet
+  count climbs when you browse via Cloudflare; `@local_v4` climbs from on-LAN
+  devices; `counter drop` climbs from real direct-IP probes. In `quic_filter`,
+  `@local_v4` climbs while an on-LAN browser uses HTTP/3 and `counter drop` should
+  stay at **0** (anything there means the router is forwarding UDP 443).
 - ❌ **Router is SNATing:** external browsing makes **`@local_v4`** climb (all
   traffic looks like `192.168.0.x`) and `@cloudflare_v4` stays at 0. The firewall
   is a no-op — block at the router instead (allow WAN 80/443 only from the
