@@ -40,6 +40,13 @@ spec:
       websecure:
         tls:
           certResolver: letsencrypt
+        {{- if .Values.http3.enabled }}
+        # Adds a udp/443 port (name `websecure-http3`) to Traefik's LoadBalancer
+        # Service — klipper opens the matching host port — and makes the
+        # entrypoint answer QUIC and advertise `Alt-Svc: h3=":443"`.
+        http3:
+          enabled: true
+        {{- end }}
     certificatesResolvers:
       letsencrypt:
         acme:

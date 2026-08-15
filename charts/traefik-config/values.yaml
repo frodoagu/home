@@ -16,6 +16,19 @@ image:
   repository: docker.io/traefik
   tag: "v3.7.10"
 
+# ── HTTP/3 (QUIC) ────────────────────────────────────────────────────────────
+# Also serves the websecure entrypoint on udp/443 (and advertises it via Alt-Svc).
+# This exists for the LAN: Pi-hole's split-horizon records point *.agu.com.ar at
+# the Pi, but the zone's Cloudflare HTTPS/SVCB record — which Pi-hole forwards
+# upstream unchanged, since local records only cover A/AAAA — advertises
+# `alpn="h3,h2"`. Browsers therefore try QUIC against Traefik, and with no UDP
+# listener they surface ERR_QUIC_PROTOCOL_ERROR instead of falling back to TCP.
+# Internet traffic is unaffected (Cloudflare terminates h3 at its edge and reaches
+# the origin over TCP), so udp/443 is a LAN-only path: charts/origin-firewall
+# drops it from every non-local source, and the router must NOT forward it.
+http3:
+  enabled: true
+
 # ── Let's Encrypt (ACME, DNS-01 challenge via Cloudflare) ────────────────────
 # DNS-01 is used instead of HTTP-01 because the global HTTP→HTTPS redirect
 # (ports.web) bounces the HTTP-01 challenge to :443, which serves a 404 for the

@@ -26,7 +26,7 @@ services running on a Raspberry Pi with k3s.
 | [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
 | [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
 | [homepage](https://gethomepage.dev/) | Dashboard / start page for the lab (Google sign-in gated) | `charts/homepage/` |
-| [nftables](https://nftables.org/) | Cloudflare-only origin firewall — DaemonSet dropping direct-to-public-IP hits on 80/443 | `charts/origin-firewall/` |
+| [nftables](https://nftables.org/) | Cloudflare-only origin firewall — DaemonSet dropping direct-to-public-IP hits on tcp/80,443 (and non-LAN udp/443 QUIC) | `charts/origin-firewall/` |
 
 ## Architecture
 
@@ -127,6 +127,10 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   DDNS token must have **Zone:DNS:Edit on both zones** (one token scoped to both,
   or drop the `yaskia.com` entries from `charts/cloudflare-ddns/values.yaml`).
 - Router port-forwarding: **TCP 80** and **TCP 443** → RPi local IP
+  - TCP only. Traefik also listens on **udp/443** (HTTP/3) for LAN clients, but
+    Cloudflare reaches the origin over TCP, so forwarding UDP 443 would only open
+    an unproxied path — the origin firewall drops non-LAN QUIC anyway
+    ([docs/tls.md](docs/tls.md#http3-udp443--lan-only)).
   - Recommended hardening: since every service is Cloudflare-proxied, lock the
     origin to Cloudflare's IP ranges so nobody can reach it by raw IP — deployed
     as the `origin-firewall` app (nftables DaemonSet), see
