@@ -235,6 +235,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   could only reach a package as an **env var** read back with HA's `!env_var` tag,
   and that tag always needs a default — without one a missing var fails the parse
   of HA's *entire* config, not just that block.
+- **HA `http:` is UI-only now** — same story as Telegram below. Since 2026.8 the
+  `http` integration is a config flow: HA imports an existing `http:` block into
+  `/config/.storage/http` (`yaml_migration_done: true`) and then raises a
+  deprecation repair for the block still in `configuration.yaml` (dies in
+  2027.2.0). So the init container no longer writes `use_x_forwarded_for` /
+  `trusted_proxies` — they're UI state (Settings > System > Network) that git
+  cannot set, and a fresh `/config` PVC needs them re-entered by hand or HA sees
+  every request as coming from the node. See docs/home-assistant.md.
 - **Telegram is UI-only now; don't try to configure it from a package.** Since
   2026.7 `telegram_bot` is `config_flow: true`, so a `telegram_bot:` block in a
   package dies with *"cannot be merged, expected a dict"* (HA's package merger
