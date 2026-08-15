@@ -10,7 +10,7 @@ description: >-
   other private services.
 type: application
 version: 0.1.0
-appVersion: "v1.51.0"
+appVersion: "v1.52.0"
 keywords:
   - logs
   - victorialogs
@@ -25,5 +25,5 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: victoria-logs-single
-    version: "0.13.8"
+    version: "0.13.9"
     repository: https://victoriametrics.github.io/helm-charts/

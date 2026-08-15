@@ -14,7 +14,7 @@ traefikNamespace: kube-system
 # Bump deliberately and confirm the bundled chart still accepts these values.
 image:
   repository: docker.io/traefik
-  tag: "v3.7.6"
+  tag: "v3.7.10"
 
 # ── Let's Encrypt (ACME, DNS-01 challenge via Cloudflare) ────────────────────
 # DNS-01 is used instead of HTTP-01 because the global HTTP→HTTPS redirect

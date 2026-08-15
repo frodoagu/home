@@ -10,7 +10,7 @@ image:
   # migration and still pullable. If docker.io is ever rate-limited, mirror it.
   repository: docker.io/bitnami/sealed-secrets-controller
   pullPolicy: IfNotPresent
-  # Empty → defaults to Chart.AppVersion (0.38.1). Keep both in sync on bumps.
+  # Empty → defaults to Chart.AppVersion (0.38.4). Keep both in sync on bumps.
   tag: ""
 
 # Controller resources — tiny; it only wakes up to unseal SealedSecrets.

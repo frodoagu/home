@@ -6,7 +6,7 @@ image:
   repository: ghcr.io/gethomepage/homepage
   pullPolicy: IfNotPresent
   # Pin explicitly (keep Chart.yaml appVersion in sync). Avoid floating tags.
-  tag: "v1.13.2"
+  tag: "v2.0.0"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -35,7 +35,7 @@ googleAuth:
     namespace: oauth2-proxy
     port: 80
 
-# Homepage validates the request Host header (v1.x). It MUST allow the ingress
+# Homepage validates the request Host header (v1.0+). It MUST allow the ingress
 # host; extra hosts can be appended here (comma-separated is built in the env).
 allowedHosts: []
 
