@@ -37,7 +37,7 @@ googleAuth:
 # node-exporter already gives CPU/RAM/disk/temperature; only throttling needs vcgencmd.
 rpiThrottleExporter:
   enabled: true
-  image: busybox:1.36
+  image: busybox:1.38
   # How often to poll `vcgencmd get_throttled` and rewrite the textfile metric.
   intervalSeconds: 30
   resources:
@@ -309,7 +309,7 @@ victoria-metrics-k8s-stack:
     # sending the operator's email authenticates as Admin without any secret.
     extraContainers: |
       - name: playlist-provisioner
-        image: curlimages/curl:8.11.1
+        image: curlimages/curl:8.21.0
         command: ["/bin/sh", "-c"]
         args:
           - |

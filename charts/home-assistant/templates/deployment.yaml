@@ -48,7 +48,7 @@ spec:
         # on first boot). We never replace it — we only idempotently ensure the
         # bits needed to sit behind the Traefik reverse proxy are present.
         - name: ensure-proxy-config
-          image: busybox:1.36
+          image: busybox:1.38
           {{- if or .Values.externalUrl .Values.googleAssistant.enabled }}
           env:
             {{- with .Values.externalUrl }}
@@ -139,7 +139,7 @@ spec:
         {{- if .Values.hacs.enabled }}
         # Install HACS only when missing from /config/custom_components.
         - name: install-hacs
-          image: busybox:1.36
+          image: busybox:1.38
           env:
             - name: HACS_VERSION
               value: {{ .Values.hacs.version | quote }}

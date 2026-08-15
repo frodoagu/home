@@ -4,7 +4,7 @@ description: External access to the LAN Shelly relays — nginx serving a small 
 type: application
 version: 0.1.0
 # Pinned to the nginx image tag (keep in sync with values.yaml image.tag).
-appVersion: "1.27-alpine"
+appVersion: "1.31-alpine"
 keywords:
   - shelly
   - home-automation

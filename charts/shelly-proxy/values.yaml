@@ -18,7 +18,7 @@ replicaCount: 1
 image:
   repository: nginx
   # Pin explicitly (keep Chart.yaml appVersion in sync). No floating tags.
-  tag: "1.27-alpine"
+  tag: "1.31-alpine"
   pullPolicy: IfNotPresent
 
 nameOverride: ""
