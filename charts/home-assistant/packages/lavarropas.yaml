@@ -116,18 +116,21 @@ template:
       # posiciones de la perilla de este equipo y no estan documentados en
       # ningun lado (ni la integracion ni la comunidad los mapean). Se completan
       # observandolos con `scripts/candyctl.py learn` y anotando que marcaba la
-      # perilla; hasta entonces cae al numero crudo, que es honesto.
+      # perilla; los que falten caen al numero crudo, que es honesto.
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: >-
           {% set p = state_attr('sensor.lavasecarropas_datos', 'Pr') | int(-1) %}
-          {% set nombres = {} %}
+          {% set nombres = {
+            2: 'Perfect Mix',
+          } %}
           {{ nombres.get(p, 'Programa ' ~ p) }}
 
-      # Misma historia que el programa: escala sin documentar. Se deja el crudo
-      # hasta poder observar el rango real girando el selector.
+      # SLevel dio 3 en el unico ciclo observado, y es el valor por defecto del
+      # equipo. Falta confirmar si la maquina tiene selector de suciedad: si no
+      # lo tiene el campo es constante y esta entidad no aporta nada.
       - name: "Lavasecarropas nivel de suciedad"
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
