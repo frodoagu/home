@@ -145,6 +145,8 @@ dhcp:
     - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.215", name: "shelly-escalera" }
     # Shelly Mini 1 Gen4 controlando la puerta principal.
     - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
+    # Lavasecarropas Candy simply-Fi: la integracion de HA lo direcciona por IP.
+    - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.164", name: "lavarropas" }
 
 # Resource requests/limits – tuned small for the RPi.
 resources:

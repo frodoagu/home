@@ -263,6 +263,22 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `docs/gas-mopeka.md` for the one consumer that exists today (Alertmanager's
   Telegram alerts from `charts/monitoring` go through its own bot API call, not
   through this HA entity).
+- **lavarropas Candy — the HACS integration under-reports, so a package reads the
+  device directly.** The Candy simply-Fi washer-dryer talks a LOCAL HTTP API
+  (`/http-read.json?encrypted=1`) whose JSON is XOR'd with a repeating 16-char
+  key. That key is NOT a secret and is NOT in a SealedSecret: it is recoverable
+  from ~400 bytes of the device's own response (autocorrelation → period 16, then
+  a per-column printable-ASCII constraint), and the integration is config-flow
+  only so there'd be nowhere to inject it anyway (same trap as `telegram_bot` /
+  `http:`). The HACS integration (`ofalvai/home-assistant-candy`) publishes only 3
+  sensors, **drops 10 fields** the device reports (incl. `DryT`, so a washer-DRYER
+  loses all drying data), and **divides `RemTime` by 60 assuming seconds** — it's
+  minutes here, proven by its own `TumbleDryerStatus` reading the same field
+  undivided. `charts/home-assistant/packages/lavarropas.yaml` therefore polls the
+  same endpoint and republishes everything correctly. The device answers ONE
+  connection at a time, so the package's command retries 3×; it also ignores ICMP
+  (find it by its UDP broadcast heartbeat on :55555, not by ping). See
+  docs/lavarropas-candy.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
