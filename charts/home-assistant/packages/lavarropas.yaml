@@ -112,11 +112,18 @@ template:
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
 
-      # Los numeros de programa son ESPECIFICOS DEL MODELO: corresponden a
-      # posiciones de la perilla de este equipo y no estan documentados en
-      # ningun lado (ni la integracion ni la comunidad los mapean). Se completan
-      # observandolos con `scripts/candyctl.py learn` y anotando que marcaba la
-      # perilla; los que falten caen al numero crudo, que es honesto.
+      # Los numeros de programa son ESPECIFICOS DEL MODELO: son posiciones de la
+      # perilla y no estan documentados en ningun lado. Este mapeo sale de leer
+      # el panel del equipo: las posiciones numeran EN SENTIDO HORARIO desde
+      # APAGADO, empezando en 1.
+      #
+      # CONFIRMADO empiricamente: solo Pr=2, observado en un ciclo real con la
+      # perilla en Perfect Mix. El resto se deduce del orden del panel. El
+      # sentido de giro NO es una suposicion libre: en antihorario el 2 caeria
+      # en "Rapido L&S", que contradice la observacion.
+      #
+      # Verificar el resto con `scripts/candyctl.py learn`. Lo que no este en el
+      # diccionario cae al numero crudo.
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
@@ -124,13 +131,28 @@ template:
         state: >-
           {% set p = state_attr('sensor.lavasecarropas_datos', 'Pr') | int(-1) %}
           {% set nombres = {
+            1: 'Planchado Facil',
             2: 'Perfect Mix',
+            3: 'Anti-alergias',
+            4: 'Perfect Rapid 59 min',
+            5: 'Rapidos 14/30/44 min',
+            6: 'Algodon',
+            7: 'Delicados',
+            8: 'Aclarados',
+            9: 'Desague + Centrifugado',
+            10: 'Lana/Seda',
+            11: 'Lana',
+            12: 'Mixtos',
+            13: 'Algodon eco',
+            14: 'Rapido L&S 59 min',
+            15: 'Smart Fi+',
           } %}
           {{ nombres.get(p, 'Programa ' ~ p) }}
 
-      # SLevel dio 3 en el unico ciclo observado, y es el valor por defecto del
-      # equipo. Falta confirmar si la maquina tiene selector de suciedad: si no
-      # lo tiene el campo es constante y esta entidad no aporta nada.
+      # El panel NO tiene selector de suciedad: solo "Seleccion Temperatura" y
+      # "Seleccion Centrifugado". Asi que SLevel no se elige y probablemente sea
+      # constante en 3 (o lo fije el programa). Queda sin nombres a proposito;
+      # si `learn` confirma que nunca cambia, esta entidad sale del dashboard.
       - name: "Lavasecarropas nivel de suciedad"
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
