@@ -31,7 +31,21 @@ def encrypt(plain: str) -> str:
 
 
 def decrypt(hexstr: str) -> str:
-    return xor(bytes.fromhex(hexstr.strip())).decode("ascii", "replace")
+    """Decode a device reply, which may or may not actually be encrypted.
+
+    The firmware is inconsistent: /http-read.json and /http-write.json XOR their
+    payload, but /http-config.json and /http-getStatistics.json return hex-encoded
+    PLAINTEXT even when asked with `encrypted=1`. XORing those yields garbage that
+    looks like a decryption failure, so detect the plain case first.
+    """
+    raw = bytes.fromhex(hexstr.strip())
+    try:
+        plain = raw.decode("ascii")
+        if plain.lstrip().startswith("{"):
+            return plain
+    except UnicodeDecodeError:
+        pass
+    return xor(raw).decode("ascii", "replace")
 
 
 def fetch(url: str, attempts: int = 4) -> str:
@@ -73,9 +87,23 @@ def cmd_learn(args) -> None:
     print(f"{'hora':8s}  " + "  ".join(f"{f:>7s}" for f in WATCH))
     prev = None
     seen = []
+    off = False
     try:
         while True:
-            st = read_status()
+            # The Wi-Fi module powers down with the appliance, so "unreachable"
+            # is a normal state here, not a reason to give up.
+            try:
+                st = read_status()
+            except SystemExit:
+                if not off:
+                    print(f"{time.strftime('%H:%M:%S')}  -- equipo apagado / sin "
+                          f"respuesta; sigo esperando --", flush=True)
+                    off, prev = True, None
+                time.sleep(args.interval)
+                continue
+            if off:
+                print(f"{time.strftime('%H:%M:%S')}  -- equipo en linea --", flush=True)
+                off = False
             cur = {f: st.get(f, "-") for f in WATCH}
             if cur != prev:
                 ts = time.strftime("%H:%M:%S")
@@ -103,10 +131,17 @@ def cmd_probe(_args) -> None:
 
 
 def cmd_send(args) -> None:
-    payload = encrypt(args.command)
-    url = f"http://{IP}/http-write.json?encrypted=1&data={payload}"
-    print(f"comando  : {args.command}")
-    print(f"cifrado  : {payload}")
+    # Some simply-Fi models take the command as plain query parameters with
+    # `encrypted=0` instead of an encrypted `data=` blob. Which form this
+    # appliance honours is exactly what the probing is for.
+    if args.plain:
+        url = f"http://{IP}/http-write.json?encrypted=0&{args.command}"
+        print(f"comando  : {args.command}  (SIN cifrar)")
+    else:
+        payload = encrypt(args.command)
+        url = f"http://{IP}/http-write.json?encrypted=1&data={payload}"
+        print(f"comando  : {args.command}")
+        print(f"cifrado  : {payload}")
     print(f"URL      : {url}\n")
 
     # A dry run transmits nothing, so it stays available at any time.
@@ -149,6 +184,8 @@ def main() -> None:
     s.add_argument("command", help='e.g. "Write=1&StSt=1"')
     s.add_argument("--yes", action="store_true", help="actually transmit")
     s.add_argument("--force", action="store_true", help="allow while running")
+    s.add_argument("--plain", action="store_true",
+                   help="mandar los parametros sin cifrar (encrypted=0)")
     s.set_defaults(fn=cmd_send)
     args = p.parse_args()
     args.fn(args)
