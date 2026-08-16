@@ -112,17 +112,30 @@ template:
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
 
+      # Los numeros de programa son ESPECIFICOS DEL MODELO: corresponden a
+      # posiciones de la perilla de este equipo y no estan documentados en
+      # ningun lado (ni la integracion ni la comunidad los mapean). Se completan
+      # observandolos con `scripts/candyctl.py learn` y anotando que marcaba la
+      # perilla; hasta entonces cae al numero crudo, que es honesto.
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
-        state: "{{ state_attr('sensor.lavasecarropas_datos', 'Pr') | int(0) }}"
+        state: >-
+          {% set p = state_attr('sensor.lavasecarropas_datos', 'Pr') | int(-1) %}
+          {% set nombres = {} %}
+          {{ nombres.get(p, 'Programa ' ~ p) }}
 
+      # Misma historia que el programa: escala sin documentar. Se deja el crudo
+      # hasta poder observar el rango real girando el selector.
       - name: "Lavasecarropas nivel de suciedad"
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
-        state: "{{ state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(0) }}"
+        state: >-
+          {% set n = state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(-1) %}
+          {% set nombres = {} %}
+          {{ nombres.get(n, 'Nivel ' ~ n) }}
 
       # El mapeo replica DryerCycleState de la integración. El equipo reporta
       # DryT (no DryLev, que es el campo que ese enum cubre oficialmente), así

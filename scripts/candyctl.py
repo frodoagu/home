@@ -5,6 +5,7 @@ Safe by default: `send` prints the URL and refuses to transmit unless --yes is
 given, and refuses outright while a cycle is running unless --force.
 
   ./candyctl.py read                      # decrypted status snapshot
+  ./candyctl.py learn                     # map dial positions to program numbers
   ./candyctl.py probe                     # does /http-write.json exist? (non-mutating)
   ./candyctl.py send "Write=1&StSt=1"     # dry run: prints URL, sends nothing
   ./candyctl.py send "Write=1&StSt=1" --yes
@@ -60,6 +61,34 @@ def cmd_read(_args) -> None:
           f"WiFiStatus={st['WiFiStatus']}")
 
 
+def cmd_learn(args) -> None:
+    """Watch the dial-driven fields and print each change.
+
+    Program numbers are model-specific — they map to positions on this machine's
+    dial and are documented nowhere — so the only way to name them is to turn the
+    dial and record what comes back.
+    """
+    WATCH = ("Pr", "SLevel", "Temp", "SpinSp", "DryT", "Opt1", "Opt2", "Opt3")
+    print("Gira la perilla; cada cambio se imprime. Ctrl-C para terminar.\n")
+    print(f"{'hora':8s}  " + "  ".join(f"{f:>7s}" for f in WATCH))
+    prev = None
+    seen = []
+    try:
+        while True:
+            st = read_status()
+            cur = {f: st.get(f, "-") for f in WATCH}
+            if cur != prev:
+                ts = time.strftime("%H:%M:%S")
+                print(f"{ts}  " + "  ".join(f"{cur[f]:>7s}" for f in WATCH), flush=True)
+                seen.append(cur)
+                prev = cur
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print(f"\n\n{len(seen)} combinaciones distintas observadas.")
+        print("Anotar que programa mostraba la perilla en cada una y volcarlo al")
+        print("mapeo de charts/home-assistant/packages/lavarropas.yaml.")
+
+
 def cmd_probe(_args) -> None:
     """Ask the write endpoint for nothing. Should error, not act."""
     url = f"http://{IP}/http-write.json?encrypted=1"
@@ -113,6 +142,9 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("read").set_defaults(fn=cmd_read)
     sub.add_parser("probe").set_defaults(fn=cmd_probe)
+    l = sub.add_parser("learn", help="mapear la perilla a numeros de programa")
+    l.add_argument("--interval", type=float, default=5.0)
+    l.set_defaults(fn=cmd_learn)
     s = sub.add_parser("send")
     s.add_argument("command", help='e.g. "Write=1&StSt=1"')
     s.add_argument("--yes", action="store_true", help="actually transmit")
