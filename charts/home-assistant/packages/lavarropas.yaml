@@ -1,0 +1,197 @@
+# HA package: lavasecarropas Candy simply-Fi. Contexto completo en
+# docs/lavarropas-candy.md.
+#
+# La integración `candy` (HACS) publica sólo 3 sensores y descarta 10 campos que
+# el equipo sí reporta (Err, SLevel, Opt1..Opt8, Steam, DryT, DelVal, RecipeId,
+# CheckUpState). Este package lee el MISMO endpoint local y los expone todos.
+#
+# El endpoint devuelve JSON cifrado con XOR de clave repetida de 16 chars,
+# hex-encodeado. La clave va en claro acá a propósito: se recupera del propio
+# tráfico del equipo en segundos, así que es ofuscación y no un secreto (docs §2).
+#
+# El equipo atiende UNA conexión por vez y la integración poliea cada 60 s, así
+# que el comando reintenta 3 veces: la primera lectura a veces colisiona y da
+# timeout.
+
+command_line:
+  - sensor:
+      # Un único fetch por ciclo; todo lo demás son template sensors sobre estos
+      # atributos, para no multiplicar requests contra un equipo que no los tolera.
+      name: "Lavasecarropas datos"
+      unique_id: lavasecarropas_datos
+      command: >-
+        for i in 1 2 3; do H=$(curl -sS -m 15 "http://192.168.0.164/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 3; done;
+        printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';h=sys.stdin.read().strip();print(json.dumps(json.loads(bytes(b^k[i%16] for i,b in enumerate(bytes.fromhex(h))))['statusLavatrice']))"
+      command_timeout: 45
+      scan_interval: 60
+      value_template: "{{ value_json.MachMd }}"
+      json_attributes:
+        - WiFiStatus
+        - Err
+        - MachMd
+        - Pr
+        - PrPh
+        - SLevel
+        - Temp
+        - SpinSp
+        - Opt1
+        - Opt2
+        - Opt3
+        - Opt4
+        - Opt5
+        - Opt6
+        - Opt7
+        - Opt8
+        - Steam
+        - DryT
+        - DelVal
+        - RemTime
+        - RecipeId
+        - CheckUpState
+
+template:
+  - sensor:
+      - name: "Lavasecarropas estado"
+        unique_id: lavasecarropas_estado
+        icon: mdi:washing-machine
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set m = state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) %}
+          {{ {1: 'En reposo', 2: 'En marcha', 3: 'En pausa',
+              4: 'Inicio diferido (selección)', 5: 'Inicio diferido programado',
+              6: 'Error', 7: 'Completado', 8: 'Completado'}.get(m, 'Desconocido') }}
+
+      - name: "Lavasecarropas fase"
+        unique_id: lavasecarropas_fase
+        icon: mdi:water-sync
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set p = state_attr('sensor.lavasecarropas_datos', 'PrPh') | int(-1) %}
+          {{ {0: 'Parado', 1: 'Pre-lavado', 2: 'Lavando', 3: 'Aclarado',
+              4: 'Último aclarado', 5: 'Fin', 6: 'Secando', 7: 'Error',
+              8: 'Vapor', 9: 'Centrifugando (noche)', 10: 'Centrifugando'}.get(p, 'Desconocido') }}
+
+      # RemTime viene en MINUTOS. La integración lo divide por 60 asumiendo
+      # segundos y publica ~60x menos; este sensor es el valor correcto.
+      - name: "Lavasecarropas tiempo restante"
+        unique_id: lavasecarropas_tiempo_restante_real
+        unit_of_measurement: "min"
+        device_class: duration
+        state_class: measurement
+        icon: mdi:timer-sand
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0) }}"
+
+      # Sólo con la máquina en marcha: parada, RemTime es la duración del
+      # programa seleccionado y una hora de fin no significaría nada.
+      - name: "Lavasecarropas fin estimado"
+        unique_id: lavasecarropas_fin_estimado
+        device_class: timestamp
+        icon: mdi:clock-end
+        availability: >-
+          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+             and state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 2 }}
+        state: >-
+          {{ (now() + timedelta(minutes = state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0))).isoformat() }}
+
+      - name: "Lavasecarropas temperatura"
+        unique_id: lavasecarropas_temperatura
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermometer-water
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'Temp') | int(0) }}"
+
+      # SpinSp viene en centenas de rpm.
+      - name: "Lavasecarropas centrifugado"
+        unique_id: lavasecarropas_centrifugado
+        unit_of_measurement: "rpm"
+        state_class: measurement
+        icon: mdi:rotate-3d-variant
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
+
+      - name: "Lavasecarropas programa"
+        unique_id: lavasecarropas_programa
+        icon: mdi:playlist-music
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'Pr') | int(0) }}"
+
+      - name: "Lavasecarropas nivel de suciedad"
+        unique_id: lavasecarropas_nivel_suciedad
+        icon: mdi:liquid-spot
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(0) }}"
+
+      # El mapeo replica DryerCycleState de la integración. El equipo reporta
+      # DryT (no DryLev, que es el campo que ese enum cubre oficialmente), así
+      # que la escala es probable pero NO está confirmada — ver docs §5.
+      - name: "Lavasecarropas nivel de secado"
+        unique_id: lavasecarropas_nivel_secado
+        icon: mdi:tumble-dryer
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set d = state_attr('sensor.lavasecarropas_datos', 'DryT') | int(-1) %}
+          {{ {0: 'Sin secado', 1: 'Secado para planchar', 2: 'Secado para colgar',
+              3: 'Secado para guardar', 4: 'Secado extra'}.get(d, 'Desconocido') }}
+
+      # 255 es el centinela de "sin inicio diferido".
+      - name: "Lavasecarropas inicio diferido"
+        unique_id: lavasecarropas_inicio_diferido
+        icon: mdi:clock-start
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set d = state_attr('sensor.lavasecarropas_datos', 'DelVal') | int(255) %}
+          {{ 'Sin programar' if d == 255 else d }}
+
+      # Ídem: 255 significa "sin error".
+      - name: "Lavasecarropas error"
+        unique_id: lavasecarropas_error
+        icon: mdi:alert-circle-outline
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set e = state_attr('sensor.lavasecarropas_datos', 'Err') | int(255) %}
+          {{ 'Sin error' if e == 255 else e }}
+
+      - name: "Lavasecarropas opciones activas"
+        unique_id: lavasecarropas_opciones_activas
+        icon: mdi:tune-variant
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set ns = namespace(activas = []) %}
+          {% for n in range(1, 9) %}
+            {% if state_attr('sensor.lavasecarropas_datos', 'Opt' ~ n) | int(0) != 0 %}
+              {% set ns.activas = ns.activas + [n | string] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.activas | join(', ') if ns.activas else 'Ninguna' }}
+
+  - binary_sensor:
+      - name: "Lavasecarropas en marcha"
+        unique_id: lavasecarropas_en_marcha
+        device_class: running
+        icon: mdi:washing-machine
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 2 }}"
+
+      # MachMd 7 y 8 son ambos "Finished" en la integración.
+      - name: "Lavasecarropas ciclo terminado"
+        unique_id: lavasecarropas_ciclo_terminado
+        icon: mdi:check-circle-outline
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) in [7, 8] }}"
+
+      - name: "Lavasecarropas problema"
+        unique_id: lavasecarropas_problema
+        device_class: problem
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 6
+             or state_attr('sensor.lavasecarropas_datos', 'Err') | int(255) != 255 }}
+
+      - name: "Lavasecarropas vapor"
+        unique_id: lavasecarropas_vapor
+        icon: mdi:kettle-steam
+        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        state: "{{ state_attr('sensor.lavasecarropas_datos', 'Steam') | int(0) != 0 }}"
