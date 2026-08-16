@@ -118,7 +118,7 @@ actually is.
 |---|---|
 | `sensor.lavasecarropas` | machine state; attributes `program`, `temperature`, `spin_speed`, `remaining_minutes`, `remote_control` |
 | `sensor.lavasecarropas_estado_ciclo` | program phase (wash, rinse, spin…) |
-| `sensor.lavasecarropas_tiempo_restante` | remaining minutes — **see the bug in §5** |
+| `sensor.lavasecarropas_tiempo_restante_integracion` | remaining minutes — **wrong, see the bug in §5**; renamed out of the way so the package can own the clean id |
 
 The **states already render in Spanish** with no extra work: the integration ships
 `translations/sensor.es.json` and this HA runs with `language: es`. The API always
@@ -152,8 +152,8 @@ few stays at one per cycle.
 | `sensor.lavasecarropas_temperatura` | °C |
 | `sensor.lavasecarropas_centrifugado` | rpm (`SpinSp × 100`) |
 | `sensor.lavasecarropas_programa` | program number |
-| `sensor.lavasecarropas_nivel_suciedad` | `SLevel` |
-| `sensor.lavasecarropas_nivel_secado` | dry scale — **unconfirmed**, see §5 |
+| `sensor.lavasecarropas_nivel_de_suciedad` | `SLevel` |
+| `sensor.lavasecarropas_nivel_de_secado` | dry scale — **unconfirmed**, see §5 |
 | `sensor.lavasecarropas_inicio_diferido` | "Sin programar" when `DelVal == 255` |
 | `sensor.lavasecarropas_error` | "Sin error" when `Err == 255` |
 | `sensor.lavasecarropas_opciones_activas` | which `OptN` are set |
@@ -227,6 +227,21 @@ machine and creates no tumble-dryer device.
   to `False` while a dial-started cycle runs, so it seems to track remote-control
   availability — but the field's exact semantics are unconfirmed. Do not read it as
   "I can send commands now".
+
+- **Entity ids collide between the integration and the package, and HA resolves
+  the collision the wrong way round.** Both want to publish a remaining-time
+  sensor. Whichever registers second gets a `_2` suffix — on first deploy that was
+  the package's (correct) sensor, leaving the integration's buggy one holding the
+  clean `sensor.lavasecarropas_tiempo_restante`. Fixed in the entity registry by
+  renaming the integration's to `…_tiempo_restante_integracion` first and then
+  reclaiming the clean id. Both entities carry a `unique_id`, so the registry
+  remembers the rename across restarts. Watch for the same trap if more overlapping
+  sensors are added.
+
+- **HA slugifies entity ids from the full friendly name, prepositions included.**
+  `"Lavasecarropas nivel de secado"` becomes `sensor.lavasecarropas_nivel_de_secado`,
+  not `…_nivel_secado`. Read the ids back from the API after a deploy instead of
+  predicting them.
 
 - **The appliance serves ONE connection at a time.** Two overlapping requests give
   `connection refused` on the second. This is what the integration fixed in 0.8.0
