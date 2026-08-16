@@ -195,3 +195,35 @@ template:
         icon: mdi:kettle-steam
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Steam') | int(0) != 0 }}"
+
+# El aviso dispara por TRANSICIÓN de estado, nunca por el tiempo restante: ese
+# campo se revisa a la baja al pesar la carga y ademas emite valores espurios
+# sueltos (docs/lavarropas-candy.md §5).
+automation:
+  - id: lavasecarropas_ciclo_terminado
+    alias: Lavasecarropas - Avisar cuando termina el ciclo
+    description: >-
+      Notifica al celular cuando MachMd pasa a 7/8 (Finished). El equipo se
+      queda en ese estado hasta que alguien lo abre, asi que el aviso sale una
+      sola vez por ciclo.
+    trigger:
+      # `from: "off"` es lo que evita el aviso fantasma al arrancar HA: el
+      # command_line tarda hasta 60 s en su primera lectura, con lo cual el
+      # binary_sensor pasa por unavailable y despues resuelve. Sin el `from`,
+      # esa transicion se veria como un ciclo recien terminado.
+      - platform: state
+        entity_id: binary_sensor.lavasecarropas_ciclo_terminado
+        from: "off"
+        to: "on"
+    action:
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Lavasecarropas
+          message: >-
+            Termino el ciclo (programa {{ states('sensor.lavasecarropas_programa') }},
+            {{ states('sensor.lavasecarropas_temperatura') }} °C). Hay que sacar la ropa.
+          data:
+            channel: Lavasecarropas
+            importance: high
+            notification_icon: mdi:washing-machine
+    mode: single
