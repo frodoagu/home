@@ -73,6 +73,9 @@ esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices ou
                      gas sensor and the BTHome thermometers (docs/home-assistant.md#ble-proxies).
                      Secrets via !secret (secrets.yaml gitignored; secrets.yaml.example is the
                      template) — one api_key/ota_password pair per device.
+scripts/             Operator CLIs run BY HAND against LAN devices — not deployed, not called by
+                     any chart. candyctl.py drives the Candy washer-dryer's local API
+                     (docs/lavarropas-candy.md §8); it refuses to transmit without --yes.
 docs/                Long-form guides (e.g. Google Assistant setup).
 kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 ```

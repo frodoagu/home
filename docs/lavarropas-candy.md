@@ -401,12 +401,78 @@ include `StartStop=1` to begin a program, plus `DelayStart`, `ExtraDry` and
 
 **Unverified on this appliance.** A bare `GET /http-write.json` timed out here, which
 proves nothing either way — with two 60 s pollers running, a timeout is the ordinary
-collision signature (§5). Before trying anything real:
+collision signature (§5).
 
-- **Only with the machine idle.** Probing write commands mid-cycle risks interrupting
-  a running wash.
-- **Remote start is probably gated on the appliance.** `WiFiStatus` reads `1` when
-  idle and `0` during a dial-started cycle; if it does track remote-control
-  availability, the physical dial likely has to be in a remote-enabled position.
-- **It starts a real washing machine.** Door, detergent and water supply are all
-  physical preconditions no protocol check will catch.
+### 8.1 The tool
+
+[`scripts/candyctl.py`](../scripts/candyctl.py) carries the XOR layer, so commands can
+be composed as plain text:
+
+```bash
+scripts/candyctl.py read                     # decrypted status snapshot
+scripts/candyctl.py probe                    # does the endpoint exist? non-mutating
+scripts/candyctl.py send "Write=1&StSt=1"    # dry run: prints the URL, sends nothing
+scripts/candyctl.py send "Write=1&StSt=1" --yes
+```
+
+Two interlocks, because this drives a real appliance: nothing is transmitted without
+`--yes`, and `--yes` **refuses outright while a cycle is running** unless `--force` is
+also given. A real send snapshots status before and after and prints the field diff, so
+an effect is observed rather than assumed.
+
+### 8.2 Test plan
+
+Run it in order, with the machine **idle** and someone in front of it.
+
+**Phase 0 — does the endpoint exist?** `probe` requests `/http-write.json` with no
+`data`, which cannot act.
+
+| Response | Reading |
+|---|---|
+| hex decrypting to `BAD REQUEST` / `ERROR` | endpoint exists → continue |
+| hex decrypting to `OK` | exists and tolerates empty commands → continue carefully |
+| consistent 404 / refused | not in this firmware → **end of the road** |
+| timeout on all retries | inconclusive; could be poller collision |
+
+If inconclusive, scale HA to zero briefly to clear the LAN and repeat.
+
+**Phase 1 — is the key accepted for writes?** This is the real unknown, and it is
+settled with a deliberately invalid command:
+
+```bash
+scripts/candyctl.py send "Write=1&NoExiste=1" --yes
+```
+
+What matters is whether the reply *differs* from Phase 0. A different answer to a
+well-encrypted `data` than to an absent one means the appliance is decrypting and
+parsing what we send — i.e. the read key works for writing too.
+
+**Phase 2 — which parameter family?** Two conventions are documented and neither is
+confirmed for a `statusLavatrice`: `Write=1&StSt=1` (washers) versus
+`StartStop=1&Program=P5&DelayStart=0&…` (dishwashers). Probe with harmless commands
+first, never a start:
+
+```bash
+scripts/candyctl.py send "Write=0" --yes                            # config read, if supported
+scripts/candyctl.py send "Write=1&Pr=2&Temp=40&SpinSp=10&StSt=0" --yes  # echo current values
+scripts/candyctl.py send "Write=1&Reset=1" --yes                    # no-op when already stopped
+```
+
+**Phase 3 — an actual start.** Only after the above gave clear signals, and only with:
+
+- the door shut and the machine loaded as if for a real wash;
+- **`WiFiStatus == 1`** in the preceding read — it reads `1` when idle and `0` during a
+  dial-started cycle, so it appears to track remote-control availability, and the
+  physical dial may have to sit in a remote-enabled position;
+- someone present.
+
+Stop immediately if the appliance stops answering `read` after a write (power-cycle it),
+if `Err` comes back as anything other than 255, or on any unexpected mechanical
+movement.
+
+### 8.3 Only then, the Home Assistant side
+
+Once a command is confirmed, the package gains a `shell_command` carrying the same
+inline encryption as the read sensor, a `script` per action, and dashboard buttons.
+Deliberately not written in advance: there is no point versioning commands the appliance
+may not accept.
