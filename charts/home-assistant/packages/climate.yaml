@@ -162,6 +162,65 @@ script:
               temperature: 24
     mode: single
 
+  # Mismos dos toggles pero sin el dormitorio: la zona de estar (cocina +
+  # living), que es la que se usa de día. Misma regla que los de arriba — solo
+  # apaga cuando LOS DOS están prendidos; mezclado o todo apagado prende los dos.
+  # El blast va a los dos aunque uno ya esté prendido: con IR cada envío manda el
+  # frame completo, así que reafirma modo+temperatura en vez de togglear.
+  aires_cocina_living_toggle_calor:
+    alias: Aires - Toggle cocina + living (calor 21 / off)
+    icon: mdi:fire
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id:
+                    - climate.aire_cocina
+                    - climate.aire_living
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id:
+                - climate.aire_cocina
+                - climate.aire_living
+            data:
+              hvac_mode: heat
+              temperature: 21
+    mode: single
+
+  aires_cocina_living_toggle_frio:
+    alias: Aires - Toggle cocina + living (frío 24 / off)
+    icon: mdi:snowflake
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id:
+                    - climate.aire_cocina
+                    - climate.aire_living
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id:
+                - climate.aire_cocina
+                - climate.aire_living
+            data:
+              hvac_mode: cool
+              temperature: 24
+    mode: single
+
 # ────────────────────────────────────────────────────────────────────────────
 # AUTOMATISMO DE LOS AIRES. Migrado 1:1 desde las automatizaciones de Google
 # Home (google-home/automations/*.yaml): mismos horarios, umbrales y guardas.

@@ -328,7 +328,7 @@ doesn't even blink). Two fixes:
 > You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist);
 > SmartIR re-downloads the code JSONs automatically.
 
-**Quick-access scenes.** The same package ships four `script:`s for one-tap
+**Quick-access scenes.** The same package ships several `script:`s for one-tap
 presets — they show up as `script.*` entities (buttons on the HA app / dashboard
 cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes in
 Google Home:
@@ -343,12 +343,22 @@ Google Home:
   turns everything off. Ideal for a single Android home-screen widget / iOS Shortcut.
 - `aires_toggle_frio` — same one-button toggle, but the "on" side sets **cool
   24 °C** (summer preset).
+- `aires_cocina_living_toggle_calor` / `aires_cocina_living_toggle_frio` — the
+  same toggle scoped to the **living area only** (kitchen + living, no bedroom):
+  off only when **both** are on, otherwise both to heat 21 °C / cool 24 °C.
 
 Turn-on presets fix mode+temperature in a single `climate.set_temperature` call
 (passing `hvac_mode`): IR sends the whole state frame each time, so one blast
-lands the unit in the target state. To add a button to the phone, drop an
-`entities`/`button` card pointing at the `script.*` entity, or add it to the
-Google Home app once linked.
+lands the unit in the target state — re-blasting a unit that's already on
+re-asserts mode+temperature instead of toggling it, which is why the "on" side
+targets every AC in the group rather than only the ones HA believes are off.
+
+To add a button to the phone, drop an `entities`/`button` card pointing at the
+`script.*` entity, or add it to the Google Home app once linked. For a
+home-screen **widget**: on Android the HA companion app ships an *Entity/Script*
+widget — add it, pick the `script.*` entity, and one tap runs it; on iOS use
+Shortcuts (*Home Assistant → Run Script*) and add the shortcut to the home
+screen or Lock Screen.
 
 ### Automatic schedule (migrated from Google Home)
 
