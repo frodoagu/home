@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "unifi.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # The controller binds host ports via hostNetwork and owns a single /config
+  # PVC, so the old pod must be gone before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "unifi.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "unifi.selectorLabels" . | nindent 8 }}
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      {{- if .Values.hostNetwork }}
+      # Keep cluster DNS working for the pod itself when sharing the host netns —
+      # without this the controller cannot resolve the MongoDB Service.
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: unifi
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: inform
+              containerPort: {{ .Values.ports.inform }}
+              protocol: TCP
+            - name: https
+              containerPort: {{ .Values.ports.https }}
+              protocol: TCP
+            - name: stun
+              containerPort: {{ .Values.ports.stun }}
+              protocol: UDP
+            - name: discovery
+              containerPort: {{ .Values.ports.discovery }}
+              protocol: UDP
+            - name: discoverable
+              containerPort: {{ .Values.ports.discoverable }}
+              protocol: UDP
+          env:
+            - name: PUID
+              value: {{ .Values.puid | quote }}
+            - name: PGID
+              value: {{ .Values.pgid | quote }}
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: MEM_STARTUP
+              value: {{ .Values.java.memStartup | quote }}
+            - name: MEM_LIMIT
+              value: {{ .Values.java.memLimit | quote }}
+            - name: MONGO_HOST
+              value: {{ include "unifi.mongodb.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            - name: MONGO_PORT
+              value: {{ .Values.mongodb.port | quote }}
+            - name: MONGO_DBNAME
+              value: {{ .Values.mongodb.dbName | quote }}
+            # The init script creates the user inside the controller's own
+            # database, not in "admin", so that is where it must authenticate.
+            # Leaving this at the image's "admin" default fails with an
+            # authentication error the controller reports only as "db down".
+            - name: MONGO_AUTHSOURCE
+              value: {{ .Values.mongodb.dbName | quote }}
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.username }}
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.password }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # TCP probes, not HTTP: the UI port speaks HTTPS with a self-signed
+          # cert, and the controller 302s the root anyway. A TCP check is the
+          # honest signal that the Java app is listening.
+          startupProbe:
+            tcpSocket:
+              port: https
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            # A cold JVM start plus any database migration is slow on a Pi.
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "unifi.fullname" . }}-config
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

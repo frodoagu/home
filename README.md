@@ -428,6 +428,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/lavarropas-candy.md](docs/lavarropas-candy.md) — Candy simply-Fi washer-dryer over its **local** HTTP API (no cloud, no vendor app): finding it via the UDP heartbeat, recovering the XOR key from the device's own traffic, and the `RemTime` unit bug
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `images/home-site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
+- [docs/unifi.md](docs/unifi.md) — UniFi AP controller: why UniFi OS Server can't run here, the 8080 inform-port collision that moved Pi-hole to 8081, and bounding MongoDB growth on the SD card with retention settings git cannot set — the PVC sizes are not limits, since `local-path` enforces no quota
 - [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
 

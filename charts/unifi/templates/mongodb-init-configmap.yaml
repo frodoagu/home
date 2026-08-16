@@ -1,0 +1,39 @@
+# First-boot MongoDB provisioning for the controller's database user.
+#
+# The official mongo image runs everything in /docker-entrypoint-initdb.d ONCE,
+# when the data directory is empty. A .sh (not a .js) is used deliberately: the
+# credentials arrive as environment variables from the out-of-band Secret, and a
+# .js file has no way to read them — it would mean writing the password into git.
+#
+# The controller keeps stats in a SEPARATE database named "<dbName>_stat", so the
+# user has to be created in both or the controller starts and then fails to write
+# any statistics.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "unifi.mongodb.fullname" . }}-init
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+data:
+  init-unifi-user.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # The entrypoint has already created the root user and is running this
+    # against a local mongod that now requires auth, so authenticate explicitly.
+    mongosh --host 127.0.0.1 \
+      --username "${MONGO_INITDB_ROOT_USERNAME}" \
+      --password "${MONGO_INITDB_ROOT_PASSWORD}" \
+      --authenticationDatabase admin \
+      --quiet <<EOF
+    db.getSiblingDB("${UNIFI_DB}").createUser({
+      user: "${UNIFI_DB_USER}",
+      pwd: "${UNIFI_DB_PASSWORD}",
+      roles: [{ role: "dbOwner", db: "${UNIFI_DB}" }],
+    });
+    db.getSiblingDB("${UNIFI_DB}_stat").createUser({
+      user: "${UNIFI_DB_USER}",
+      pwd: "${UNIFI_DB_PASSWORD}",
+      roles: [{ role: "dbOwner", db: "${UNIFI_DB}_stat" }],
+    });
+    EOF

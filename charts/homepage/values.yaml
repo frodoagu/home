@@ -115,6 +115,10 @@ config:
             href: https://shelly.agu.com.ar
             description: Outdoor lights control
             icon: shelly.png
+        - UniFi:
+            href: https://unifi.agu.com.ar
+            description: WiFi AP controller
+            icon: unifi.png
     - Sites:
         - agu.com.ar:
             href: https://agu.com.ar

@@ -1,0 +1,42 @@
+{{- if .Values.persistence.enabled }}
+{{- $fullName := include "unifi.fullname" . }}
+# Two claims: the controller's /config and MongoDB's data directory. Separate
+# because their lifecycles differ — /config holds the site configuration and
+# certificates and is worth keeping across a database wipe.
+#
+# Both land on the default StorageClass (the SD card). The `storage` requests are
+# NOT limits: local-path ignores capacity entirely, so these numbers only shape
+# what `kubectl get pvc` reports. Growth is bounded by the retention settings and
+# watched by the NodeFilesystemFillingUp alert, not by this file.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}-config
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}-data
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+{{- end }}

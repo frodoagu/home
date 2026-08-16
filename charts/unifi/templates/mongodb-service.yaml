@@ -1,0 +1,21 @@
+# ClusterIP for the controller to reach MongoDB.
+#
+# The controller pod runs in hostNetwork, so it resolves this name through
+# dnsPolicy: ClusterFirstWithHostNet and connects over the cluster network like
+# any other client. MongoDB itself is NOT on the host network and is never
+# exposed on the LAN.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "unifi.mongodb.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "unifi.mongodb.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: mongodb
+      port: {{ .Values.mongodb.port }}
+      targetPort: mongodb
+      protocol: TCP

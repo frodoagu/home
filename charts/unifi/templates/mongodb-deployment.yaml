@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "unifi.mongodb.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # One PVC, one mongod. Never let a rolling update start a second pod against
+  # the same data directory — WiredTiger takes an exclusive lock and the new pod
+  # would crash-loop until the old one happened to go away.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "unifi.mongodb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "unifi.mongodb.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mongodb
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
+          # Cap the WiredTiger cache explicitly. Left alone it defaults to
+          # (RAM/2 - 1GB) ~= 3 GB on this node, which would swallow the entire
+          # memory headroom for a database that holds a few hundred MB.
+          args:
+            - --wiredTigerCacheSizeGB
+            - {{ .Values.mongodb.wiredTigerCacheSizeGB | quote }}
+            - --bind_ip_all
+          ports:
+            - name: mongodb
+              containerPort: {{ .Values.mongodb.port }}
+              protocol: TCP
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.rootUsername }}
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.rootPassword }}
+            # Consumed by the first-boot init script (see the ConfigMap).
+            - name: UNIFI_DB
+              value: {{ .Values.mongodb.dbName | quote }}
+            - name: UNIFI_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.username }}
+            - name: UNIFI_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.existingSecret }}
+                  key: {{ .Values.mongodb.secretKeys.password }}
+          startupProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            # First boot runs the init script and preallocates journal files,
+            # which is slow on a Pi. Allow a couple of minutes.
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.mongodb.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "unifi.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: init
+          configMap:
+            name: {{ include "unifi.mongodb.fullname" . }}-init
+            defaultMode: 0555

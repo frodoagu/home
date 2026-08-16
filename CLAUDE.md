@@ -47,6 +47,10 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      local RPC by a CronJob (self-heal) + PostSync hook Job (apply a git change now).
                      Deploys NO device: it ships switch settings (values.yaml) and mJS scripts
                      (scripts/*.js, incl. the outdoor-lights gang). See docs/shelly.md + gotchas.
+  unifi/             UniFi Network Application (AP controller) + its own MongoDB, at unifi.agu.com.ar
+                     (google-auth). hostNetwork for L2 adoption (took host 8080, so pihole moved to
+                     8081). On the SD card; growth is bounded by MANUAL retention settings, NOT by
+                     the PVC sizes. See docs/unifi.md + gotchas.
   shelly-proxy/      External access to the Shelly relays at shelly.agu.com.ar (google-auth). An nginx
                      pod serves a small self-hosted control panel AND reverse-proxies one PathPrefix
                      per device (/escalera, /principal) to that device's LAN HTTP RPC. Does NOT link the
@@ -282,6 +286,23 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   connection at a time, so the package's command retries 3×; it also ignores ICMP
   (find it by its UDP broadcast heartbeat on :55555, not by ping). See
   docs/lavarropas-candy.md.
+- **unifi — three constraints that shaped the chart.** (1) Ubiquiti's **UniFi OS
+  Server is x86-64 only** and installs as a host podman/systemd stack — it cannot
+  run here at all; the arm64-capable **Network Application** is what's deployed.
+  (2) `hostNetwork` is required (adoption is a UDP-10001 **broadcast**), which
+  collided with Pi-hole: 8080 is UniFi's **inform** port, baked into every device
+  and retried by a factory-reset AP, while Pi-hole's 8080 was arbitrary and
+  reached only by Traefik — so **Pi-hole moved to 8081**, not UniFi. (3) **Nothing
+  bounds the database at the filesystem level.** It sits on `local-path` (the SD
+  card), which **enforces no quota** — the PVC capacity is ignored upstream by
+  design, so those `size:` fields are reporting metadata and read like limits
+  without being any. The only real bounds are the **statistics retention** and the
+  **auto-backup count**, and both are **UI/Mongo state with no config-file key**
+  (same trap as `telegram_bot` / `http:`) — so they are a manual step git cannot
+  enforce, backed by the `NodeFilesystemFillingUp` alert as the last line of
+  defence. The usual disk-filler is unbounded **auto-backups**, not the stats. The
+  UI is self-signed HTTPS with no plain-HTTP listener, hence the repo's first
+  `ServersTransport` (`insecureSkipVerify`). See docs/unifi.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

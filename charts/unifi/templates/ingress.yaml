@@ -1,0 +1,49 @@
+{{- if .Values.ingress.enabled }}
+# The controller has no plain-HTTP UI listener — it serves 8443 over TLS with a
+# self-signed certificate it generates itself, and there is no supported way to
+# hand it the Let's Encrypt cert. So the Traefik -> controller hop has to skip
+# verification. This is not a downgrade of what the browser sees: Traefik still
+# terminates the real letsencrypt cert on the outside, and this hop stays inside
+# the node.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ include "unifi.fullname" . }}-selfsigned
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  insecureSkipVerify: true
+---
+# Traefik IngressRoute for the UniFi controller UI, gated by the google-auth
+# ForwardAuth middleware (Google sign-in, allowlist enforced by oauth2-proxy).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "unifi.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.ingress.host }}`)
+      kind: Rule
+      {{- if .Values.googleAuth.enabled }}
+      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+      # sign-in redirect. Reversed, the raw 401 reaches the browser.
+      middlewares:
+        - name: google-auth-signin
+        - name: google-auth
+      {{- end }}
+      services:
+        - name: {{ include "unifi.fullname" . }}
+          port: {{ .Values.service.port }}
+          # Talk HTTPS upstream, tolerating the controller's self-signed cert.
+          scheme: https
+          serversTransport: {{ include "unifi.fullname" . }}-selfsigned
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}
+# HTTP → HTTPS redirection is handled globally by the bundled Traefik's web
+# entrypoint (see charts/traefik-config), so no separate HTTP route is needed.
