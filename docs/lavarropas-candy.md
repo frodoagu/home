@@ -329,6 +329,20 @@ A separate dashboard, so the auto-generated Overview and the existing `Mapa` /
 - Rebuild with *Settings → Dashboards → Add*, then in the new dashboard use the
   three-dot menu → *Raw configuration editor* and paste:
 
+Two things this layout deliberately avoids, both of which the first version got
+wrong:
+
+- **The binary sensors are not on it.** `en_marcha` and `ciclo_terminado` exist to
+  drive automations; as tiles they only restate `sensor.lavasecarropas_estado`.
+- **The finish time is shown as a wall clock, not a countdown.** A `tile` renders a
+  `device_class: timestamp` entity as relative time ("in 38 minutes"), which is a
+  verbatim repeat of the remaining-minutes sensor beside it. An `entities` row with
+  `format: time` prints `23:47` instead, which is the only reason to show it at all.
+  There is no countdown graph for the same reason: plotting a counter that decrements
+  by one is a straight line that carries no information the number lacks. The only
+  history graph kept is the phase progression, which cannot be read off any single
+  number.
+
 ```yaml
 views:
   - title: Lavasecarropas
@@ -342,17 +356,13 @@ views:
           - {type: heading, heading: Ahora, icon: mdi:washing-machine, heading_style: subtitle}
           - {type: tile, entity: sensor.lavasecarropas_estado, name: Estado}
           - {type: tile, entity: sensor.lavasecarropas_fase, name: Fase del ciclo}
-          - {type: tile, entity: binary_sensor.lavasecarropas_en_marcha, name: En marcha}
-          - {type: tile, entity: binary_sensor.lavasecarropas_ciclo_terminado, name: Ciclo terminado}
       - type: grid
         cards:
           - {type: heading, heading: Tiempo, icon: mdi:timer-sand, heading_style: subtitle}
-          - {type: tile, entity: sensor.lavasecarropas_tiempo_restante, name: Tiempo restante}
-          - {type: tile, entity: sensor.lavasecarropas_fin_estimado, name: Termina}
-          - type: history-graph
-            hours_to_show: 6
+          - type: entities
             entities:
-              - {entity: sensor.lavasecarropas_tiempo_restante, name: Minutos restantes}
+              - {entity: sensor.lavasecarropas_tiempo_restante, name: Faltan}
+              - {entity: sensor.lavasecarropas_fin_estimado, name: Termina a las, format: time}
       - type: grid
         cards:
           - {type: heading, heading: Programa, icon: mdi:playlist-music, heading_style: subtitle}
@@ -369,14 +379,13 @@ views:
           - {type: tile, entity: binary_sensor.lavasecarropas_vapor, name: Vapor}
       - type: grid
         cards:
-          - {type: heading, heading: Diagnostico, icon: mdi:stethoscope, heading_style: subtitle}
+          - {type: heading, heading: Historial y diagnostico, icon: mdi:chart-timeline-variant, heading_style: subtitle}
           - {type: tile, entity: sensor.lavasecarropas_error, name: Codigo de error}
-          - {type: tile, entity: binary_sensor.lavasecarropas_problema, name: Problema}
           - type: history-graph
             hours_to_show: 12
             entities:
-              - {entity: sensor.lavasecarropas_estado, name: Estado}
               - {entity: sensor.lavasecarropas_fase, name: Fase}
+              - {entity: sensor.lavasecarropas_estado, name: Estado}
 ```
 
 ---
