@@ -19,10 +19,15 @@ command_line:
       # atributos, para no multiplicar requests contra un equipo que no los tolera.
       name: "Lavasecarropas datos"
       unique_id: lavasecarropas_datos
+      # Presupuesto de tiempo: 5 intentos x (8 s de curl + 2 s de espera) = 50 s
+      # peor caso, bajo el command_timeout de 55 y el scan_interval de 60. La
+      # version anterior pedia 3 intentos de 15 s pero cortaba a los 45, asi que
+      # nunca llegaba al tercero. El equipo responde en 1-2 s cuando responde,
+      # de modo que conviene timeout corto y mas intentos.
       command: >-
-        for i in 1 2 3; do H=$(curl -sS -m 15 "http://192.168.0.164/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 3; done;
+        for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://192.168.0.164/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
         printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';h=sys.stdin.read().strip();print(json.dumps(json.loads(bytes(b^k[i%16] for i,b in enumerate(bytes.fromhex(h))))['statusLavatrice']))"
-      command_timeout: 45
+      command_timeout: 55
       scan_interval: 60
       value_template: "{{ value_json.MachMd }}"
       json_attributes:
@@ -73,13 +78,19 @@ template:
 
       # RemTime viene en MINUTOS. La integración lo divide por 60 asumiendo
       # segundos y publica ~60x menos; este sensor es el valor correcto.
+      #
+      # Al terminar el ciclo el equipo pone 65535 (0xFFFF) = "sin dato". Sin este
+      # filtro el sensor publica 65535 minutos y ensucia las estadisticas; no
+      # disponible es la representacion correcta de un dato que no existe.
       - name: "Lavasecarropas tiempo restante"
         unique_id: lavasecarropas_tiempo_restante_real
         unit_of_measurement: "min"
         device_class: duration
         state_class: measurement
         icon: mdi:timer-sand
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: >-
+          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+             and state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(65535) != 65535 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0) }}"
 
       # Sólo con la máquina en marcha: parada, RemTime es la duración del
@@ -94,35 +105,82 @@ template:
         state: >-
           {{ (now() + timedelta(minutes = state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0))).isoformat() }}
 
+      # 255 (0xFF) = "sin dato", que el equipo publica al terminar el ciclo.
       - name: "Lavasecarropas temperatura"
         unique_id: lavasecarropas_temperatura
         unit_of_measurement: "°C"
         device_class: temperature
         state_class: measurement
         icon: mdi:thermometer-water
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: >-
+          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+             and state_attr('sensor.lavasecarropas_datos', 'Temp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Temp') | int(0) }}"
 
-      # SpinSp viene en centenas de rpm.
+      # SpinSp viene en centenas de rpm, con el mismo centinela 255: sin filtrar,
+      # al terminar el ciclo publicaria 25500 rpm.
       - name: "Lavasecarropas centrifugado"
         unique_id: lavasecarropas_centrifugado
         unit_of_measurement: "rpm"
         state_class: measurement
         icon: mdi:rotate-3d-variant
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: >-
+          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+             and state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
 
+      # Los numeros de programa son ESPECIFICOS DEL MODELO: son posiciones de la
+      # perilla y no estan documentados en ningun lado. Este mapeo sale de leer
+      # el panel del equipo: las posiciones numeran EN SENTIDO HORARIO desde
+      # APAGADO, empezando en 1.
+      #
+      # CONFIRMADO empiricamente: solo Pr=2, observado en un ciclo real con la
+      # perilla en Perfect Mix. El resto se deduce del orden del panel. El
+      # sentido de giro NO es una suposicion libre: en antihorario el 2 caeria
+      # en "Rapido L&S", que contradice la observacion.
+      #
+      # Verificar el resto con `scripts/candyctl.py learn`. Lo que no este en el
+      # diccionario cae al numero crudo.
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
-        state: "{{ state_attr('sensor.lavasecarropas_datos', 'Pr') | int(0) }}"
+        state: >-
+          {% set p = state_attr('sensor.lavasecarropas_datos', 'Pr') | int(-1) %}
+          {% set nombres = {
+            1: 'Planchado Facil',
+            2: 'Perfect Mix',
+            3: 'Anti-alergias',
+            4: 'Perfect Rapid 59 min',
+            5: 'Rapidos 14/30/44 min',
+            6: 'Algodon',
+            7: 'Delicados',
+            8: 'Aclarados',
+            9: 'Desague + Centrifugado',
+            10: 'Lana/Seda',
+            11: 'Lana',
+            12: 'Mixtos',
+            13: 'Algodon eco',
+            14: 'Rapido L&S 59 min',
+            15: 'Smart Fi+',
+          } %}
+          {{ nombres.get(p, 'Programa ' ~ p) }}
 
+      # El panel NO tiene selector de suciedad: solo "Seleccion Temperatura" y
+      # "Seleccion Centrifugado". Asi que SLevel no se elige y probablemente sea
+      # constante en 3 (o lo fije el programa). Queda sin nombres a proposito;
+      # si `learn` confirma que nunca cambia, esta entidad sale del dashboard.
+      # Mismo centinela 255 al terminar el ciclo.
       - name: "Lavasecarropas nivel de suciedad"
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
-        state: "{{ state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(0) }}"
+        availability: >-
+          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+             and state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(255) != 255 }}
+        state: >-
+          {% set n = state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(-1) %}
+          {% set nombres = {} %}
+          {{ nombres.get(n, 'Nivel ' ~ n) }}
 
       # El mapeo replica DryerCycleState de la integración. El equipo reporta
       # DryT (no DryLev, que es el campo que ese enum cubre oficialmente), así
@@ -219,9 +277,15 @@ automation:
       - action: notify.mobile_app_motorola_edge_70
         data:
           title: Lavasecarropas
+          # NO citar temperatura ni centrifugado: justo al terminar el ciclo el
+          # equipo los pone en 255, asi que el aviso saldria "a 255 grados". Pr
+          # sigue siendo valido en ese momento, pero el sensor puede estar
+          # momentaneamente no disponible si el fetch colisiono, y entonces el
+          # mensaje diria "(unavailable)": de ahi el guardia.
           message: >-
-            Termino el ciclo (programa {{ states('sensor.lavasecarropas_programa') }},
-            {{ states('sensor.lavasecarropas_temperatura') }} °C). Hay que sacar la ropa.
+            {% set prog = states('sensor.lavasecarropas_programa') %}
+            Termino el ciclo{{ ' (' ~ prog ~ ')' if prog not in ['unknown', 'unavailable'] else '' }}.
+            Hay que sacar la ropa.
           data:
             channel: Lavasecarropas
             importance: high
