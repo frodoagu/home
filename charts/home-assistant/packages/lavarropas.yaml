@@ -5,13 +5,17 @@
 # el equipo sí reporta (Err, SLevel, Opt1..Opt8, Steam, DryT, DelVal, RecipeId,
 # CheckUpState). Este package lee el MISMO endpoint local y los expone todos.
 #
-# El endpoint devuelve JSON cifrado con XOR de clave repetida de 16 chars,
-# hex-encodeado. La clave va en claro acá a propósito: se recupera del propio
-# tráfico del equipo en segundos, así que es ofuscación y no un secreto (docs §2).
+# El endpoint devuelve el JSON hex-encodeado, a veces además cifrado con XOR de
+# clave repetida de 16 chars y a veces en claro pese al `encrypted=1` — el
+# firmware es inconsistente. Por eso el decode mira si el hex ya arranca con `{`
+# y sólo aplica el XOR cuando no. La clave va en claro acá a propósito: se
+# recupera del propio tráfico del equipo en segundos, así que es ofuscación y no
+# un secreto (docs §2).
 #
-# El equipo atiende UNA conexión por vez y la integración poliea cada 60 s, así
-# que el comando reintenta 3 veces: la primera lectura a veces colisiona y da
-# timeout.
+# El equipo atiende UNA conexión por vez y corta la que no puede servir, así que
+# el comando reintenta 5 veces: una lectura suelta devuelve vacío. La integración
+# `candy` de HACS se sacó justamente porque poleaba el mismo endpoint cada 60 s y
+# chocaba con este fetch (docs §3.1) — no volver a agregarla.
 
 command_line:
   - sensor:
@@ -26,7 +30,7 @@ command_line:
       # de modo que conviene timeout corto y mas intentos.
       command: >-
         for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://192.168.0.164/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
-        printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';h=sys.stdin.read().strip();print(json.dumps(json.loads(bytes(b^k[i%16] for i,b in enumerate(bytes.fromhex(h))))['statusLavatrice']))"
+        printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';r=bytes.fromhex(sys.stdin.read().strip());d=r if r.lstrip().startswith(b'{') else bytes(c^k[i%16] for i,c in enumerate(r));print(json.dumps(json.loads(d)['statusLavatrice']))"
       command_timeout: 55
       scan_interval: 60
       value_template: "{{ value_json.MachMd }}"

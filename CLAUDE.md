@@ -268,8 +268,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   through this HA entity).
 - **lavarropas Candy — the HACS integration under-reports, so a package reads the
   device directly.** The Candy simply-Fi washer-dryer talks a LOCAL HTTP API
-  (`/http-read.json?encrypted=1`) whose JSON is XOR'd with a repeating 16-char
-  key. That key is NOT a secret and is NOT in a SealedSecret: it is recoverable
+  (`/http-read.json?encrypted=1`) whose hex-encoded JSON is USUALLY — not always —
+  XOR'd with a repeating 16-char key: the firmware sometimes answers plaintext at
+  the same URL, so every reader hex-decodes first and XORs only when the result
+  doesn't start with `{`. XORing unconditionally turns a good reply into garbage
+  and knocks out ALL the entities at once (that's the failure mode to suspect when
+  everything goes unavailable together). That key is NOT a secret and is NOT in a
+  SealedSecret: it is recoverable
   from ~400 bytes of the device's own response (autocorrelation → period 16, then
   a per-column printable-ASCII constraint), and the integration is config-flow
   only so there'd be nowhere to inject it anyway (same trap as `telegram_bot` /
@@ -278,10 +283,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   loses all drying data), and **divides `RemTime` by 60 assuming seconds** — it's
   minutes here, proven by its own `TumbleDryerStatus` reading the same field
   undivided. `charts/home-assistant/packages/lavarropas.yaml` therefore polls the
-  same endpoint and republishes everything correctly. The device answers ONE
-  connection at a time, so the package's command retries 3×; it also ignores ICMP
-  (find it by its UDP broadcast heartbeat on :55555, not by ping). See
-  docs/lavarropas-candy.md.
+  same endpoint and republishes everything correctly, and the integration was
+  **removed** (config entry deleted 2026-08-17) — it polled the same endpoint every
+  60 s and the device answers ONE connection at a time, so it collided with the
+  package's fetch (`Empty reply from server`). Don't re-add it. The package's command
+  retries 5× for the same reason; the device also ignores ICMP (find it by its UDP
+  broadcast heartbeat on :55555, not by ping). See docs/lavarropas-candy.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
