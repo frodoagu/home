@@ -1,0 +1,16 @@
+apiVersion: v2
+name: unifi
+description: Helm chart for the UniFi Network Application (AP controller) + its MongoDB, on k3s with Traefik ingress
+type: application
+version: 0.1.0
+appVersion: "10.5.67"
+keywords:
+  - unifi
+  - ubiquiti
+  - wifi
+  - controller
+sources:
+  - https://github.com/linuxserver/docker-unifi-network-application
+  - https://help.ui.com/hc/en-us/categories/6583256751383-UniFi-Network
+maintainers:
+  - name: frodoagu

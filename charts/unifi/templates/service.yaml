@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "unifi.fullname" . }}
+  labels:
+    {{- include "unifi.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "unifi.selectorLabels" . | nindent 4 }}
+  # Only the web UI is fronted by a Service (for the Traefik IngressRoute). The
+  # device-facing ports (inform, STUN, discovery) are raw LAN protocols reached
+  # directly on the node via hostNetwork.
+  ports:
+    - name: https
+      port: {{ .Values.service.port }}
+      targetPort: https
+      protocol: TCP

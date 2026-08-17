@@ -1,0 +1,182 @@
+# Default values for unifi.
+#
+# The UniFi Network Application ("the controller") manages the LAN's UniFi APs.
+# There is no UniFi gateway here (the router is a Sagemcom from the ISP), so this
+# deploys the controller only — see docs/unifi.md for what that implies.
+#
+# NOTE: "UniFi OS Server", Ubiquiti's self-hosted UniFi OS, is NOT what this runs
+# and cannot run here: it is x86-64 only and installs as a host-level podman
+# stack, not a container. The Network Application is the arm64-capable piece.
+
+replicaCount: 1
+
+image:
+  repository: lscr.io/linuxserver/unifi-network-application
+  pullPolicy: IfNotPresent
+  # Pin to an explicit version (keep Chart.yaml appVersion in sync). Avoid
+  # floating tags like "latest".
+  tag: "10.5.67"
+
+nameOverride: ""
+fullnameOverride: ""
+
+# IANA timezone — used for stat bucketing and the controller's own logs.
+timezone: "America/Argentina/Buenos_Aires"
+
+puid: 1000
+pgid: 1000
+
+# Java heap for the controller, in MB (the image's MEM_STARTUP / MEM_LIMIT).
+# Deliberately small: one AP with ~16 clients does not need the 1024 default, and
+# the node only has ~3 GB available (see docs/unifi.md "Presupuesto de memoria").
+java:
+  memStartup: 256
+  memLimit: 768
+
+# Ports.
+#
+# hostNetwork is REQUIRED (see below), so these are HOST ports.
+#
+# inform (8080/tcp) is the port APs report to. It is the protocol default that a
+# factory-reset AP tries on its own, which is why the controller keeps it and
+# Pi-hole's web UI was moved to 8081 instead (charts/pihole webPort) — Pi-hole's
+# port is arbitrary and reached only by Traefik, UniFi's is baked into devices.
+ports:
+  # Device inform. Changing this means every AP needs a manual set-inform.
+  inform: 8080
+  # Web UI (HTTPS, self-signed). Fronted by Traefik; not reached directly.
+  https: 8443
+  # STUN — APs use it to keep the controller's view of them alive.
+  stun: 3478
+  # L2 device discovery (controller -> broadcast). Needed for auto-adoption.
+  discovery: 10001
+  # "Make controller discoverable" (UBNT discovery over SSDP).
+  discoverable: 1900
+
+# The node's LAN address. Only used for the adoption instructions in NOTES.txt —
+# nothing is configured from it, because hostNetwork means the controller already
+# sees this address as its own.
+lanAddress: "192.168.0.100"
+
+# hostNetwork is REQUIRED, for the same reason as charts/pihole.
+#
+# Adoption depends on layer-2 broadcast (UDP 10001) reaching the physical LAN,
+# which the pod overlay cannot do. It also makes the controller see 192.168.0.100
+# as its own address, so the inform URL it hands to APs is LAN-reachable without
+# the system_ip / "Override inform host" dance that a pod IP would require.
+hostNetwork: true
+
+# ClusterIP service fronting the web UI for the Traefik IngressRoute. The AP-facing
+# ports are reached directly on the node via hostNetwork, so they are not listed.
+service:
+  type: ClusterIP
+  port: 8443
+
+# Persistent storage.
+#
+# On the default `local-path` StorageClass, i.e. the Pi's SD card — same as every
+# other stateful chart here.
+#
+# Know what that does NOT give you: local-path enforces no quota whatsoever. The
+# requested capacity is ignored by design upstream, so the sizes below are
+# reporting metadata and nothing at the filesystem level stops MongoDB growing
+# until the card is full. The defences that actually apply are all above the
+# filesystem: bounded statistics retention and a finite auto-backup count (both
+# manual, see docs/unifi.md), plus the NodeFilesystemFillingUp alert in
+# charts/monitoring, which fires roughly a week before the card would fill.
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  # Controller state: /config (system.properties, backups, logs, certs).
+  config:
+    size: 2Gi
+  # MongoDB data directory.
+  data:
+    size: 8Gi
+
+# MongoDB backing the controller.
+#
+# Version matters: UniFi Network supports MongoDB up to 8.0, and 7.0 is the
+# best-tested pairing. 7.0 also needs ARMv8.2-A (LSE atomics) on arm64 — fine on
+# this Pi 5 (Cortex-A76), but it would NOT boot on a Pi 4 (Cortex-A72), which is
+# capped at MongoDB 4.4.
+mongodb:
+  image:
+    repository: mongo
+    pullPolicy: IfNotPresent
+    tag: "7.0.40"
+  # Database names. The controller also uses "<dbName>_stat" for the stat
+  # collections (stat_5minutes, stat_hourly, stat_daily, ...), so the init script
+  # provisions the user on both.
+  dbName: unifi
+  port: 27017
+  # WiredTiger cache, in GB. MUST be set explicitly: the default is
+  # (RAM/2 - 1GB), which on this 8 GB node is ~3 GB and would eat every bit of
+  # headroom the Pi has left.
+  wiredTigerCacheSizeGB: 0.25
+  # Credentials come from a Secret created OUT-OF-BAND (never in git), matching
+  # how the rest of this repo handles secrets. See docs/secrets.md:
+  #   kubectl create secret generic unifi-mongo -n unifi \
+  #     --from-literal=root-username=root \
+  #     --from-literal=root-password='...' \
+  #     --from-literal=username=unifi \
+  #     --from-literal=password='...'
+  existingSecret: unifi-mongo
+  secretKeys:
+    rootUsername: root-username
+    rootPassword: root-password
+    username: username
+    password: password
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+# Web UI via Traefik IngressRoute, gated by the google-auth ForwardAuth middleware.
+#
+# The controller serves its UI over HTTPS with a SELF-SIGNED certificate and has
+# no plain-HTTP UI listener, so the IngressRoute needs a ServersTransport with
+# insecureSkipVerify (see templates/ingress.yaml). Traefik still terminates a real
+# Let's Encrypt cert on the outside; only the Traefik->controller hop is skipped.
+ingress:
+  enabled: true
+  host: unifi.agu.com.ar
+  certResolver: letsencrypt
+
+# ForwardAuth → oauth2-proxy (Google sign-in). Mirrors charts/pihole so the
+# IngressRoute can require sign-in without relying on Traefik cross-namespace
+# middleware references — a local copy of the middleware is created in this
+# namespace (see templates/google-auth-middleware.yaml).
+#
+# Note this gates the UI only. The inform/STUN/discovery ports are raw device
+# protocols on the LAN and are NOT behind Traefik or google-auth — an AP cannot
+# carry a Google session. They are LAN-only (never port-forwarded).
+googleAuth:
+  enabled: true
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
+
+# Resource requests/limits – tuned small for the RPi. The limit has to clear the
+# Java heap (java.memLimit) plus the JVM's own non-heap overhead.
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1280Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Extra environment variables for the controller container.
+env: []

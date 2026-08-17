@@ -28,6 +28,7 @@ see [.gitignore](../.gitignore).
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
 | `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI) |
+| `unifi-mongo` | `unifi` | UniFi Network Application ↔ MongoDB | `root-username` / `root-password` (MongoDB root) and `username` / `password` (the controller's own DB user) |
 
 ## Create them
 
@@ -144,6 +145,27 @@ kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f 
 kubectl -n monitoring create secret generic alertmanager-telegram \
   --from-literal=bot-token='123456:ABC-your-telegram-bot-token'
 ```
+
+**UniFi ↔ MongoDB credentials.** Both pairs are generated here and never leave
+the cluster — nothing outside it connects to this MongoDB. Create the Secret
+*before* the app first syncs: the `root-*` pair is only read on the very first
+boot (the official mongo image runs `/docker-entrypoint-initdb.d` once, against
+an empty data directory), so changing it later has no effect without wiping the
+volume. See [docs/unifi.md](unifi.md).
+
+```bash
+kubectl create namespace unifi --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n unifi create secret generic unifi-mongo \
+  --from-literal=root-username=root \
+  --from-literal=root-password="$(openssl rand -base64 24 | tr -d '/+=')" \
+  --from-literal=username=unifi \
+  --from-literal=password="$(openssl rand -base64 24 | tr -d '/+=')"
+```
+
+The `tr -d '/+='` matters: the controller assembles a MongoDB URI by string
+concatenation, so a password containing URI-reserved characters has to be
+percent-encoded or the connection silently fails. Stripping them is simpler than
+encoding them.
 
 GHCR has no usable fine-grained-token path for container pulls — use a *classic*
 token. Prefer narrower scope? Drop `repo` and give the Argo CD repository a

@@ -1,0 +1,37 @@
+---
+# ArgoCD Application – deploys the UniFi Network Application from this repository.
+#
+# PREREQUISITE: the out-of-band `unifi-mongo` Secret must exist in the unifi
+# namespace BEFORE the first sync — MongoDB reads its root credentials only once,
+# when the data directory is still empty. See docs/secrets.md.
+#
+# Pi-hole must also already be on 8081 (charts/pihole): the controller needs host
+# port 8080 for device inform, and with hostNetwork that collision is NOT caught
+# by the scheduler — the bind just fails inside the app.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: unifi
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://unifi.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/unifi
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: unifi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

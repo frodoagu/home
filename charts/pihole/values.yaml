@@ -22,14 +22,19 @@ timezone: "America/Argentina/Buenos_Aires"
 # Pi-hole serves its web UI on this plain-HTTP port. It is deliberately OFF 80/443
 # because the pod runs in hostNetwork and those host ports are taken by the
 # bundled Traefik (which terminates TLS and reverse-proxies to this port).
-webPort: 8080
+#
+# It is also deliberately off 8080: charts/unifi runs the UniFi controller in
+# hostNetwork too, and 8080 is the inform port that UniFi APs try on their own
+# after a factory reset. Between the two, Pi-hole's port is the arbitrary one —
+# only Traefik ever connects to it — so Pi-hole yields and UniFi keeps 8080.
+webPort: 8081
 
 # ClusterIP service that fronts the web UI for the Traefik IngressRoute. DNS (53)
 # and DHCP (67) are reached directly on the node via hostNetwork, not through a
 # Service, so they are not listed here.
 service:
   type: ClusterIP
-  port: 8080
+  port: 8081
 
 # Persistent storage for /etc/pihole (pihole.toml, gravity.db, the FTL query DB
 # and dnsmasq.d). On the RPi's SD card, so keep it modest.
@@ -104,6 +109,7 @@ dns:
         - pihole.agu.com.ar
         - logs.agu.com.ar
         - dash.agu.com.ar
+        - unifi.agu.com.ar
 
 # DHCP server. Pi-hole replaces the router's DHCP so every device gets Pi-hole as
 # its DNS automatically.
@@ -147,6 +153,9 @@ dhcp:
     - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
     # Lavasecarropas Candy simply-Fi: la integracion de HA lo direcciona por IP.
     - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.164", name: "lavarropas" }
+    # AP UniFi de la oficina, adoptado por charts/unifi. Pinneado para que el
+    # controller no lo vea como un device nuevo si cambia de IP.
+    - { mac: "f4:92:bf:10:74:f9", ip: "192.168.0.163", name: "ap-oficina" }
 
 # Resource requests/limits – tuned small for the RPi.
 resources:

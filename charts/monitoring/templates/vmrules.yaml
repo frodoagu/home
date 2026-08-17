@@ -75,6 +75,22 @@ spec:
           annotations:
             summary: {{ `Low disk space on {{ $labels.mountpoint }} ({{ $value | printf "%.0f" }}% free)` | quote }}
             description: {{ `{{ $labels.instance }} {{ $labels.mountpoint }} has under 15% free for 15m.` | quote }}
+        # Catch growth BEFORE it becomes a threshold breach. NodeFilesystemLow
+        # above only fires once a disk is already 85% full, which for a database
+        # that grows steadily (charts/unifi's MongoDB on the SSD) is late notice.
+        # The extra <40%-free clause keeps a mostly-empty disk from alerting on
+        # the noise of a single large write.
+        - alert: NodeFilesystemFillingUp
+          expr: |-
+            predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 7 * 24 * 3600) < 0
+            and on(instance, mountpoint)
+            node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.40
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `{{ $labels.mountpoint }} is on track to fill up within 7 days` | quote }}
+            description: {{ `Extrapolating the last 6h of writes, {{ $labels.instance }} {{ $labels.mountpoint }} runs out of space inside a week.` | quote }}
         - alert: NodeMemoryHigh
           expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 90
           for: 15m

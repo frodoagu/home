@@ -1,0 +1,38 @@
+UniFi Network Application deployed! 📡
+
+1. Web UI (Google sign-in gated):
+   https://{{ .Values.ingress.host }}
+   (add {{ .Values.ingress.host }} to charts/cloudflare-ddns domains and to
+    Pi-hole's dns.localRecords, like the other agu.com.ar services)
+
+2. Adopt the AP. The controller is on hostNetwork, so it is reachable on the LAN
+   at the node's own address and layer-2 auto-adoption should just work: the AP
+   shows up under Devices as "Pending Adoption".
+
+   If it does not appear, adopt it over layer 3 from the AP itself:
+     ssh ubnt@<ap-ip>
+     set-inform http://{{ .Values.lanAddress }}:{{ .Values.ports.inform }}/inform
+   (repeat the command once after clicking Adopt — the AP forgets the URL until
+    provisioning finishes)
+
+3. ⚠️  SET THE RETENTION LIMITS BY HAND. They are the reason this chart exists in
+   the shape it does, and git CANNOT set them — they live in MongoDB, not in a
+   config file. Right after first login, go to
+   Settings → System → Other Configuration and untick "Statistics Retention",
+   then bound each bucket. Suggested for a one-AP site:
+     - 5-minute stats : 1 day
+     - hourly stats   : 7 days
+     - daily stats    : 90 days
+   And in Settings → System → Backups, set the number of backups to keep to a
+   FINITE number (3-7). An unlimited auto-backup count is the most common cause
+   of a UniFi install filling its disk — far more than the statistics are.
+
+4. Storage is on the SD card (default local-path StorageClass):
+     {{ include "unifi.fullname" . }}-config  ({{ .Values.persistence.config.size }}, /config)
+     {{ include "unifi.fullname" . }}-data  ({{ .Values.persistence.data.size }}, MongoDB)
+   Those sizes are NOT enforced — local-path applies no quota. Step 3 is what
+   actually bounds growth, which is why it is not optional. See docs/unifi.md.
+
+5. MongoDB credentials come from the out-of-band Secret "{{ .Values.mongodb.existingSecret }}".
+   If the controller reports the database as down, check that it exists:
+     kubectl -n {{ .Release.Namespace }} get secret {{ .Values.mongodb.existingSecret }}
