@@ -331,6 +331,31 @@ input_select:
       - "Desagüe"
       - "Manual"
 
+  # El PrNm crudo no le dice nada a nadie, asi que la lista va por nombre. Las
+  # etiquetas describen la receta MEDIDA (docs §8.3), no la leyenda de la
+  # perilla: de esa leyenda solo estan confirmados Pr=2 (Perfect Mix) y Pr=15
+  # (Smart Fi+), y la medicion contradice el resto — PrNm=11 carga un secado
+  # donde el panel dice "Lana". Los que no se pudieron caracterizar quedan como
+  # "Programa N" con su receta al lado, que es lo unico cierto que se puede
+  # decir de ellos. PrNm 1 y 2 no aparecen porque el equipo los rechaza.
+  lavasecarropas_programa_manual:
+    name: Lavasecarropas programa (manual)
+    icon: mdi:playlist-music
+    options:
+      - "Perfect Mix · 40° · 1h57"
+      - "Rápido · 40° · 59'"
+      - "Algodón · 40° · 3h52"
+      - "Programa 7 · 40° · 400 rpm · 59'"
+      - "Programa 8 · 40° · 400 rpm · 59'"
+      - "Lana/Seda · 30° · 48'"
+      - "Sólo secado · 2h"
+      - "Lavar y secar · 3h50"
+      - "Programa 16 · 59'"
+      - "Desagüe · sin centrifugado · 1'"
+      - "Programa 19 · 30° · 45'"
+      - "Programa 20 · 59'"
+      - "Smart Fi+ (reposo)"
+
   lavasecarropas_temperatura_manual:
     name: Lavasecarropas temperatura (manual)
     icon: mdi:thermometer
@@ -349,17 +374,6 @@ input_select:
     name: Lavasecarropas secado (manual)
     icon: mdi:tumble-dryer
     options: ["Del programa", "Sin secado", "Planchar", "Colgar", "Guardar", "Extra"]
-
-input_number:
-  # 1 y 2 no los acepta (deja el programa como estaba) y 15 es la posicion
-  # Smart Fi+ en reposo. El rango va igual de 1 a 20 para poder explorar.
-  lavasecarropas_programa_manual:
-    name: Lavasecarropas programa (manual)
-    icon: mdi:numeric
-    min: 1
-    max: 20
-    step: 1
-    mode: box
 
 shell_command:
   # HA pasa a create_subprocess_exec (sin shell) apenas el comando trae una
@@ -400,6 +414,20 @@ script:
         "Sólo secado": {PrNm: 11}
         "Lavar y secar": {PrNm: 13}
         "Desagüe": {PrNm: 17}
+      programas:
+        "Perfect Mix · 40° · 1h57": 3
+        "Rápido · 40° · 59'": 4
+        "Algodón · 40° · 3h52": 6
+        "Programa 7 · 40° · 400 rpm · 59'": 7
+        "Programa 8 · 40° · 400 rpm · 59'": 8
+        "Lana/Seda · 30° · 48'": 10
+        "Sólo secado · 2h": 11
+        "Lavar y secar · 3h50": 13
+        "Programa 16 · 59'": 16
+        "Desagüe · sin centrifugado · 1'": 17
+        "Programa 19 · 30° · 45'": 19
+        "Programa 20 · 59'": 20
+        "Smart Fi+ (reposo)": 15
       secados:
         "Sin secado": 0
         "Planchar": 1
@@ -410,7 +438,7 @@ script:
         {% set preset = states('input_select.lavasecarropas_preset') %}
         {% set ns = namespace(partes=['Write=1']) %}
         {% if preset == 'Manual' %}
-          {% set ns.partes = ns.partes + ['PrNm=' ~ states('input_number.lavasecarropas_programa_manual') | int(3)] %}
+          {% set ns.partes = ns.partes + ['PrNm=' ~ programas.get(states('input_select.lavasecarropas_programa_manual'), 15)] %}
           {% set t = states('input_select.lavasecarropas_temperatura_manual') %}
           {% if t != 'Del programa' %}
             {% set ns.partes = ns.partes + ['TmpTgt=' ~ t | int] %}
