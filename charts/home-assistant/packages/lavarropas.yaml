@@ -295,3 +295,161 @@ automation:
             importance: high
             notification_icon: mdi:washing-machine
     mode: single
+
+# --------------------------------------------------------------------------
+# Control (escritura). Protocolo confirmado contra el equipo — ver docs §8.
+#
+# La escritura va por `GET /http-write.json?encrypted=1&data=<HEX>`, donde HEX
+# es el texto plano en ASCII hexeado y NO cifrado: el `encrypted=1` es
+# obligatorio (con `encrypted=0` contesta BAD REQUEST) pero el equipo no
+# descifra nada. Mandar el blob XOR de la clave de lectura no produce ningun
+# efecto, que es lo que hace ver la escritura como imposible.
+#
+# La respuesta es SIEMPRE {"response":"SUCCESS"}, incluso ante un pedido vacio
+# o con parametros inexistentes, asi que no confirma nada: el unico testigo de
+# que un comando entro es el cambio de los campos en http-read.
+#
+# Los nombres de escritura NO son los de lectura: se escribe PrNm/TmpTgt/SpdTgt/
+# Dry y se lee Pr/Temp/SpinSp/DryT. Escribir `Temp=30` no hace nada.
+# --------------------------------------------------------------------------
+
+input_select:
+  # Los numeros de PrNm salen de barrer el equipo y anotar la receta que carga
+  # cada uno (docs §8.3). PrNm no coincide con el Pr que despues se lee: PrNm=3
+  # se lee como Pr=2. Los nombres son descriptivos de la receta MEDIDA, no de
+  # la leyenda de la perilla, que no esta confirmada.
+  lavasecarropas_preset:
+    name: Lavasecarropas preset
+    icon: mdi:playlist-check
+    options:
+      - "Diario 40° (mixtos)"
+      - "Algodón largo"
+      - "Rápido 59 min"
+      - "Delicados 30°"
+      - "Sólo secado"
+      - "Lavar y secar"
+      - "Desagüe"
+      - "Manual"
+
+  lavasecarropas_temperatura_manual:
+    name: Lavasecarropas temperatura (manual)
+    icon: mdi:thermometer
+    options: ["Del programa", "20", "30", "40", "60", "90"]
+
+  # El equipo recibe centenas de rpm (SpdTgt=10 -> 1000), igual que las publica.
+  lavasecarropas_centrifugado_manual:
+    name: Lavasecarropas centrifugado (manual)
+    icon: mdi:rotate-3d-variant
+    options: ["Del programa", "0", "400", "800", "1000", "1200", "1400"]
+
+  # `Dry` no es la misma escala que el `DryT` que se lee: Dry=3 vuelve como
+  # DryT=2. Los nombres siguen el orden creciente de secado y hay que
+  # confirmarlos contra el panel; el valor crudo es lo unico seguro.
+  lavasecarropas_secado_manual:
+    name: Lavasecarropas secado (manual)
+    icon: mdi:tumble-dryer
+    options: ["Del programa", "Sin secado", "Planchar", "Colgar", "Guardar", "Extra"]
+
+input_number:
+  # 1 y 2 no los acepta (deja el programa como estaba) y 15 es la posicion
+  # Smart Fi+ en reposo. El rango va igual de 1 a 20 para poder explorar.
+  lavasecarropas_programa_manual:
+    name: Lavasecarropas programa (manual)
+    icon: mdi:numeric
+    min: 1
+    max: 20
+    step: 1
+    mode: box
+
+shell_command:
+  # HA pasa a create_subprocess_exec (sin shell) apenas el comando trae una
+  # plantilla, de ahi el `sh -c` explicito. `comando` viaja como argumento
+  # posicional y se hexea en python, no se interpola en la URL: asi el `&` de
+  # los parametros no se parte ni necesita escaping.
+  #
+  # Tres intentos espaciados y nada mas: el equipo atiende UNA conexion por vez
+  # y una rafaga de escrituras lo cuelga hasta el corte de energia (docs §8.4).
+  lavasecarropas_enviar: >-
+    sh -c 'H=$(python3 -c "import sys;print(sys.argv[1].encode().hex().upper())" "$1");
+    for i in 1 2 3; do
+    curl -sS -m 8 "http://192.168.0.164/http-write.json?encrypted=1&data=$H" >/dev/null && exit 0;
+    sleep 3; done; exit 1' _ "{{ comando }}"
+
+script:
+  lavasecarropas_aplicar:
+    alias: Lavasecarropas - Aplicar receta
+    description: >-
+      Arma el comando desde el preset elegido (o desde los controles manuales) y
+      lo manda. Con arrancar=false solo deja el programa seleccionado, que es lo
+      que conviene para mirar en los sensores que el equipo lo acepto antes de
+      largar el ciclo.
+    mode: single
+    fields:
+      arrancar:
+        name: Arrancar
+        description: Agrega StSt=1 y larga el ciclo.
+        default: false
+        selector:
+          boolean:
+    variables:
+      recetas:
+        "Diario 40° (mixtos)": {PrNm: 3, TmpTgt: 40, SpdTgt: 10}
+        "Algodón largo": {PrNm: 6, TmpTgt: 40, SpdTgt: 14}
+        "Rápido 59 min": {PrNm: 4, TmpTgt: 40, SpdTgt: 10}
+        "Delicados 30°": {PrNm: 10, TmpTgt: 30, SpdTgt: 8}
+        "Sólo secado": {PrNm: 11}
+        "Lavar y secar": {PrNm: 13}
+        "Desagüe": {PrNm: 17}
+      secados:
+        "Sin secado": 0
+        "Planchar": 1
+        "Colgar": 2
+        "Guardar": 3
+        "Extra": 4
+      comando: >-
+        {% set preset = states('input_select.lavasecarropas_preset') %}
+        {% set ns = namespace(partes=['Write=1']) %}
+        {% if preset == 'Manual' %}
+          {% set ns.partes = ns.partes + ['PrNm=' ~ states('input_number.lavasecarropas_programa_manual') | int(3)] %}
+          {% set t = states('input_select.lavasecarropas_temperatura_manual') %}
+          {% if t != 'Del programa' %}
+            {% set ns.partes = ns.partes + ['TmpTgt=' ~ t | int] %}
+          {% endif %}
+          {% set s = states('input_select.lavasecarropas_centrifugado_manual') %}
+          {% if s != 'Del programa' %}
+            {% set ns.partes = ns.partes + ['SpdTgt=' ~ (s | int // 100)] %}
+          {% endif %}
+          {% set d = states('input_select.lavasecarropas_secado_manual') %}
+          {% if d != 'Del programa' %}
+            {% set ns.partes = ns.partes + ['Dry=' ~ secados.get(d, 0)] %}
+          {% endif %}
+        {% else %}
+          {% for k, v in recetas.get(preset, {'PrNm': 15}).items() %}
+            {% set ns.partes = ns.partes + [k ~ '=' ~ v] %}
+          {% endfor %}
+        {% endif %}
+        {% if arrancar | default(false) %}
+          {% set ns.partes = ns.partes + ['StSt=1'] %}
+        {% endif %}
+        {{ ns.partes | join('&') }}
+    sequence:
+      # Arrancar sobre un ciclo en marcha es la unica combinacion que puede
+      # sorprender; seleccionar un programa con la maquina andando no la altera.
+      - condition: template
+        value_template: >-
+          {{ not (arrancar | default(false))
+             or state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) != 2 }}
+      - action: shell_command.lavasecarropas_enviar
+        data:
+          comando: "{{ comando }}"
+
+  lavasecarropas_detener:
+    alias: Lavasecarropas - Detener / cancelar
+    description: >-
+      StSt=0 corta el ciclo y tambien limpia un inicio diferido armado. Deja Pr
+      en 0 o 15 segun el momento; ambos son reposo.
+    mode: single
+    sequence:
+      - action: shell_command.lavasecarropas_enviar
+        data:
+          comando: "Write=1&StSt=0"

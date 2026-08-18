@@ -7,8 +7,9 @@ given, and refuses outright while a cycle is running unless --force.
   ./candyctl.py read                      # decrypted status snapshot
   ./candyctl.py learn                     # map dial positions to program numbers
   ./candyctl.py probe                     # does /http-write.json exist? (non-mutating)
-  ./candyctl.py send "Write=1&StSt=1"     # dry run: prints URL, sends nothing
-  ./candyctl.py send "Write=1&StSt=1" --yes
+  ./candyctl.py send "Write=1&PrNm=6"     # dry run: prints URL, sends nothing
+  ./candyctl.py send "Write=1&PrNm=6&StSt=1" --yes
+  ./candyctl.py stop --yes                # cancel the cycle / a delayed start
 """
 import argparse
 import json
@@ -25,9 +26,16 @@ def xor(data: bytes) -> bytes:
     return bytes(b ^ KEY[i % len(KEY)] for i, b in enumerate(data))
 
 
-def encrypt(plain: str) -> str:
-    """Plaintext command -> XOR -> uppercase hex, the form `data=` expects."""
-    return xor(plain.encode()).hex().upper()
+def to_hex(plain: str) -> str:
+    """Plaintext command -> uppercase hex, the form `data=` actually expects.
+
+    Despite the mandatory `encrypted=1`, the appliance does NOT decrypt what it
+    receives: it reads `data=` as hex of plain ASCII. Sending the XOR blob the
+    read path uses is accepted with the usual SUCCESS and then ignored, which is
+    what makes writing look impossible. `--xor` keeps that form available for
+    comparison; it has never produced an effect here.
+    """
+    return plain.encode().hex().upper()
 
 
 def decrypt(hexstr: str) -> str:
@@ -118,30 +126,35 @@ def cmd_learn(args) -> None:
 
 
 def cmd_probe(_args) -> None:
-    """Ask the write endpoint for nothing. Should error, not act."""
+    """Ask the write endpoint for nothing.
+
+    Answers SUCCESS, like every other request it gets - so this only proves the
+    endpoint is routed, never that a command was understood. Only a field diff
+    against http-read does that.
+    """
     url = f"http://{IP}/http-write.json?encrypted=1"
     print(f"GET {url}\n")
     body = fetch(url)
     print(f"crudo      : {body[:160]}")
     try:
         print(f"descifrado : {decrypt(body)}")
-        print("\n=> el endpoint EXISTE y responde con nuestra clave")
+        print("\n=> el endpoint existe; SUCCESS aca no significa nada mas que eso")
     except Exception:
-        print("\n=> respondio algo no descifrable con la clave de lectura")
+        print("\n=> respondio algo no descifrable")
 
 
 def cmd_send(args) -> None:
-    # Some simply-Fi models take the command as plain query parameters with
-    # `encrypted=0` instead of an encrypted `data=` blob. Which form this
-    # appliance honours is exactly what the probing is for.
+    # This appliance honours exactly one form: `encrypted=1` with `data=` set to
+    # the hex of the plain command. The other two are kept to re-check that.
     if args.plain:
+        # encrypted=0 is rejected outright (BAD REQUEST) on both paths here.
         url = f"http://{IP}/http-write.json?encrypted=0&{args.command}"
-        print(f"comando  : {args.command}  (SIN cifrar)")
+        print(f"comando  : {args.command}  (encrypted=0)")
     else:
-        payload = encrypt(args.command)
+        payload = xor(args.command.encode()).hex().upper() if args.xor else to_hex(args.command)
         url = f"http://{IP}/http-write.json?encrypted=1&data={payload}"
         print(f"comando  : {args.command}")
-        print(f"cifrado  : {payload}")
+        print(f"hex      : {payload}{'  (XOR - inerte)' if args.xor else ''}")
     print(f"URL      : {url}\n")
 
     # A dry run transmits nothing, so it stays available at any time.
@@ -157,6 +170,8 @@ def cmd_send(args) -> None:
         )
 
     print(f"estado antes : MachMd={st['MachMd']} PrPh={st['PrPh']} RemTime={st['RemTime']}")
+    # The reply is ALWAYS {"response":"SUCCESS"} - empty request, bogus
+    # parameters, anything - so only the field diff below witnesses an effect.
     body = fetch(url)
     print(f"respuesta    : {body[:160]}")
     try:
@@ -169,6 +184,12 @@ def cmd_send(args) -> None:
           f"RemTime={after['RemTime']}")
     changed = {k: (st[k], after[k]) for k in st if st[k] != after[k]}
     print(f"cambios      : {changed or 'ninguno'}")
+
+
+def cmd_stop(args) -> None:
+    """Cancel whatever is armed. --force is implied: stopping is always safe."""
+    args.force = True
+    cmd_send(args)
 
 
 def main() -> None:
@@ -185,8 +206,16 @@ def main() -> None:
     s.add_argument("--yes", action="store_true", help="actually transmit")
     s.add_argument("--force", action="store_true", help="allow while running")
     s.add_argument("--plain", action="store_true",
-                   help="mandar los parametros sin cifrar (encrypted=0)")
+                   help="mandar los parametros como query (encrypted=0; el equipo lo rechaza)")
+    s.add_argument("--xor", action="store_true",
+                   help="hexear con XOR en vez de texto plano (inerte aca)")
     s.set_defaults(fn=cmd_send)
+    t = sub.add_parser("stop", help="cancelar ciclo o inicio diferido (Write=1&StSt=0)")
+    t.add_argument("--yes", action="store_true", help="actually transmit")
+    t.add_argument("--force", action="store_true", help="allow while running")
+    t.add_argument("--plain", action="store_true", help=argparse.SUPPRESS)
+    t.add_argument("--xor", action="store_true", help=argparse.SUPPRESS)
+    t.set_defaults(fn=cmd_stop, command="Write=1&StSt=0")
     args = p.parse_args()
     args.fn(args)
 

@@ -289,6 +289,22 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   package's fetch (`Empty reply from server`). Don't re-add it. The package's command
   retries 5× for the same reason; the device also ignores ICMP (find it by its UDP
   broadcast heartbeat on :55555, not by ping). See docs/lavarropas-candy.md.
+- **lavarropas Candy — writing works, but NOT the way `encrypted=1` implies.**
+  `/http-write.json?encrypted=1&data=<hex>` drives the machine (select program,
+  set temp/spin/dry, start, cancel), and `encrypted=1` is mandatory (`encrypted=0`
+  → `BAD REQUEST`) — but `data=` is the hex of the **plain** command: XOR-encrypting
+  it under the read key is accepted and silently ignored, which is what makes the
+  write path look dead. Worse, the reply is **always** `{"response":"SUCCESS"}` —
+  for an empty request, a valid command, or invented parameters alike — so the only
+  proof a command landed is a changed field in `/http-read.json`. Write names are
+  NOT read names (`PrNm`/`TmpTgt`/`SpdTgt`/`Dry` in, `Pr`/`Temp`/`SpinSp`/`DryT`
+  out; writing `Temp=` does nothing), `PrNm` also overwrites the recipe with the
+  program's defaults so overrides must ride in the SAME command, and `PrNm` ≠ `Pr`
+  (`PrNm=3` reads back `Pr=2`). Above all: **a burst of writes wedges the Wi-Fi
+  module** (it keeps answering reads, with incoherent values) and only a power
+  cycle recovers it — so the HA scripts send one command per press and the
+  `shell_command` retries 3× at most. Protocol, program table and the measured
+  presets in docs/lavarropas-candy.md §8.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
