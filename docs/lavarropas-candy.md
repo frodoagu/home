@@ -9,16 +9,16 @@ April 2024 because of the UK PSTI legislation.
 
 | Piece | Where it lives |
 |---|---|
-| `candy` integration | HACS → `/config/custom_components/candy` (PVC, **not in git**) |
-| Config entry (IP + key) | HA UI (`.storage`, not in git — see [home-assistant.md](home-assistant.md)) |
 | DHCP reservation | [`charts/pihole/values.yaml`](../charts/pihole/values.yaml) → `dhcp.reservations` |
-| All-fields sensors | [`charts/home-assistant/packages/lavarropas.yaml`](../charts/home-assistant/packages/lavarropas.yaml) |
+| Sensors + control | [`charts/home-assistant/packages/lavarropas.yaml`](../charts/home-assistant/packages/lavarropas.yaml) |
+| Operator CLI | [`scripts/candyctl.py`](../scripts/candyctl.py) (read / learn / send / stop) |
+| `candy` integration | **removed** 2026-08-17 (§3.1) — HACS files still on the PVC, no config entry |
 
 ```
-  Candy washer-dryer        ──HTTP/XOR──>   Home Assistant
-  192.168.0.164 (ESP8266)    LAN, no TLS     custom_components/candy   (3 sensors)
-  48:55:19:c1:90:bb                          packages/lavarropas.yaml  (17 entities)
-      │                                      local polling, READ-ONLY
+  Candy washer-dryer      <──HTTP, no TLS──>  Home Assistant
+  192.168.0.164 (ESP8266)                     packages/lavarropas.yaml
+  48:55:19:c1:90:bb        read : hex, XOR      17 sensor entities, 60 s polling
+      │                    write: hex, plain    5 helpers + 2 scripts (§8)
       └── UDP broadcast heartbeat :55555 every ~7 s
 ```
 
@@ -279,10 +279,11 @@ machine and creates no tumble-dryer device.
 - **It does not answer ICMP** — it will not show up in `ping` sweeps, nor in the ARP
   table if nothing has talked to it. Use the UDP heartbeat (§1).
 
-- **It is read-only.** `PLATFORMS = ["sensor"]` and the client has no write call at
-  all. Cycles cannot be started, paused or configured from HA. The firmware does
-  expose `/http-write.json` and the community uses it on other models, but the
-  parameter format is not publicly documented and would need reverse engineering.
+- **The *integration* is read-only; the appliance is not.** `PLATFORMS = ["sensor"]`
+  and its client has no write call, which is why the removed integration could never
+  start a cycle. `/http-write.json` does work — the format was never publicly
+  documented and is reverse-engineered in **§8**, and the package uses it. Writing
+  in bursts wedges the module (§8.4).
 
 - **The integration is dormant.** Latest release 0.8.3 (January 2025) against HA
   2026.8.2. It is not archived and issues are still being closed in 2026, and it is
@@ -415,100 +416,218 @@ views:
               - {entity: sensor.lavasecarropas_estado, name: Estado}
 ```
 
+### 7.4 The control view
+
+A second view on the same dashboard. Add it under `views:` after the one above.
+
+The layout follows the one rule the appliance imposes (§8.4): **one command per
+press, and never a burst**. So selecting and starting are two separate buttons
+rather than one — *Seleccionar* writes the recipe without `StSt=1`, and the
+"Cargado en el equipo" card right below it then shows what the appliance actually
+took. That readback is the only confirmation that exists, since the HTTP reply
+always says `SUCCESS`. Once it looks right, *Arrancar* commits.
+
+Both mutating buttons carry a `confirmation`, and the manual controls are behind a
+`conditional` card so the normal path stays a single dropdown.
+
+```yaml
+  - title: Control
+    path: control
+    icon: mdi:play-box-outline
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - {type: heading, heading: Que lavar, icon: mdi:playlist-check, heading_style: subtitle}
+          - type: entities
+            entities:
+              - {entity: input_select.lavasecarropas_preset, name: Preset}
+          - type: conditional
+            conditions:
+              - {condition: state, entity: input_select.lavasecarropas_preset, state: Manual}
+            card:
+              type: entities
+              title: A mano
+              entities:
+                - {entity: input_number.lavasecarropas_programa_manual, name: Programa (PrNm)}
+                - {entity: input_select.lavasecarropas_temperatura_manual, name: Temperatura}
+                - {entity: input_select.lavasecarropas_centrifugado_manual, name: Centrifugado}
+                - {entity: input_select.lavasecarropas_secado_manual, name: Secado}
+          - type: button
+            name: Seleccionar
+            icon: mdi:tray-arrow-down
+            tap_action:
+              action: perform-action
+              perform_action: script.lavasecarropas_aplicar
+              data: {arrancar: false}
+
+      - type: grid
+        cards:
+          - {type: heading, heading: Cargado en el equipo, icon: mdi:check-decagram, heading_style: subtitle}
+          - type: entities
+            entities:
+              - {entity: sensor.lavasecarropas_programa, name: Programa}
+              - {entity: sensor.lavasecarropas_temperatura, name: Temperatura}
+              - {entity: sensor.lavasecarropas_centrifugado, name: Centrifugado}
+              - {entity: sensor.lavasecarropas_nivel_de_secado, name: Secado}
+              - {entity: sensor.lavasecarropas_tiempo_restante, name: Duracion}
+              - {entity: sensor.lavasecarropas_estado, name: Estado}
+          - type: button
+            name: Arrancar
+            icon: mdi:play
+            tap_action:
+              action: perform-action
+              perform_action: script.lavasecarropas_aplicar
+              data: {arrancar: true}
+              confirmation:
+                text: Arrancar el ciclo con el programa seleccionado?
+          - type: button
+            name: Detener
+            icon: mdi:stop
+            tap_action:
+              action: perform-action
+              perform_action: script.lavasecarropas_detener
+              confirmation:
+                text: Cancelar el ciclo en curso?
+```
+
+The sensors on the right update on the package's 60 s poll, so a selection takes
+up to a minute to show. Forcing it with `homeassistant.update_entity` would fire a
+second fetch at the appliance right after a write — precisely the pattern §8.4
+warns about — so the view waits instead.
+
 ---
 
-## 8. Control: not today, but not impossible
+## 8. Control: confirmed working
 
-The integration is read-only and that is not going to change upstream. Whether the
-**appliance** can be driven is a separate question, and the answer looks like yes —
-untested here.
+The appliance **can** be driven over the LAN, and the Home Assistant package
+does it. Everything in this section was verified against this machine on
+**2026-08-17**, with the dial on **Smart Fi+** and `WiFiStatus: 1`.
 
-The firmware exposes a write endpoint that the community has used on sibling models:
+### 8.1 The wire format
 
 ```text
-http://<ip>/http-write.json?encrypted=1&data=<encrypted command>
+GET http://192.168.0.164/http-write.json?encrypted=1&data=<HEX>
 ```
 
-The payload is encrypted with the **same XOR key** as the read path, which is the
-part that usually blocks people and which §2 already recovers. Reported parameters
-include `StartStop=1` to begin a program, plus `DelayStart`, `ExtraDry` and
-`OpenDoorOpt`; some machines accept an unencrypted form
-(`?encrypted=0&Write=1&…`), though this one rejects `encrypted=0` on the read path.
+Two things about that URL are counter-intuitive, and between them they are why
+writing looks impossible until it suddenly isn't:
 
-**Unverified on this appliance.** A bare `GET /http-write.json` timed out here, which
-proves nothing either way — with two 60 s pollers running, a timeout is the ordinary
-collision signature (§5).
+- **`encrypted=1` is mandatory** — `encrypted=0` answers `{"response":"BAD REQUEST"}`,
+  on the write path exactly as on the read path.
+- **…but nothing is encrypted.** `data=` is the **hex of the plain ASCII
+  command**. Sending the XOR blob under the read key (§2) — the obvious reading
+  of `encrypted=1`, and what the reference Android client does on *its* hardware —
+  is accepted, answered `SUCCESS`, and **silently ignored**.
 
-### 8.1 The tool
+> **The reply is worthless as a signal.** `/http-write.json` returns
+> `{"response":"SUCCESS"}` for *everything*: an empty request, a valid command, a
+> command made of invented parameters. It confirms only that the endpoint is
+> routed. The **only** evidence that a command was understood is a changed field
+> in `/http-read.json`, which is why `candyctl.py send` snapshots the status
+> before and after and prints the diff.
 
-[`scripts/candyctl.py`](../scripts/candyctl.py) carries the XOR layer, so commands can
-be composed as plain text:
+### 8.2 Parameters
+
+The write names are **not** the read names. Writing `Temp=30` or `DryT=3` does
+nothing at all; the targets are separate fields:
+
+| Write | Effect | Read back as |
+|---|---|---|
+| `Write=1` | required on every command | — |
+| `PrNm=<n>` | select program **and load its whole default recipe** | `Pr` |
+| `TmpTgt=<°C>` | target temperature | `Temp` |
+| `SpdTgt=<rpm/100>` | target spin (`10` → 1000 rpm) | `SpinSp` |
+| `SLevTgt=<n>` | target soil level | `SLevel` |
+| `Dry=<n>` | drying level | `DryT` (**not** the same scale — `Dry=3` reads back `DryT=2`) |
+| `StSt=1` | start the selected program | `MachMd` → 2 |
+| `StSt=0` | stop / cancel, including an armed delayed start | `MachMd` → 1 |
+
+`PrNm` overwrites temperature, spin and soil level with the program's defaults,
+so any override has to travel **in the same command**, after it:
 
 ```bash
-scripts/candyctl.py read                     # decrypted status snapshot
-scripts/candyctl.py probe                    # does the endpoint exist? non-mutating
-scripts/candyctl.py send "Write=1&StSt=1"    # dry run: prints the URL, sends nothing
-scripts/candyctl.py send "Write=1&StSt=1" --yes
+scripts/candyctl.py send "Write=1&PrNm=6&TmpTgt=30&SpdTgt=8" --yes   # select only
+scripts/candyctl.py send "Write=1&PrNm=6&TmpTgt=30&SpdTgt=8&StSt=1" --yes
+scripts/candyctl.py stop --yes                                       # cancel
 ```
 
-Two interlocks, because this drives a real appliance: nothing is transmitted without
-`--yes`, and `--yes` **refuses outright while a cycle is running** unless `--force` is
-also given. A real send snapshots status before and after and prints the field diff, so
-an effect is observed rather than assumed.
+**`DelVl` is not exposed anywhere.** Delayed start was reached once, but only as
+a side effect of malformed writes, and `DelVl=<n>` alongside a valid `StSt=1`
+did not arm it. `StSt=0` does clear it, which is what matters for recovery.
 
-### 8.2 Test plan
+### 8.3 The program table
 
-Run it in order, with the machine **idle** and someone in front of it.
+`PrNm` (what you write) is **not** `Pr` (what you read) — `PrNm=3` comes back as
+`Pr=2`. This table is the appliance's own answer: set `PrNm`, then read the
+recipe it loaded. Temperature/spin of `255` mean "not applicable to this program".
 
-**Phase 0 — does the endpoint exist?** `probe` requests `/http-write.json` with no
-`data`, which cannot act.
+| `PrNm` | → `Pr` | Temp | Spin | `DryT` | `RemTime` | Reads as |
+|---|---|---|---|---|---|---|
+| 1, 2 | *(rejected)* | | | | | leaves the program unchanged |
+| 3 | 2 | 40 | 1000 | 0 | 117 | mixed / Perfect Mix |
+| 4, 5 | 4 | 40 | 1000 | 0 | 59 | 59-minute wash |
+| 6 | 6 | 40 | 1400 | 0 | 232 | long cottons |
+| 7 | 7 | 40 | 400 | 0 | 59 | |
+| 8, 9 | 8 | 40 | 400 | 0 | 59 | |
+| 10 | 10 | 30 | 800 | 0 | 48 | delicates |
+| 11, 12 | 11 | — | — | **2** | 120 | drying only |
+| 13, 14 | 13 | — | — | **1** | 230 | wash + dry |
+| 15 | 15 | 90 | 400 | 0 | 136 | Smart Fi+ resting position |
+| 16 | 16 | — | — | 0 | 59 | |
+| 17, 18 | 17 / 18 | — | 0 | 0 | **1** | drain, no spin |
+| 19 | 19 | 30 | 0 | 0 | 45 | |
+| 20 | 20 | — | 0 | 0 | 59 | |
 
-| Response | Reading |
+The **names are descriptions of the measured recipe**, not the dial legend —
+only `Pr=2` (Perfect Mix, from a real cycle) and `Pr=15` (Smart Fi+) are
+confirmed against the panel. Reconcile the rest with `candyctl.py learn` before
+trusting a preset name.
+
+### 8.4 A burst of writes hangs the appliance
+
+Sweeping parameters back-to-back — roughly one write every 10 s for a few
+minutes — **wedged the Wi-Fi module**: it kept answering `/http-read.json`, but
+with incoherent values (`SpdTgt=0` reading back as `SpinSp=12`, `SpdTgt=4` as
+`11`), and it took a **power cycle** to recover. Nothing was damaged, and the
+appliance came back on its own resting values.
+
+Read this together with the one-connection-at-a-time limit in §5: the appliance
+tolerates the 60 s polling of the package plus the occasional command, and does
+not tolerate being driven like an API. Hence:
+
+- `shell_command.lavasecarropas_enviar` retries **3 times, 3 s apart**, and stops.
+- The scripts send **one** command per press.
+- Incoherent readings across several fields at once — as opposed to everything
+  going unavailable together, which is the decode failure of §2 — mean the module
+  is wedged. Power-cycle the appliance.
+
+### 8.5 What the package exposes
+
+[`packages/lavarropas.yaml`](../charts/home-assistant/packages/lavarropas.yaml)
+carries the write path (`shell_command` + two scripts + the helpers behind the
+dashboard in §7.4):
+
+| Entity | What it does |
 |---|---|
-| hex decrypting to `BAD REQUEST` / `ERROR` | endpoint exists → continue |
-| hex decrypting to `OK` | exists and tolerates empty commands → continue carefully |
-| consistent 404 / refused | not in this firmware → **end of the road** |
-| timeout on all retries | inconclusive; could be poller collision |
+| `input_select.lavasecarropas_preset` | 7 measured presets, plus `Manual` |
+| `input_number.lavasecarropas_programa_manual` | raw `PrNm`, 1–20 |
+| `input_select.lavasecarropas_temperatura_manual` | `Del programa` / 20…90 °C |
+| `input_select.lavasecarropas_centrifugado_manual` | `Del programa` / 0…1400 rpm |
+| `input_select.lavasecarropas_secado_manual` | `Del programa` / `Sin secado`…`Extra` |
+| `script.lavasecarropas_aplicar` | builds the command; field `arrancar` adds `StSt=1` |
+| `script.lavasecarropas_detener` | `Write=1&StSt=0` |
+| `shell_command.lavasecarropas_enviar` | hexes the plain command and GETs it |
 
-If inconclusive, scale HA to zero briefly to clear the LAN and repeat.
+`aplicar` with `arrancar: false` only **selects** — the sensors then show the
+recipe the appliance actually loaded, which is the cheap way to confirm a command
+landed before committing to a cycle. It refuses to start over a running cycle
+(`MachMd == 2`); selecting during one is harmless and allowed.
 
-**Phase 1 — is the key accepted for writes?** This is the real unknown, and it is
-settled with a deliberately invalid command:
-
-```bash
-scripts/candyctl.py send "Write=1&NoExiste=1" --yes
-```
-
-What matters is whether the reply *differs* from Phase 0. A different answer to a
-well-encrypted `data` than to an absent one means the appliance is decrypting and
-parsing what we send — i.e. the read key works for writing too.
-
-**Phase 2 — which parameter family?** Two conventions are documented and neither is
-confirmed for a `statusLavatrice`: `Write=1&StSt=1` (washers) versus
-`StartStop=1&Program=P5&DelayStart=0&…` (dishwashers). Probe with harmless commands
-first, never a start:
-
-```bash
-scripts/candyctl.py send "Write=0" --yes                            # config read, if supported
-scripts/candyctl.py send "Write=1&Pr=2&Temp=40&SpinSp=10&StSt=0" --yes  # echo current values
-scripts/candyctl.py send "Write=1&Reset=1" --yes                    # no-op when already stopped
-```
-
-**Phase 3 — an actual start.** Only after the above gave clear signals, and only with:
-
-- the door shut and the machine loaded as if for a real wash;
-- **`WiFiStatus == 1`** in the preceding read — it reads `1` when idle and `0` during a
-  dial-started cycle, so it appears to track remote-control availability, and the
-  physical dial may have to sit in a remote-enabled position;
-- someone present.
-
-Stop immediately if the appliance stops answering `read` after a write (power-cycle it),
-if `Err` comes back as anything other than 255, or on any unexpected mechanical
-movement.
-
-### 8.3 Only then, the Home Assistant side
-
-Once a command is confirmed, the package gains a `shell_command` carrying the same
-inline encryption as the read sensor, a `script` per action, and dashboard buttons.
-Deliberately not written in advance: there is no point versioning commands the appliance
-may not accept.
+HA switches to `create_subprocess_exec` (no shell) as soon as a `shell_command`
+contains a template, so `lavasecarropas_enviar` invokes `sh -c` explicitly and
+passes the command as a **positional argument** rather than interpolating it into
+the URL — that keeps the `&` between parameters from being split. It follows that
+a command containing a quote would break the quoting; none of the generated ones
+do.
