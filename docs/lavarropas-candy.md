@@ -450,7 +450,7 @@ Both mutating buttons carry a `confirmation`, and the manual controls are behind
               type: entities
               title: A mano
               entities:
-                - {entity: input_number.lavasecarropas_programa_manual, name: Programa (PrNm)}
+                - {entity: input_select.lavasecarropas_programa_manual, name: Programa}
                 - {entity: input_select.lavasecarropas_temperatura_manual, name: Temperatura}
                 - {entity: input_select.lavasecarropas_centrifugado_manual, name: Centrifugado}
                 - {entity: input_select.lavasecarropas_secado_manual, name: Secado}
@@ -582,8 +582,13 @@ recipe it loaded. Temperature/spin of `255` mean "not applicable to this program
 
 The **names are descriptions of the measured recipe**, not the dial legend —
 only `Pr=2` (Perfect Mix, from a real cycle) and `Pr=15` (Smart Fi+) are
-confirmed against the panel. Reconcile the rest with `candyctl.py learn` before
-trusting a preset name.
+confirmed against the panel, and the measurements **contradict** the rest of that
+legend: `PrNm=11` loads a drying program where the panel reads "Lana". So the
+manual selector labels each entry by what it measurably does
+(`Perfect Mix · 40° · 1h57`, `Sólo secado · 2h`, `Desagüe · sin centrifugado · 1'`)
+and falls back to `Programa N · <recipe>` for the ones that could not be
+characterised — a true statement instead of a guessed name. Reconcile them with
+`candyctl.py learn` before renaming.
 
 ### 8.4 A burst of writes hangs the appliance
 
@@ -612,7 +617,7 @@ dashboard in §7.4):
 | Entity | What it does |
 |---|---|
 | `input_select.lavasecarropas_preset` | 7 measured presets, plus `Manual` |
-| `input_number.lavasecarropas_programa_manual` | raw `PrNm`, 1–20 |
+| `input_select.lavasecarropas_programa_manual` | the 13 programs by name; the script maps each to its `PrNm` |
 | `input_select.lavasecarropas_temperatura_manual` | `Del programa` / 20…90 °C |
 | `input_select.lavasecarropas_centrifugado_manual` | `Del programa` / 0…1400 rpm |
 | `input_select.lavasecarropas_secado_manual` | `Del programa` / `Sin secado`…`Extra` |
