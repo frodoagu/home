@@ -333,14 +333,16 @@ presets — they show up as `script.*` entities (buttons on the HA app / dashboa
 cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes in
 Google Home:
 
-- `aires_todos_encender` — all three ACs to **heat 21 °C**.
+- `aires_todos_encender` — living + kitchen to **heat 21 °C**, bedroom to
+  **heat 20 °C** (it's a degree cooler for sleeping).
 - `aires_todos_frio` — all three ACs to **cool 24 °C**.
-- `aires_solo_pieza` — bedroom to **heat 21 °C**, living + kitchen **off**.
+- `aires_solo_pieza` — bedroom to **heat 20 °C**, living + kitchen **off**.
 - `aires_todos_apagar` — all three **off**.
 - `aires_toggle_calor` — one-button toggle. Only turns **off** when **all
   three** ACs are on; in any other state (mixed, or all off) it turns all on to
-  heat 21 °C. So a mixed state is first driven to "all on" and only the next tap
-  turns everything off. Ideal for a single Android home-screen widget / iOS Shortcut.
+  heat (21 °C, bedroom 20 °C). So a mixed state is first driven to "all on" and
+  only the next tap turns everything off. Ideal for a single Android
+  home-screen widget / iOS Shortcut.
 - `aires_toggle_frio` — same one-button toggle, but the "on" side sets **cool
   24 °C** (summer preset).
 - `aires_cocina_living_toggle_calor` / `aires_cocina_living_toggle_frio` — the
