@@ -37,19 +37,25 @@ climate:
 # hvac_mode): con IR cada envío manda el frame completo, así un solo blast deja
 # el equipo en el estado deseado. Apagar usa climate.turn_off.
 script:
+  # El dormitorio va un grado abajo que el resto: se duerme mejor a 20.
   aires_todos_encender:
-    alias: Aires - Encender todos (calor 21)
+    alias: Aires - Encender todos (calor 21, pieza 20)
     icon: mdi:air-conditioner
     sequence:
       - action: climate.set_temperature
         target:
           entity_id:
             - climate.aire_living
-            - climate.aire_dormitorio
             - climate.aire_cocina
         data:
           hvac_mode: heat
           temperature: 21
+      - action: climate.set_temperature
+        target:
+          entity_id: climate.aire_dormitorio
+        data:
+          hvac_mode: heat
+          temperature: 20
     mode: single
 
   aires_todos_frio:
@@ -68,7 +74,7 @@ script:
     mode: single
 
   aires_solo_pieza:
-    alias: Aires - Solo la pieza (calor 21)
+    alias: Aires - Solo la pieza (calor 20)
     icon: mdi:bed
     sequence:
       - action: climate.turn_off
@@ -81,7 +87,7 @@ script:
           entity_id: climate.aire_dormitorio
         data:
           hvac_mode: heat
-          temperature: 21
+          temperature: 20
     mode: single
 
   aires_todos_apagar:
@@ -97,11 +103,12 @@ script:
     mode: single
 
   # Un solo botón idempotente: solo apaga cuando los TRES están prendidos; en
-  # cualquier otro estado (mezclado o todo apagado) prende los tres en calor 21.
-  # Así un estado mezclado primero se lleva a "todo prendido" y recién el próximo
-  # toque apaga. El estado que ve HA es el asumido (IR es unidireccional).
+  # cualquier otro estado (mezclado o todo apagado) prende los tres en calor
+  # (21, y el dormitorio 20). Así un estado mezclado primero se lleva a "todo
+  # prendido" y recién el próximo toque apaga. El estado que ve HA es el asumido
+  # (IR es unidireccional).
   aires_toggle_calor:
-    alias: Aires - Toggle todos (calor 21 / off)
+    alias: Aires - Toggle todos (calor 21, pieza 20 / off)
     icon: mdi:fire
     sequence:
       - choose:
@@ -123,11 +130,16 @@ script:
             target:
               entity_id:
                 - climate.aire_living
-                - climate.aire_dormitorio
                 - climate.aire_cocina
             data:
               hvac_mode: heat
               temperature: 21
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.aire_dormitorio
+            data:
+              hvac_mode: heat
+              temperature: 20
     mode: single
 
   # Igual que aires_toggle_calor pero prende en frío 24 (para el verano): solo
