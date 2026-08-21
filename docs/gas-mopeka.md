@@ -76,9 +76,15 @@ Y las derivadas, del package de HA:
 
 | Entidad | Qué es |
 |---|---|
-| `sensor.gas_nivel` | % calculado a partir de `tank_level` (ver §3) — fuente de la verdad del cálculo, no es la que se muestra (§2.1) |
+| `sensor.gas_altura` | altura en mm con el eco doble descartado (ver §4) |
+| `sensor.gas_altura_suave` | promedio móvil de 3 h de la anterior — de acá salen las tres derivadas |
+| `sensor.gas_nivel` | % calculado a partir de la altura suavizada (ver §3) — fuente de la verdad del cálculo, no es la que se muestra (§2.1) |
 | `sensor.gas_restante` | kg restantes (`% × 45`) |
 | `binary_sensor.gas_bajo` | `problem`, < 20 % sostenido 2 h |
+
+La cadena es `tank_level` → `gas_altura` → `gas_altura_suave` → las tres
+derivadas. A `gas_altura` y `gas_altura_suave` tampoco hay que asignarles área,
+por lo mismo que al resto de las entidades del package (§2.1, punto 4).
 
 `sensor` ya está en `googleAssistant.exposedDomains`, así que el nivel también
 queda disponible en Google Home sin tocar nada.
@@ -192,35 +198,130 @@ Es lineal sobre el %, así que `sensor.gas_restante` hereda la exactitud del
 
 ---
 
-## 4. Precaución heredada del M1001
+## 4. Filtrado de lecturas
+
+Dos lecturas malas distintas llegan a `tank_level`, y cada una tiene su guarda.
+
+### El `0` espurio (heredado del M1001)
 
 El M1001 tenía un gotcha específico: una lectura mala no daba "unavailable",
 daba `distance = 0` — indistinguible de un tubo vacío, y hubiera disparado la
 alerta con el tubo lleno. **No está confirmado que la integración nativa
 `mopeka` tenga el mismo problema** (es un codebase Python completamente
-distinto al `mopeka_std_check` de ESPHome), pero por las dudas
-`packages/gas.yaml` mantiene la misma defensa: todas las entidades derivadas
-cuelgan de `tank_level > 0`, así que con una lectura de `0` mm se marcan **no
-disponibles** en vez de reportar un tubo vacío.
+distinto al `mopeka_std_check` de ESPHome), pero por las dudas la `condition`
+del bloque trigger de `gas.yaml` sólo deja entrar lecturas `> 0`: un `0`, un
+`unknown` o un `unavailable` no actualizan `gas_altura`, que retiene el último
+valor bueno.
 
-El costo de esa guarda es que **un tubo realmente vacío también queda no
-disponible** — no dispara `gas_bajo`, sólo `gas_aviso_sin_datos` a las 12 h. Se
-acepta porque para cuando la lectura llega a `0` los avisos de 20 % y 10 % ya se
-mandaron: el aviso temprano no depende de la guarda, y filtrar el `0` espurio sí
-evita un falso "gas crítico".
+La contrapartida es que `gas_altura` **no se cae nunca** una vez que arrancó, así
+que ya no sirve para detectar que el sensor dejó de reportar. Por eso
+`gas_aviso_sin_datos` (§6) mira el sensor **crudo**, el único de la cadena que
+efectivamente queda `unavailable` cuando dejan de llegar advertisements.
 
-Chequeando el recorder de HA directo (`states`/`states_meta` en
-`home-assistant_v2.db`) con el sensor ya montado en el tubo real, `tank_level`
-viene **estable en 584-586 mm** durante los primeros ~40 min — nada parecido al
-0 constante del M1001. Sí hay ruido en `reading_quality` (llegó a `0` /
-`unavailable` recién emparejado, después se estabilizó en 33-67 %), que
-`packages/gas.yaml` todavía no usa. Si en el futuro `tank_level` empieza a
-mostrar valores erráticos sin caer a 0, `reading_quality` es el candidato obvio
-para sumar al `availability`.
+### El eco doble (cerca del fondo)
+
+Con la columna de líquido corta, el eco directo llega débil y casi pegado al
+ringdown del transductor, y el detector de picos se engancha al **segundo**
+rebote (superficie → fondo → superficie): el sensor reporta **el doble** de la
+altura real. Medido sobre el recorder de HA los días 20 y 21 de agosto de 2026,
+con el tubo alrededor del 8 %:
+
+| altura real (mm) | lectura espuria (mm) | ratio |
+|---|---|---|
+| 106-107 | 208 | 1,95 |
+| 95-98 | 196-198 | 2,02 |
+| 93-95 | 184-185 | 1,96 |
+| 84-85 | 173-175 | 2,05 |
+
+`reading_quality` acompaña — venía en 67-100 % del 11 al 19 de agosto y se
+desplomó a 0-33 % cuando empezaron los dobles — pero **no alcanza como filtro**:
+hay lecturas dobles con calidad 33 % y buenas con calidad 33 % también.
+
+Lo que sí es determinante es el factor 2. `gas_altura` es un template
+**trigger-based** que compara cada lectura contra su propio estado anterior
+(`this.state`) y descarta los saltos hacia arriba de entre **1,4× y 3×**:
+
+```text
+altura = cruda   si  anterior >= 300 mm  o  cruda < anterior×1,4  o  cruda > anterior×3
+         anterior  en cualquier otro caso
+```
+
+- **Bajar siempre se acepta**: el gas sólo se consume.
+- **Subir hasta 1,4×** es chapoteo y deriva térmica (§5), no un eco doble.
+- **Más de 3× es una recarga** (de 84 mm a ~1000 mm son 12×), así que entra
+  derecho y el filtro no se queda pegado con el tubo lleno.
+- **Arriba de 300 mm pasa todo**: ahí el eco directo domina y los dobles no
+  aparecen. Eso también cierra el único hueco del criterio de recarga — cambiar
+  el tubo estando a media carga sería un salto de ~2,5×, que caería en la banda
+  descartada.
+
+Simulado contra las 120 lecturas crudas posteriores al 20/08 15:00 UTC:
+descarta 53 ecos dobles, bloquea 21 `unknown`, y la salida se queda en la banda
+real de 84-109 mm en vez de saltar a 208.
+
+Si arranca en frío (HA reiniciado, sin estado previo) la primera lectura entra
+sin comparación posible y puede ser un doble, pero se corrige con la siguiente
+buena: bajar siempre se acepta.
+
+### El chapoteo
+
+Consumir gas hace hervir el líquido y la superficie se mueve: la lectura de un
+mismo día varía ±20-40 mm, unos 2-4 puntos de porcentaje — bastante más que el
+0,09 % que vale un mm. `sensor.gas_altura_suave` es un `filter` con un
+`time_simple_moving_average` de 3 h que se lleva ese ruido (y de paso el vaivén
+térmico de §5). Las tres derivadas leen de ahí. La ventana no compromete las
+alertas: contra los días de autonomía que quedan es corta, y `gas_bajo` y
+`gas_aviso_critico` ya traen 2 h de debounce encima.
+
+## 5. Temperatura: el nivel se mueve sin que cambie el gas
+
+El tubo tiene **dos** efectos térmicos, y apuntan para lados contrarios:
+
+- **Dilatación del líquido.** El GLP líquido se expande ~0,18 % por °C (unas
+  diez veces más que el agua). Calentar sube el nivel sin que entre gas. El
+  efecto es proporcional a la **altura de líquido**.
+- **Condensación del vapor.** Enfriar baja la presión de saturación, parte del
+  vapor se condensa y **sube** el nivel. Este es proporcional al **volumen de
+  vapor**, que crece a medida que el tubo se vacía.
+
+Así que el signo depende de cuán lleno esté: con el tubo lleno manda la
+dilatación (calor ⇒ sube) y con el tubo casi vacío manda la condensación
+(frío ⇒ sube). Medido sobre las estadísticas horarias de HA del 4 al 20 de
+agosto de 2026, quitándole la tendencia de consumo con una mediana móvil de
+±12 h:
+
+| tramo de altura | dH/dT medido | n (horas) |
+|---|---|---|
+| 450-600 mm | +1,18 mm/°C | 122 |
+| 380-450 mm | +2,83 mm/°C | 41 |
+| 300-380 mm | +1,13 mm/°C | 52 |
+| 200-300 mm | +0,57 mm/°C | 97 |
+| 100-200 mm | +0,14 mm/°C | 67 |
+
+El coeficiente **se achica monótonamente a medida que el tubo se vacía** y va
+camino a cambiar de signo — que es exactamente lo que predice el modelo de los
+dos términos. El valor absoluto del cruce no es confiable: sale de un ajuste
+contaminado (más frío ⇒ más calefacción ⇒ más consumo, lo que sesga el
+coeficiente hacia arriba) y el término de condensación depende de la sección del
+tubo y del volumen total, dos constantes que **no están calibradas** (§3).
+
+**La corrección exacta sería reportar masa en vez de altura**, sumando las dos
+fases:
+
+```text
+kg = rho_liq(T) × A × h  +  rho_vap(T) × (V_tubo − A × h)
+```
+
+Al condensarse, el gas pasa de un término al otro y el total no se mueve; la
+dilatación se cancela sola porque `rho_liq` es función de `T`. No está
+implementado a propósito: hacen falta `A` y `V_tubo`, y lo que se gana (≤1 mm/°C,
+menos de 0,1 % por °C) es **menos que el chapoteo** que ya filtra el promedio
+móvil de §4. Si algún día se calibra el tubo de verdad, esta es la forma
+correcta de hacerlo.
 
 ---
 
-## 5. Alertas por Telegram
+## 6. Alertas por Telegram
 
 Cuatro automations en `packages/gas.yaml`, todas contra
 `notify.afuera_telegram_gateway_fede_a`:
@@ -269,7 +370,7 @@ del mensaje.
 
 ---
 
-## 6. Validar cambios
+## 7. Validar cambios
 
 ```bash
 helm lint charts/home-assistant

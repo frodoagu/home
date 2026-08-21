@@ -266,6 +266,22 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `docs/gas-mopeka.md` for the one consumer that exists today (Alertmanager's
   Telegram alerts from `charts/monitoring` go through its own bot API call, not
   through this HA entity).
+- **gas Mopeka — near the bottom the sensor reports DOUBLE the real height.**
+  With a short liquid column the direct echo is weak and the peak detector latches
+  onto the second bounce (surface → tank floor → surface), so `tank_level` reads
+  ~2× the truth — measured at 1,95-2,05× across 53 samples at ~8 % fill.
+  `reading_quality` drops when it happens but is NOT a usable filter (33 % shows
+  up on good and bad readings alike). `packages/gas.yaml` therefore derives
+  `sensor.gas_altura`, a **trigger-based** template that compares each reading to
+  its own `this.state` and rejects upward jumps of 1,4×-3× (below 3× is the double
+  echo; above it is a refill, ~12×; above 300 mm everything passes because the
+  direct echo dominates there). Consequence: `gas_altura` holds its last good
+  value instead of going unavailable, so the dead-sensor alert must watch the RAW
+  entity. Two thermal effects also move the level with no gas consumed — liquid
+  expansion (heat ⇒ up, scales with liquid height) and vapour condensation
+  (cold ⇒ up, scales with vapour volume) — so the sign flips as the tube empties;
+  both are ≤1 mm/°C, under the ±20-40 mm sloshing, and a 3 h moving average
+  handles them. See docs/gas-mopeka.md §4-§5.
 - **lavarropas Candy — the HACS integration under-reports, so a package reads the
   device directly.** The Candy simply-Fi washer-dryer talks a LOCAL HTTP API
   (`/http-read.json?encrypted=1`) whose hex-encoded JSON is USUALLY — not always —

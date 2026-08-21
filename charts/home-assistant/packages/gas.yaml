@@ -6,15 +6,43 @@
 # Única constante: full_mm = 1090 (1280 mm de alto útil × ~85 % de llenado). Es
 # una estimación, no una calibración: para corregirla, anotar el `tank_level` con
 # el tubo recién cargado y reemplazar 1090 en las TRES fórmulas de abajo (están
-# escritas independientes a propósito, no encadenadas entre sí, para no depender
-# del orden de inicialización de los template sensors).
+# escritas independientes entre sí a propósito, no encadenadas una con otra, para
+# no depender del orden de inicialización de los template sensors).
 #
-# Todo lo derivado del nivel cuelga de `tank_level > 0`: una lectura de 0 mm se
-# marca no disponible en vez de reportar tubo vacío (el M1001 daba 0 ante una
-# lectura mala). El costo es que un tubo realmente vacío también queda no
-# disponible — ver docs §4.
-
+# La cadena es: `tank_level` (crudo) -> `gas_altura` (descarta el eco doble) ->
+# `gas_altura_suave` (promedio móvil) -> nivel %, kg restantes y `gas_bajo`.
 template:
+  # Con la columna de líquido corta el eco directo es débil y el sensor engancha
+  # el segundo rebote (superficie -> fondo -> superficie), así que reporta ~2× la
+  # altura real. Un salto hacia arriba de entre 1,4× y 3× es ese eco doble y se
+  # descarta reteniendo la última altura buena; por encima de 3× es una recarga y
+  # se acepta. Arriba de 300 mm el eco directo domina y la lectura pasa derecho.
+  #
+  # La `condition` deja pasar sólo lecturas positivas: sin ella un `unknown` del
+  # sensor entraría como 0 mm y se leería como tubo vacío. Como contrapartida
+  # esta entidad retiene el último valor bueno en vez de quedar no disponible,
+  # así que quien vigila que sigan llegando lecturas es `gas_aviso_sin_datos`,
+  # apuntado al sensor crudo.
+  - trigger:
+      - platform: state
+        entity_id: sensor.pro_check_universal_5343_tank_level
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state | float(0) > 0 }}
+    sensor:
+      - name: "Gas altura"
+        unique_id: gas_altura
+        unit_of_measurement: "mm"
+        device_class: distance
+        state_class: measurement
+        icon: mdi:propane-tank
+        state: >-
+          {% set raw = trigger.to_state.state | float(0) %}
+          {% set prev = this.state | float(raw) %}
+          {{ raw if prev >= 300 or raw < prev * 1.4 or raw > prev * 3 else prev }}
+
   - sensor:
       # Los decimales van en el estado: el schema YAML de template no tiene
       # `suggested_display_precision`, así que subir la precisión en la UI sobre
@@ -25,10 +53,10 @@ template:
         state_class: measurement
         icon: mdi:propane-tank
         availability: >-
-          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
-             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
+             and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
-          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) | round(2) }}
+          {{ min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) | round(2) }}
 
       # Lineal sobre el %, así que hereda su exactitud (calibración incluida).
       - name: "Gas restante"
@@ -38,10 +66,10 @@ template:
         state_class: measurement
         icon: mdi:propane-tank
         availability: >-
-          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
-             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
+             and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
-          {{ (min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) / 100 * 45) | round(1) }}
+          {{ (min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) / 100 * 45) | round(1) }}
 
   - binary_sensor:
       # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
@@ -51,11 +79,25 @@ template:
         device_class: problem
         icon: mdi:propane-tank-outline
         availability: >-
-          {{ states('sensor.pro_check_universal_5343_tank_level') not in ['unknown', 'unavailable']
-             and states('sensor.pro_check_universal_5343_tank_level') | float(0) > 0 }}
+          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
+             and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
-          {{ min(max(states('sensor.pro_check_universal_5343_tank_level') | float(0) / 1090 * 100, 0), 100) < 20 }}
+          {{ min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) < 20 }}
         delay_on: "02:00:00"
+
+# Consumir gas hace hervir el líquido y la superficie chapotea: la misma hora
+# puede variar ±20-40 mm (2-4 puntos de %). El promedio móvil se lleva ese ruido
+# y de paso el vaivén térmico diario. La ventana es corta contra los días de
+# autonomía que quedan, y las alertas ya traen 2 h de debounce encima.
+sensor:
+  - platform: filter
+    name: "Gas altura suave"
+    unique_id: gas_altura_suave
+    entity_id: sensor.gas_altura
+    filters:
+      - filter: time_simple_moving_average
+        window_size: "03:00:00"
+        precision: 0
 
 # ────────────────────────────────────────────────────────────────────────────
 # CÓMO SE MANDA A TELEGRAM. NO por `notify.telegram` ni por un `telegram_bot:`
@@ -143,11 +185,14 @@ automation:
     alias: Gas - Sin datos del sensor
     description: >-
       La otra forma de morir en silencio: el sensor sale de rango Bluetooth, se
-      le agota la batería de golpe, o se despega del tubo. 12 h de tolerancia
-      para no avisar por un corte breve.
+      le agota la batería de golpe, o se despega del tubo. Mira el sensor CRUDO,
+      que es el único de la cadena que se cae cuando dejan de llegar
+      advertisements — `gas_altura` retiene el último valor bueno a propósito.
+      12 h de tolerancia para no avisar por un corte breve; cualquier lectura
+      válida en el medio reinicia la cuenta.
     trigger:
       - platform: state
-        entity_id: sensor.gas_nivel
+        entity_id: sensor.pro_check_universal_5343_tank_level
         to:
           - "unavailable"
           - "unknown"
