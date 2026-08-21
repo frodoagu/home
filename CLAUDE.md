@@ -266,6 +266,29 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `docs/gas-mopeka.md` for the one consumer that exists today (Alertmanager's
   Telegram alerts from `charts/monitoring` go through its own bot API call, not
   through this HA entity).
+- **gas Mopeka — near the bottom the sensor reports DOUBLE the real height.**
+  With a short liquid column the direct echo is weak and the peak detector latches
+  onto the second bounce (surface → tank floor → surface), so `tank_level` reads
+  ~2× the truth — measured at 1,95-2,05× across 53 samples at ~8 % fill.
+  `reading_quality` drops when it happens but is NOT a usable filter (33 % shows
+  up on good and bad readings alike). `packages/gas.yaml` therefore derives
+  `sensor.gas_altura`, a **trigger-based** template that compares each reading to
+  its own `this.state` and rejects upward jumps of 1,4×-3× (below 3× is the double
+  echo; above it is a refill, ~12×; above 300 mm everything passes because the
+  direct echo dominates there). Consequence: `gas_altura` holds its last good
+  value instead of going unavailable, so the dead-sensor alert must watch the RAW
+  entity. Two thermal effects also move the level with no gas consumed — liquid
+  expansion (heat ⇒ up, scales with liquid height) and vapour condensation
+  (cold ⇒ up, scales with vapour volume) — so the sign flips as the tube empties;
+  both are real: at constant mass a 20 °C swing moves the height up to 52 mm (4,8
+  points of a height-based %). `gas_restante` therefore computes the TWO-PHASE
+  MASS (`rho_liq(T)·a·h + rho_vap(T)·(v_tubo − a·h)`, saturated-propane
+  correlations good to <1 % over 0-40 °C) and the % is `kg/45`. Two consequences:
+  with zero liquid it reads ~1,6 kg of vapour (real gas, so the % floors at
+  ~3,9 %), which is why the alerts are in KG (10 / 6) and not in %. The two
+  cylinder constants — `a` (cross-section, from a tape around the tube: `C²/4π`)
+  and `v_tubo` (water capacity, stamped on the collar) — are NOT calibrated yet;
+  they set the scale, not the stability. See docs/gas-mopeka.md §3-§5.
 - **lavarropas Candy — the HACS integration under-reports, so a package reads the
   device directly.** The Candy simply-Fi washer-dryer talks a LOCAL HTTP API
   (`/http-read.json?encrypted=1`) whose hex-encoded JSON is USUALLY — not always —
