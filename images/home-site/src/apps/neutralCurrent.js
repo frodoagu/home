@@ -5,11 +5,17 @@
  *
  * Dos modelos:
  *  - neutralCurrent({a,b,c}) — solo fundamental (compatibilidad / fasores).
- *  - harmonicNeutral(spectra) — espectro completo por fase. Las cargas no
+ *  - harmonicNeutral(spectra, phi) — espectro completo por fase. Las cargas no
  *    lineales (aires, fuentes conmutadas, LEDs…) inyectan armónicos. Los
  *    armónicos triples (3, 9, 15… = 3·impar) son de secuencia cero: están en
  *    fase en las tres fases y SE SUMAN en el neutro en vez de cancelarse, así
  *    que un sistema balanceado puede igual cargar fuerte el neutro.
+ *
+ * La fundamental es un FASOR: cada carga tiene un desplazamiento φ entre
+ * tensión y corriente (inductivo = atrasa, capacitivo = adelanta), así que dos
+ * cargas de la misma corriente pueden sumar menos que la suma aritmética. Eso
+ * es lo que hace `buildPhaseLoad`, y de ahí salen el triángulo de potencias
+ * (`phasePower` / `systemPower`) y la corrección con capacitores.
  * ---------------------------------------------------------------------- */
 
 export const I_MAX = 100; // A, fondo de escala por fase
@@ -34,27 +40,42 @@ export const isTriplen = (h) => h % 3 === 0;
  * con I ≈ P / 230. El pico de arranque de los motores (4-6× la nominal) NO se
  * modela acá: el catálogo representa el consumo en régimen permanente.
  *
+ * `pf` + `kind` describen la parte REACTIVA: `pf` es el factor de potencia de
+ * desplazamiento (cos φ) y `kind` su signo — "ind" la corriente atrasa (todo
+ * lo que tenga bobinado: motores, balastos, transformadores), "cap" adelanta
+ * (drivers capacitivos, capacitores) y "res" es carga óhmica pura.
+ *
  * Regla práctica de la firma armónica:
  *  - Cargas resistivas (resistencias, boilers): casi senoidales, ~0 armónicos.
  *  - Motores de inducción (bombas, compresores): poca distorsión, algo de 5ª/7ª.
  *  - Fuentes conmutadas / electrónica (PC, TV, LED): mucho 3er armónico, que es
  *    el que SE SUMA en el neutro (triple) aunque las fases estén balanceadas.
+ *
+ * Ojo con confundir las dos cosas: una fuente conmutada tiene cos φ ≈ 1 (la
+ * corriente no está corrida) y sin embargo un factor de potencia REAL malísimo,
+ * porque lo que sobra es distorsión, no reactiva. Un capacitor no la arregla.
  * ---------------------------------------------------------------------- */
 export const APPLIANCES = [
   {
     // Split inverter ~4000 frig a plena carga: ~1.4 kW eléctricos (EER ~3.2).
+    // El variador tiene corrección activa, así que casi no desplaza.
     key: "aire",
     label: { es: "Aire (inverter)", en: "AC (inverter)" },
     icon: "AirVent",
     current: 6,
+    pf: 0.95,
+    kind: "ind",
     spectrum: { 3: 0.2, 5: 0.12, 7: 0.07, 9: 0.03 },
   },
   {
-    // Magnetrón ~1000 W de salida ≈ 1.5 kW de entrada. Doblador media onda.
+    // Magnetrón ~1000 W de salida ≈ 1.5 kW de entrada. Doblador media onda
+    // sobre un transformador con fuga -> muy inductivo Y muy distorsionado.
     key: "micro",
     label: { es: "Microondas", en: "Microwave" },
     icon: "Microwave",
     current: 6.5,
+    pf: 0.65,
+    kind: "ind",
     spectrum: { 3: 0.3, 5: 0.18, 7: 0.08 },
   },
   {
@@ -65,6 +86,8 @@ export const APPLIANCES = [
     label: { es: "Cafetera (2000 W)", en: "Coffee maker (2000 W)" },
     icon: "Coffee",
     current: 8.7,
+    pf: 1,
+    kind: "res",
     spectrum: { 3: 0.05, 5: 0.03 },
   },
   {
@@ -74,6 +97,8 @@ export const APPLIANCES = [
     label: { es: "Compresor (½ HP)", en: "Compressor (½ HP)" },
     icon: "Wind",
     current: 4.5,
+    pf: 0.8,
+    kind: "ind",
     spectrum: { 3: 0.05, 5: 0.06, 7: 0.04 },
   },
   {
@@ -82,16 +107,43 @@ export const APPLIANCES = [
     label: { es: "Bomba de agua", en: "Water pump" },
     icon: "Droplets",
     current: 3,
+    pf: 0.82,
+    kind: "ind",
     spectrum: { 3: 0.06, 5: 0.05, 7: 0.03 },
   },
   {
     // Heladera no-frost: compresor en marcha ~0.28 kW (el ciclo de defrost
-    // suma más, pero el catálogo modela el compresor en régimen).
+    // suma más, pero el catálogo modela el compresor en régimen). Motor chico
+    // = cos φ pobre.
     key: "heladera",
     label: { es: "Heladera", en: "Fridge" },
     icon: "Refrigerator",
     current: 1.2,
+    pf: 0.75,
+    kind: "ind",
     spectrum: { 3: 0.1, 5: 0.06, 7: 0.03 },
+  },
+  {
+    // Motor de inducción girando en vacío: casi no entrega potencia activa
+    // pero la magnetización sigue ahí -> el caso de libro de reactiva pura.
+    key: "motor",
+    label: { es: "Motor en vacio", en: "Idle motor" },
+    icon: "Fan",
+    current: 3.5,
+    pf: 0.35,
+    kind: "ind",
+    spectrum: { 5: 0.05, 7: 0.03 },
+  },
+  {
+    // Tubo fluorescente con balasto electromagnético (sin capacitor de
+    // compensación): el balasto es una inductancia en serie.
+    key: "tubo",
+    label: { es: "Tubo fluorescente", en: "Fluorescent tube" },
+    icon: "Lamp",
+    current: 0.9,
+    pf: 0.5,
+    kind: "ind",
+    spectrum: { 3: 0.15, 5: 0.08 },
   },
   {
     // TV LED/OLED grande ~160 W. Fuente conmutada -> fuerte 3er armónico.
@@ -99,23 +151,66 @@ export const APPLIANCES = [
     label: { es: "Televisores", en: "TVs" },
     icon: "Tv",
     current: 0.7,
+    pf: 0.95,
+    kind: "ind",
     spectrum: { 3: 0.45, 5: 0.25, 7: 0.12, 9: 0.06 },
   },
   {
+    // Fuente sin PFC: el pico de corriente cae junto al pico de tensión, así
+    // que cos φ ≈ 1; lo que arruina el factor de potencia real es la distorsión.
     key: "pc",
     label: { es: "PC / Fuente", en: "PC / PSU" },
     icon: "MonitorSmartphone",
     current: 2,
+    pf: 0.99,
+    kind: "ind",
     spectrum: { 3: 0.6, 5: 0.35, 7: 0.2, 9: 0.1, 11: 0.06 },
   },
   {
+    // Lámpara LED barata con fuente capacitiva (capacitive dropper): la
+    // corriente ADELANTA. Es el artefacto capacitivo típico de una casa.
     key: "led",
     label: { es: "Luces LED", en: "LED lights" },
     icon: "Lightbulb",
     current: 1,
+    pf: 0.55,
+    kind: "cap",
     spectrum: { 3: 0.3, 5: 0.1, 7: 0.05 },
   },
+  {
+    // Capacitor de 20 µF a 230 V/50 Hz: I = V·2πfC ≈ 1.45 A, reactiva pura
+    // adelantada (φ = −90°). Sirve para compensar a mano, artefacto por
+    // artefacto, en vez de con el banco.
+    key: "capacitor",
+    label: { es: "Capacitor 20 uF", en: "20 uF capacitor" },
+    icon: "CircuitBoard",
+    current: 1.45,
+    pf: 0,
+    kind: "cap",
+  },
 ];
+
+/**
+ * Ángulo de desplazamiento φ (rad) entre tensión y corriente de una carga.
+ * Positivo = la corriente ATRASA (inductivo), negativo = adelanta (capacitivo).
+ */
+export function displacementAngle({ pf = 1, kind = "res" } = {}) {
+  if (kind !== "ind" && kind !== "cap") return 0;
+  const phi = Math.acos(Math.min(1, Math.max(0, pf)));
+  return kind === "cap" ? -phi : phi;
+}
+
+/* ---- aritmética compleja mínima; los fasores son {re, im} ---- */
+const cAdd = (p, q) => ({ re: p.re + q.re, im: p.im + q.im });
+const cMul = (p, q) => ({ re: p.re * q.re - p.im * q.im, im: p.re * q.im + p.im * q.re });
+const cDiv = (p, q) => {
+  const d = q.re * q.re + q.im * q.im;
+  if (d < 1e-30) return { re: 0, im: 0 };
+  return { re: (p.re * q.re + p.im * q.im) / d, im: (p.im * q.re - p.re * q.im) / d };
+};
+const cAbs = (p) => Math.hypot(p.re, p.im);
+const toC = (v) => (typeof v === "number" ? { re: v, im: 0 } : { re: v?.re ?? 0, im: v?.im ?? 0 });
+const unit = (deg) => ({ re: Math.cos(rad(deg)), im: Math.sin(rad(deg)) });
 
 export const getAppliance = (key) => APPLIANCES.find((a) => a.key === key);
 
@@ -140,34 +235,65 @@ export function neutralCurrent({ a, b, c }) {
 }
 
 /**
- * Espectro de una fase = carga lineal base (solo fundamental) + artefactos.
- * Devuelve un mapa { orden: magnitud_A }. La fundamental del artefacto es su
- * `current`; cada armónico h aporta current · spectrum[h].
+ * Carga de una fase = carga lineal base (resistiva) + artefactos + banco de
+ * capacitores. La fundamental se suma como FASOR — cada artefacto aporta
+ * I∠−φ tomando la tensión de esa fase como referencia — así que lo inductivo y
+ * lo capacitivo se compensan entre sí y el módulo resultante puede ser menor
+ * que la suma aritmética. Los armónicos, en cambio, se suman en módulo.
+ *
+ * @param base A de carga lineal resistiva (φ = 0).
+ * @param appliances artefactos del catálogo (usan `current`, `pf`, `kind`, `spectrum`).
+ * @param capKvar kVAr capacitivos conectados a ESTA fase (banco de corrección).
+ * @returns {{spec, phi, fund, load, cap, qLoad}} `spec` = { orden: magnitud_A }
+ *   con spec[1] = módulo del fasor resultante; `phi` = desplazamiento resultante
+ *   (rad, >0 atrasa); `load` = fasor de la carga SIN el banco; `cap` = A del
+ *   banco; `qLoad` = reactiva de la carga sin compensar (var).
  */
-export function buildPhaseSpectrum(base, appliances = []) {
+export function buildPhaseLoad(base, appliances = [], capKvar = 0) {
   const spec = {};
-  if (base) spec[1] = base;
+  let re = base || 0;
+  let im = 0;
   for (const a of appliances) {
-    const cur = a.current ?? 0;
-    spec[1] = (spec[1] ?? 0) + cur;
-    for (const [h, frac] of Object.entries(a.spectrum ?? {})) {
+    const cur = a?.current ?? 0;
+    const ph = displacementAngle(a ?? {});
+    re += cur * Math.cos(ph);
+    im -= cur * Math.sin(ph); // atrasar = parte imaginaria negativa
+    for (const [h, frac] of Object.entries(a?.spectrum ?? {})) {
       const ho = Number(h);
       spec[ho] = (spec[ho] ?? 0) + cur * frac;
     }
   }
-  return spec;
+  const cap = capacitorCurrent(capKvar);
+  const total = { re, im: im + cap };
+  const fund = cAbs(total);
+  if (fund > 0) spec[1] = fund;
+  return {
+    spec,
+    phi: fund > 0 ? -Math.atan2(total.im, total.re) : 0,
+    fund,
+    load: { re, im },
+    cap,
+    qLoad: -V_NOM * im,
+  };
+}
+
+/** Espectro por fase en módulos (atajo de `buildPhaseLoad` para los fasores). */
+export function buildPhaseSpectrum(base, appliances = []) {
+  return buildPhaseLoad(base, appliances).spec;
 }
 
 /**
  * Corriente de neutro a partir del espectro por fase.
  * @param spectra { a: {orden: mag}, b: {...}, c: {...} }
+ * @param phi { a, b, c } desplazamiento de la fundamental de cada fase (rad,
+ *   >0 atrasa). Sólo corre la fundamental: los armónicos se dejan en h·θ.
  * Para cada armónico h se suman los tres fasores con ángulo h·(0/120/240)°;
  * la corriente de neutro total es el RMS de las resultantes por armónico:
  * In = √(Σ_h |In_h|²). Devuelve además el desglose por armónico (perHarmonic),
  * el fasor de la fundamental (comp, para el diagrama fasorial) y la fundamental
  * por fase (fund) para métricas.
  */
-export function harmonicNeutral(spectra) {
+export function harmonicNeutral(spectra, phi = {}) {
   const orders = new Set();
   for (const k of PHASE_KEYS)
     for (const h of Object.keys(spectra[k] ?? {})) orders.add(Number(h));
@@ -181,7 +307,9 @@ export function harmonicNeutral(spectra) {
     let y = 0;
     for (const k of PHASE_KEYS) {
       const m = spectra[k]?.[h] ?? 0;
-      const ang = rad(h * PHASE_ANGLES[k]);
+      const ang = h === 1
+        ? rad(PHASE_ANGLES[k]) - (phi[k] || 0)
+        : rad(h * PHASE_ANGLES[k]);
       x += m * Math.cos(ang);
       y += m * Math.sin(ang);
     }
@@ -224,36 +352,39 @@ export function scaleSpectrum(spec, f) {
 
 /**
  * Neutro abierto (estrella flotante): las cargas quedan en estrella sin retorno,
- * así que la corriente de neutro es 0 y el punto estrella se desplaza. Tomando
- * cada carga como resistiva (conductancia G ∝ corriente fundamental), el neutro
- * flotante en pu es V_n = Σ Gₖ·∠θₖ / Σ Gₖ y la tensión sobre cada carga es
- * |∠θₖ − V_n|. Las fases poco cargadas suben (sobretensión) y las muy cargadas
- * bajan; con cargas balanceadas no hay desplazamiento.
+ * así que la corriente de neutro es 0 y el punto estrella se desplaza. Cada
+ * carga es una admitancia Yₖ ∝ Iₖ∠−φₖ, y el neutro flotante en pu es
+ * V_n = Σ Yₖ·∠θₖ / Σ Yₖ; la tensión sobre cada carga es |∠θₖ − V_n|. Las fases
+ * poco cargadas suben (sobretensión) y las muy cargadas bajan; con cargas
+ * balanceadas no hay desplazamiento aunque sean reactivas.
  * @param fund { a, b, c } corrientes fundamentales por fase (A).
+ * @param phi { a, b, c } desplazamiento de cada fase (rad, >0 atrasa).
  * @returns { vn, V: {a,b,c} en V, ratio: {a,b,c} = V/V_NOM }
  */
-export function openNeutralVoltages(fund) {
-  const G = { a: fund.a || 0, b: fund.b || 0, c: fund.c || 0 };
-  const Gsum = G.a + G.b + G.c;
-  if (Gsum < 1e-9)
+export function openNeutralVoltages(fund, phi = {}) {
+  const Y = {};
+  let ysum = { re: 0, im: 0 };
+  for (const k of PHASE_KEYS) {
+    const m = fund[k] || 0;
+    const p = phi[k] || 0;
+    Y[k] = { re: m * Math.cos(p), im: -m * Math.sin(p) };
+    ysum = cAdd(ysum, Y[k]);
+  }
+  if (cAbs(ysum) < 1e-9)
     return {
       vn: { x: 0, y: 0 },
       V: { a: V_NOM, b: V_NOM, c: V_NOM },
       ratio: { a: 1, b: 1, c: 1 },
     };
-  let nx = 0;
-  let ny = 0;
-  for (const k of PHASE_KEYS) {
-    nx += G[k] * Math.cos(rad(PHASE_ANGLES[k]));
-    ny += G[k] * Math.sin(rad(PHASE_ANGLES[k]));
-  }
-  const vn = { x: nx / Gsum, y: ny / Gsum };
+  let num = { re: 0, im: 0 };
+  for (const k of PHASE_KEYS) num = cAdd(num, cMul(Y[k], unit(PHASE_ANGLES[k])));
+  const n = cDiv(num, ysum);
+  const vn = { x: n.re, y: n.im };
   const V = {};
   const ratio = {};
   for (const k of PHASE_KEYS) {
-    const dx = Math.cos(rad(PHASE_ANGLES[k])) - vn.x;
-    const dy = Math.sin(rad(PHASE_ANGLES[k])) - vn.y;
-    const r = Math.hypot(dx, dy);
+    const e = unit(PHASE_ANGLES[k]);
+    const r = cAbs({ re: e.re - vn.x, im: e.im - vn.y });
     ratio[k] = r;
     V[k] = r * V_NOM;
   }
@@ -278,55 +409,61 @@ export function cableResistance(lengthM, sectionMm2) {
  *  - el desplazamiento del neutro por su propia resistencia,
  *  - el neutro abierto (Rn = Infinity), donde el punto estrella flota.
  *
- * Cargas resistivas: conductancia G_p (S). Cada fase ve E_p = V_NOM∠θ_p en el
- * origen y un cable R_p; el neutro vuelve por R_n. Con a_p = G_p/(1+G_p·R_p):
+ * Cargas como admitancia Y_p (S), compleja: Y = (I/V)∠−φ, así que una carga
+ * inductiva atrasa su corriente y una capacitiva la adelanta. Cada fase ve
+ * E_p = V_NOM∠θ_p en el origen y un cable R_p; el neutro vuelve por R_n. Con
+ * a_p = Y_p/(1+Y_p·R_p):
  *   V_N = Σ E_p·a_p / (Σ a_p + 1/R_n)
- *   I_p = (E_p − V_N)·a_p ,  U_carga_p = (E_p − V_N)/(1 + G_p·R_p)
+ *   I_p = (E_p − V_N)·a_p ,  U_carga_p = (E_p − V_N)/(1 + Y_p·R_p)
  *
- * @param {{G:{a,b,c}, R:{a,b,c}, Rn:number}} p
+ * @param {{G:{a,b,c}, R:{a,b,c}, Rn:number}} p — G acepta un número (carga
+ *   resistiva) o un fasor {re, im} de admitancia.
  * @returns {{V:{a,b,c} (V), ang:{a,b,c} (rad), I:{a,b,c} (A), vn:{x,y}, In:number}}
  */
 export function solveVoltages({ G, R, Rn }) {
+  const Y = {};
   const a = {};
+  const one = { re: 1, im: 0 };
   for (const k of PHASE_KEYS) {
-    const Gp = G[k] || 0;
+    Y[k] = toC(G[k] ?? 0);
     const Rp = R[k] || 0;
-    a[k] = Gp / (1 + Gp * Rp);
+    // Cable abierto (R = ∞): esa fase no conduce.
+    a[k] = Number.isFinite(Rp)
+      ? cDiv(Y[k], cAdd(one, cMul(Y[k], { re: Rp, im: 0 })))
+      : { re: 0, im: 0 };
   }
   const E = {};
-  for (const k of PHASE_KEYS)
-    E[k] = { x: V_NOM * Math.cos(rad(PHASE_ANGLES[k])), y: V_NOM * Math.sin(rad(PHASE_ANGLES[k])) };
-
-  let numX = 0;
-  let numY = 0;
-  let den = Number.isFinite(Rn) && Rn > 0 ? 1 / Rn : 0;
   for (const k of PHASE_KEYS) {
-    numX += E[k].x * a[k];
-    numY += E[k].y * a[k];
-    den += a[k];
+    const u = unit(PHASE_ANGLES[k]);
+    E[k] = { re: V_NOM * u.re, im: V_NOM * u.im };
   }
-  const vn = den > 1e-12 ? { x: numX / den, y: numY / den } : { x: 0, y: 0 };
+
+  let num = { re: 0, im: 0 };
+  let den = Number.isFinite(Rn) && Rn > 0 ? { re: 1 / Rn, im: 0 } : { re: 0, im: 0 };
+  for (const k of PHASE_KEYS) {
+    num = cAdd(num, cMul(E[k], a[k]));
+    den = cAdd(den, a[k]);
+  }
+  const n = cAbs(den) > 1e-12 ? cDiv(num, den) : { re: 0, im: 0 };
+  const vn = { x: n.re, y: n.im };
 
   const V = {};
   const ang = {};
   const I = {};
-  let inx = 0;
-  let iny = 0;
+  let inC = { re: 0, im: 0 };
   for (const k of PHASE_KEYS) {
-    const dx = E[k].x - vn.x;
-    const dy = E[k].y - vn.y;
-    const ipx = dx * a[k];
-    const ipy = dy * a[k];
-    inx += ipx;
-    iny += ipy;
-    I[k] = Math.hypot(ipx, ipy);
-    const f = 1 / (1 + (G[k] || 0) * (R[k] || 0));
-    const ux = dx * f;
-    const uy = dy * f;
-    V[k] = Math.hypot(ux, uy);
-    ang[k] = Math.atan2(uy, ux);
+    const d = { re: E[k].re - vn.x, im: E[k].im - vn.y };
+    const ip = cMul(d, a[k]);
+    inC = cAdd(inC, ip);
+    I[k] = cAbs(ip);
+    const Rp = R[k] || 0;
+    const u = Number.isFinite(Rp)
+      ? cDiv(d, cAdd(one, cMul(Y[k], { re: Rp, im: 0 })))
+      : { re: 0, im: 0 };
+    V[k] = cAbs(u);
+    ang[k] = Math.atan2(u.im, u.re);
   }
-  return { V, ang, I, vn, In: Math.hypot(inx, iny) };
+  return { V, ang, I, vn, In: cAbs(inC) };
 }
 
 // Ampacidad orientativa (A) por sección (mm²) — cobre, aislación PVC.
@@ -362,12 +499,85 @@ export function conductorTemp(irms, sectionMm2, ambient = T_AMBIENT) {
   return ambient + T_RATED_RISE * (irms / amp) ** 2;
 }
 
-/** Corriente instantánea de una fase (suma de armónicos) en θ [rad]. */
-export function phaseInstant(spec, angleDeg, theta) {
+/**
+ * Corriente instantánea de una fase (suma de armónicos) en θ [rad]. `phi`
+ * atrasa la fundamental: es lo que se ve como corrimiento contra la tensión.
+ */
+export function phaseInstant(spec, angleDeg, theta, phi = 0) {
   let v = 0;
   for (const [h, mag] of Object.entries(spec)) {
     const ho = Number(h);
-    v += mag * Math.sin(ho * theta + rad(ho * angleDeg));
+    const shift = ho === 1 ? phi : 0;
+    v += mag * Math.sin(ho * theta + rad(ho * angleDeg) - shift);
   }
   return v;
+}
+
+/* -------------------------------------------------------------------------
+ * Triángulo de potencias. Con distorsión armónica no alcanza con el cos φ: la
+ * corriente que no está a 50 Hz no transporta potencia activa pero igual
+ * calienta el cable, así que el factor de potencia REAL (P/S) queda por debajo
+ * del de desplazamiento. Esa diferencia es la potencia de distorsión D, y el
+ * triángulo se vuelve un tetraedro: S² = P² + Q² + D².
+ * ---------------------------------------------------------------------- */
+
+/** Corriente (A) de un banco de `kvar` capacitivos en una fase a V_NOM. */
+export const capacitorCurrent = (kvar) => ((kvar || 0) * 1000) / V_NOM;
+
+/** cos φ objetivo habitual para no pagar recargo por reactiva. */
+export const PF_TARGET = 0.95;
+
+/**
+ * Potencias de una fase (W / var / VA). Q > 0 es inductiva (atrasada).
+ * @param spec espectro { orden: A } de la fase.
+ * @param phi desplazamiento de la fundamental (rad).
+ * @param v tensión de fase (V).
+ */
+export function phasePower(spec, phi = 0, v = V_NOM) {
+  const i1 = spec?.[1] ?? 0;
+  const irms = specRms(spec);
+  const P = v * i1 * Math.cos(phi);
+  const Q = v * i1 * Math.sin(phi);
+  const D = v * Math.sqrt(Math.max(0, irms * irms - i1 * i1));
+  const S = v * irms;
+  return {
+    P, Q, D, S, i1, irms, phi,
+    cosPhi: i1 > 1e-9 ? Math.cos(phi) : 1,
+    pf: S > 1e-9 ? P / S : 1,
+  };
+}
+
+/**
+ * Suma trifásica. P y Q se suman algebraicamente (lo inductivo de una fase
+ * compensa lo capacitivo de otra); la aparente es la suma aritmética de las
+ * fases — el criterio usual con desbalance — y la distorsión cierra el
+ * tetraedro: D = √(S² − P² − Q²).
+ */
+export function systemPower(perPhase) {
+  let P = 0;
+  let Q = 0;
+  let S = 0;
+  for (const ph of perPhase) {
+    P += ph.P;
+    Q += ph.Q;
+    S += ph.S;
+  }
+  const S1 = Math.hypot(P, Q);
+  return {
+    P, Q, S, S1,
+    D: Math.sqrt(Math.max(0, S * S - P * P - Q * Q)),
+    phi: Math.atan2(Q, P),
+    cosPhi: S1 > 1e-9 ? P / S1 : 1,
+    pf: S > 1e-9 ? P / S : 1,
+  };
+}
+
+/**
+ * kVAr capacitivos que hay que agregar para llevar una carga (P, Q en W/var) a
+ * `targetPf` atrasado: Q_c = P·(tan φ − tan φ_objetivo). Devuelve 0 si la carga
+ * ya está adelantada (un capacitor la empeoraría).
+ */
+export function kvarToCorrect(P, Q, targetPf = PF_TARGET) {
+  const t = Math.min(0.999, Math.max(0.05, targetPf));
+  return Math.max(0, (Q - P * Math.tan(Math.acos(t))) / 1000);
 }

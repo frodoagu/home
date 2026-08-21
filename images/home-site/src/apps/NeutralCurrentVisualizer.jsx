@@ -4,19 +4,23 @@ import {
   Plus, Trash2, AirVent, Microwave, Droplets, Refrigerator, MonitorSmartphone, Lightbulb,
   Coffee, Wind, Tv,
   Unplug, ArrowUp, ArrowDown, Gauge, Cable, GripVertical, ChevronUp, ChevronDown, Thermometer,
+  Fan, Lamp, CircuitBoard, Triangle, Scale,
 } from "lucide-react";
 import {
   I_MAX, F_HZ, T_MS, V_NOM, rad, APPLIANCES, getAppliance, FAULTS, CABLE_SECTIONS,
-  buildPhaseSpectrum, harmonicNeutral, phaseInstant, openNeutralVoltages, scaleSpectrum,
+  buildPhaseLoad, harmonicNeutral, phaseInstant, openNeutralVoltages, scaleSpectrum,
   cableResistance, solveVoltages, specRms, conductorTemp, resistanceAtTemp, AMPACITY, T_AMBIENT,
+  phasePower, systemPower, kvarToCorrect, PF_TARGET, displacementAngle,
 } from "./neutralCurrent";
 import { localizeText, useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Visualizador de corriente de neutro en sistema trifásico (3F + N)
- * - Sliders = carga lineal base por fase (solo fundamental, ∠ 0/120/240).
- * - Artefactos = cargas no lineales que inyectan armónicos. Los triples (3,9…)
- *   se SUMAN en el neutro aunque el sistema esté balanceado.
+ * - Sliders = carga lineal base por fase (resistiva, ∠ 0/120/240).
+ * - Artefactos = cargas con su cos φ (inductivo atrasa, capacitivo adelanta) y
+ *   su firma armónica. Los triples (3,9…) se SUMAN en el neutro aunque el
+ *   sistema esté balanceado; el desplazamiento φ también lo desbalancea.
+ * - Banco de capacitores = corrección del factor de potencia, en kVAr.
  * - Cableado por conductor (largo + sección) -> caída de tensión y, con el
  *   neutro, su desplazamiento. Fallas combinables (corte de fase y/o neutro).
  * - Los paneles se pueden reordenar (drag o flechas) y el orden se guarda.
@@ -36,7 +40,19 @@ const DANGER = "#f43f5e"; // rojo-rosa para fallas
 const APP_ICONS = {
   aire: AirVent, micro: Microwave, cafetera: Coffee, compresor: Wind, bomba: Droplets,
   heladera: Refrigerator, tele: Tv, pc: MonitorSmartphone, led: Lightbulb,
+  motor: Fan, tubo: Lamp, capacitor: CircuitBoard,
 };
+
+const IND = "#a78bfa";  // violeta: reactiva inductiva (atrasa)
+const CAP = "#2dd4bf";  // turquesa: reactiva capacitiva (adelanta)
+const DIST = "#94a3b8"; // gris: potencia de distorsion (armonicos)
+
+const fmt2 = (n) => n.toFixed(2);
+// Signo de la reactiva: inductivo, capacitivo o resistivo puro.
+const reactiveKind = (q, eps = 0.01) => (q > eps ? "ind" : q < -eps ? "cap" : "res");
+const reactiveColor = (q, eps) => ({ ind: IND, cap: CAP, res: "#64748b" }[reactiveKind(q, eps)]);
+// Verde >= 0.95, ambar >= 0.85, rojo abajo (mismo criterio que el recargo por reactiva).
+const pfColor = (pf) => (pf >= 0.95 ? "#34d399" : pf >= 0.85 ? "#f59e0b" : DANGER);
 
 const PRESETS = [
   { label: { es: "Sin carga base", en: "No base load" }, v: { a: 0, b: 0, c: 0 } },
@@ -57,8 +73,8 @@ function niceAmpScaleMax(rawMax) {
 }
 
 /* ---- orden de paneles persistido en localStorage ---- */
-const PANEL_KEY = "ncv:panel-order:v1";
-const DEFAULT_PANEL_ORDER = ["metrics", "viz", "load", "faults", "cables", "appliances"];
+const PANEL_KEY = "ncv:panel-order:v2";
+const DEFAULT_PANEL_ORDER = ["metrics", "viz", "load", "faults", "cables", "appliances", "pfc"];
 
 function loadOrder() {
   try {
@@ -133,6 +149,7 @@ export default function NeutralCurrentVisualizer() {
   const [cables, setCables] = useState({
     a: { L: 20, A: 4 }, b: { L: 20, A: 4 }, c: { L: 20, A: 4 }, n: { L: 20, A: 4 },
   });
+  const [capKvar, setCapKvar] = useState(0); // banco de capacitores, kVAr trifásicos
   const dnd = usePanelOrder();
 
   const toggleVis = (k) => setVis((s) => ({ ...s, [k]: !s[k] }));
@@ -149,31 +166,41 @@ export default function NeutralCurrentVisualizer() {
   const removeAppliance = (id) => setAppliances((s) => s.filter((a) => a.id !== id));
   const clearAppliances = () => setAppliances([]);
 
-  /* ---- espectro por fase (base + artefactos), falla y cálculo central ---- */
-  const { spectra, In, comp, fund, perHarmonic, severity } = useMemo(() => {
-    const base = {};
+  /* ---- carga por fase (base + artefactos + banco), falla y cálculo central ----
+     Cada fase resuelve su fundamental como fasor, así que `phi` (el
+     desplazamiento resultante) viaja junto al espectro: sin él el neutro y las
+     tensiones ignorarían que una fase inductiva no está en fase con una
+     resistiva del mismo módulo. */
+  const { spectra, phi, loads, In, comp, fund, perHarmonic, severity } = useMemo(() => {
+    const loads = {};
+    const spectra = {};
+    const phi = {};
     for (const { key } of PHASES) {
       const apps = appliances.filter((a) => a.phase === key).map((a) => getAppliance(a.key));
-      base[key] = buildPhaseSpectrum(I[key], apps);
+      // Fase cortada: no conduce nada, tampoco el banco (está del lado de la carga).
+      loads[key] = faults[key]
+        ? { spec: {}, phi: 0, fund: 0, qLoad: 0, cap: 0, load: { re: 0, im: 0 } }
+        : buildPhaseLoad(I[key], apps, capKvar / 3);
+      spectra[key] = loads[key].spec;
+      phi[key] = loads[key].phi;
     }
-    for (const k of ["a", "b", "c"]) if (faults[k]) base[k] = {};
 
     if (faults.n) {
-      const nominalFund = { a: base.a[1] || 0, b: base.b[1] || 0, c: base.c[1] || 0 };
-      const ov = openNeutralVoltages(nominalFund);
+      const nominalFund = { a: loads.a.fund, b: loads.b.fund, c: loads.c.fund };
+      const ov = openNeutralVoltages(nominalFund, phi);
       const scaled = {
-        a: scaleSpectrum(base.a, ov.ratio.a),
-        b: scaleSpectrum(base.b, ov.ratio.b),
-        c: scaleSpectrum(base.c, ov.ratio.c),
+        a: scaleSpectrum(spectra.a, ov.ratio.a),
+        b: scaleSpectrum(spectra.b, ov.ratio.b),
+        c: scaleSpectrum(spectra.c, ov.ratio.c),
       };
-      const calc = harmonicNeutral(scaled);
+      const calc = harmonicNeutral(scaled, phi);
       return {
-        spectra: scaled, In: 0, comp: { x: 0, y: 0 },
+        spectra: scaled, phi, loads, In: 0, comp: { x: 0, y: 0 },
         fund: calc.fund, perHarmonic: [], severity: "ok",
       };
     }
-    return { spectra: base, ...harmonicNeutral(base) };
-  }, [I, appliances, faults]);
+    return { spectra, phi, loads, ...harmonicNeutral(spectra, phi) };
+  }, [I, appliances, faults, capKvar]);
 
   /* ---- por conductor: corriente RMS, temperatura y R corregida por calor ----
      Más A o menos sección -> más temperatura; el cobre caliente sube su R, lo
@@ -197,15 +224,27 @@ export default function NeutralCurrentVisualizer() {
     return { R, Rn: faults.n ? Infinity : conductors.n.R };
   }, [conductors, faults.n]);
 
+  /* La carga entra al circuito como admitancia compleja Y = (I/V)∠−φ: con eso
+     la caída de tensión deja de depender sólo del módulo de la corriente. */
   const volt = useMemo(() => {
     const G = {};
     for (const p of PHASES) {
-      const apps = appliances.filter((a) => a.phase === p.key).map((a) => getAppliance(a.key));
-      const spec = buildPhaseSpectrum(I[p.key], apps);
-      G[p.key] = (faults[p.key] ? 0 : (spec[1] || 0)) / V_NOM;
+      const { fund, phi: ph } = loads[p.key];
+      G[p.key] = { re: (fund * Math.cos(ph)) / V_NOM, im: (-fund * Math.sin(ph)) / V_NOM };
     }
     return solveVoltages({ G, R, Rn });
-  }, [I, appliances, faults, R, Rn]);
+  }, [loads, R, Rn]);
+
+  /* ---- triángulo de potencias por fase y del sistema ---- */
+  const power = useMemo(() => {
+    const per = PHASES.map((p) => ({ key: p.key, ...phasePower(spectra[p.key], phi[p.key]) }));
+    return { per, total: systemPower(per) };
+  }, [spectra, phi]);
+
+  // Reactiva de la carga SIN el banco: es la que hay que compensar.
+  const qLoad = PHASES.reduce((sum, p) => sum + loads[p.key].qLoad, 0);
+  const capNeed = kvarToCorrect(power.total.P, qLoad);
+  const capMax = Math.max(2, Math.ceil((qLoad / 1000) * 1.6 * 2) / 2, capKvar);
 
   const neutralOpen = faults.n;
   const sevColor = NEUTRAL;
@@ -224,11 +263,13 @@ export default function NeutralCurrentVisualizer() {
         tabPhasors: "Fasores",
         tabWaves: "Ondas",
         tabHarm: "Armonicos",
+        tabPower: "Potencia",
         tabVoltage: "Tension",
         loadTitle: "Carga lineal base por fase",
         faultsTitle: "Simular fallas",
         cablesTitle: "Cableado por conductor",
-        appliancesTitle: "Artefactos (armonicos)",
+        appliancesTitle: "Artefactos (cos φ + armonicos)",
+        pfcTitle: "Banco de capacitores (correccion)",
       }
     : {
         title: "Neutral Current · Three-Phase System",
@@ -237,11 +278,13 @@ export default function NeutralCurrentVisualizer() {
         tabPhasors: "Phasors",
         tabWaves: "Waves",
         tabHarm: "Harmonics",
+        tabPower: "Power",
         tabVoltage: "Voltage",
         loadTitle: "Base linear load per phase",
         faultsTitle: "Simulate faults",
         cablesTitle: "Cabling by conductor",
-        appliancesTitle: "Appliances (harmonics)",
+        appliancesTitle: "Appliances (cos φ + harmonics)",
+        pfcTitle: "Capacitor bank (power-factor correction)",
       };
 
   const renderPanel = (id) => {
@@ -249,10 +292,16 @@ export default function NeutralCurrentVisualizer() {
       case "metrics":
         return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {PHASES.map((p) => (
-              <Metric key={p.key} label={localizeText(p.label, language)} value={fund[p.key]} unit="A"
-                color={p.color} sub={`∠ ${p.angle}° · ${language === "es" ? "fundamental" : "fundamental"}`} />
-            ))}
+            {PHASES.map((p) => {
+              const ph = phi[p.key];
+              const deg = (((p.angle - (ph * 180) / Math.PI) % 360) + 360) % 360;
+              const kind = reactiveKind(ph, 0.005);
+              return (
+                <Metric key={p.key} label={localizeText(p.label, language)} value={fund[p.key]} unit="A"
+                  color={p.color}
+                  sub={`∠ ${Math.round(deg)}° · cos φ ${fmt2(Math.cos(ph))}${kind === "res" ? "" : ` ${kind}`}`} />
+              );
+            })}
             <NeutralMetric In={In} color={sevColor} language={language} ampScaleMax={ampScaleMax} />
           </div>
         );
@@ -267,13 +316,16 @@ export default function NeutralCurrentVisualizer() {
                   icon={<Waves size={14} />} label={txt.tabWaves} />
                 <TabBtn active={tab === "harm"} onClick={() => setTab("harm")}
                   icon={<BarChart3 size={14} />} label={txt.tabHarm} />
+                <TabBtn active={tab === "power"} onClick={() => setTab("power")}
+                  icon={<Triangle size={14} />} label={txt.tabPower} />
                 <TabBtn active={tab === "volts"} onClick={() => setTab("volts")}
                   icon={<Gauge size={14} />} label={txt.tabVoltage} />
               </div>
               <div className="p-4">
-                {tab === "phasors" && <PhasorView I={fund} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
-                {tab === "waves" && <WaveView spectra={spectra} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
+                {tab === "phasors" && <PhasorView I={fund} phi={phi} comp={comp} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
+                {tab === "waves" && <WaveView spectra={spectra} phi={phi} In={In} nColor={sevColor} vis={vis} onToggle={toggleVis} neutralOpen={neutralOpen} language={language} ampScaleMax={ampScaleMax} />}
                 {tab === "harm" && <HarmonicView perHarmonic={perHarmonic} In={In} nColor={sevColor} language={language} />}
+                {tab === "power" && <PowerView power={power} language={language} />}
                 {tab === "volts" && <VoltageView volt={volt} spectra={spectra} R={R} Rn={Rn} faults={faults} neutralOpen={neutralOpen} vis={vis} onToggle={toggleVis} language={language} />}
               </div>
             </div>
@@ -293,6 +345,12 @@ export default function NeutralCurrentVisualizer() {
           <AppliancesCard
             appliances={appliances} target={target} setTarget={setTarget}
             onAdd={addAppliance} onRemove={removeAppliance} onClear={clearAppliances} language={language} title={txt.appliancesTitle} />
+        );
+      case "pfc":
+        return (
+          <PfcCard
+            capKvar={capKvar} onChange={setCapKvar} max={capMax} need={capNeed}
+            qLoad={qLoad} power={power} loads={loads} language={language} title={txt.pfcTitle} />
         );
       default:
         return null;
@@ -592,13 +650,20 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {APPLIANCES.map((a) => {
               const Icon = APP_ICONS[a.key] ?? Plus;
+              const ph = displacementAngle(a);
+              const k = reactiveKind(ph, 0.005);
               return (
                 <button key={a.key} onClick={() => onAdd(a.key)}
                   className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/50 px-2 py-2
                              text-xs text-slate-300 hover:border-amber-500/60 hover:bg-slate-800 transition-colors text-left">
                   <Icon size={16} style={{ color: ACCENT }} className="shrink-0" />
                   <span className="leading-tight">{localizeText(a.label, language)}<br />
-                    <span className="text-[10px] text-slate-600 font-mono">{a.current} A</span>
+                    <span className="text-[10px] text-slate-600 font-mono">
+                      {a.current} A · cos {fmt2(Math.cos(ph))}
+                      {k !== "res" && (
+                        <span className="ml-1" style={{ color: reactiveColor(ph, 0.005) }}>{k}</span>
+                      )}
+                    </span>
                   </span>
                 </button>
               );
@@ -621,8 +686,8 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
           {appliances.length === 0 ? (
             <p className="text-xs text-slate-600 leading-relaxed">
               {language === "es"
-                ? "Sin artefactos. Elegi una fase (o 3f) y toca un artefacto para agregarlo."
-                : "No appliances yet. Pick a phase (or 3f) and add an appliance."}
+                ? "Sin artefactos. Elegi una fase (o 3f) y toca un artefacto para agregarlo. El numero de abajo es su cos φ: ind atrasa la corriente (motores), cap la adelanta."
+                : "No appliances yet. Pick a phase (or 3f) and add an appliance. The number below is its cos φ: ind lags the current (motors), cap leads it."}
             </p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1 max-h-44 overflow-y-auto pr-1">
@@ -630,11 +695,15 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
                 const meta = getAppliance(a.key);
                 const Icon = APP_ICONS[a.key] ?? Plus;
                 const ph = PHASES.find((p) => p.key === a.phase);
+                const k = reactiveKind(displacementAngle(meta ?? {}), 0.005);
                 return (
                   <div key={a.id}
                     className="flex items-center gap-2 rounded-md bg-slate-950/60 px-2 py-1 text-xs">
-                    <Icon size={13} className="shrink-0 text-slate-400" />
+                    <Icon size={13} className="shrink-0" style={{ color: reactiveColor(displacementAngle(meta ?? {}), 0.005) }} />
                     <span className="flex-1 truncate text-slate-300">{localizeText(meta?.label, language)}</span>
+                    {k !== "res" && (
+                      <span className="font-mono text-[9px] shrink-0" style={{ color: reactiveColor(displacementAngle(meta ?? {}), 0.005) }}>{k}</span>
+                    )}
                     <span className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: ph?.color }} />
                     <span className="font-mono text-[10px] text-slate-500 w-3">
                       {localizeText(ph?.label, language)?.slice(-1)}
@@ -650,6 +719,101 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
         </div>
       </div>
     </Card>
+  );
+}
+
+/* El banco va del lado de la carga, así que descarga el cable: el tramo entre
+   el banco y el medidor deja de transportar esa reactiva. Sobrecompensar no es
+   gratis — la corriente vuelve a subir, ahora adelantada. */
+function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, title }) {
+  const es = language === "es";
+  const q = power.total.Q;
+  const iBefore = PHASES.reduce((sum, p) => sum + Math.hypot(loads[p.key].load.re, loads[p.key].load.im), 0);
+  const iAfter = PHASES.reduce((sum, p) => sum + loads[p.key].fund, 0);
+  const drop = iBefore > 0.05 ? (1 - iAfter / iBefore) * 100 : 0;
+  const over = q < -50;
+  const distorted = power.total.D > power.total.S * 0.15;
+  const step = Math.max(0.1, Math.round((max / 40) * 10) / 10);
+
+  return (
+    <Card title={title} icon={<Scale size={15} />}>
+      <div className="grid md:grid-cols-2 gap-x-6 gap-y-4 pt-2">
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-sm text-slate-300">
+              {es ? "Capacitores" : "Capacitors"}
+              <span className="ml-2 text-[10px] text-slate-600 font-mono">
+                {es ? "3φ · en la carga" : "3-phase · at the load"}
+              </span>
+            </span>
+            <span className="font-mono text-sm font-semibold tabular-nums" style={{ color: CAP }}>
+              {fmt2(capKvar)} kvar
+            </span>
+          </div>
+          <input type="range" min={0} max={max} step={step} value={capKvar}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="w-full cursor-pointer" style={{ accentColor: CAP }} />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={() => onChange(0)}
+              className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
+                         text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
+              {es ? "Sin banco" : "No bank"}
+            </button>
+            <button onClick={() => onChange(Math.round(need * 10) / 10)} disabled={need <= 0}
+              className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
+                         text-slate-300 hover:border-teal-500/60 hover:bg-slate-800 transition-colors
+                         disabled:opacity-40 disabled:hover:border-slate-800">
+              cos φ {fmt2(PF_TARGET)}
+            </button>
+            <button onClick={() => onChange(Math.round((qLoad / 1000) * 10) / 10)} disabled={qLoad <= 0}
+              className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
+                         text-slate-300 hover:border-teal-500/60 hover:bg-slate-800 transition-colors
+                         disabled:opacity-40 disabled:hover:border-slate-800">
+              {es ? "cos φ 1 (total)" : "cos φ 1 (full)"}
+            </button>
+          </div>
+        </div>
+
+        <div className="md:border-l md:border-slate-800 md:pl-6 space-y-2">
+          <Row label={es ? "Reactiva de la carga" : "Load reactive"}
+            value={`${fmt2(qLoad / 1000)} kvar`} color={qLoad > 50 ? IND : "#94a3b8"} />
+          <Row label={es ? "Aporta el banco" : "Bank supplies"}
+            value={`−${fmt2(capKvar)} kvar`} color={CAP} />
+          <Row label={es ? "Queda en el cable" : "Left on the cable"}
+            value={`${fmt2(q / 1000)} kvar`} color={reactiveColor(q, 50)} />
+          <Row label={es ? "Corriente de linea (3 fases)" : "Line current (3 phases)"}
+            value={capKvar > 0 ? `${fmt(iBefore)} → ${fmt(iAfter)} A` : `${fmt(iAfter)} A`}
+            color={drop > 1 ? "#34d399" : "#94a3b8"}
+            sub={drop > 1 ? `−${drop.toFixed(0)} %` : null} />
+        </div>
+      </div>
+
+      <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
+        {over
+          ? (es
+            ? "Sobrecompensado: el banco pasó de largo y la corriente vuelve a subir, ahora adelantada. Un cos φ capacitivo tambien se paga, y en vacio puede sobretensionar."
+            : "Overcompensated: the bank overshot and current rises again, now leading. A leading power factor is also penalised and can raise voltage at light load.")
+          : distorted
+            ? (es
+              ? "Ojo: la mayor parte de lo que sobra acá es DISTORSION, no reactiva. Los capacitores no la tocan (y en resonancia con la red la amplifican): eso se filtra."
+              : "Careful: most of the excess here is DISTORTION, not reactive power. Capacitors do not remove it (and can amplify it through resonance): that needs filters.")
+            : (es
+              ? "Los capacitores entregan la reactiva que piden los motores, asi que el cable ya no tiene que transportarla: misma potencia util, menos amperes y menos calentamiento (I²R). La caida de tension casi no cambia: con un cable resistivo la fija la componente activa."
+              : "Capacitors supply the reactive power motors demand, so the cable stops carrying it: same useful power, fewer amps, less heating (I²R). Voltage drop barely moves though — on a resistive cable it tracks the active component.")}
+      </p>
+    </Card>
+  );
+}
+
+function Row({ label, value, color, sub }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-xs">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-mono tabular-nums" style={{ color }}>
+        {value}
+        {sub && <span className="ml-1.5 text-[10px] text-emerald-400">{sub}</span>}
+      </span>
+    </div>
   );
 }
 
@@ -838,7 +1002,7 @@ function TabBtn({ active, onClick, icon, label }) {
 
 /* ===================== Vista: Diagrama Fasorial ===================== */
 
-function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
+function PhasorView({ I, phi, comp, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
   const VB = 340, C = VB / 2, R = 140, scale = R / ampScaleMax;
   const In = Math.hypot(comp.x, comp.y);
 
@@ -848,6 +1012,7 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language, amp
   });
   const nTip = { x: C + comp.x * scale, y: C - comp.y * scale };
   const rings = [0.25, 0.5, 0.75, 1].map((f) => Math.round(f * ampScaleMax));
+  const shifted = PHASES.some((p) => Math.abs(phi?.[p.key] || 0) > 0.01);
 
   return (
     <div className="flex flex-col items-center">
@@ -862,8 +1027,18 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language, amp
         <line x1={10} y1={C} x2={VB - 10} y2={C} stroke="#334155" strokeWidth={1} />
         <line x1={C} y1={10} x2={C} y2={VB - 10} stroke="#334155" strokeWidth={1} />
 
+        {/* Referencia de tensión: la corriente que no cae sobre su línea está desplazada. */}
+        {shifted && PHASES.map((p) => {
+          const t = tip(ampScaleMax, p.angle);
+          if (!vis[p.key]) return null;
+          return (
+            <line key={`v${p.key}`} x1={C} y1={C} x2={t.x} y2={t.y} stroke={p.color}
+              strokeWidth={1} strokeDasharray="2 5" opacity={0.4} />
+          );
+        })}
+
         {PHASES.map((p) => {
-          const t = tip(I[p.key], p.angle);
+          const t = tip(I[p.key], p.angle - ((phi?.[p.key] || 0) * 180) / Math.PI);
           if (I[p.key] < 0.05 || !vis[p.key]) return null;
           return <Arrow key={p.key} x1={C} y1={C} x2={t.x} y2={t.y} color={p.color} width={2.5} />;
         })}
@@ -882,10 +1057,14 @@ function PhasorView({ I, comp, nColor, vis, onToggle, neutralOpen, language, amp
         neutralOpen={neutralOpen}
         language={language}
       />
-      <p className="mt-1 text-[10px] text-slate-600 font-mono text-center">
+      <p className="mt-1 text-[10px] text-slate-600 font-mono text-center max-w-md leading-relaxed">
         {language === "es"
-          ? "El diagrama fasorial muestra solo la fundamental. Los armonicos se ven en otras pestanas."
-          : "Phasor diagram shows only the fundamental. Harmonics are shown in the other tabs."}
+          ? shifted
+            ? "Las punteadas finas son la tension de cada fase: la corriente atrasa (inductivo) o adelanta (capacitivo) ese angulo φ. Solo se ve la fundamental."
+            : "El diagrama fasorial muestra solo la fundamental. Los armonicos se ven en otras pestanas."
+          : shifted
+            ? "Thin dashed lines are each phase voltage: current lags (inductive) or leads (capacitive) by φ. Fundamental only."
+            : "Phasor diagram shows only the fundamental. Harmonics are shown in the other tabs."}
       </p>
     </div>
   );
@@ -908,7 +1087,7 @@ function Arrow({ x1, y1, x2, y2, color, width, dashed, glow }) {
 
 /* ===================== Vista: Formas de Onda (corriente) ===================== */
 
-function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
+function WaveView({ spectra, phi, In, nColor, vis, onToggle, neutralOpen, language, ampScaleMax }) {
   const W = 560, H = 260, padL = 40, padR = 16, padT = 16, padB = 30;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const cY = padT + plotH / 2;
@@ -920,9 +1099,9 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language, a
     for (let i = 0; i <= N; i++) {
       const ms = (i / N) * T_MS;
       const th = (ms / T_MS) * 2 * Math.PI;
-      const ia = phaseInstant(spectra.a, 0, th);
-      const ib = phaseInstant(spectra.b, 120, th);
-      const ic = phaseInstant(spectra.c, 240, th);
+      const ia = phaseInstant(spectra.a, 0, th, phi?.a || 0);
+      const ib = phaseInstant(spectra.b, 120, th, phi?.b || 0);
+      const ic = phaseInstant(spectra.c, 240, th, phi?.c || 0);
       const inst = ia + ib + ic;
       raw.a.push([ms, ia]); raw.b.push([ms, ib]); raw.c.push([ms, ic]); raw.n.push([ms, inst]);
       peak = Math.max(peak, Math.abs(ia), Math.abs(ib), Math.abs(ic), Math.abs(inst));
@@ -937,7 +1116,7 @@ function WaveView({ spectra, In, nColor, vis, onToggle, neutralOpen, language, a
       nPath: toStr(raw.n),
       yMax,
     };
-  }, [spectra, ampScaleMax, cY, plotH, plotW]);
+  }, [spectra, phi, ampScaleMax, cY, plotH, plotW]);
 
   const yS = (plotH / 2) / yMax;
   const y = (amp) => cY - amp * yS;
@@ -1174,6 +1353,231 @@ function HarmonicView({ perHarmonic, In, nColor, language }) {
           : "Contribution of each harmonic to I_N. Triplen harmonics (3rd, 9th...) add in neutral."}
       </p>
       <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} language={language} />
+    </div>
+  );
+}
+
+/* ===================== Vista: Triángulo de Potencias =====================
+ * P (activa) es la que hace trabajo; Q (reactiva) va y vuelve por el cable sin
+ * producir nada, y D (distorsión) es lo que aportan los armónicos. Las tres se
+ * combinan en la aparente S — la que el cable y el medidor tienen que bancar —
+ * cerrando un tetraedro: S² = P² + Q² + D². Por eso el cos φ, que sólo mira P y
+ * Q, no alcanza cuando hay armónicos: el factor de potencia REAL es P/S.
+ * ---------------------------------------------------------------------- */
+
+function PowerView({ power, language }) {
+  const { total, per } = power;
+  const es = language === "es";
+  const kind = reactiveKind(total.Q, 1); // Q en var
+  const qSub = { ind: es ? "inductiva · atrasa" : "inductive · lags",
+                 cap: es ? "capacitiva · adelanta" : "capacitive · leads",
+                 res: es ? "sin reactiva" : "none" }[kind];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col lg:flex-row items-center gap-4">
+        <PowerTriangle total={total} language={language} />
+        <div className="w-full flex-1 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <PowerStat label={es ? "Activa (P)" : "Active (P)"} value={total.P / 1000} unit="kW"
+              color="#34d399" sub={es ? "hace el trabajo" : "does the work"} />
+            <PowerStat label={es ? "Reactiva (Q)" : "Reactive (Q)"} value={total.Q / 1000} unit="kvar"
+              color={reactiveColor(total.Q, 1)} sub={qSub} />
+            <PowerStat label={es ? "Distorsion (D)" : "Distortion (D)"} value={total.D / 1000} unit="kvar"
+              color={DIST} sub={es ? "armonicos" : "harmonics"} />
+            <PowerStat label={es ? "Aparente (S)" : "Apparent (S)"} value={total.S / 1000} unit="kVA"
+              color={ACCENT} sub={es ? "lo que carga el cable" : "what the cable carries"} />
+          </div>
+          <PfBar cosPhi={total.cosPhi} pf={total.pf} q={total.Q} language={language} />
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-2">
+        {per.map((ph) => {
+          const p = PHASES.find((x) => x.key === ph.key);
+          const k = reactiveKind(ph.Q, 1);
+          return (
+            <div key={ph.key} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: p.color }} />
+                <span className="text-xs text-slate-300">{localizeText(p.label, language)}</span>
+                <span className="ml-auto font-mono text-xs tabular-nums text-slate-400">
+                  {fmt(ph.irms)} A <span className="text-[9px] text-slate-600">rms</span>
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-1.5 font-mono text-xs">
+                <span className="text-slate-500">cos φ</span>
+                <span className="font-semibold tabular-nums" style={{ color: pfColor(Math.abs(ph.cosPhi)) }}>
+                  {fmt2(ph.cosPhi)}
+                </span>
+                {k !== "res" && (
+                  <span className="text-[10px]" style={{ color: reactiveColor(ph.Q, 1) }}>{k}</span>
+                )}
+              </div>
+              <div className="mt-0.5 font-mono text-[10px] text-slate-600 tabular-nums">
+                {fmt2(ph.P / 1000)} kW · {fmt2(ph.Q / 1000)} kvar
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-slate-600 font-mono text-center leading-relaxed max-w-2xl mx-auto">
+        {es
+          ? "S² = P² + Q² + D². La reactiva se compensa con capacitores; la distorsion NO (para eso van filtros). Potencias calculadas a la tension nominal."
+          : "S² = P² + Q² + D². Reactive power is fixed with capacitors; distortion is NOT (that needs filters). Powers computed at nominal voltage."}
+      </p>
+    </div>
+  );
+}
+
+function PowerTriangle({ total, language }) {
+  const W = 340, H = 250, PAD = 30;
+  const es = language === "es";
+
+  if (total.S <= 1e-6) {
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 360 }}>
+        <text x={W / 2} y={H / 2} textAnchor="middle" fill="#475569" fontSize={12} fontFamily="monospace">
+          {es ? "Sin carga" : "No load"}
+        </text>
+      </svg>
+    );
+  }
+
+  /* Se arma en unidades de potencia (x = P, y = Q hacia arriba) y recién al
+     final se escala al recuadro: así el dibujo aprovecha todo el ancho aunque
+     la reactiva sea chica frente a la activa, que es el caso normal. */
+  const { P, Q, D } = total;
+  const L = Math.hypot(P, Q) || 1;
+  const n = Q >= 0 ? { x: -Q / L, y: P / L } : { x: Q / L, y: -P / L };
+  const sTip = { x: P + n.x * D, y: Q + n.y * D };
+  const pts = [{ x: 0, y: 0 }, { x: P, y: Q }, sTip];
+  const x0 = Math.min(...pts.map((q) => q.x));
+  const x1 = Math.max(...pts.map((q) => q.x));
+  const y0 = Math.min(...pts.map((q) => q.y));
+  const y1 = Math.max(...pts.map((q) => q.y));
+  const scale = Math.min(
+    (W - 2 * PAD) / Math.max(x1 - x0, 1e-9),
+    (H - 2 * PAD) / Math.max(y1 - y0, 1e-9),
+  );
+  // Centrado: con la carga compensada el triángulo queda casi plano y si no
+  // se centra se pega al borde de abajo.
+  const ox = (W - (x1 - x0) * scale) / 2;
+  const oy = (H - (y1 - y0) * scale) / 2;
+  const sx = (x) => ox + (x - x0) * scale;
+  const sy = (y) => H - oy - (y - y0) * scale;
+
+  const O = { x: sx(0), y: sy(0) };
+  const pEnd = { x: sx(P), y: sy(0) };
+  const qEnd = { x: sx(P), y: sy(Q) };
+  const sEnd = { x: sx(sTip.x), y: sy(sTip.y) };
+  const showD = Math.hypot(sEnd.x - qEnd.x, sEnd.y - qEnd.y) > 6;
+  const qColor = reactiveColor(Q, 1);
+  const ang = Math.atan2(Q, P);
+  const arcR = Math.min(30, L * scale * 0.4);
+  const arc = `M ${O.x + arcR} ${O.y} A ${arcR} ${arcR} 0 0 ${ang >= 0 ? 0 : 1} ` +
+    `${O.x + arcR * Math.cos(ang)} ${O.y - arcR * Math.sin(ang)}`;
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const qFits = pEnd.x + 52 < W; // si la activa llega al borde, la etiqueta va adentro
+  const sLabel = mid(O, sEnd);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 360 }}>
+      <line x1={O.x - 12} y1={O.y} x2={W - 6} y2={O.y} stroke="#1e293b" strokeWidth={1} />
+
+      {showD && (
+        <>
+          <line x1={qEnd.x} y1={qEnd.y} x2={sEnd.x} y2={sEnd.y} stroke={DIST} strokeWidth={2}
+            strokeDasharray="5 4" strokeLinecap="round" />
+          <text x={sEnd.x} y={sEnd.y - 8} textAnchor="middle" fill={DIST}
+            fontSize={10} fontFamily="monospace">D {fmt2(D / 1000)}</text>
+        </>
+      )}
+
+      {Math.abs(ang) > 0.04 && arcR > 8 && (
+        <>
+          <path d={arc} fill="none" stroke="#64748b" strokeWidth={1.2} />
+          <text x={O.x + arcR + 4} y={O.y - (Q >= 0 ? 4 : -12)} fill="#94a3b8"
+            fontSize={10} fontFamily="monospace">φ</text>
+        </>
+      )}
+
+      {/* S: la hipotenusa completa (con distorsión, la punteada externa) */}
+      <line x1={O.x} y1={O.y} x2={sEnd.x} y2={sEnd.y} stroke={ACCENT} strokeWidth={2.5}
+        strokeDasharray={showD ? "7 4" : undefined} strokeLinecap="round" />
+      {showD && (
+        <line x1={O.x} y1={O.y} x2={qEnd.x} y2={qEnd.y} stroke="#64748b" strokeWidth={1.5} />
+      )}
+
+      <Arrow x1={O.x} y1={O.y} x2={pEnd.x} y2={pEnd.y} color="#34d399" width={3} />
+      <Arrow x1={pEnd.x} y1={pEnd.y} x2={qEnd.x} y2={qEnd.y} color={qColor} width={3} />
+
+      <text x={mid(O, pEnd).x} y={O.y + (Q >= 0 ? 15 : -8)} textAnchor="middle" fill="#34d399"
+        fontSize={10} fontFamily="monospace">P {fmt2(P / 1000)} kW</text>
+      <text x={pEnd.x + (qFits ? 7 : -7)} y={mid(pEnd, qEnd).y + 3} textAnchor={qFits ? "start" : "end"}
+        fill={qColor} fontSize={10} fontFamily="monospace">Q {fmt2(Q / 1000)}</text>
+      <text x={sLabel.x - 8} y={sLabel.y - 7} textAnchor="end" fill={ACCENT}
+        fontSize={10} fontFamily="monospace">S {fmt2(total.S / 1000)} kVA</text>
+      <circle cx={O.x} cy={O.y} r={3} fill="#64748b" />
+    </svg>
+  );
+}
+
+function PowerStat({ label, value, unit, color, sub }) {
+  return (
+    <div className="rounded-lg border bg-slate-950/50 p-2.5" style={{ borderColor: color + "33" }}>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-0.5 flex items-baseline gap-1">
+        <span className="font-mono text-lg font-semibold tabular-nums" style={{ color }}>{fmt2(value)}</span>
+        <span className="font-mono text-[10px] text-slate-500">{unit}</span>
+      </div>
+      <div className="font-mono text-[10px] text-slate-600">{sub}</div>
+    </div>
+  );
+}
+
+/* Barra de cos φ: el centro es 1 y los extremos ±90°. La posición es el ángulo,
+   no el coseno, para que la zona útil (0,85-1) no quede aplastada contra el
+   centro. El marcador hueco es el factor de potencia REAL (P/S): lo que se
+   separa del lleno es distorsión, que ningún capacitor corrige. */
+function PfBar({ cosPhi, pf, q, language }) {
+  const W = 320, H = 56, barY = 20, barH = 12, half = W / 2;
+  const es = language === "es";
+  const sign = q >= 0 ? 1 : -1;
+  const at = (c) => half + sign * (Math.acos(Math.min(1, Math.max(0, c))) / (Math.PI / 2)) * half;
+  const band = (c) => (Math.acos(c) / (Math.PI / 2)) * half;
+  const x1 = at(cosPhi);
+  const x2 = at(Math.min(1, Math.abs(pf)));
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full mx-auto" style={{ maxWidth: 400 }}>
+        <rect x={0} y={barY} width={W} height={barH} rx={6} fill={DANGER} opacity={0.35} />
+        <rect x={half - band(0.85)} y={barY} width={2 * band(0.85)} height={barH} fill="#f59e0b" opacity={0.35} />
+        <rect x={half - band(0.95)} y={barY} width={2 * band(0.95)} height={barH} fill="#34d399" opacity={0.35} />
+        <line x1={half} y1={barY - 3} x2={half} y2={barY + barH + 3} stroke="#94a3b8" strokeWidth={1} />
+
+        <polygon points={`${x1},${barY - 2} ${x1 - 5},${barY - 11} ${x1 + 5},${barY - 11}`}
+          fill={pfColor(Math.abs(cosPhi))} />
+        <circle cx={x2} cy={barY + barH + 7} r={4} fill="none" stroke={pfColor(Math.abs(pf))} strokeWidth={2} />
+
+        <text x={2} y={barY + barH + 20} fill={CAP} fontSize={9} fontFamily="monospace">
+          {es ? "capacitivo" : "leading"}
+        </text>
+        <text x={half} y={barY - 13} textAnchor="middle" fill="#94a3b8" fontSize={9} fontFamily="monospace">1.00</text>
+        <text x={W - 2} y={barY + barH + 20} textAnchor="end" fill={IND} fontSize={9} fontFamily="monospace">
+          {es ? "inductivo" : "lagging"}
+        </text>
+      </svg>
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-0.5 text-[11px] font-mono">
+        <span style={{ color: pfColor(Math.abs(cosPhi)) }}>
+          cos φ {fmt2(cosPhi)}
+        </span>
+        <span style={{ color: pfColor(Math.abs(pf)) }}>
+          {es ? "FP real" : "true PF"} {fmt2(pf)}
+        </span>
+      </div>
     </div>
   );
 }
