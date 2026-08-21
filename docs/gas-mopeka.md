@@ -77,14 +77,15 @@ Y las derivadas, del package de HA:
 | Entidad | Qué es |
 |---|---|
 | `sensor.gas_altura` | altura en mm con el eco doble descartado (ver §4) |
-| `sensor.gas_altura_suave` | promedio móvil de 3 h de la anterior — de acá salen las tres derivadas |
-| `sensor.gas_nivel` | % calculado a partir de la altura suavizada (ver §3) — fuente de la verdad del cálculo, no es la que se muestra (§2.1) |
-| `sensor.gas_restante` | kg restantes (`% × 45`) |
-| `binary_sensor.gas_bajo` | `problem`, < 20 % sostenido 2 h |
+| `sensor.gas_altura_suave` | promedio móvil de 3 h de la anterior |
+| `sensor.gas_restante` | **kg de gas en el tubo, líquido + vapor** (ver §3 y §5) — acá vive la única fórmula |
+| `sensor.gas_nivel` | % = `kg / 45` — fuente de la verdad del cálculo, no es la que se muestra (§2.1) |
+| `binary_sensor.gas_bajo` | `problem`, < 10 kg sostenido 2 h |
 
-La cadena es `tank_level` → `gas_altura` → `gas_altura_suave` → las tres
-derivadas. A `gas_altura` y `gas_altura_suave` tampoco hay que asignarles área,
-por lo mismo que al resto de las entidades del package (§2.1, punto 4).
+La cadena es `tank_level` → `gas_altura` → `gas_altura_suave` → `gas_restante` →
+`gas_nivel` y `gas_bajo`. A `gas_altura` y `gas_altura_suave` tampoco hay que
+asignarles área, por lo mismo que al resto de las entidades del package (§2.1,
+punto 4).
 
 `sensor` ya está en `googleAssistant.exposedDomains`, así que el nivel también
 queda disponible en Google Home sin tocar nada.
@@ -157,17 +158,19 @@ Entidades* sobre un estado entero muestra `33,00 %` y nada más. El helper
 "Nivel" espeja el estado tal cual, así que hereda los decimales (y tiene su
 `display_precision` en 2 para que la tarjeta los muestre).
 
-Son decimales de presentación, no de exactitud: la lectura de un mismo día se
-mueve ±20-40 mm por el chapoteo (≈ 2-4 puntos de %), bastante más que el 0,09 %
-que vale un mm.
+Son decimales de presentación, no de exactitud: la lectura cruda de un mismo día
+se mueve ±20-40 mm por el chapoteo (≈ 2-4 puntos de %), bastante más que el
+0,09 % que vale un mm. El promedio móvil de §4 se lleva casi todo eso, pero las
+constantes del envase (§3) siguen sin calibrar, así que los decimales no son
+exactitud real.
 
 ---
 
-## 3. Por qué "Universal" no da porcentaje solo, y cómo se calibra
+## 3. Por qué "Universal" no da porcentaje solo, y qué constantes hacen falta
 
 "Universal" significa que el sensor no asume la geometría del tanque: a
 diferencia de otros Mopeka Pro pensados para tanques de forma conocida, éste
-sólo publica la lectura cruda (`tank_level`, en mm). El % y los kg se calculan
+sólo publica la lectura cruda (`tank_level`, en mm). Los kg y el % se calculan
 en `packages/gas.yaml`.
 
 ### `tank_level` es altura de líquido, no headspace
@@ -175,28 +178,39 @@ en `packages/gas.yaml`.
 El Mopeka va pegado **abajo** del tubo y dispara el ultrasonido **hacia
 arriba**, así que `tank_level` es la **altura de la columna de líquido sobre el
 sensor** — más gas ⇒ lectura más grande. No es la distancia desde el tope del
-tubo hasta la superficie. El tubo vacío es `0 mm`, así que hay **una sola**
-constante:
+tubo hasta la superficie. El tubo vacío es `0 mm`.
+
+### De altura a kg: dos constantes del envase
+
+La conversión no es una regla de tres sobre la altura, porque la altura se mueve
+sola con la temperatura (§5). `gas_restante` calcula la **masa de las dos fases**:
 
 ```text
-level% = clamp( tank_level / full_mm * 100, 0, 100)
+kg = rho_liq(T) × a × h  +  rho_vap(T) × (v_tubo − a × h)
 ```
 
-| Constante | Valor actual | De dónde sale |
-|---|---|---|
-| `full_mm` | **1090** (`1280 × 0.85`) | altura de líquido con el tubo recién cargado: 1280 mm de alto útil de un tubo de 45 kg (dato de fabricante) × ~85 % de llenado — los envases de GLP no se cargan al 100 % del volumen (espacio de expansión de vapor), y 85 % es convención de industria, no un dato verificado para este tubo |
+y para eso hacen falta dos constantes del tubo, las dos **medibles**:
 
-**Es un punto de partida, no una calibración real.** Para corregirlo: anotar el
-`tank_level` en mm apenas carguen el tubo (recién cargado = lleno de verdad) y
-reemplazar 1090 en **las tres** fórmulas de `packages/gas.yaml` (nivel, restante
-y el umbral del `binary_sensor` están escritas independientes a propósito — no
-encadenadas entre sí, para no depender del orden de inicialización de los
-template sensors).
+| Constante | Qué es | Valor actual | De dónde sale |
+|---|---|---|---|
+| `a` | **sección** interna, m² — el área del círculo horizontal, convierte altura en volumen (`V_líquido = a × h`) | **0,0811** | despejada de suponer 1090 mm de líquido a tubo lleno (1280 mm de alto útil × ~85 % de llenado) y 45 kg a 15 °C |
+| `v_tubo` | **volumen interno total**, m³ — el vapor ocupa `v_tubo − a × h` | **0,108** | capacidad de agua típica de un envase de 45 kg |
 
-Es lineal sobre el %, así que `sensor.gas_restante` hereda la exactitud del
-`level`, calibración incluida.
+**Ninguna de las dos está calibrada, y `a` es sospechosa**: implica un diámetro
+equivalente de 32,1 cm, y un tubo de 45 kg real mide más que eso. O sea que el
+valor de arriba probablemente sobreestima la altura a tubo lleno y subestima la
+sección.
 
----
+Las dos se miden sin esperar a nada:
+
+- **`a` con una cinta métrica**: medir el perímetro `C` del tubo y hacer
+  `a = C² / (4π)`. Con `C` en metros sale directo en m².
+- **`v_tubo` leyendo la cofia**: los envases traen estampada la capacidad de agua
+  en litros; dividir por 1000.
+
+Están escritas dentro del `state` de `gas_restante`, en un solo lugar. Ajustadas
+esas dos, el resto de la cadena sale solo: el % es `kg / 45`, y los umbrales de
+aviso ya están en kg.
 
 ## 4. Filtrado de lecturas
 
@@ -273,53 +287,93 @@ térmico de §5). Las tres derivadas leen de ahí. La ventana no compromete las
 alertas: contra los días de autonomía que quedan es corta, y `gas_bajo` y
 `gas_aviso_critico` ya traen 2 h de debounce encima.
 
-## 5. Temperatura: el nivel se mueve sin que cambie el gas
+## 5. Temperatura: por qué se cuenta masa y no altura
 
 El tubo tiene **dos** efectos térmicos, y apuntan para lados contrarios:
 
-- **Dilatación del líquido.** El GLP líquido se expande ~0,18 % por °C (unas
-  diez veces más que el agua). Calentar sube el nivel sin que entre gas. El
-  efecto es proporcional a la **altura de líquido**.
+- **Dilatación del líquido.** El propano líquido se expande ~0,3 % por °C (unas
+  diez veces más que el agua). Calentar sube el nivel sin que entre gas. Escala
+  con la **altura de líquido**.
 - **Condensación del vapor.** Enfriar baja la presión de saturación, parte del
-  vapor se condensa y **sube** el nivel. Este es proporcional al **volumen de
-  vapor**, que crece a medida que el tubo se vacía.
+  vapor se condensa y **sube** el nivel. Escala con el **volumen de vapor**, que
+  crece a medida que el tubo se vacía.
 
-Así que el signo depende de cuán lleno esté: con el tubo lleno manda la
-dilatación (calor ⇒ sube) y con el tubo casi vacío manda la condensación
-(frío ⇒ sube). Medido sobre las estadísticas horarias de HA del 4 al 20 de
-agosto de 2026, quitándole la tendencia de consumo con una mediana móvil de
-±12 h:
+Así que el signo depende de cuán lleno esté el tubo. Con la masa fija y las
+constantes de §3, la altura que reportaría el sensor a tres temperaturas:
 
-| tramo de altura | dH/dT medido | n (horas) |
-|---|---|---|
-| 450-600 mm | +1,18 mm/°C | 122 |
-| 380-450 mm | +2,83 mm/°C | 41 |
-| 300-380 mm | +1,13 mm/°C | 52 |
-| 200-300 mm | +0,57 mm/°C | 97 |
-| 100-200 mm | +0,14 mm/°C | 67 |
+| masa real | 25 °C | 15 °C | 5 °C | recorrido | lo que diría un % por altura sola |
+|---|---|---|---|---|---|
+| 40 kg | 991 mm | 964 mm | 938 mm | 52 mm | 86,1 % .. 90,9 % |
+| 24 kg | 570 mm | 561 mm | 550 mm | 20 mm | 50,5 % .. 52,3 % |
+| 12 kg | 255 mm | 258 mm | 259 mm | 4 mm | 23,4 % .. 23,8 % |
+| 5 kg | 71 mm | 82 mm | 89 mm | 18 mm | 6,5 % .. 8,2 % |
 
-El coeficiente **se achica monótonamente a medida que el tubo se vacía** y va
-camino a cambiar de signo — que es exactamente lo que predice el modelo de los
-dos términos. El valor absoluto del cruce no es confiable: sale de un ajuste
-contaminado (más frío ⇒ más calefacción ⇒ más consumo, lo que sesga el
-coeficiente hacia arriba) y el término de condensación depende de la sección del
-tubo y del volumen total, dos constantes que **no están calibradas** (§3).
+Con el tubo lleno manda la dilatación (calor ⇒ sube) y con el tubo casi vacío
+manda la condensación (frío ⇒ sube); alrededor de 12 kg se cancelan y la altura
+casi no se mueve. Un % calculado sobre la altura sola se corre hasta 4,8 puntos
+por un swing de 20 °C, **sin que se haya consumido nada**.
 
-**La corrección exacta sería reportar masa en vez de altura**, sumando las dos
-fases:
+### La corrección
+
+Sumar las dos fases. Al condensarse, el gas pasa de un término al otro y el
+total no se mueve; la dilatación se cancela sola porque `rho_liq` es función de
+`T`:
 
 ```text
-kg = rho_liq(T) × A × h  +  rho_vap(T) × (V_tubo − A × h)
+kg = rho_liq(T) × a × h  +  rho_vap(T) × (v_tubo − a × h)
 ```
 
-Al condensarse, el gas pasa de un término al otro y el total no se mueve; la
-dilatación se cancela sola porque `rho_liq` es función de `T`. No está
-implementado a propósito: hacen falta `A` y `V_tubo`, y lo que se gana (≤1 mm/°C,
-menos de 0,1 % por °C) es **menos que el chapoteo** que ya filtra el promedio
-móvil de §4. Si algún día se calibra el tubo de verdad, esta es la forma
-correcta de hacerlo.
+Con correlaciones de propano saturado ajustadas a tabla con **menos de 1 % de
+error entre 0 y 40 °C** (kg/m³, `T` en °C):
 
----
+```text
+rho_liq(T) = 528 − 1,5·T
+rho_vap(T) = 10,8 + 0,27·T + 0,006·T²
+```
+
+| T | `rho_liq` modelo / tabla | `rho_vap` modelo / tabla |
+|---|---|---|
+| 0 °C | 528,0 / 528,6 | 10,8 / 10,8 |
+| 10 °C | 513,0 / 517,0 | 14,1 / 14,1 |
+| 20 °C | 498,0 / 500,5 | 18,6 / 18,6 |
+| 40 °C | 468,0 / 467,4 | 31,2 / 31,2 |
+
+Son de **propano**. Si el envase trajera mezcla con butano, `rho_liq` sube y
+`rho_vap` baja bastante, y habría que reajustarlas.
+
+### Dos consecuencias que hay que tener presentes
+
+1. **Con altura 0 el modelo no da 0 kg**: quedan ~1,6 kg de vapor. Es gas real y
+   se quema, así que contarlo es lo correcto, pero implica que `gas_nivel` tiene
+   **piso en ~3,9 %** en vez de llegar a 0. Por eso los avisos de §6 están en
+   **kg y no en %** (10 kg y 6 kg, que reproducen los puntos de aviso que daban
+   el 20 % y el 10 % del cálculo por altura sola).
+2. **Vaciado del todo el líquido, el modelo sobreestima**: asume vapor saturado,
+   y sin líquido el vapor deja de estarlo a medida que se consume. Es académico
+   — para entonces el sensor tampoco puede leer (§4).
+
+### Qué se gana, medido
+
+Sobre las estadísticas horarias de HA del 4 al 20 de agosto de 2026, quitándole
+la tendencia de consumo con una mediana móvil de ±12 h, el coeficiente térmico
+del valor reportado:
+
+| tramo de altura | por altura sola | por masa |
+|---|---|---|
+| 450-600 mm | +0,12 %/°C | +0,10 %/°C |
+| 300-450 mm | +0,31 %/°C | +0,26 %/°C |
+| 200-300 mm | +0,01 %/°C | +0,01 %/°C |
+| 100-200 mm | +0,02 %/°C | +0,03 %/°C |
+
+Mejora, pero poco, y conviene decir por qué: **ese ajuste está contaminado**. Más
+frío ⇒ más calefacción ⇒ más consumo, así que parte de lo que aparece como
+"coeficiente térmico" es en realidad consumo correlacionado con la temperatura, y
+eso ningún modelo físico lo saca. Además el tubo está en un lugar resguardado y
+en esos 16 días la temperatura se movió apenas entre 7 y 17 °C. Donde el modelo
+se nota de verdad es en el rango que la tabla de arriba muestra y estos datos no
+tienen: swings grandes, y el tubo cerca del fondo. Con las constantes de §3 sin
+calibrar, tampoco hay que esperar exactitud absoluta — lo que arregla es la
+**estabilidad**, no la escala.
 
 ## 6. Alertas por Telegram
 
@@ -328,8 +382,8 @@ Cuatro automations en `packages/gas.yaml`, todas contra
 
 | Automation | Dispara |
 |---|---|
-| `gas_aviso_bajo` | transición de `binary_sensor.gas_bajo` (< 20 % por 2 h) |
-| `gas_aviso_critico` | `sensor.gas_nivel` < 10 % por 2 h |
+| `gas_aviso_bajo` | transición de `binary_sensor.gas_bajo` (< 10 kg por 2 h) |
+| `gas_aviso_critico` | `sensor.gas_restante` < 6 kg por 2 h |
 | `gas_aviso_bateria_sensor` | batería del sensor < 15 % por 1 h |
 | `gas_aviso_sin_datos` | 12 h sin lecturas (sensor fuera de rango, batería agotada, despegado) |
 

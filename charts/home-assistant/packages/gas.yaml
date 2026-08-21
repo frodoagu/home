@@ -3,14 +3,24 @@
 #
 # `tank_level` es la ALTURA DE LÍQUIDO en mm sobre el sensor (va pegado ABAJO del
 # tubo, dispara hacia arriba): más gas => lectura más grande, tubo vacío = 0 mm.
-# Única constante: full_mm = 1090 (1280 mm de alto útil × ~85 % de llenado). Es
-# una estimación, no una calibración: para corregirla, anotar el `tank_level` con
-# el tubo recién cargado y reemplazar 1090 en las TRES fórmulas de abajo (están
-# escritas independientes entre sí a propósito, no encadenadas una con otra, para
-# no depender del orden de inicialización de los template sensors).
 #
 # La cadena es: `tank_level` (crudo) -> `gas_altura` (descarta el eco doble) ->
-# `gas_altura_suave` (promedio móvil) -> nivel %, kg restantes y `gas_bajo`.
+# `gas_altura_suave` (promedio móvil) -> `gas_restante` (kg) -> nivel % y
+# `gas_bajo`. La conversión de altura a kg vive en UN solo lugar, en
+# `gas_restante`: es larga y triplicarla sería peor que encadenar. Las guardas de
+# `availability` cubren el arranque, así que el orden de inicialización no importa.
+#
+# ┌─ CONSTANTES DEL TUBO (las dos son medibles, ninguna está calibrada todavía) ─┐
+# │ a      = 0,0811 m²  sección interna. Se saca con una cinta métrica alrededor │
+# │                     del tubo: a = C² / (4π). Este valor sale de suponer      │
+# │                     1090 mm de líquido a tubo lleno, y da 32 cm de diámetro  │
+# │                     equivalente — un 45 kg real mide más, así que sobreestima│
+# │                     la altura y subestima la sección.                        │
+# │ v_tubo = 0,108 m³   volumen interno total. Suele venir estampado en la cofia │
+# │                     como capacidad de agua, en litros.                       │
+# └──────────────────────────────────────────────────────────────────────────────┘
+# Están escritas dentro de `gas_restante`; al medirlas hay que tocarlas ahí y
+# nada más.
 template:
   # Con la columna de líquido corta el eco directo es débil y el sensor engancha
   # el segundo rebote (superficie -> fondo -> superficie), así que reporta ~2× la
@@ -44,21 +54,25 @@ template:
           {{ raw if prev >= 300 or raw < prev * 1.4 or raw > prev * 3 else prev }}
 
   - sensor:
-      # Los decimales van en el estado: el schema YAML de template no tiene
-      # `suggested_display_precision`, así que subir la precisión en la UI sobre
-      # un estado entero sólo agrega ceros.
-      - name: "Gas nivel"
-        unique_id: gas_nivel
-        unit_of_measurement: "%"
-        state_class: measurement
-        icon: mdi:propane-tank
-        availability: >-
-          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
-             and states('sensor.gas_altura_suave') | float(0) > 0 }}
-        state: >-
-          {{ min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) | round(2) }}
-
-      # Lineal sobre el %, así que hereda su exactitud (calibración incluida).
+      # Masa de gas en el tubo, sumando LAS DOS FASES. El líquido se dilata ~0,3 %
+      # por °C y el vapor se condensa cuando baja la temperatura, así que la
+      # ALTURA se mueve sola aunque no se consuma nada: hasta 52 mm en un swing
+      # de 20 °C con el tubo lleno, y con el signo dado vuelta cerca del fondo
+      # (ahí manda la condensación y enfriar SUBE el nivel). Contar las dos fases
+      # cancela las dos cosas: al condensarse, el gas pasa de un término al otro
+      # y el total no se mueve.
+      #
+      # Correlaciones de propano saturado, ajustadas a tabla con <1 % de error
+      # entre 0 y 40 °C (kg/m³, T en °C). Si el tubo trajera mezcla con butano,
+      # rho_liq sube y rho_vap baja bastante — habría que reajustarlas.
+      #
+      # Con altura 0 esto NO da 0 kg: quedan ~1,6 kg de vapor, que son gas real y
+      # todavía se queman. Por eso el % de abajo tiene piso en ~3,9 % y por eso
+      # los avisos van por kg y no por %.
+      #
+      # La temperatura viene en el mismo advertisement que la altura, así que si
+      # la altura está fresca la temperatura también; el default de 15 °C es sólo
+      # una red de contención.
       - name: "Gas restante"
         unique_id: gas_restante
         unit_of_measurement: "kg"
@@ -69,20 +83,43 @@ template:
           {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
              and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
-          {{ (min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) / 100 * 45) | round(1) }}
+          {% set a = 0.0811 %}
+          {% set v_tubo = 0.108 %}
+          {% set h = states('sensor.gas_altura_suave') | float(0) / 1000 %}
+          {% set t = states('sensor.pro_check_universal_5343_temperature') | float(15) %}
+          {% set rho_liq = 528 - 1.5 * t %}
+          {% set rho_vap = 10.8 + 0.27 * t + 0.006 * t * t %}
+          {% set v_liq = [a * h, v_tubo] | min %}
+          {{ (rho_liq * v_liq + rho_vap * (v_tubo - v_liq)) | round(2) }}
+
+      # Los decimales van en el estado: el schema YAML de template no tiene
+      # `suggested_display_precision`, así que subir la precisión en la UI sobre
+      # un estado entero sólo agrega ceros.
+      - name: "Gas nivel"
+        unique_id: gas_nivel
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:propane-tank
+        availability: >-
+          {{ states('sensor.gas_restante') not in ['unknown', 'unavailable'] }}
+        state: >-
+          {{ min(max(states('sensor.gas_restante') | float(0) / 45 * 100, 0), 100) | round(2) }}
 
   - binary_sensor:
-      # `delay_on` largo: el líquido chapotea y el eco varía entre lecturas, así
-      # que 2 h continuas bajo el umbral evitan avisos por un mal advertisement.
+      # Umbral en kg, no en %: el % ahora incluye el vapor y tiene piso en ~3,9 %,
+      # así que "20 %" ya no significa lo mismo. 10 kg reproduce el punto de aviso
+      # que daba el 20 % del cálculo por altura sola.
+      #
+      # `delay_on` largo: aunque el promedio móvil ya alisa el chapoteo, 2 h
+      # continuas bajo el umbral evitan avisar por una racha de lecturas malas.
       - name: "Gas bajo"
         unique_id: gas_bajo
         device_class: problem
         icon: mdi:propane-tank-outline
         availability: >-
-          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
-             and states('sensor.gas_altura_suave') | float(0) > 0 }}
+          {{ states('sensor.gas_restante') not in ['unknown', 'unavailable'] }}
         state: >-
-          {{ min(max(states('sensor.gas_altura_suave') | float(0) / 1090 * 100, 0), 100) < 20 }}
+          {{ states('sensor.gas_restante') | float(99) < 10 }}
         delay_on: "02:00:00"
 
 # Consumir gas hace hervir el líquido y la superficie chapotea: la misma hora
@@ -122,7 +159,7 @@ automation:
   - id: gas_aviso_bajo
     alias: Gas - Aviso de nivel bajo
     description: >-
-      Avisa por Telegram cuando el tubo baja del 20%. Dispara en la transición
+      Avisa por Telegram cuando quedan menos de 10 kg. Dispara en la transición
       del binary_sensor, que ya trae 2 h de debounce, así que manda un solo
       mensaje por cruce de umbral y no repite mientras siga bajo.
     trigger:
@@ -143,13 +180,15 @@ automation:
   - id: gas_aviso_critico
     alias: Gas - Aviso de nivel crítico
     description: >-
-      Segundo aviso al 10%. `for` de 2 h por la misma razón que el binary_sensor:
-      filtrar lecturas sueltas malas. numeric_state sólo dispara al cruzar el
-      umbral, así que no repite.
+      Segundo aviso a los 6 kg, que es donde avisaba el 10% del cálculo por
+      altura sola. En kg y no en %, por lo mismo que `gas_bajo`: el % ahora
+      cuenta el vapor y tiene piso en ~3,9%. `for` de 2 h por la misma razón que
+      el binary_sensor: filtrar lecturas sueltas malas. numeric_state sólo
+      dispara al cruzar el umbral, así que no repite.
     trigger:
       - platform: numeric_state
-        entity_id: sensor.gas_nivel
-        below: 10
+        entity_id: sensor.gas_restante
+        below: 6
         for: "02:00:00"
     action:
       - action: notify.send_message
