@@ -147,6 +147,15 @@ metrics). No change to `charts/traefik-config` or the ingress is needed.
   the chart's pre-delete hooks and cascade-delete the whole app (the Application
   picks up a `deletionTimestamp` and the `resources-finalizer` prunes children).
   Let ArgoCD reconcile on its own; if you must nudge it, use a plain refresh.
+- **A permanent `OutOfSync` on the `VMRule` is the CRD's own doing.** Its
+  v1beta1 schema declares `default: ""` for `record` (and for `alert`), so the
+  API server stamps `record: ""` onto every alerting rule and the live object
+  never matches the rendered manifest. selfHeal cannot close it — applying does
+  not remove a server-side default — so [apps/monitoring.yaml](../apps/monitoring.yaml)
+  drops the field with `ignoreDifferences` when it holds exactly that default,
+  leaving a genuine recording rule still comparable. `ServerSideDiff=true` also
+  hides it, but on this app it surfaces false diffs on the Grafana
+  Secret/Deployment and the operator's validating webhook instead.
 - If the app ever gets stuck deleting because the **operator is gone but `VM*`
   CRs still hold finalizers**, clear them so the cascade (and the app-of-apps
   recreation) can finish:

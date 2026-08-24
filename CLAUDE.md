@@ -145,6 +145,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 
 ## Per-chart gotchas (hard-won — don't re-investigate)
 
+- **monitoring — the `VMRule` sits OutOfSync forever without `ignoreDifferences`.**
+  The VMRule CRD schema defaults `record` (and `alert`) to `""`, so the API
+  server stamps `record: ""` onto every alerting rule and the live object cannot
+  match the manifest; selfHeal never closes it, because applying does not remove
+  a server-side default. `apps/monitoring.yaml` drops the field via a
+  `jqPathExpressions` `select(.record == "")`, so a real recording rule still
+  diffs. Don't reach for `ServerSideDiff=true` — it hides this one but surfaces
+  false diffs on Grafana and the operator's webhook. See docs/monitoring.md.
 - **monitoring — Grafana datasources/plugins.** The VM k8s-stack provisions
   datasources via `victoria-metrics-k8s-stack.defaultDatasources` (it renders a
   `grafana_datasource`-labelled ConfigMap that the Grafana sidecar imports), NOT
