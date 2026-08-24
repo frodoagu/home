@@ -10,15 +10,19 @@
 # `gas_restante`: es larga y triplicarla sería peor que encadenar. Las guardas de
 # `availability` cubren el arranque, así que el orden de inicialización no importa.
 #
-# ┌─ CONSTANTES DEL TUBO (las dos son medibles, ninguna está calibrada todavía) ─┐
-# │ a      = 0,0811 m²  sección interna. Se saca con una cinta métrica alrededor │
-# │                     del tubo: a = C² / (4π). Este valor sale de suponer      │
-# │                     1090 mm de líquido a tubo lleno, y da 32 cm de diámetro  │
-# │                     equivalente — un 45 kg real mide más, así que sobreestima│
-# │                     la altura y subestima la sección.                        │
-# │ v_tubo = 0,108 m³   volumen interno total. Suele venir estampado en la cofia │
-# │                     como capacidad de agua, en litros.                       │
+# ┌─ CONSTANTES DEL TUBO ────────────────────────────────────────────────────────┐
+# │ a      = 0,0748 m²  sección interna. CALIBRADA contra un tubo lleno: montado │
+# │                     el 23/08/2026, la altura extrapolada al momento del      │
+# │                     montaje es 1168 mm a 11 °C, y despejar 45 kg de ahí da   │
+# │                     esta sección (31 cm de diámetro equivalente, o sea 97 cm │
+# │                     de perímetro — verificable con una cinta).               │
+# │ v_tubo = 0,108 m³   volumen interno total. SIN calibrar; sale de la          │
+# │                     capacidad típica de un envase de 45 kg. Suele venir      │
+# │                     estampado en la cofia como capacidad de agua, en litros. │
 # └──────────────────────────────────────────────────────────────────────────────┘
+# `a` es insensible a `v_tubo` (mover v_tubo entre 0,100 y 0,115 corre `a` un
+# 0,5 %), porque a tubo lleno el término de vapor casi no pesa. Donde `v_tubo`
+# manda es en el otro extremo: fija el piso de ~1,6 kg de vapor con altura 0.
 # Están escritas dentro de `gas_restante`; al medirlas hay que tocarlas ahí y
 # nada más.
 template:
@@ -83,7 +87,7 @@ template:
           {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
              and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
-          {% set a = 0.0811 %}
+          {% set a = 0.0748 %}
           {% set v_tubo = 0.108 %}
           {% set h = states('sensor.gas_altura_suave') | float(0) / 1000 %}
           {% set t = states('sensor.pro_check_universal_5343_temperature') | float(15) %}
