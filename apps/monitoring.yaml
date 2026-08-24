@@ -33,3 +33,15 @@ spec:
       # The VictoriaMetrics operator ships large CRDs; server-side apply avoids
       # the client-side "metadata.annotations too long" error.
       - ServerSideApply=true
+  # The VMRule CRD schema defaults `record` (and `alert`) to "", so the API
+  # server stamps `record: ""` onto every alerting rule and the live object can
+  # never match the rendered manifest — a permanent OutOfSync that selfHeal
+  # cannot fix, because applying does not remove a server-side default. Drop the
+  # field only when it holds that default: a real recording rule still diffs.
+  # (ServerSideDiff=true also hides it, but it surfaces false diffs on Grafana
+  # and the operator's webhook instead — don't reach for it here.)
+  ignoreDifferences:
+    - group: operator.victoriametrics.com
+      kind: VMRule
+      jqPathExpressions:
+        - '.spec.groups[].rules[] | select(.record == "") | .record'
