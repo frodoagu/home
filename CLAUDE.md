@@ -286,9 +286,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   correlations good to <1 % over 0-40 °C) and the % is `kg/45`. Two consequences:
   with zero liquid it reads ~1,6 kg of vapour (real gas, so the % floors at
   ~3,9 %), which is why the alerts are in KG (10 / 6) and not in %. The two
-  cylinder constants — `a` (cross-section, from a tape around the tube: `C²/4π`)
-  and `v_tubo` (water capacity, stamped on the collar) — are NOT calibrated yet;
-  they set the scale, not the stability. See docs/gas-mopeka.md §3-§5.
+  cylinder constants set the scale, not the stability: `a` (cross-section) is
+  CALIBRATED — 0,0748 m², solved from 80 readings on a full tube (1168 mm at
+  11 °C, 2026-08-23), i.e. 31 cm equivalent diameter, and insensitive to `v_tubo`;
+  `v_tubo` (water capacity, stamped on the collar) is still the ~0,108 m³ typical
+  value and only moves the vapour floor. See docs/gas-mopeka.md §3-§5.
 - **lavarropas Candy — the HACS integration under-reports, so a package reads the
   device directly.** The Candy simply-Fi washer-dryer talks a LOCAL HTTP API
   (`/http-read.json?encrypted=1`) whose hex-encoded JSON is USUALLY — not always —

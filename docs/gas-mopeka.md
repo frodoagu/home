@@ -191,22 +191,32 @@ kg = rho_liq(T) × a × h  +  rho_vap(T) × (v_tubo − a × h)
 
 y para eso hacen falta dos constantes del tubo, las dos **medibles**:
 
-| Constante | Qué es | Valor actual | De dónde sale |
+| Constante | Qué es | Valor actual | Estado |
 |---|---|---|---|
-| `a` | **sección** interna, m² — el área del círculo horizontal, convierte altura en volumen (`V_líquido = a × h`) | **0,0811** | despejada de suponer 1090 mm de líquido a tubo lleno (1280 mm de alto útil × ~85 % de llenado) y 45 kg a 15 °C |
-| `v_tubo` | **volumen interno total**, m³ — el vapor ocupa `v_tubo − a × h` | **0,108** | capacidad de agua típica de un envase de 45 kg |
+| `a` | **sección** interna, m² — el área del círculo horizontal, convierte altura en volumen (`V_líquido = a × h`) | **0,0748** | **calibrada** contra un tubo lleno (ver abajo) |
+| `v_tubo` | **volumen interno total**, m³ — el vapor ocupa `v_tubo − a × h` | **0,108** | sin calibrar; capacidad típica de un envase de 45 kg |
 
-**Ninguna de las dos está calibrada, y `a` es sospechosa**: implica un diámetro
-equivalente de 32,1 cm, y un tubo de 45 kg real mide más que eso. O sea que el
-valor de arriba probablemente sobreestima la altura a tubo lleno y subestima la
-sección.
+### Cómo se calibró `a`
 
-Las dos se miden sin esperar a nada:
+El 23/08/2026 el sensor se pasó a un tubo lleno. Se registraron 80 lecturas en
+las 19,6 h siguientes, con `reading_quality` llegando a 100 %; ajustando una
+recta y extrapolando al momento del montaje (para descontar lo ya consumido) da
+**1168 mm a 11 °C**. Despejando `a` de la ecuación con 45 kg:
 
-- **`a` con una cinta métrica**: medir el perímetro `C` del tubo y hacer
-  `a = C² / (4π)`. Con `C` en metros sale directo en m².
-- **`v_tubo` leyendo la cofia**: los envases traen estampada la capacidad de agua
-  en litros; dividir por 1000.
+```text
+a = (45 − rho_vap(T) × v_tubo) / ((rho_liq(T) − rho_vap(T)) × h)
+```
+
+sale **0,0748 m²**, o sea **31 cm de diámetro equivalente** — unos 97 cm de
+perímetro, verificable con una cinta. La cuenta cierra sola por otro lado: con
+`v_tubo = 0,108` eso implica 1443 mm de altura interna y un llenado del 80,9 %,
+que es justo el límite de llenado convencional del GLP.
+
+`a` es **insensible a `v_tubo`**: moverlo entre 0,100 y 0,115 m³ corre `a` un
+0,5 %, porque a tubo lleno el término de vapor casi no pesa. Donde `v_tubo` sí
+manda es en el otro extremo — fija el piso de ~1,6 kg de vapor con altura 0 — así
+que sigue valiendo la pena leerlo: los envases traen estampada la **capacidad de
+agua en litros** en la cofia; dividir por 1000.
 
 Están escritas dentro del `state` de `gas_restante`, en un solo lugar. Ajustadas
 esas dos, el resto de la cadena sale solo: el % es `kg / 45`, y los umbrales de
@@ -371,9 +381,9 @@ frío ⇒ más calefacción ⇒ más consumo, así que parte de lo que aparece c
 eso ningún modelo físico lo saca. Además el tubo está en un lugar resguardado y
 en esos 16 días la temperatura se movió apenas entre 7 y 17 °C. Donde el modelo
 se nota de verdad es en el rango que la tabla de arriba muestra y estos datos no
-tienen: swings grandes, y el tubo cerca del fondo. Con las constantes de §3 sin
-calibrar, tampoco hay que esperar exactitud absoluta — lo que arregla es la
-**estabilidad**, no la escala.
+tienen: swings grandes, y el tubo cerca del fondo. Desde el 23/08/2026 `a` está calibrada
+contra un tubo lleno (§3), así que la escala también es real; `v_tubo` sigue
+estimada y lo único que mueve es el piso de vapor.
 
 ## 6. Alertas por Telegram
 
