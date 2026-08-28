@@ -24,8 +24,8 @@
 // The two devices in the gang. MAC as returned by Shelly.GetDeviceInfo
 // (uppercase, no separators). IPs are DHCP reservations in Pi-hole.
 let DEVICES = [
-  { mac: "7C2C67672C90", ip: "192.168.0.215" }, // Luz Puerta Escalera
-  { mac: "7C2C67609438", ip: "192.168.0.222" }  // Luz Puerta Principal
+  { mac: "7C2C67672C90", ip: "192.168.0.20" }, // Luz Puerta Escalera
+  { mac: "7C2C67609438", ip: "192.168.0.21" }  // Luz Puerta Principal
 ];
 
 // Both are Shelly 1 Mini Gen4: single channel, always id 0.

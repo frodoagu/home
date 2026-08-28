@@ -240,9 +240,9 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
 
 - **Broadlink devices** — added via the HA UI (Settings → Devices → Broadlink).
   They register as `remote.*` entities:
-  - `remote.control_living` — living-room blaster (`192.168.0.186`)
-  - `remote.control_dormitorio` — bedroom blaster (`192.168.0.101`)
-  - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.172`)
+  - `remote.control_living` — living-room blaster (`192.168.0.31`)
+  - `remote.control_dormitorio` — bedroom blaster (`192.168.0.30`)
+  - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
@@ -466,8 +466,8 @@ moved the bedroom TV off its configured `.10`. Both TVs are now pinned in
 
 | TV | IP | MAC |
 |---|---|---|
-| Sala de estar | `192.168.0.221` | `4c:ba:d7:11:bb:12` |
-| Dormitorio | `192.168.0.155` | `44:cb:8b:e4:44:c8` |
+| Sala de estar | `192.168.0.50` | `4c:ba:d7:11:bb:12` |
+| Dormitorio | `192.168.0.51` | `44:cb:8b:e4:44:c8` |
 
 > The `wake_on_lan:` activation and the two WoL automations are **versioned in git**
 > ([`packages/tv.yaml`](../charts/home-assistant/packages/tv.yaml), see

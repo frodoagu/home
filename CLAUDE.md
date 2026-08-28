@@ -209,6 +209,25 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   safe; the udp/443 `quic_filter` chain is LAN-only — see the next bullet). Effectiveness
   hinges on the ROUTER preserving the source IP on port-forward — verify via the
   rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
+- **pihole — LAN addressing: a static block, and `.lan` names instead of hardcoded
+  IPs.** `192.168.0.0/24` is split so the halves never meet: `.10-.99` static
+  reservations (one decade per device class — `.1x` ESPHome/BLE, `.2x` Shelly,
+  `.3x` Broadlink, `.4x` electrodomesticos, `.5x` TVs), `.100` the Pi (static on
+  the host, NOT a reservation), `.101-.149` headroom, `.150-.250` the dynamic
+  pool. dnsmasq would keep a reservation out of the pool even if it sat inside
+  it — the split is for legibility, not correctness. Pi-hole also serves the
+  reservations as DNS under `dns.domain` (`lan`), so `lavarropas.lan` resolves
+  from the reservation and consumers can stop hardcoding IPs. **Pods can't
+  resolve that by default** (CoreDNS forwards to the node's upstream, not to
+  Pi-hole) — `dns.clusterForwarding` renders the `coredns-custom` ConfigMap that
+  k3s's CoreDNS already mounts as an optional volume, adding a `lan:53 { forward
+  . 192.168.0.100 }` block with no change to the k3s-managed Corefile. TWO
+  consumers deliberately keep raw IPs: `shelly-proxy`'s nginx (a literal
+  `proxy_pass` resolves at STARTUP, so an unresolvable name = pod refuses to
+  start) and `scripts/luces-afuera.js` (runs on the Shelly; it exists to survive
+  HA and the Pi being down). Renumbering a device is never just a `values.yaml`
+  edit — Broadlink, webOS and ESPHome are config-flow integrations whose host
+  lives in HA's `/config/.storage`, unreachable from git. See docs/pihole.md.
 - **traefik-config + pihole — split-horizon DNS does NOT cover the HTTPS (SVCB)
   record.** Pi-hole's `localRecords` are hosts-file entries, so they override
   A/AAAA only; the type-65 HTTPS query is forwarded and Cloudflare answers

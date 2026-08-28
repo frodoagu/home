@@ -41,10 +41,10 @@ service:
 devices:
   - path: escalera
     label: Luz puerta escalera
-    host: 192.168.0.215
+    host: 192.168.0.20
   - path: principal
     label: Luz puerta principal
-    host: 192.168.0.222
+    host: 192.168.0.21
 
 # Seconds nginx waits on each device before giving up (a relay on the LAN answers
 # in milliseconds; a short timeout keeps a powered-off device from hanging the UI).

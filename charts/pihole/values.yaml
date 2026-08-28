@@ -84,6 +84,31 @@ dns:
   # ALL is safe here: :53 is not exposed to the internet (no port-forward).
   listeningMode: "all"
   dnssec: false
+  # Local DNS domain handed to DHCP clients (dnsmasq `domain=`). Pi-hole answers
+  # every DHCP lease AND every static reservation under it, using the entry's
+  # `name`, so `lavarropas.lan` resolves to whatever dhcp.reservations says — the
+  # reservation list below is the single source of truth for those addresses and
+  # consumers can stop hardcoding IPs. Bare names resolve too, but the qualified
+  # form is what works from inside the cluster (see clusterForwarding).
+  #
+  # "lan" is also FTL's default; it is set explicitly because the CoreDNS stanza
+  # below and several consumers now depend on this exact suffix.
+  domain: "lan"
+  # Make `*.<dns.domain>` resolvable from INSIDE the cluster.
+  #
+  # Pods resolve through CoreDNS, which forwards everything it doesn't own to the
+  # node's upstream — not to Pi-hole — so `lavarropas.lan` is NXDOMAIN in a pod
+  # even though it resolves fine on the LAN. This renders the `coredns-custom`
+  # ConfigMap that k3s already mounts into CoreDNS (optional volume at
+  # /etc/coredns/custom, imported by the stock Corefile's `import
+  # /etc/coredns/custom/*.server`), adding one server block that forwards the
+  # local domain back to Pi-hole on the node.
+  #
+  # piholeIP must be the node's LAN address: Pi-hole runs hostNetwork, so :53 is
+  # served on the host, not through a Service.
+  clusterForwarding:
+    enabled: true
+    piholeIP: "192.168.0.100"
   # Local DNS records (split-horizon DNS): on the LAN, these hostnames resolve
   # straight to the Pi's own IP instead of Cloudflare's, so traffic to
   # *.agu.com.ar never has to leave the network and come back. Traefik on the
@@ -105,14 +130,25 @@ dns:
         - logs.agu.com.ar
         - dash.agu.com.ar
 
-# DHCP server. Pi-hole replaces the router's DHCP so every device gets Pi-hole as
-# its DNS automatically.
-#
 # DHCP server. The router's own DHCP is OFF and the Pi has a static IP, so Pi-hole
-# now owns DHCP and advertises itself as the resolver. (Keep this in sync with the
+# owns DHCP and advertises itself as the resolver. (Keep this in sync with the
 # router: never run both DHCP servers at once.)
+#
+# Address plan for 192.168.0.0/24 — the static and the dynamic halves must never
+# meet, so a device that is addressed by IP somewhere else can't have its address
+# handed to a phone while it is off:
+#
+#   .1              router (gateway)
+#   .10 – .99       STATIC reservations, grouped by device class (see below)
+#   .100            the Pi itself — static on the host (NetworkManager), not here
+#   .150 – .250     DYNAMIC pool
+#
+# dnsmasq does keep a reserved address out of the pool even when it falls inside
+# start–end, so the split is not what makes this correct — it is what makes it
+# legible, and it leaves .101–.149 free as headroom on both sides.
 dhcp:
   enabled: true
+  # Dynamic pool. Must stay clear of the .10–.99 static block above.
   start: "192.168.0.150"
   end: "192.168.0.250"
   # Default gateway advertised to clients (the router).
@@ -120,33 +156,44 @@ dhcp:
   leaseTime: "24h"
   ipv6: false
   rapidCommit: false
-  # Static DHCP reservations (MAC -> fixed IP). Use for devices that MUST keep
-  # their current IP — e.g. Broadlink (addressed by IP in Home Assistant) and
-  # ESPHome Bluetooth proxies. Each entry: { mac, ip, name? }. The reserved IP
-  # may be inside or outside the start–end range; dnsmasq honours it either way.
-  #   reservations:
-  #     - { mac: "AA:BB:CC:DD:EE:FF", ip: "192.168.0.40", name: "broadlink-living" }
-  #     - { mac: "11:22:33:44:55:66", ip: "192.168.0.41", name: "esphome-btproxy" }
+  # Static DHCP reservations (MAC -> fixed IP), for devices that MUST keep their
+  # address because something else addresses them by IP: Home Assistant config
+  # entries (Broadlink, webOS TVs), the Shelly reconciler + proxy, the Candy
+  # package. Each entry: { mac, ip, name? } -> one dnsmasq `dhcp-host`.
   #
-  # Discovered from the live ARP table + OUI lookup (current IPs preserved).
-  # NOTE: the ARP table only shows recently-contacted devices — verify this list
-  # against the router lease table / Home Assistant and add any ESPHome proxy
-  # that was asleep when this was captured.
+  # One decade per device class, in ascending order. Add a device to its own
+  # decade and keep the list sorted; a new class takes the next free decade.
+  #   .10–.19  ESPHome / BLE proxies
+  #   .20–.29  Shelly relays
+  #   .30–.39  Broadlink IR blasters
+  #   .40–.49  electrodomesticos
+  #   .50–.59  TVs / media
+  #
+  # Renumbering one of these is never just an edit here: grep the repo for the
+  # old address (charts/shelly-*, packages/lavarropas.yaml, scripts/candyctl.py,
+  # docs/) and re-point the matching Home Assistant config entry by hand — those
+  # are config-flow integrations, so git cannot set their host.
   reservations:
-    - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.101", name: "broadlink-1" }
-    - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.186", name: "broadlink-2" }
-    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.172", name: "broadlink-3" }
-    - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.56", name: "esphome-btproxy" }
+    # ESPHome BLE proxies — relay the Mopeka gas sensor and the BTHome
+    # thermometers that sit out of the Pi's Bluetooth range.
+    - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.10", name: "esphome-btproxy" }
+    - { mac: "30:76:f5:e6:ab:38", ip: "192.168.0.11", name: "ble-proxy" }
+    # Shelly Mini 1 Gen4 — the two outdoor doors. Addressed by IP from
+    # charts/shelly-config (reconciler), charts/shelly-proxy (nginx) and
+    # scripts/luces-afuera.js (the gang script's peer list).
+    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.20", name: "shelly-escalera" }
+    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.21", name: "shelly-puerta-principal" }
+    # Broadlink IR blasters — Home Assistant addresses each one by IP.
+    - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.30", name: "broadlink-1" }        # dormitorio
+    - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.31", name: "broadlink-2" }        # living
+    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }        # cocina
+    # Lavasecarropas Candy simply-Fi: packages/lavarropas.yaml and
+    # scripts/candyctl.py hit its local HTTP API by IP.
+    - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.40", name: "lavarropas" }
     # LG webOS TVs — pinned so Home Assistant's webostv host (and the WoL magic
     # packet target) never drift when the DHCP lease renews.
-    - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.221", name: "tv-sala" }
-    - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.155", name: "tv-dormitorio" }
-    # Shelly Mini 1 Gen4 controlando la puerta de la escalera exterior.
-    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.215", name: "shelly-escalera" }
-    # Shelly Mini 1 Gen4 controlando la puerta principal.
-    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
-    # Lavasecarropas Candy simply-Fi: la integracion de HA lo direcciona por IP.
-    - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.164", name: "lavarropas" }
+    - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
+    - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
 
 # Resource requests/limits – tuned small for the RPi.
 resources:

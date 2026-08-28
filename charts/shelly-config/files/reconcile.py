@@ -2,7 +2,10 @@
 """Reconcile declarative config onto Shelly Gen2+ devices over their local RPC.
 
 Runs from the cluster (CronJob + PostSync hook, see charts/shelly-config). Pods
-reach the LAN devices directly by IP -- no host networking needed.
+route to the LAN directly -- no host networking needed. Each device's `host` is
+its Pi-hole DHCP reservation NAME (e.g. shelly-escalera.lan), resolvable from a
+pod via the coredns-custom forward in charts/pihole, so renumbering a device does
+not touch this chart.
 
 Idempotent by design: it reads the live config, compares, and only writes on
 drift. A no-op run prints "in sync" and touches nothing, so it is safe to run

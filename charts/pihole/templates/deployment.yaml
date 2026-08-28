@@ -71,6 +71,10 @@ spec:
               value: {{ .Values.dns.listeningMode | quote }}
             - name: FTLCONF_dns_dnssec
               value: {{ .Values.dns.dnssec | quote }}
+            # Local domain for DHCP leases + static reservations, so a device is
+            # reachable as <reservation name>.<domain> instead of by IP.
+            - name: FTLCONF_dns_domain
+              value: {{ .Values.dns.domain | quote }}
             {{- if .Values.dns.localRecords }}
             # Split-horizon local DNS records (agu.com.ar -> the Pi's LAN IP).
             - name: FTLCONF_dns_hosts
