@@ -9,8 +9,8 @@ their local RPC.
 
 | Light | `switch.*` (Home Assistant) | Input (wall switch) | IP | Model |
 |---|---|---|---|---|
-| Puerta Principal | `switch.afuera_interruptor_puerta_principal` | `binary_sensor.afuera_interruptor_puerta_principal_entrada_0` | 192.168.0.222 | Shelly 1 Mini Gen4 |
-| Puerta Escalera | `switch.afuera_interruptor_puerta_escalera` | `binary_sensor.afuera_interruptor_puerta_escalera_entrada_0` | 192.168.0.215 | Shelly 1 Mini Gen4 |
+| Puerta Principal | `switch.afuera_interruptor_puerta_principal` | `binary_sensor.afuera_interruptor_puerta_principal_entrada_0` | `shelly-puerta-principal.lan` (`.21`) | Shelly 1 Mini Gen4 |
+| Puerta Escalera | `switch.afuera_interruptor_puerta_escalera` | `binary_sensor.afuera_interruptor_puerta_escalera_entrada_0` | `shelly-escalera.lan` (`.20`) | Shelly 1 Mini Gen4 |
 
 IPs are DHCP reservations in [`charts/pihole`](../charts/pihole). Both devices are
 also commissioned into a Matter fabric (Google Home) and picked up by Home
@@ -105,6 +105,17 @@ that decides the grouping, is in
   silent; the reconciler pins both.
 - **Pods reach the devices directly.** No host networking needed for the
   reconciler — a normal pod routes to `192.168.0.0/24` fine.
+- **Names here, IPs there — on purpose.** The reconciler addresses each device by
+  its Pi-hole reservation name (`shelly-escalera.lan`), so a renumbering is one
+  line in `charts/pihole`. The other two consumers deliberately keep the raw IP:
+  - **`luces-afuera.js`** runs *on the device*, and the whole point of that is
+    surviving HA (and the Pi) being down. Resolving a name would put Pi-hole back
+    on the critical path of every actuation.
+  - **`charts/shelly-proxy`** feeds nginx a literal `proxy_pass`, which nginx
+    resolves **at startup** — an unresolvable name means the pod refuses to start,
+    so a cold cluster boot would CrashLoop shelly-proxy until Pi-hole is serving.
+    Switching it would mean a `resolver` directive plus `proxy_pass` through a
+    variable (runtime resolution, 502 instead of a crash).
 
 ## How the config gets there (`charts/shelly-config`)
 
@@ -131,8 +142,8 @@ kubectl -n shelly-config create job --from=cronjob/shelly-config shelly-reconcil
 kubectl -n shelly-config logs job/shelly-reconcile-manual
 
 # what a device actually has
-curl 'http://192.168.0.215/rpc/Switch.GetConfig?id=0'
-curl 'http://192.168.0.215/rpc/Script.List'
+curl 'http://shelly-escalera.lan/rpc/Switch.GetConfig?id=0'
+curl 'http://shelly-escalera.lan/rpc/Script.List'
 ```
 
 Adding a device or a script is a `values.yaml` edit (plus the `.js` under
@@ -146,8 +157,8 @@ and delete the script:
 
 ```bash
 CFG='%7B%22id%22%3A0%2C%22in_mode%22%3A%22follow%22%7D'
-curl "http://192.168.0.215/rpc/Switch.SetConfig?id=0&config=$CFG"
-curl 'http://192.168.0.215/rpc/Script.Delete?id=1'
+curl "http://shelly-escalera.lan/rpc/Switch.SetConfig?id=0&config=$CFG"
+curl 'http://shelly-escalera.lan/rpc/Script.Delete?id=1'
 ```
 
 ## Reaching the devices from outside (`charts/shelly-proxy`)
@@ -162,9 +173,9 @@ private section (`images/home-site`) and the homepage dash.
 An nginx pod does two things on that host:
 
 - serves a small self-hosted **control panel** at `/` (on/off + status per light);
-- reverse-proxies **one PathPrefix per device** — `/escalera/…` → `192.168.0.215`,
-  `/principal/…` → `192.168.0.222` — so `/<path>/rpc/<Method>` hits the device's
-  `/rpc/<Method>`.
+- reverse-proxies **one PathPrefix per device** — `/escalera/…` → `192.168.0.20`,
+  `/principal/…` → `192.168.0.21` — so `/<path>/rpc/<Method>` hits the device's
+  `/rpc/<Method>`. These stay raw IPs, not `.lan` names (see the gotcha above).
 
 **Why a custom panel and not the device's own web UI:** the Shelly Gen4 admin UI
 drives the device over a *hardcoded* `ws://…/rpc` WebSocket (`"ws://"+location.host`,

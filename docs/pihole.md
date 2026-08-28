@@ -5,7 +5,8 @@ Chart: `charts/pihole/` · App: `apps/pihole.yaml` (namespace `pihole`).
 
 - Web UI: `https://pihole.agu.com.ar/admin` (Google sign-in gated)
 - DNS: `192.168.0.100:53` (the Pi's static LAN IP)
-- DHCP: leases `192.168.0.150 – .250`, gateway `192.168.0.1`
+- DHCP: dynamic pool `192.168.0.150 – .250`, static reservations `.10 – .99`,
+  gateway `192.168.0.1` (see [address plan](#address-plan))
 
 ## Why it also does DHCP
 
@@ -104,37 +105,127 @@ its own (see the chicken-and-egg section above).
 
 ## Static DHCP reservations
 
-Devices that must keep their current IP — **Broadlink** (Home Assistant addresses it
-by IP), **ESPHome Bluetooth proxies**, and **Shelly** door switches — get MAC→IP
-reservations in `dhcp.reservations`:
+### Address plan
+
+The static and the dynamic halves of `192.168.0.0/24` are kept apart, so no device
+that something else addresses by IP can ever have its address handed to a phone
+while it is off:
+
+| Range | Use |
+|---|---|
+| `.1` | router (gateway) |
+| `.10 – .99` | **static** reservations, one decade per device class |
+| `.100` | the Pi — static on the host (NetworkManager), not a DHCP reservation |
+| `.101 – .149` | free headroom |
+| `.150 – .250` | **dynamic** pool (`dhcp.start` – `dhcp.end`) |
+
+dnsmasq already keeps a reserved address out of the pool even when it sits inside
+`start`–`end`, so the split isn't what makes this correct — it's what makes it
+readable, and it means the pool can be widened without auditing every reservation.
+
+### The reservations
+
+Devices that must keep their address because something else addresses them by IP —
+**Broadlink** and the **webOS TVs** (Home Assistant config entries), the **Shelly**
+door switches (`charts/shelly-config` + `charts/shelly-proxy`), the **Candy**
+washer-dryer (`packages/lavarropas.yaml`, `scripts/candyctl.py`) and the **ESPHome
+BLE proxies** — get MAC→IP reservations in `dhcp.reservations`, grouped by class:
 
 ```yaml
 dhcp:
   reservations:
-    - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.101", name: "broadlink-1" }
-    - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.186", name: "broadlink-2" }
-    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.172", name: "broadlink-3" }
-    - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.56",  name: "esphome-btproxy" }
-    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.215", name: "shelly-escalera" }
-    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.222", name: "shelly-puerta-principal" }
+    # .10-.19  ESPHome / BLE proxies
+    - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.10", name: "esphome-btproxy" }
+    - { mac: "30:76:f5:e6:ab:38", ip: "192.168.0.11", name: "ble-proxy" }
+    # .20-.29  Shelly relays
+    - { mac: "7c:2c:67:67:2c:90", ip: "192.168.0.20", name: "shelly-escalera" }
+    - { mac: "7c:2c:67:60:94:38", ip: "192.168.0.21", name: "shelly-puerta-principal" }
+    # .30-.39  Broadlink IR blasters
+    - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.30", name: "broadlink-1" }  # dormitorio
+    - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.31", name: "broadlink-2" }  # living
+    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }  # cocina
+    # .40-.49  electrodomesticos
+    - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.40", name: "lavarropas" }
+    # .50-.59  TVs / media
+    - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
+    - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
 ```
 
 To find a new Shelly's MAC/IP: it registers on the LAN with no reverse-DNS hostname
 (`nmap -sn 192.168.0.0/24`), and its local HTTP API confirms the model —
 `curl http://<ip>/shelly`.
 
-These render into `FTLCONF_dhcp_hosts` as `mac,ip,name` entries joined by `;`. A
-reserved IP may sit inside or outside the pool. To find a device's MAC: the router's
-lease table, Home Assistant, or the Pi's neighbour table + an OUI lookup:
+These render into `FTLCONF_dhcp_hosts` as `mac,ip,name` entries joined by `;`. To
+find a device's MAC: the live lease table, Home Assistant, or the Pi's neighbour
+table + an OUI lookup:
 
 ```bash
+kubectl -n pihole exec deploy/pihole -- cat /etc/pihole/dhcp.leases
 ip neigh show          # IP ↔ MAC on the LAN (eth0)
 curl -s https://api.macvendors.com/<mac>   # identify the vendor
 ```
 
+> **Renumbering one of these is never just an edit in `values.yaml`.** Grep the repo
+> for the old address (`charts/shelly-config`, `charts/shelly-proxy`,
+> `packages/lavarropas.yaml`, `scripts/candyctl.py`, `docs/`) and re-point the
+> matching Home Assistant config entry **by hand** — Broadlink, webOS and ESPHome are
+> config-flow integrations that keep the host in `/config/.storage`, where git can't
+> reach it. The device itself only picks up the new address when its lease renews
+> (`leaseTime: 24h`) or it is power-cycled.
+
 > The reservation list only captures devices seen at setup time. Any device that
 > previously relied on a **router** DHCP reservation loses it when the router's DHCP
 > is disabled — add it here too.
+
+### Reaching a device by name instead of by IP
+
+Pi-hole hands DHCP clients the local domain `lan` (`dns.domain` →
+`FTLCONF_dns_domain`) and answers every lease **and every static reservation**
+under it, using the entry's `name`. So the reservation list is the single source of
+truth for those addresses and consumers don't have to hardcode them:
+
+```bash
+dig +short lavarropas.lan @192.168.0.100        # -> 192.168.0.40
+dig +short shelly-escalera.lan @192.168.0.100   # -> 192.168.0.20
+```
+
+That works on the LAN for free (every device gets Pi-hole as its resolver), but
+**not inside the cluster**: pods resolve through CoreDNS, which forwards what it
+doesn't own to the node's upstream rather than to Pi-hole, so `lavarropas.lan` is
+NXDOMAIN in a pod. `dns.clusterForwarding` fixes that by rendering the
+`coredns-custom` ConfigMap:
+
+```
+lan:53 {
+    errors
+    cache 30
+    forward . 192.168.0.100
+}
+```
+
+k3s's CoreDNS already mounts a ConfigMap named exactly `coredns-custom` from
+`kube-system` as an **optional** volume at `/etc/coredns/custom`, and its stock
+Corefile ends with `import /etc/coredns/custom/*.server` — so this splices in a
+server block without touching the k3s-managed Corefile, and no Deployment change is
+needed. `forward` points at the **node's LAN IP** because Pi-hole runs hostNetwork
+(there is no Service for :53). CoreDNS's `reload` plugin picks the change up within
+~2 min; `kubectl -n kube-system rollout restart deploy/coredns` forces it.
+
+Who uses names, and who deliberately doesn't:
+
+| Consumer | Runs in | Addressing |
+|---|---|---|
+| `packages/lavarropas.yaml` | HA pod | `lavarropas.lan` |
+| `charts/shelly-config` reconciler | CronJob pod | `shelly-*.lan` |
+| `scripts/candyctl.py` | your laptop | `lavarropas.lan` |
+| `charts/shelly-proxy` nginx | nginx pod | **IP** — literal `proxy_pass` resolves at startup, so an unresolvable name makes the pod refuse to start |
+| `scripts/luces-afuera.js` | **on the Shelly** | **IP** — it exists to survive HA and the Pi being down; a name puts Pi-hole back on the critical path |
+
+Note the circularity this introduces for the pod cases: Pi-hole is itself a
+workload, so on a cold boot a pod may briefly fail to resolve a device until
+Pi-hole is up. That's the same chicken-and-egg the DHCP cutover has, and the same
+answer — these are all retrying consumers (the Candy package retries 5×, the
+reconciler runs again in 30 min).
 
 ## Configuration
 

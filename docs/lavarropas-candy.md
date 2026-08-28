@@ -16,7 +16,7 @@ April 2024 because of the UK PSTI legislation.
 
 ```
   Candy washer-dryer      <──HTTP, no TLS──>  Home Assistant
-  192.168.0.164 (ESP8266)                     packages/lavarropas.yaml
+  lavarropas.lan / .40 (ESP8266)             packages/lavarropas.yaml
   48:55:19:c1:90:bb        read : hex, XOR      17 sensor entities, 60 s polling
       │                    write: hex, plain    5 helpers + 2 scripts (§8)
       └── UDP broadcast heartbeat :55555 every ~7 s
@@ -90,7 +90,7 @@ the XOR **only when the result does not already start with `{`**. Decoding
 failures across all entities simultaneously point here first: check with
 
 ```bash
-curl -sS "http://192.168.0.164/http-read.json?encrypted=1" \
+curl -sS "http://lavarropas.lan/http-read.json?encrypted=1" \
   | python3 -c "import sys;print(bytes.fromhex(sys.stdin.read().strip())[:40])"
 ```
 
@@ -305,7 +305,7 @@ machine and creates no tumble-dryer device.
 1. HACS → search **"Candy Simply-Fi"** (`ofalvai/home-assistant-candy`) → download
    → restart HA.
 2. Settings → Devices & Services → Add Integration → **Candy**.
-3. Single field: the **IP** (`192.168.0.164`). The key is auto-detected; if it ever
+3. Single field: the **IP** (`192.168.0.40`, i.e. `lavarropas.lan`). The key is auto-detected; if it ever
    has to be entered by hand, it is in §2.
 4. Move the device to the **Cocina** area and rename the entities — by default they
    come out as `sensor.bathroom_washing_machine_*` and a spurious "Bathroom" area is
@@ -508,7 +508,7 @@ does it. Everything in this section was verified against this machine on
 ### 8.1 The wire format
 
 ```text
-GET http://192.168.0.164/http-write.json?encrypted=1&data=<HEX>
+GET http://lavarropas.lan/http-write.json?encrypted=1&data=<HEX>
 ```
 
 Two things about that URL are counter-intuitive, and between them they are why

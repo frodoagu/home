@@ -17,7 +17,9 @@ import sys
 import time
 import urllib.request
 
-IP = "192.168.0.164"
+# DHCP reservation name from charts/pihole (dhcp.reservations + dns.domain),
+# so the washer-dryer can be renumbered without touching this script.
+HOST = "lavarropas.lan"
 KEY = b"aeaclekbgmjjcebg"
 RUNNING = 2
 
@@ -72,7 +74,7 @@ def fetch(url: str, attempts: int = 4) -> str:
 
 
 def read_status() -> dict:
-    raw = fetch(f"http://{IP}/http-read.json?encrypted=1")
+    raw = fetch(f"http://{HOST}/http-read.json?encrypted=1")
     return json.loads(decrypt(raw))["statusLavatrice"]
 
 
@@ -132,7 +134,7 @@ def cmd_probe(_args) -> None:
     endpoint is routed, never that a command was understood. Only a field diff
     against http-read does that.
     """
-    url = f"http://{IP}/http-write.json?encrypted=1"
+    url = f"http://{HOST}/http-write.json?encrypted=1"
     print(f"GET {url}\n")
     body = fetch(url)
     print(f"crudo      : {body[:160]}")
@@ -148,11 +150,11 @@ def cmd_send(args) -> None:
     # the hex of the plain command. The other two are kept to re-check that.
     if args.plain:
         # encrypted=0 is rejected outright (BAD REQUEST) on both paths here.
-        url = f"http://{IP}/http-write.json?encrypted=0&{args.command}"
+        url = f"http://{HOST}/http-write.json?encrypted=0&{args.command}"
         print(f"comando  : {args.command}  (encrypted=0)")
     else:
         payload = xor(args.command.encode()).hex().upper() if args.xor else to_hex(args.command)
-        url = f"http://{IP}/http-write.json?encrypted=1&data={payload}"
+        url = f"http://{HOST}/http-write.json?encrypted=1&data={payload}"
         print(f"comando  : {args.command}")
         print(f"hex      : {payload}{'  (XOR - inerte)' if args.xor else ''}")
     print(f"URL      : {url}\n")

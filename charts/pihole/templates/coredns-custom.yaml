@@ -1,0 +1,29 @@
+{{- if .Values.dns.clusterForwarding.enabled }}
+---
+# Teaches CoreDNS to resolve the LAN's local domain through Pi-hole, so a pod can
+# reach a device by its DHCP reservation name instead of a hardcoded IP.
+#
+# This is NOT part of the pihole Deployment: k3s ships its CoreDNS with an
+# `optional` volume for a ConfigMap named exactly `coredns-custom` in kube-system,
+# mounted at /etc/coredns/custom, and the stock Corefile ends with
+# `import /etc/coredns/custom/*.server`. So a `<name>.server` key here is spliced
+# in as an extra server block with no change to the k3s-managed Corefile. The name
+# and namespace are fixed by that contract — don't template them.
+#
+# CoreDNS's `reload` plugin picks the change up on its own (up to ~2 min); a
+# `kubectl -n kube-system rollout restart deploy/coredns` forces it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  labels:
+    {{- include "pihole.labels" . | nindent 4 }}
+data:
+  {{ .Values.dns.domain }}.server: |
+    {{ .Values.dns.domain }}:53 {
+        errors
+        cache 30
+        forward . {{ .Values.dns.clusterForwarding.piholeIP }}
+    }
+{{- end }}

@@ -29,7 +29,7 @@ command_line:
       # nunca llegaba al tercero. El equipo responde en 1-2 s cuando responde,
       # de modo que conviene timeout corto y mas intentos.
       command: >-
-        for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://192.168.0.164/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
+        for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://lavarropas.lan/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
         printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';r=bytes.fromhex(sys.stdin.read().strip());d=r if r.lstrip().startswith(b'{') else bytes(c^k[i%16] for i,c in enumerate(r));print(json.dumps(json.loads(d)['statusLavatrice']))"
       command_timeout: 55
       scan_interval: 60
@@ -386,7 +386,7 @@ shell_command:
   lavasecarropas_enviar: >-
     sh -c 'H=$(python3 -c "import sys;print(sys.argv[1].encode().hex().upper())" "$1");
     for i in 1 2 3; do
-    curl -sS -m 8 "http://192.168.0.164/http-write.json?encrypted=1&data=$H" >/dev/null && exit 0;
+    curl -sS -m 8 "http://lavarropas.lan/http-write.json?encrypted=1&data=$H" >/dev/null && exit 0;
     sleep 3; done; exit 1' _ "{{ comando }}"
 
 script:
