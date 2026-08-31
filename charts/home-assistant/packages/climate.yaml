@@ -30,6 +30,10 @@ climate:
     device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air) - mismo equipo que el living
     controller_data: remote.broadlink_cocina
 
+# The kids' room AC has no block here: it isn't IR. It arrives through the ESPHome
+# integration from the SLWF-01pro module (esphome/aire-chicos.yaml), which creates
+# `climate.aire_chicos` by discovery. See docs/aire-chicos-slwf01pro.md.
+
 # Escenas de acceso rápido para los aires. Aparecen como entidades script.*
 # (botones en la app HA / cards del dashboard) y, al estar `script` en
 # googleAssistant.exposedDomains, también como escenas en Google Home.
@@ -228,6 +232,57 @@ script:
               entity_id:
                 - climate.aire_cocina
                 - climate.aire_living
+            data:
+              hvac_mode: cool
+              temperature: 24
+    mode: single
+
+  # The kids' room stands alone: it is in neither the "todos" scenes nor the
+  # scheduled automations below, so it never starts or stops unless someone asks.
+  # Heat goes to 20, same as the main bedroom.
+  #
+  # These two toggles can trust the state they read: `climate.aire_chicos` is
+  # ESPHome over the unit's own bus, not IR, so it reports what the AC is really
+  # doing — even when someone used the physical remote.
+  aire_chicos_toggle_calor:
+    alias: Aire chicos - Toggle (calor 20 / off)
+    icon: mdi:fire
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_chicos') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id: climate.aire_chicos
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.aire_chicos
+            data:
+              hvac_mode: heat
+              temperature: 20
+    mode: single
+
+  aire_chicos_toggle_frio:
+    alias: Aire chicos - Toggle (frío 24 / off)
+    icon: mdi:snowflake
+    sequence:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ states('climate.aire_chicos') not in ['off', 'unavailable', 'unknown'] }}
+            sequence:
+              - action: climate.turn_off
+                target:
+                  entity_id: climate.aire_chicos
+        default:
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.aire_chicos
             data:
               hvac_mode: cool
               temperature: 24

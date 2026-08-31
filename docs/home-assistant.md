@@ -395,6 +395,33 @@ Notes that matter when editing them:
   `below` are strict. Where the boundary matters (`≥ 19 °C` outside, `≤ 17 °C`
   inside) the check is a template instead — the reasons are in the comments.
 
+## Air conditioner over Wi-Fi (ESPHome + Midea) — the kids' room
+
+The fourth split (a **Philco iView 3800 W**, kids' room) is **not** IR. It carries
+a **SMLIGHT SLWF-01pro** module plugged into the indoor unit's 4-pin port, running
+[`esphome/aire-chicos.yaml`](../esphome/aire-chicos.yaml) and speaking Midea's UART
+protocol, so HA gets `climate.aire_chicos` through the **ESPHome integration** —
+there is no `climate:` block for it in `climate.yaml`.
+
+What changes versus the three SmartIR units:
+
+- **The link is two-way.** The entity reports what the unit is actually doing,
+  including changes made with the physical remote, and the ambient temperature
+  comes from the AC itself (no ATC thermometer needed).
+- **Its scripts can trust the state they read.** `aire_chicos_toggle_calor` /
+  `aire_chicos_toggle_frio` are plain toggles, without the "only turn off when all
+  of them are on" dance the IR groups need.
+- **It stays out of the group scenes and the schedule** above — the kids' room
+  never starts or stops on its own.
+- **It depends on Wi-Fi.** The entity goes `unavailable` when the module drops,
+  where an IR blast would still work.
+
+Whether the module works at all hinges on the unit being Midea inside, which
+Philco's label does not settle — the bedroom "Philco" in this same house turned
+out to be a rebranded Mitsubishi Electric. Compatibility checks, physical install,
+flashing, the DHCP reservation and the fallback are in
+[docs/aire-chicos-slwf01pro.md](aire-chicos-slwf01pro.md).
+
 ## Sensor health alerts (`salud.yaml`)
 
 [`packages/salud.yaml`](../charts/home-assistant/packages/salud.yaml) is

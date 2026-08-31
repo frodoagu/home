@@ -178,6 +178,10 @@ dhcp:
     # thermometers that sit out of the Pi's Bluetooth range.
     - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.10", name: "esphome-btproxy" }
     - { mac: "30:76:f5:e6:ab:38", ip: "192.168.0.11", name: "ble-proxy" }
+    # SLWF-01pro, the Wi-Fi module in the kids' room AC (esphome/aire-chicos.yaml).
+    # Commented out until its MAC is known: an invalid `dhcp-host` takes down the
+    # whole DHCP config, not just this entry. See docs/aire-chicos-slwf01pro.md.
+    # - { mac: "PONER_LA_MAC", ip: "192.168.0.12", name: "aire-chicos" }
     # Shelly Mini 1 Gen4 — the two outdoor doors. Addressed by IP from
     # charts/shelly-config (reconciler), charts/shelly-proxy (nginx) and
     # scripts/luces-afuera.js (the gang script's peer list).
