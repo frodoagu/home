@@ -143,7 +143,7 @@ dhcp:
     # .30-.39  Broadlink IR blasters
     - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.30", name: "broadlink-1" }  # dormitorio
     - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.31", name: "broadlink-2" }  # living
-    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }  # cocina
+    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }  # pieza de los chicos
     # .40-.49  electrodomesticos
     - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.40", name: "lavarropas" }
     # .50-.59  TVs / media

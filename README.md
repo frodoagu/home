@@ -424,7 +424,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/secrets.md](docs/secrets.md) — every secret as a committed `SealedSecret`: the controller-key bootstrap, minting/rotation/adoption, and the off-repo key backup
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, versioned device config (HA packages: split-AC climate via SmartIR/Broadlink, unified webOS+IR TVs + WoL), device discovery (host networking), Bluetooth
-- [docs/aire-chicos-slwf01pro.md](docs/aire-chicos-slwf01pro.md) — the kids'-room AC over Wi-Fi (SMLIGHT SLWF-01pro + ESPHome/Midea) instead of IR: compatibility checks, install, flashing, DHCP reservation, HA onboarding
+- [docs/aire-cocina-slwf01pro.md](docs/aire-cocina-slwf01pro.md) — the kitchen AC over Wi-Fi (SMLIGHT SLWF-01pro + ESPHome/Midea) instead of IR, and the blaster it freed moving to the kids' room: install, flashing, keeping the `climate.aire_cocina` entity id across the swap, DHCP reservation, HA onboarding
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/lavarropas-candy.md](docs/lavarropas-candy.md) — Candy simply-Fi washer-dryer over its **local** HTTP API (no cloud, no vendor app): finding it via the UDP heartbeat, recovering the XOR key from the device's own traffic, and the `RemTime` unit bug
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `images/home-site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback

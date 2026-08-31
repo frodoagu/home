@@ -1,11 +1,11 @@
-# Kids' room AC: a SMLIGHT SLWF-01pro (ESP8266) in the indoor unit's USB-shaped
+# Kitchen AC: a SMLIGHT SLWF-01pro (ESP8266) in the indoor unit's USB-shaped
 # port, speaking Midea's UART protocol. The only two-way AC in the house — the
-# other three are IR (SmartIR + Broadlink). Compatibility checks, install,
-# flashing and HA onboarding: docs/aire-chicos-slwf01pro.md.
+# other three are IR (SmartIR + Broadlink). Install, flashing, the entity-registry
+# migration off SmartIR and HA onboarding: docs/aire-cocina-slwf01pro.md.
 
 substitutions:
-  name: aire-chicos
-  friendly_name: Aire Chicos
+  name: aire-cocina
+  friendly_name: Aire Cocina
 
 esphome:
   name: ${name}
@@ -21,17 +21,17 @@ logger:
 
 api:
   encryption:
-    key: !secret aire_chicos_api_key
+    key: !secret aire_cocina_api_key
 
 ota:
   - platform: esphome
-    password: !secret aire_chicos_ota_password
+    password: !secret aire_cocina_ota_password
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   ap:
-    ssid: "Aire-Chicos-Fallback"
+    ssid: "Aire-Cocina-Fallback"
     password: !secret ap_password
 
 captive_portal:
@@ -45,14 +45,16 @@ uart:
 
 climate:
   - platform: midea
-    # Empty: the entity inherits the device friendly_name -> climate.aire_chicos.
+    # Empty: the entity inherits the device friendly_name -> climate.aire_cocina,
+    # the same id the SmartIR entity had, so every scene and automation keeps
+    # working. The old registry entry has to be deleted first or this lands on
+    # climate.aire_cocina_2 — see §7 of the doc.
     name: ""
     period: 1s
     timeout: 2s
     num_attempts: 3
     # Modes, fan speeds, presets and swing come from asking the unit itself.
     autoconf: true
-    # It's a room where kids sleep, and the scenes send commands with nobody there.
     beeper: false
     visual:
       min_temperature: 17 °C

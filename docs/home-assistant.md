@@ -229,7 +229,7 @@ One leftover: the WiFi-signal sensor kept an old entity_id
 
 ## Air conditioners (SmartIR + Broadlink)
 
-The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4
+Three of the four split ACs (living room + bedroom + kids' room) are IR-controlled via **Broadlink RM4
 mini** blasters and the **[SmartIR](https://github.com/smartHomeHub/SmartIR)**
 custom component (installed through HACS). The `climate:` entities are **versioned in
 git** as an HA package ([`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml),
@@ -242,7 +242,10 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   They register as `remote.*` entities:
   - `remote.control_living` — living-room blaster (`192.168.0.31`)
   - `remote.control_dormitorio` — bedroom blaster (`192.168.0.30`)
-  - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
+  - `remote.broadlink_cocina` — kids'-room blaster (`192.168.0.32`). The id still
+    says *cocina* because it used to hang there; it moved when the kitchen went
+    over to ESPHome, and Broadlink is a config-flow integration whose entity id
+    git cannot rename.
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
@@ -268,18 +271,23 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
       temperature_sensor: sensor.dormitorio_atc_b6d2_temperatura
       humidity_sensor: sensor.dormitorio_atc_b6d2_humedad
     - platform: smartir
-      name: "Aire Cocina"
-      unique_id: aire_cocina
-      device_code: 1382              # Midea MSY-12HRDN1 (BGH Silent Air) — same unit as the living room
+      name: "Aire Chicos"
+      unique_id: aire_chicos
+      device_code: 5140              # hypothesis: what the other Philco in the house needed
       controller_data: remote.broadlink_cocina
-      # No ATC BLE thermometer in the kitchen yet, so no temperature/humidity sensor.
+      # No ATC BLE thermometer in this room, so no temperature/humidity sensor.
   ```
 
   The `sensor.*_temperatura`/`_humedad` entities are the per-room ATC BLE
   thermometers (Xiaomi/ATC), which SmartIR shows on the thermostat card as the
-  real ambient reading (the IR AC reports nothing back). The kitchen has no ATC
-  thermometer yet, so `Aire Cocina` runs without one (its card shows no ambient
+  real ambient reading (the IR AC reports nothing back). The kids' room has no ATC
+  thermometer, so `Aire Chicos` runs without one (its card shows no ambient
   reading until a sensor is added).
+
+  `Aire Chicos` is a **Philco iView 3800 W** and its `device_code` is **not
+  verified**: `5140` is seeded as the first candidate because it is what the other
+  Philco in this house turned out to need. Confirm it against the physical remote
+  and swap it using the waveform method below if the tables don't line up.
 
 **Finding the right `device_code`.** Neither AC matched its labelled brand:
 
@@ -395,32 +403,36 @@ Notes that matter when editing them:
   `below` are strict. Where the boundary matters (`≥ 19 °C` outside, `≤ 17 °C`
   inside) the check is a template instead — the reasons are in the comments.
 
-## Air conditioner over Wi-Fi (ESPHome + Midea) — the kids' room
+## Air conditioner over Wi-Fi (ESPHome + Midea) — the kitchen
 
-The fourth split (a **Philco iView 3800 W**, kids' room) is **not** IR. It carries
-a **SMLIGHT SLWF-01pro** module plugged into the indoor unit's 4-pin port, running
-[`esphome/aire-chicos.yaml`](../esphome/aire-chicos.yaml) and speaking Midea's UART
-protocol, so HA gets `climate.aire_chicos` through the **ESPHome integration** —
-there is no `climate:` block for it in `climate.yaml`.
+The kitchen split is **not** IR. It carries a **SMLIGHT SLWF-01pro** module plugged
+into the indoor unit's 4-pin port, running
+[`esphome/aire-cocina.yaml`](../esphome/aire-cocina.yaml) and speaking Midea's UART
+protocol, so `climate.aire_cocina` comes from the **ESPHome integration** — there
+is no `climate:` block for it in `climate.yaml`.
 
-What changes versus the three SmartIR units:
+It kept its entity id through the move off SmartIR, so every scene and automation
+that names it is unchanged. What changed is what's behind the id:
 
 - **The link is two-way.** The entity reports what the unit is actually doing,
   including changes made with the physical remote, and the ambient temperature
-  comes from the AC itself (no ATC thermometer needed).
-- **Its scripts can trust the state they read.** `aire_chicos_toggle_calor` /
-  `aire_chicos_toggle_frio` are plain toggles, without the "only turn off when all
-  of them are on" dance the IR groups need.
-- **It stays out of the group scenes and the schedule** above — the kids' room
-  never starts or stops on its own.
+  comes from the AC itself — the kitchen never had an ATC thermometer, so this is
+  the first real reading its card has shown.
+- **Its state is worth trusting in a condition**, unlike the three IR units. The
+  group toggles now mix one real state with two assumed ones.
 - **It depends on Wi-Fi.** The entity goes `unavailable` when the module drops,
   where an IR blast would still work.
 
-Whether the module works at all hinges on the unit being Midea inside, which
-Philco's label does not settle — the bedroom "Philco" in this same house turned
-out to be a rebranded Mitsubishi Electric. Compatibility checks, physical install,
-flashing, the DHCP reservation and the fallback are in
-[docs/aire-chicos-slwf01pro.md](aire-chicos-slwf01pro.md).
+The module went to the kitchen because that unit is known to be Midea inside (it
+ran on SmartIR's `1382`, the *BGH Silent Air* Midea rebadge), and the blaster it
+replaced moved to the kids' room to drive the Philco there.
+
+**The one-time trap:** the SmartIR entity keeps owning `climate.aire_cocina` in the
+entity registry after its YAML block is gone, so onboarding the ESPHome device
+before deleting that orphan lands it on `climate.aire_cocina_2` and every reference
+in `climate.yaml` silently points at a dead entity. Order and recovery, plus the
+install, flashing, DHCP reservation and fallback:
+[docs/aire-cocina-slwf01pro.md](aire-cocina-slwf01pro.md).
 
 ## Sensor health alerts (`salud.yaml`)
 
