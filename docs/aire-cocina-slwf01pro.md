@@ -83,6 +83,12 @@ Two consequences worth knowing:
 - The group toggles (`aires_toggle_calor`, `aires_cocina_living_toggle_*`) read a
   **real** state for the kitchen and an assumed one for the other two. That's
   strictly better than before, but it doesn't make the group logic exact.
+- The kitchen is also the only AC that can now go `unavailable`. The toggle
+  conditions therefore decide on the units HA can actually see: an offline kitchen
+  is ignored rather than read as "off", which would otherwise pin those buttons to
+  the turn-everything-on branch until the module came back. For every state
+  reachable while all three are visible, the outcome is identical to the IR-only
+  version.
 - `climate.aire_cocina` is now the one entity whose state is worth trusting in an
   automation condition. `aires_apagar_templado` currently keys on
   `climate.aire_living` (assumed); pointing it at the kitchen instead would make
