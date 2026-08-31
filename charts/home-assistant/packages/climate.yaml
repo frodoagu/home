@@ -126,7 +126,10 @@ script:
   # (IR es unidireccional).
   #
   # The kitchen is the exception since it moved to ESPHome: its state is the real
-  # one, so a mixed group resolves correctly at least on that third.
+  # one, so a mixed group resolves correctly at least on that third. It is also the
+  # only one that can go `unavailable` (Wi-Fi, not IR), so the condition decides on
+  # the units HA can actually see — an offline kitchen is ignored instead of
+  # pinning the button to the "turn everything on" branch until it comes back.
   aires_toggle_calor:
     alias: Aires - Toggle todos (calor 21, pieza 20 / off)
     icon: mdi:fire
@@ -135,9 +138,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
+                  {% set aires = expand('climate.aire_living', 'climate.aire_dormitorio', 'climate.aire_cocina')
+                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
+                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -172,9 +175,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
+                  {% set aires = expand('climate.aire_living', 'climate.aire_dormitorio', 'climate.aire_cocina')
+                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
+                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -207,8 +210,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
+                  {% set aires = expand('climate.aire_cocina', 'climate.aire_living')
+                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
+                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -234,8 +238,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
-                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
+                  {% set aires = expand('climate.aire_cocina', 'climate.aire_living')
+                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
+                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
             sequence:
               - action: climate.turn_off
                 target:
