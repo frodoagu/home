@@ -42,8 +42,12 @@ Mitsubishi's `5140` because the Philco code never worked. Philco is a licensed
 brand, so the OEM changes with the model and the year.
 
 Putting the module on the unit that is known to be Midea and giving the Philco the
-IR path that already works for the other Philco is the low-risk assignment of the
-two.
+IR path is the low-risk assignment of the two.
+
+It did need its own code, though: the kids' Philco is a **Wide WDS12ECO** on the
+wire (`3340`), unrelated to the bedroom's Mitsubishi. Two Philcos, two OEMs — read
+off the remote, see
+[home-assistant.md](home-assistant.md#reading-the-protocol-off-the-remote).
 
 Since the living room is the **same model as the kitchen**, it is the obvious
 candidate if a second module ever gets bought.
@@ -225,11 +229,11 @@ detection came up short: set `autoconf: false` and list `supported_modes`,
 `web_server` is the most expensive thing running. Drop it from the YAML before
 blaming the Wi-Fi.
 
-**The kids' room AC doesn't respond to `climate.aire_chicos`.** `device_code: 5140`
-is a hypothesis, not a verified code — it's what the bedroom Philco needed. Don't
-guess by brand: compare the IR waveform of candidate codes against one that
-partially works, the method is in
-[home-assistant.md](home-assistant.md#air-conditioners-smartir--broadlink).
+**The kids' room AC doesn't respond to `climate.aire_chicos`.** Check the code is
+`3340` (*Wide WDS12ECO*) and not `5140`: the bedroom Philco's Mitsubishi code is
+a different OEM and this unit ignores it outright. `3340` comes from capturing the
+physical remote with `remote.learn_command` and decoding the frame —
+[home-assistant.md](home-assistant.md#reading-the-protocol-off-the-remote).
 
 ## 10. Checklist for the day it arrives
 
@@ -249,7 +253,7 @@ partially works, the method is in
 **Kids' room (the blaster):**
 
 - [ ] Move the blaster from the kitchen and plug it in there.
-- [ ] Try `climate.aire_chicos` with `device_code: 5140`; if the unit ignores it
-      or the temperature table is wrong, find the right code (§9).
+- [x] `device_code: 3340`, verified on the unit (heat, cool and the temperature
+      table). If a mode ever misbehaves, re-read the remote (§9).
 - [ ] Try both toggles: *Aire chicos - Toggle (calor 20 / off)* and
       *(frío 24 / off)*.
