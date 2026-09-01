@@ -253,7 +253,7 @@ physical remote with `remote.learn_command` and decoding the frame —
 **Kids' room (the blaster):**
 
 - [ ] Move the blaster from the kitchen and plug it in there.
-- [ ] Try `climate.aire_chicos` with `device_code: 3340`; if the temperature table
-      or a mode is wrong, re-read the remote (§9).
+- [x] `device_code: 3340`, verified on the unit (heat, cool and the temperature
+      table). If a mode ever misbehaves, re-read the remote (§9).
 - [ ] Try both toggles: *Aire chicos - Toggle (calor 20 / off)* and
       *(frío 24 / off)*.

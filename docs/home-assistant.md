@@ -286,6 +286,9 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
 
   `Aire Chicos` is a **Philco iView 3800 W**. It runs `3340` (*Wide WDS12ECO*),
   read off its own remote — see "Reading the protocol off the remote" below.
+  Confirmed on the unit itself by blasting the raw frames through
+  `remote.send_command`: heat 20, heat 25, cool 24 and off all land, so both mode
+  nibbles and the temperature table are right.
 
 **Finding the right `device_code`.** No AC in this house matches its labelled brand:
 
