@@ -66,11 +66,18 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
-esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
+esphome/             ESP32/ESP8266 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
                      Lirika coffee machine (see docs/cafetera-saeco-lirika.md); ble-proxy.yaml is a
                      Bluetooth proxy that relays the BLE devices out of the Pi's range — the Mopeka
-                     gas sensor and the BTHome thermometers (docs/home-assistant.md#ble-proxies).
+                     gas sensor and the BTHome thermometers (docs/home-assistant.md#ble-proxies);
+                     aire-cocina.yaml is a SMLIGHT SLWF-01pro inside the KITCHEN split, driving it
+                     over Midea's UART protocol — the one AC that is NOT IR, so its HA entity is
+                     two-way and comes from the ESPHome integration, not from a `climate:` block in
+                     packages/climate.yaml. It keeps the entity id `climate.aire_cocina` that the
+                     SmartIR entity had, which only works if the stale registry entry is deleted
+                     first; the blaster it replaced moved to the kids' room
+                     (docs/aire-cocina-slwf01pro.md).
                      Secrets via !secret (secrets.yaml gitignored; secrets.yaml.example is the
                      template) — one api_key/ota_password pair per device.
 scripts/             Operator CLIs run BY HAND against LAN devices — not deployed, not called by

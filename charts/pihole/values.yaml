@@ -178,6 +178,10 @@ dhcp:
     # thermometers that sit out of the Pi's Bluetooth range.
     - { mac: "d4:d4:da:4a:06:70", ip: "192.168.0.10", name: "esphome-btproxy" }
     - { mac: "30:76:f5:e6:ab:38", ip: "192.168.0.11", name: "ble-proxy" }
+    # SLWF-01pro, the Wi-Fi module in the kitchen AC (esphome/aire-cocina.yaml).
+    # Commented out until its MAC is known: an invalid `dhcp-host` takes down the
+    # whole DHCP config, not just this entry. See docs/aire-cocina-slwf01pro.md.
+    # - { mac: "PONER_LA_MAC", ip: "192.168.0.12", name: "aire-cocina" }
     # Shelly Mini 1 Gen4 — the two outdoor doors. Addressed by IP from
     # charts/shelly-config (reconciler), charts/shelly-proxy (nginx) and
     # scripts/luces-afuera.js (the gang script's peer list).
@@ -186,7 +190,7 @@ dhcp:
     # Broadlink IR blasters — Home Assistant addresses each one by IP.
     - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.30", name: "broadlink-1" }        # dormitorio
     - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.31", name: "broadlink-2" }        # living
-    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }        # cocina
+    - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }        # pieza de los chicos
     # Lavasecarropas Candy simply-Fi: packages/lavarropas.yaml and
     # scripts/candyctl.py hit its local HTTP API by IP.
     - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.40", name: "lavarropas" }

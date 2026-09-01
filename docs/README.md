@@ -9,6 +9,7 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [tls.md](tls.md) | Let's Encrypt via the **DNS-01** Cloudflare challenge, and how `acme.json` is persisted |
 | [monitoring.md](monitoring.md) | VictoriaMetrics + Grafana stack: custom dashboards, Telegram alerts, blackbox uptime/TLS probes, Traefik metrics, operating notes |
 | [home-assistant.md](home-assistant.md) | Home Assistant chart specifics: config bootstrap, device discovery (host networking), Bluetooth, IR air conditioners (SmartIR + Broadlink) |
+| [aire-cocina-slwf01pro.md](aire-cocina-slwf01pro.md) | Kitchen AC over Wi-Fi with a SMLIGHT SLWF-01pro module (and its IR blaster moving to the kids' room): install, flashing, keeping the `climate.aire_cocina` entity id across the swap, DHCP reservation, HA onboarding, fallback |
 | [gas-mopeka.md](gas-mopeka.md) | Nivel del tubo de 45 kg con un sensor Mopeka Pro Check Universal vía Bluetooth nativo de HA: por qué (a diferencia del M1001 revertido) no hace falta ESPHome, calibración, filtrado del eco doble cerca del fondo, efectos térmicos y alertas por Telegram |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
 | [agu-spa.md](agu-spa.md) | SPA chart: how `images/home-site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
