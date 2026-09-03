@@ -28,11 +28,13 @@ climate:
   - platform: smartir
     name: "Aire Chicos"
     unique_id: aire_chicos
-    # Philco iView 3800 W — a *Wide WDS12ECO* on the wire. Captured off the
-    # physical remote and decoded: the "56" protocol family, which SmartIR's only
-    # Philco code (3000) belongs to but covers with cool + heat_cool alone. 3340 is
-    # the one code in that family with a complete table. See docs/home-assistant.md.
-    device_code: 3340
+    # Philco iView 3800 W. 5140 is a starting hypothesis, not a verified code: it
+    # is what the OTHER Philco in this house (the bedroom) turned out to need,
+    # since Philco is a licensed brand and that unit is a rebadged Mitsubishi
+    # Electric. Check it against the physical remote and swap it if the command
+    # tables don't line up — the waveform-comparison method is in
+    # docs/home-assistant.md.
+    device_code: 5140
     # The blaster that used to sit in the kitchen, physically moved to this room.
     # Broadlink is a config-flow integration, so the entity id is whatever HA
     # already stored; renaming it in the UI means editing this line too.

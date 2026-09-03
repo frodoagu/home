@@ -273,7 +273,7 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
     - platform: smartir
       name: "Aire Chicos"
       unique_id: aire_chicos
-      device_code: 3340              # Wide WDS12ECO — the Philco iView's actual protocol
+      device_code: 5140              # hypothesis: what the other Philco in the house needed
       controller_data: remote.broadlink_cocina
       # No ATC BLE thermometer in this room, so no temperature/humidity sensor.
   ```
@@ -284,13 +284,12 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   thermometer, so `Aire Chicos` runs without one (its card shows no ambient
   reading until a sensor is added).
 
-  `Aire Chicos` is a **Philco iView 3800 W**. It runs `3340` (*Wide WDS12ECO*),
-  read off its own remote — see "Reading the protocol off the remote" below.
-  Confirmed on the unit itself by blasting the raw frames through
-  `remote.send_command`: heat 20, heat 25, cool 24 and off all land, so both mode
-  nibbles and the temperature table are right.
+  `Aire Chicos` is a **Philco iView 3800 W** and its `device_code` is **not
+  verified**: `5140` is seeded as the first candidate because it is what the other
+  Philco in this house turned out to need. Confirm it against the physical remote
+  and swap it using the waveform method below if the tables don't line up.
 
-**Finding the right `device_code`.** No AC in this house matches its labelled brand:
+**Finding the right `device_code`.** Neither AC matched its labelled brand:
 
 - **Bedroom** — branded *Philco*, but the Philco code (`3000`) never worked; it's
   a **rebranded Mitsubishi Electric**. `5140` (MSC-A12WV) is the winner. It was
@@ -298,56 +297,16 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   the wrong temperature table.
 - **Living room** — a *BGH Silent Air*, which is **OEM Midea** (the SmartIR Midea
   RG-series codes are BGH's remotes). `1382` (MSY-12HRDN1) works with full modes.
-- **Kids' room** — branded *Philco* like the bedroom, but a **different OEM**: the
-  two Philcos share nothing on the wire. `3340` (*Wide WDS12ECO*) is the winner.
-  The one Philco-branded code SmartIR ships, `3000`, is the right protocol family
-  but the wrong table — it has no `heat`.
 
-When the labelled brand fails, don't guess by brand — compare the **IR waveform**.
-Two codes are the same protocol/OEM when their Broadlink packets share the same
-**leader timing** and **frame length** (pulse count); the matching sibling with a
-fuller/correct command table is the one to keep (e.g. `1382` was picked over the
-bare `1381` because both share an identical on/off waveform but `1382` adds
-`dry`/`heat_cool`/`fan_only` + auto fan).
-
-### Reading the protocol off the remote
-
-Comparing candidate codes against each other needs a code that already *partially*
-works. When nothing works, take the reference from the **physical remote** instead
-— one button press identifies the OEM outright:
-
-1. **Capture.** `remote.learn_command` on the blaster in that room
-   (`device: <anything>`, `command: <anything>`, `command_type: ir`), then press the
-   button at the blaster within 30 s. The base64 lands in
-   `/config/.storage/broadlink_remote_<mac>_codes` — the service returns success
-   whether or not anything was learned, so always read that file back.
-2. **Decode the Broadlink packet.** Byte 0 `0x26` = IR, byte 1 repeat, bytes 2-3
-   length (LE); then one tick per byte, or `0x00` + two bytes big-endian for values
-   over 255. A tick is `8192/269` ≈ **30.45 µs**.
-3. **Signature.** Leader mark/space + pulse count. It is enough to pick the OEM out
-   of all ~330 Broadlink climate codes: of those, only four share the kids' room
-   remote's *8200/4200 µs, 244 pulses*.
-4. **Confirm on the bits**, not just the timing. Long space = 1, short = 0.
-
-The kids' room turned out to be the 15-byte **"56" family** (Aux/Wide/Hisense
-rebadges), fully legible once decoded:
-
-| Byte | Meaning |
-|---|---|
-| 0 | `0x56`, constant |
-| 1 | `0x6C + (T − 16)` — target temperature, 16-32 °C |
-| 4 | high nibble = mode (`1` heat, `2` cool, `3` dry, `4` auto, `5` fan only), low nibble = fan (`0` auto, `1` high, `2` low, `3` mid) |
-| 5 | `0x02` swing on, `0xC0` power off |
-| 14 | checksum = **sum of the nibbles** of bytes 0-13 |
-
-That checksum is the free lunch: it verifies a capture end to end, so a frame that
-adds up is a real frame and not a mis-read. The captured one was
-`56 70 00 00 10 C0 … 1F` — heat, fan auto, 20 °C, and `0xC0` says it was the
-**off** press. Worth expecting: on these remotes power is a toggle, so pressing it
-twice hands you the off frame.
-
-> Two Philcos in this house, two unrelated OEMs. Brand tells you nothing here — the
-> licensee changes with the model and the year.
+When the labelled brand fails, don't guess by brand — compare the **IR waveform**
+of candidate codes against a code that already partially works. Two codes are the
+same protocol/OEM when their Broadlink packets share the same **leader timing**
+and **frame length** (pulse count); the matching sibling with a fuller/correct
+command table is the one to keep (e.g. `1382` was picked over the bare `1381`
+because both share an identical on/off waveform but `1382` adds `dry`/`heat_cool`/
+`fan_only` + auto fan). A helper that decodes the Broadlink base64 and ranks codes
+by waveform similarity lived in the scratchpad during that work; the gist is:
+same leader + same pulse count ⇒ try it.
 
 **No swing on Midea codes.** None of SmartIR's Broadlink Midea codes encode a
 `swingModes` table, so the living-room AC has no swing control in HA regardless of
