@@ -1,5 +1,4 @@
-# HA package: split-AC climate entities. Three are IR (SmartIR + Broadlink); the
-# kitchen runs on ESPHome and is not declared here.
+# HA package: split-AC climate entities (SmartIR + Broadlink IR).
 #
 # Versioned config that HA merges via `homeassistant: packages:`. Rendered into
 # the {{ fullname }}-packages ConfigMap and mounted read-only at /config/packages.
@@ -26,26 +25,10 @@ climate:
     temperature_sensor: sensor.dormitorio_atc_b6d2_temperatura
     humidity_sensor: sensor.dormitorio_atc_b6d2_humedad
   - platform: smartir
-    name: "Aire Chicos"
-    unique_id: aire_chicos
-    # Philco iView 3800 W. 5140 is a starting hypothesis, not a verified code: it
-    # is what the OTHER Philco in this house (the bedroom) turned out to need,
-    # since Philco is a licensed brand and that unit is a rebadged Mitsubishi
-    # Electric. Check it against the physical remote and swap it if the command
-    # tables don't line up — the waveform-comparison method is in
-    # docs/home-assistant.md.
-    device_code: 5140
-    # The blaster that used to sit in the kitchen, physically moved to this room.
-    # Broadlink is a config-flow integration, so the entity id is whatever HA
-    # already stored; renaming it in the UI means editing this line too.
+    name: "Aire Cocina"
+    unique_id: aire_cocina
+    device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air) - mismo equipo que el living
     controller_data: remote.broadlink_cocina
-    # No ATC BLE thermometer in this room, so no temperature/humidity sensor.
-
-# The kitchen AC has no block here: it stopped being IR. It arrives through the
-# ESPHome integration from the SLWF-01pro module (esphome/aire-cocina.yaml), which
-# creates `climate.aire_cocina` by discovery — the same entity id the SmartIR one
-# had, so every scene and automation below is untouched. Deleting the stale
-# registry entry first is what makes that id land: docs/aire-cocina-slwf01pro.md.
 
 # Escenas de acceso rápido para los aires. Aparecen como entidades script.*
 # (botones en la app HA / cards del dashboard) y, al estar `script` en
@@ -124,12 +107,6 @@ script:
   # (21, y el dormitorio 20). Así un estado mezclado primero se lleva a "todo
   # prendido" y recién el próximo toque apaga. El estado que ve HA es el asumido
   # (IR es unidireccional).
-  #
-  # The kitchen is the exception since it moved to ESPHome: its state is the real
-  # one, so a mixed group resolves correctly at least on that third. It is also the
-  # only one that can go `unavailable` (Wi-Fi, not IR), so the condition decides on
-  # the units HA can actually see — an offline kitchen is ignored instead of
-  # pinning the button to the "turn everything on" branch until it comes back.
   aires_toggle_calor:
     alias: Aires - Toggle todos (calor 21, pieza 20 / off)
     icon: mdi:fire
@@ -138,9 +115,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = expand('climate.aire_living', 'climate.aire_dormitorio', 'climate.aire_cocina')
-                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
-                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
+                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -175,9 +152,9 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = expand('climate.aire_living', 'climate.aire_dormitorio', 'climate.aire_cocina')
-                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
-                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
+                  {{ states('climate.aire_living') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown'] }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -210,9 +187,8 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = expand('climate.aire_cocina', 'climate.aire_living')
-                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
-                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
+                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -238,9 +214,8 @@ script:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = expand('climate.aire_cocina', 'climate.aire_living')
-                       | rejectattr('state', 'in', ['unavailable', 'unknown']) | list %}
-                  {{ aires | count > 0 and aires | selectattr('state', 'eq', 'off') | list | count == 0 }}
+                  {{ states('climate.aire_cocina') not in ['off', 'unavailable', 'unknown']
+                     and states('climate.aire_living') not in ['off', 'unavailable', 'unknown'] }}
             sequence:
               - action: climate.turn_off
                 target:
@@ -253,57 +228,6 @@ script:
               entity_id:
                 - climate.aire_cocina
                 - climate.aire_living
-            data:
-              hvac_mode: cool
-              temperature: 24
-    mode: single
-
-  # The kids' room stands alone: it is in neither the "todos" scenes nor the
-  # scheduled automations below, so it never starts or stops unless someone asks.
-  # Heat goes to 20, same as the main bedroom.
-  #
-  # IR, like the living room and the bedroom, so what these read is the state HA
-  # assumes. Someone using the physical remote desyncs it and the next press can
-  # look like a no-op — same caveat as the group toggles above.
-  aire_chicos_toggle_calor:
-    alias: Aire chicos - Toggle (calor 20 / off)
-    icon: mdi:fire
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {{ states('climate.aire_chicos') not in ['off', 'unavailable', 'unknown'] }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id: climate.aire_chicos
-        default:
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_chicos
-            data:
-              hvac_mode: heat
-              temperature: 20
-    mode: single
-
-  aire_chicos_toggle_frio:
-    alias: Aire chicos - Toggle (frío 24 / off)
-    icon: mdi:snowflake
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {{ states('climate.aire_chicos') not in ['off', 'unavailable', 'unknown'] }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id: climate.aire_chicos
-        default:
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_chicos
             data:
               hvac_mode: cool
               temperature: 24
@@ -340,10 +264,6 @@ script:
 # OJO con las condiciones sobre el estado de un `climate.*`: el IR es
 # unidireccional, así que HA reporta el estado que ASUME, no el del equipo. Si
 # alguien lo apagó con el control remoto, HA no se entera.
-#
-# `climate.aire_cocina` is the exception: it runs on ESPHome over the unit's own
-# bus, so it reports what the AC is really doing and is the one entity here whose
-# state is worth trusting in a condition.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: aires_calor_manana
