@@ -229,7 +229,7 @@ One leftover: the WiFi-signal sensor kept an old entity_id
 
 ## Air conditioners (SmartIR + Broadlink)
 
-Three of the four split ACs (living room + bedroom + kids' room) are IR-controlled via **Broadlink RM4
+The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4
 mini** blasters and the **[SmartIR](https://github.com/smartHomeHub/SmartIR)**
 custom component (installed through HACS). The `climate:` entities are **versioned in
 git** as an HA package ([`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml),
@@ -242,10 +242,7 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   They register as `remote.*` entities:
   - `remote.control_living` — living-room blaster (`192.168.0.31`)
   - `remote.control_dormitorio` — bedroom blaster (`192.168.0.30`)
-  - `remote.broadlink_cocina` — kids'-room blaster (`192.168.0.32`). The id still
-    says *cocina* because it used to hang there; it moved when the kitchen went
-    over to ESPHome, and Broadlink is a config-flow integration whose entity id
-    git cannot rename.
+  - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
@@ -271,26 +268,20 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
       temperature_sensor: sensor.dormitorio_atc_b6d2_temperatura
       humidity_sensor: sensor.dormitorio_atc_b6d2_humedad
     - platform: smartir
-      name: "Aire Chicos"
-      unique_id: aire_chicos
-      device_code: 3340              # Wide WDS12ECO — the Philco iView's actual protocol
+      name: "Aire Cocina"
+      unique_id: aire_cocina
+      device_code: 1382              # Midea MSY-12HRDN1 (BGH Silent Air) — same unit as the living room
       controller_data: remote.broadlink_cocina
-      # No ATC BLE thermometer in this room, so no temperature/humidity sensor.
+      # No ATC BLE thermometer in the kitchen yet, so no temperature/humidity sensor.
   ```
 
   The `sensor.*_temperatura`/`_humedad` entities are the per-room ATC BLE
   thermometers (Xiaomi/ATC), which SmartIR shows on the thermostat card as the
-  real ambient reading (the IR AC reports nothing back). The kids' room has no ATC
-  thermometer, so `Aire Chicos` runs without one (its card shows no ambient
+  real ambient reading (the IR AC reports nothing back). The kitchen has no ATC
+  thermometer yet, so `Aire Cocina` runs without one (its card shows no ambient
   reading until a sensor is added).
 
-  `Aire Chicos` is a **Philco iView 3800 W**. It runs `3340` (*Wide WDS12ECO*),
-  read off its own remote — see "Reading the protocol off the remote" below.
-  Confirmed on the unit itself by blasting the raw frames through
-  `remote.send_command`: heat 20, heat 25, cool 24 and off all land, so both mode
-  nibbles and the temperature table are right.
-
-**Finding the right `device_code`.** No AC in this house matches its labelled brand:
+**Finding the right `device_code`.** Neither AC matched its labelled brand:
 
 - **Bedroom** — branded *Philco*, but the Philco code (`3000`) never worked; it's
   a **rebranded Mitsubishi Electric**. `5140` (MSC-A12WV) is the winner. It was
@@ -298,56 +289,16 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   the wrong temperature table.
 - **Living room** — a *BGH Silent Air*, which is **OEM Midea** (the SmartIR Midea
   RG-series codes are BGH's remotes). `1382` (MSY-12HRDN1) works with full modes.
-- **Kids' room** — branded *Philco* like the bedroom, but a **different OEM**: the
-  two Philcos share nothing on the wire. `3340` (*Wide WDS12ECO*) is the winner.
-  The one Philco-branded code SmartIR ships, `3000`, is the right protocol family
-  but the wrong table — it has no `heat`.
 
-When the labelled brand fails, don't guess by brand — compare the **IR waveform**.
-Two codes are the same protocol/OEM when their Broadlink packets share the same
-**leader timing** and **frame length** (pulse count); the matching sibling with a
-fuller/correct command table is the one to keep (e.g. `1382` was picked over the
-bare `1381` because both share an identical on/off waveform but `1382` adds
-`dry`/`heat_cool`/`fan_only` + auto fan).
-
-### Reading the protocol off the remote
-
-Comparing candidate codes against each other needs a code that already *partially*
-works. When nothing works, take the reference from the **physical remote** instead
-— one button press identifies the OEM outright:
-
-1. **Capture.** `remote.learn_command` on the blaster in that room
-   (`device: <anything>`, `command: <anything>`, `command_type: ir`), then press the
-   button at the blaster within 30 s. The base64 lands in
-   `/config/.storage/broadlink_remote_<mac>_codes` — the service returns success
-   whether or not anything was learned, so always read that file back.
-2. **Decode the Broadlink packet.** Byte 0 `0x26` = IR, byte 1 repeat, bytes 2-3
-   length (LE); then one tick per byte, or `0x00` + two bytes big-endian for values
-   over 255. A tick is `8192/269` ≈ **30.45 µs**.
-3. **Signature.** Leader mark/space + pulse count. It is enough to pick the OEM out
-   of all ~330 Broadlink climate codes: of those, only four share the kids' room
-   remote's *8200/4200 µs, 244 pulses*.
-4. **Confirm on the bits**, not just the timing. Long space = 1, short = 0.
-
-The kids' room turned out to be the 15-byte **"56" family** (Aux/Wide/Hisense
-rebadges), fully legible once decoded:
-
-| Byte | Meaning |
-|---|---|
-| 0 | `0x56`, constant |
-| 1 | `0x6C + (T − 16)` — target temperature, 16-32 °C |
-| 4 | high nibble = mode (`1` heat, `2` cool, `3` dry, `4` auto, `5` fan only), low nibble = fan (`0` auto, `1` high, `2` low, `3` mid) |
-| 5 | `0x02` swing on, `0xC0` power off |
-| 14 | checksum = **sum of the nibbles** of bytes 0-13 |
-
-That checksum is the free lunch: it verifies a capture end to end, so a frame that
-adds up is a real frame and not a mis-read. The captured one was
-`56 70 00 00 10 C0 … 1F` — heat, fan auto, 20 °C, and `0xC0` says it was the
-**off** press. Worth expecting: on these remotes power is a toggle, so pressing it
-twice hands you the off frame.
-
-> Two Philcos in this house, two unrelated OEMs. Brand tells you nothing here — the
-> licensee changes with the model and the year.
+When the labelled brand fails, don't guess by brand — compare the **IR waveform**
+of candidate codes against a code that already partially works. Two codes are the
+same protocol/OEM when their Broadlink packets share the same **leader timing**
+and **frame length** (pulse count); the matching sibling with a fuller/correct
+command table is the one to keep (e.g. `1382` was picked over the bare `1381`
+because both share an identical on/off waveform but `1382` adds `dry`/`heat_cool`/
+`fan_only` + auto fan). A helper that decodes the Broadlink base64 and ranks codes
+by waveform similarity lived in the scratchpad during that work; the gist is:
+same leader + same pulse count ⇒ try it.
 
 **No swing on Midea codes.** None of SmartIR's Broadlink Midea codes encode a
 `swingModes` table, so the living-room AC has no swing control in HA regardless of
@@ -443,37 +394,6 @@ Notes that matter when editing them:
 - Google's ≥/> comparisons don't all map onto `numeric_state`, whose `above`/
   `below` are strict. Where the boundary matters (`≥ 19 °C` outside, `≤ 17 °C`
   inside) the check is a template instead — the reasons are in the comments.
-
-## Air conditioner over Wi-Fi (ESPHome + Midea) — the kitchen
-
-The kitchen split is **not** IR. It carries a **SMLIGHT SLWF-01pro** module plugged
-into the indoor unit's 4-pin port, running
-[`esphome/aire-cocina.yaml`](../esphome/aire-cocina.yaml) and speaking Midea's UART
-protocol, so `climate.aire_cocina` comes from the **ESPHome integration** — there
-is no `climate:` block for it in `climate.yaml`.
-
-It kept its entity id through the move off SmartIR, so every scene and automation
-that names it is unchanged. What changed is what's behind the id:
-
-- **The link is two-way.** The entity reports what the unit is actually doing,
-  including changes made with the physical remote, and the ambient temperature
-  comes from the AC itself — the kitchen never had an ATC thermometer, so this is
-  the first real reading its card has shown.
-- **Its state is worth trusting in a condition**, unlike the three IR units. The
-  group toggles now mix one real state with two assumed ones.
-- **It depends on Wi-Fi.** The entity goes `unavailable` when the module drops,
-  where an IR blast would still work.
-
-The module went to the kitchen because that unit is known to be Midea inside (it
-ran on SmartIR's `1382`, the *BGH Silent Air* Midea rebadge), and the blaster it
-replaced moved to the kids' room to drive the Philco there.
-
-**The one-time trap:** the SmartIR entity keeps owning `climate.aire_cocina` in the
-entity registry after its YAML block is gone, so onboarding the ESPHome device
-before deleting that orphan lands it on `climate.aire_cocina_2` and every reference
-in `climate.yaml` silently points at a dead entity. Order and recovery, plus the
-install, flashing, DHCP reservation and fallback:
-[docs/aire-cocina-slwf01pro.md](aire-cocina-slwf01pro.md).
 
 ## Sensor health alerts (`salud.yaml`)
 
