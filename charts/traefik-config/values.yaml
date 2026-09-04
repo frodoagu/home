@@ -10,11 +10,11 @@ traefikNamespace: kube-system
 # ── Traefik image ────────────────────────────────────────────────────────────
 # This chart can't change the k3s-bundled Traefik *chart* version (that's pinned
 # by k3s' own HelmChart resource), but it can pin the container *image* via the
-# HelmChartConfig. This runs Traefik v3.7.6 on top of the bundled chart.
+# HelmChartConfig. This runs Traefik v3.7.12 on top of the bundled chart.
 # Bump deliberately and confirm the bundled chart still accepts these values.
 image:
   repository: docker.io/traefik
-  tag: "v3.7.10"
+  tag: "v3.7.12"
 
 # ── HTTP/3 (QUIC) ────────────────────────────────────────────────────────────
 # Also serves the websecure entrypoint on udp/443 (and advertises it via Alt-Svc).

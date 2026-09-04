@@ -7,7 +7,7 @@ description: >-
   and gated by the same google-auth ForwardAuth as the other private services.
 type: application
 version: 0.1.0
-appVersion: "v2.0.0"
+appVersion: "v2.2.0"
 keywords:
   - homepage
   - dashboard

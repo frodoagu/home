@@ -83,5 +83,5 @@ argo-cd:
   applicationSet:
     replicas: 1
 
-  # -- Pin to the argo-cd chart's bundled appVersion (v3.4.4) by not overriding
+  # -- Pin to the argo-cd chart's bundled appVersion (v3.5.2) by not overriding
   # the image tag. Bump the chart version in Chart.yaml to move to a newer ArgoCD.

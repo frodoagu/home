@@ -10,11 +10,16 @@ argocd-image-updater:
   replicas: 1
 
   config:
-    logLevel: info
+    # These are the upstream chart's literal ConfigMap keys, not camelCase
+    # aliases: the chart renders `config` verbatim into argocd-image-updater-config
+    # (`range` over every key it doesn't special-case), so a misspelled key lands
+    # in the ConfigMap as dead weight and the controller silently uses its own
+    # default instead.
+    log.level: info
 
     # Identity used for the write-back commits this controller pushes to git.
-    gitCommitUser: argocd-image-updater
-    gitCommitMail: argocd-image-updater@agu.com.ar
+    git.user: argocd-image-updater
+    git.email: argocd-image-updater@agu.com.ar
 
     # Registry definitions. GHCR is private, so point it at the pull secret
     # (created out-of-band in the argocd namespace). Image Updater uses these
