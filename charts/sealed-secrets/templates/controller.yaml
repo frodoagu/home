@@ -1,5 +1,5 @@
 # Sealed Secrets controller — VENDORED from the upstream release manifest:
-#   https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.38.4/controller.yaml
+#   https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.39.1/controller.yaml
 #
 # Why vendored (not a wrapper chart like the others): the project's canonical
 # Helm repo (bitnami-labs.github.io/sealed-secrets) now 404s after the 2025
