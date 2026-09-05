@@ -248,6 +248,18 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
   - `remote.broadlink_chicos` — kids' room blaster (`192.168.0.33`)
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
+
+  **Add the DHCP reservation *before* pairing the device.** The config entry stores
+  a literal IP and the integration declares `supports_reconfigure: false`, so there
+  is no reconfigure step and no UI field to edit. HA's DHCP discovery does **not**
+  rescue this: the kids' blaster was paired on a pool address, the `.33` reservation
+  landed later, the device took it on its next lease — and the entry stayed on the
+  old address in `setup_retry` while `climate.aire_chicos` blasted into the void.
+  The only fix is to **delete the config entry and re-add it** at the reserved
+  address (`DELETE /api/config/config_entries/entry/<id>`, then drive the flow again
+  with the same name). Deleting the entry takes its entity registry rows with it, so
+  re-adding under the identical name reclaims the same `remote.*` entity id — no
+  `_2` suffix and no edit to `controller_data`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
   first use.
