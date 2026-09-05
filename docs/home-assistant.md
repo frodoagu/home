@@ -243,6 +243,11 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   - `remote.control_living` — living-room blaster (`192.168.0.31`)
   - `remote.control_dormitorio` — bedroom blaster (`192.168.0.30`)
   - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
+  - `remote.broadlink_chicos` — kids' room blaster, **pending**: `.33` is held for
+    it in `charts/pihole/values.yaml` (commented out until its MAC is known) and
+    `climate.aire_chicos` already points at this entity id. Pair the device in the
+    UI and rename its `remote.*` entity to match, or edit the `controller_data`
+    line instead.
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
@@ -273,15 +278,20 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
       device_code: 1382              # Midea MSY-12HRDN1 (BGH Silent Air) — same unit as the living room
       controller_data: remote.broadlink_cocina
       # No ATC BLE thermometer in the kitchen yet, so no temperature/humidity sensor.
+    - platform: smartir
+      name: "Aire Chicos"
+      unique_id: aire_chicos
+      device_code: 3340              # Wide WDS12ECO — the Philco iView's actual protocol
+      controller_data: remote.broadlink_chicos
   ```
 
   The `sensor.*_temperatura`/`_humedad` entities are the per-room ATC BLE
   thermometers (Xiaomi/ATC), which SmartIR shows on the thermostat card as the
-  real ambient reading (the IR AC reports nothing back). The kitchen has no ATC
-  thermometer yet, so `Aire Cocina` runs without one (its card shows no ambient
-  reading until a sensor is added).
+  real ambient reading (the IR AC reports nothing back). Neither the kitchen nor
+  the kids' room has an ATC thermometer, so `Aire Cocina` and `Aire Chicos` run
+  without one (their cards show no ambient reading until a sensor is added).
 
-**Finding the right `device_code`.** Neither AC matched its labelled brand:
+**Finding the right `device_code`.** No AC in this house matches its labelled brand:
 
 - **Bedroom** — branded *Philco*, but the Philco code (`3000`) never worked; it's
   a **rebranded Mitsubishi Electric**. `5140` (MSC-A12WV) is the winner. It was
@@ -289,16 +299,58 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   the wrong temperature table.
 - **Living room** — a *BGH Silent Air*, which is **OEM Midea** (the SmartIR Midea
   RG-series codes are BGH's remotes). `1382` (MSY-12HRDN1) works with full modes.
+- **Kids' room** — branded *Philco* like the bedroom, but a **different OEM**: the
+  two Philcos share nothing on the wire. `3340` (*Wide WDS12ECO*) is the winner,
+  confirmed on the unit by blasting raw frames through `remote.send_command` (heat
+  20, heat 25, cool 24 and off all land, so both mode nibbles and the temperature
+  table are right). SmartIR's one Philco-branded code, `3000`, is the right
+  protocol family but ships no `heat`.
 
-When the labelled brand fails, don't guess by brand — compare the **IR waveform**
-of candidate codes against a code that already partially works. Two codes are the
-same protocol/OEM when their Broadlink packets share the same **leader timing**
-and **frame length** (pulse count); the matching sibling with a fuller/correct
-command table is the one to keep (e.g. `1382` was picked over the bare `1381`
-because both share an identical on/off waveform but `1382` adds `dry`/`heat_cool`/
-`fan_only` + auto fan). A helper that decodes the Broadlink base64 and ranks codes
-by waveform similarity lived in the scratchpad during that work; the gist is:
-same leader + same pulse count ⇒ try it.
+When the labelled brand fails, don't guess by brand — compare the **IR waveform**.
+Two codes are the same protocol/OEM when their Broadlink packets share the same
+**leader timing** and **frame length** (pulse count); the matching sibling with a
+fuller/correct command table is the one to keep (e.g. `1382` was picked over the
+bare `1381` because both share an identical on/off waveform but `1382` adds
+`dry`/`heat_cool`/`fan_only` + auto fan).
+
+### Reading the protocol off the remote
+
+Comparing candidate codes against each other needs a code that already *partially*
+works. When nothing works, take the reference from the **physical remote** instead
+— one button press identifies the OEM outright:
+
+1. **Capture.** `remote.learn_command` on the blaster in that room
+   (`device: <anything>`, `command: <anything>`, `command_type: ir`), then press the
+   button at the blaster within 30 s. The base64 lands in
+   `/config/.storage/broadlink_remote_<mac>_codes` — the service returns success
+   whether or not anything was learned, so always read that file back.
+2. **Decode the Broadlink packet.** Byte 0 `0x26` = IR, byte 1 repeat, bytes 2-3
+   length (LE); then one tick per byte, or `0x00` + two bytes big-endian for values
+   over 255. A tick is `8192/269` ≈ **30.45 µs**.
+3. **Signature.** Leader mark/space + pulse count. It is enough to pick the OEM out
+   of all ~330 Broadlink climate codes: of those, only four share the kids' room
+   remote's *8200/4200 µs, 244 pulses*.
+4. **Confirm on the bits**, not just the timing. Long space = 1, short = 0.
+
+The kids' room is the 15-byte **"56" family** (Aux/Wide/Hisense rebadges), fully
+legible once decoded:
+
+| Byte | Meaning |
+|---|---|
+| 0 | `0x56`, constant |
+| 1 | `0x6C + (T − 16)` — target temperature, 16-32 °C |
+| 4 | high nibble = mode (`1` heat, `2` cool, `3` dry, `4` auto, `5` fan only), low nibble = fan (`0` auto, `1` high, `2` low, `3` mid) |
+| 5 | `0x02` swing on, `0xC0` power off |
+| 14 | checksum = **sum of the nibbles** of bytes 0-13 |
+
+That checksum is the free lunch: it verifies a capture end to end, so a frame that
+adds up is a real frame and not a mis-read. The captured one was
+`56 70 00 00 10 C0 … 1F` — heat, fan auto, 20 °C, and `0xC0` says it was the
+**off** press. Worth expecting: on these remotes power is a toggle, so pressing it
+twice hands you the off frame.
+
+> Two Philcos in this house, two unrelated OEMs. Brand tells you nothing here — the
+> licensee changes with the model and the year.
 
 **No swing on Midea codes.** None of SmartIR's Broadlink Midea codes encode a
 `swingModes` table, so the living-room AC has no swing control in HA regardless of
@@ -325,29 +377,48 @@ doesn't even blink). Two fixes:
 
 > On a fresh `/config` PVC the `climate:` blocks come back **from git** (the
 > [`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml) package).
-> You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist);
-> SmartIR re-downloads the code JSONs automatically.
+> You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist, with
+> the entity ids `controller_data` expects); SmartIR re-downloads the code JSONs
+> automatically.
 
 **Quick-access scenes.** The same package ships several `script:`s for one-tap
 presets — they show up as `script.*` entities (buttons on the HA app / dashboard
 cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes in
 Google Home:
 
-- `aires_todos_encender` — living + kitchen to **heat 21 °C**, bedroom to
-  **heat 20 °C** (it's a degree cooler for sleeping).
-- `aires_todos_frio` — all three ACs to **cool 24 °C**.
-- `aires_solo_pieza` — bedroom to **heat 20 °C**, living + kitchen **off**.
-- `aires_todos_apagar` — all three **off**.
-- `aires_toggle_calor` — one-button toggle. Only turns **off** when **all
-  three** ACs are on; in any other state (mixed, or all off) it turns all on to
-  heat (21 °C, bedroom 20 °C). So a mixed state is first driven to "all on" and
-  only the next tap turns everything off. Ideal for a single Android
-  home-screen widget / iOS Shortcut.
-- `aires_toggle_frio` — same one-button toggle, but the "on" side sets **cool
-  24 °C** (summer preset).
+Setpoints throughout: heat is **21 °C** in the living areas and **20 °C** in the
+two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
+
+- `aires_todos_encender` — living + kitchen to heat 21 °C, both bedrooms to
+  heat 20 °C.
+- `aires_todos_frio` — all four ACs to cool 24 °C.
+- `aires_solo_pieza` — bedroom to heat 20 °C, everything else **off**.
+- `aires_todos_apagar` — all four **off**.
+- `aires_toggle_calor` — one-button toggle. Only turns **off** when **all four**
+  ACs are on; in any other state (mixed, or all off) it turns all on to heat. So a
+  mixed state is first driven to "all on" and only the next tap turns everything
+  off. Ideal for a single Android home-screen widget / iOS Shortcut.
+- `aires_toggle_frio` — same one-button toggle, cool 24 °C.
+- `aires_toggle_estacional` — the same toggle without picking a season: the "on"
+  side reads `sensor.aires_modo_estacional` and goes heat or cool.
 - `aires_cocina_living_toggle_calor` / `aires_cocina_living_toggle_frio` — the
-  same toggle scoped to the **living area only** (kitchen + living, no bedroom):
-  off only when **both** are on, otherwise both to heat 21 °C / cool 24 °C.
+  same toggle scoped to the **day zone** (kitchen + living, no bedrooms): off only
+  when **both** are on, otherwise both to heat 21 °C / cool 24 °C.
+- `aires_zona_noche_toggle_calor` / `aires_zona_noche_toggle_frio` — the night
+  mirror of those two: the **two bedrooms** together, heat 20 °C / cool 24 °C.
+- `aires_modo_dormir` — bedrooms at the seasonal setpoint on the slowest fan each
+  unit declares (`level1` on the 5140, `low` on the 3340), living areas off. The
+  fan frame is sent a second after the temperature frame so the two IR blasts
+  don't step on each other.
+- `aires_subir_grado` / `aires_bajar_grado` — ±1 °C on every unit that is **on**,
+  each clamped to its own limits (they differ: 17-30 on the 1382, 16-31 on the
+  5140, 16-32 on the 3340). Units that are off stay off. They are one `repeat`
+  over the four entities, guarded with `if` and not a `condition` step — inside a
+  repeat a failed condition aborts the whole script instead of skipping the item.
+
+`sensor.aires_modo_estacional` is a template sensor in the same package that
+resolves to `heat` or `cool`: the outdoor temperature against a 22 °C line,
+falling back to the living-room thermometer when the weather sensor is down.
 
 Turn-on presets fix mode+temperature in a single `climate.set_temperature` call
 (passing `hvac_mode`): IR sends the whole state frame each time, so one blast
@@ -362,6 +433,32 @@ widget — add it, pick the `script.*` entity, and one tap runs it; on iOS use
 Shortcuts (*Home Assistant → Run Script*) and add the shortcut to the home
 screen or Lock Screen.
 
+### The "Aires" dashboard
+
+A storage-mode dashboard **"Aires"** (`url_path: aires-panel`, in the sidebar)
+fronts all of the above, built from stock cards — no custom resource, unlike the
+[TV remote pad](#ir-remote-dashboard-universal-remote-card):
+
+- **Rápido** — `sensor.aires_modo_estacional` and the three thermometers up top,
+  then the group buttons: the seasonal toggle and ±1 °C, the explicit heat/cool
+  toggles (plus "reafirmar", the non-toggle `aires_todos_encender` /
+  `aires_todos_frio`, for re-blasting the frame without risking a turn-off), and
+  the zone buttons — day, bedrooms, only-the-bedroom, sleep mode. Every button is
+  a `perform-action` tap on a `script.*`, so the dashboard holds no logic of its
+  own: it is a view over the package.
+- **Detalle** — a `thermostat` card per room with the `climate-hvac-modes` and
+  `climate-fan-modes` features (the bedroom also gets `climate-swing-modes`, the
+  only unit whose code JSON declares a swing table), the ATC thermometer tiles
+  where a room has one, and 24 h history of the four units and the three
+  temperatures.
+
+Like the other two dashboards it lives in `.storage` (`lovelace.aires_panel` +
+its registry entry in `lovelace_dashboards`), so it is **not** in git.
+
+> Fresh-PVC recovery: rebuild it from the button list above, or re-import the
+> config over the WebSocket API (`lovelace/dashboards/create` +
+> `lovelace/config/save`) — the REST API does not expose dashboards.
+
 ### Automatic schedule (migrated from Google Home)
 
 The same package ships three `automation:`s, migrated 1:1 from the Google Home
@@ -370,11 +467,16 @@ app (same times, thresholds and guards — see
 
 - `aires_calor_manana` — kitchen + living to **heat 21 °C** at 08:00 on
   weekdays / 09:00 on weekends, if someone's home and the living room is ≤ 17 °C.
-- `aires_apagar_templado` — all three **off** once it hits 19 °C outside, but
+- `aires_apagar_templado` — all four **off** once it hits 19 °C outside, but
   only while the living AC is in `heat`. Checking the mode instead of a date
   range is what keeps it from firing in summer.
-- `aires_frio_dia_caluroso` — all three to **cool 24 °C** when it's over 30 °C
-  outside and over 24 °C in the living room, if someone's home.
+- `aires_frio_dia_caluroso` — kitchen + living + bedroom to **cool 24 °C** when
+  it's over 30 °C outside and over 24 °C in the living room, if someone's home.
+
+**The kids' room is in every group script but only in the turn-OFF schedule.**
+Nothing here starts that unit on a timer — the room is driven by hand, from the
+dashboard or Google Home. It joins `aires_apagar_templado` because leaving one AC
+running while the rest of the house shuts down is a leak, not a policy.
 
 Notes that matter when editing them:
 
