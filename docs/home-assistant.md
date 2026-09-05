@@ -450,18 +450,28 @@ A storage-mode dashboard **"Aires"** (`url_path: aires-panel`, in the sidebar)
 fronts all of the above, built from stock cards — no custom resource, unlike the
 [TV remote pad](#ir-remote-dashboard-universal-remote-card):
 
-- **Rápido** — `sensor.aires_modo_estacional` and the three thermometers up top,
-  then the group buttons: the seasonal toggle and ±1 °C, the explicit heat/cool
-  toggles (plus "reafirmar", the non-toggle `aires_todos_encender` /
-  `aires_todos_frio`, for re-blasting the frame without risking a turn-off), and
-  the zone buttons — day, bedrooms, only-the-bedroom, sleep mode. Every button is
-  a `perform-action` tap on a `script.*`, so the dashboard holds no logic of its
-  own: it is a view over the package.
-- **Detalle** — a `thermostat` card per room with the `climate-hvac-modes` and
-  `climate-fan-modes` features (the bedroom also gets `climate-swing-modes`, the
-  only unit whose code JSON declares a swing table), the ATC thermometer tiles
-  where a room has one, and 24 h history of the four units and the three
-  temperatures.
+- **Rápido** — four sections, each opening with a `markdown` card that says what
+  its buttons do. The idempotent toggle rule is the thing that needs explaining —
+  a button that turns everything *on* until the group is complete, and only then
+  turns it off, is not guessable from a label — so those cards are **templated**
+  and state the outcome of the next tap against the live group state ("hay 2 de 4
+  prendidos, así que el próximo toque prende los que faltan"). The sections are:
+  the house right now (a rendered on/off summary plus a tile per unit), all four
+  ACs (seasonal toggle, ±1 °C), half the house (day zone, bedrooms,
+  only-the-bedroom, sleep mode) and the manual overrides — the explicit heat/cool
+  toggles and the two non-toggle presets, labelled *Re-enviar* because that is
+  what they are for: re-blasting the frame at a unit that missed the IR. Every
+  button is a `perform-action` tap on a `script.*`, so the dashboard holds no
+  logic of its own: it is a view over the package.
+- **Detalle** — opens with the caveat that matters most here: the state shown is
+  the last thing HA *sent*, not what the unit holds, because IR is one-way. Then a
+  `thermostat` card per room with the `climate-hvac-modes` and `climate-fan-modes`
+  features (the bedroom also gets `climate-swing-modes`, the only unit whose code
+  JSON declares a swing table), the ATC thermometer tiles where a room has one,
+  and 24 h history of the four units and the three temperatures.
+
+Button labels carry their setpoint (*Día en calor 21°*, *Piezas en frío 24°*)
+rather than naming the script, so the panel needs no legend.
 
 Like the other two dashboards it lives in `.storage` (`lovelace.aires_panel` +
 its registry entry in `lovelace_dashboards`), so it is **not** in git.
