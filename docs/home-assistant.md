@@ -239,15 +239,14 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
 **What lives where:**
 
 - **Broadlink devices** — added via the HA UI (Settings → Devices → Broadlink).
-  They register as `remote.*` entities:
+  They register as `remote.*` entities — all four are addressed **by IP**, not by
+  the `<name>.lan` record Pi-hole publishes for their reservation: the integration
+  is config-flow (its host lives in `.storage`, not git) and its DHCP discovery
+  rewrites that host with an IP anyway.
   - `remote.control_living` — living-room blaster (`192.168.0.31`)
   - `remote.control_dormitorio` — bedroom blaster (`192.168.0.30`)
   - `remote.broadlink_cocina` — kitchen blaster (`192.168.0.32`)
-  - `remote.broadlink_chicos` — kids' room blaster, **pending**: `.33` is held for
-    it in `charts/pihole/values.yaml` (commented out until its MAC is known) and
-    `climate.aire_chicos` already points at this entity id. Pair the device in the
-    UI and rename its `remote.*` entity to match, or edit the `controller_data`
-    line instead.
+  - `remote.broadlink_chicos` — kids' room blaster (`192.168.0.33`)
   - Learned commands (if any) persist in `/config/.storage/broadlink_remote_<mac>_codes`.
 - **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on

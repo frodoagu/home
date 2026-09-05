@@ -30,9 +30,7 @@ climate:
     device_code: 1382  # Midea MSY-12HRDN1 (BGH Silent Air) - mismo equipo que el living
     controller_data: remote.broadlink_cocina
   # Philco iView 3800 W, a Wide WDS12ECO on the wire — read off its own remote,
-  # see docs/home-assistant.md. `controller_data` names the blaster this room is
-  # getting; until that Broadlink is paired the entity tracks state and the IR
-  # sends land nowhere. No BLE thermometer here, so no ambient reading.
+  # see docs/home-assistant.md. No BLE thermometer here, so no ambient reading.
   - platform: smartir
     name: "Aire Chicos"
     unique_id: aire_chicos
