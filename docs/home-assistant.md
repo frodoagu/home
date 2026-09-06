@@ -75,8 +75,8 @@ only in `.storage` (and must be recreated) is the *stateful* stuff the UI owns:
 the webOS/Broadlink **config entries** (re-pair the devices), the **network
 settings** (`use_x_forwarded_for`/`trusted_proxies` — see
 [`trusted_proxies`](#trusted_proxies-and-host-networking)), entity **hides**
-(`hidden_by`) and any **disables**, and the Lovelace dashboards. SmartIR re-downloads
-its code JSONs on first use as before.
+(`hidden_by`) and any **disables**. SmartIR re-downloads its code JSONs on first
+use as before. The **dashboards** come back from git too — see below.
 
 **Editing the versioned config:** change the file under `charts/home-assistant/packages/`
 and let ArgoCD sync (the ConfigMap update propagates to the mount; HA picks it up on
@@ -90,6 +90,41 @@ anymore — they're no longer there.
 > packages mounted — otherwise HA sees the same entities twice (duplicate
 > `unique_id`s, and a fatal duplicate `script` key). Order: strip the PVC first
 > (the running pod keeps its in-memory config), then deploy.
+
+## Versioned dashboards
+
+The three custom dashboards are **YAML mode**, read from git:
+[`charts/home-assistant/dashboards/`](../charts/home-assistant/dashboards/) is
+mounted read-only at `/config/dashboards` and registered through a single line the
+init container appends to `configuration.yaml`:
+
+```yaml
+lovelace: !include dashboards/lovelace.yaml
+```
+
+`lovelace.yaml` is **generated** into the same ConfigMap from
+`.Values.dashboards.items`, so adding a dashboard is a values entry plus a file —
+no rewrite of `configuration.yaml`, which is what the `!include` buys. (The
+`google_assistant:` block, appended verbatim, is the counter-example: it only
+applies on a fresh `/config`.) A `checksum/dashboards` annotation rolls the pod on
+any change, same as the packages one.
+
+What this trades away: **a YAML-mode dashboard cannot be edited from the UI.** The
+edit pencil is gone and changes go through git. The default *Overview* dashboard
+stays `mode: storage` and stays editable, so the UI is not read-only everywhere.
+
+Two rules the schema itself enforces — `url_path` **must contain a hyphen**
+(hence `aires-panel`, not `aires`) and `filename` is relative to `/config`.
+
+> **Migrating one from storage mode:** delete the storage dashboard first
+> (`lovelace/dashboards/delete` over the WebSocket API, or Settings → Dashboards).
+> A YAML dashboard cannot claim a `url_path` that a storage dashboard already
+> holds, and the config schema does not catch the collision — it shows up at
+> runtime as the dashboard simply not appearing.
+
+> Fresh-PVC recovery: nothing to do for the dashboards themselves. Re-add the
+> custom card **resource** the TV pad needs (see below) — resources are still
+> `.storage`.
 
 ## HACS default bootstrap
 
@@ -488,12 +523,15 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
 Button labels carry their setpoint (*Día en calor 21°*, *Piezas en frío 24°*)
 rather than naming the script, so the panel needs no legend.
 
-Like the other two dashboards it lives in `.storage` (`lovelace.aires_panel` +
-its registry entry in `lovelace_dashboards`), so it is **not** in git.
+Its config is [`dashboards/aires.yaml`](../charts/home-assistant/dashboards/aires.yaml)
+in git — see [Versioned dashboards](#versioned-dashboards). Edits go through a PR,
+not the UI.
 
-> Fresh-PVC recovery: rebuild it from the button list above, or re-import the
-> config over the WebSocket API (`lovelace/dashboards/create` +
-> `lovelace/config/save`) — the REST API does not expose dashboards.
+Every card carries an explicit `grid_options.columns`. Leaving one at the default
+is what breaks the layout: a `tile` defaults to **half a row**, so the cards after
+it wrap into a staircase instead of lining up. The views also set
+`dense_section_placement: true`, without which every section in a row stretches to
+the tallest one and short sections leave a hole.
 
 ### Automatic schedule (migrated from Google Home)
 
@@ -760,8 +798,8 @@ but HACS won't track it for updates):
 - JS lives at `/config/www/universal-remote-card.min.js` (v4.11.3), served at
   `/local/universal-remote-card.min.js` and registered as a `module` resource in
   `.storage/lovelace_resources`.
-- The dashboard config is `.storage/lovelace.tv-remotes` (+ its registry entry in
-  `.storage/lovelace_dashboards`).
+- The dashboard config is [`dashboards/tvs.yaml`](../charts/home-assistant/dashboards/tvs.yaml)
+  in git. The **resource** registration is not — that stays `.storage`.
 
 Gotchas:
 - After (re)registering the resource, **hard-refresh the browser** (Ctrl-Shift-R) or
@@ -770,9 +808,9 @@ Gotchas:
 - Lovelace resources are read at startup in storage mode, so a new resource needs an
   HA restart to load.
 
-> Fresh-PVC recovery: re-download the JS into `/config/www/`, re-add the resource +
-> dashboard registry + `lovelace.tv-remotes` config, restart, hard-refresh. Or just
-> install "Universal Remote Card" from HACS and rebuild the two cards.
+> Fresh-PVC recovery: re-download the JS into `/config/www/` and re-add the
+> resource, then restart and hard-refresh. The dashboard itself comes back from
+> git. Or install "Universal Remote Card" from HACS instead of the manual copy.
 
 ## Outdoor lights (Shelly) — see [docs/shelly.md](shelly.md)
 

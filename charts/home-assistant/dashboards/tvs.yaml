@@ -1,0 +1,452 @@
+title: TVs
+views:
+- title: Remotos IR
+  path: remotos
+  icon: mdi:remote-tv
+  cards:
+  - type: heading
+    heading: TV Sala
+    icon: mdi:television
+  - type: custom:universal-remote-card
+    media_player_id: media_player.tv_sala_ir
+    rows:
+    - - power
+    - - - volume_up
+        - volume_down
+      - circlepad
+      - - channel_up
+        - channel_down
+    - - back
+      - home
+      - info
+    - - input
+      - settings
+      - volume_mute
+    - - netflix
+      - primevideo
+    - - play
+      - pause
+    custom_actions:
+    - type: button
+      name: power
+      tap_action:
+        action: perform-action
+        perform_action: media_player.toggle
+        target:
+          entity_id: media_player.tv_sala_ir
+      icon: mdi:power
+      styles: ':host { --icon-color: #ff5252; }'
+    - type: circlepad
+      name: circlepad
+      icon: mdi:circle-medium
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: OK
+      up:
+        icon: mdi:chevron-up
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_sala_ir
+          data:
+            source: Up Arrow
+        hold_action:
+          action: repeat
+      down:
+        icon: mdi:chevron-down
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_sala_ir
+          data:
+            source: Down Arrow
+        hold_action:
+          action: repeat
+      left:
+        icon: mdi:chevron-left
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_sala_ir
+          data:
+            source: Left Arrow
+        hold_action:
+          action: repeat
+      right:
+        icon: mdi:chevron-right
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_sala_ir
+          data:
+            source: Right Arrow
+        hold_action:
+          action: repeat
+    - type: button
+      name: volume_up
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_up
+        target:
+          entity_id: media_player.tv_sala_ir
+      icon: mdi:volume-plus
+    - type: button
+      name: volume_down
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_down
+        target:
+          entity_id: media_player.tv_sala_ir
+      icon: mdi:volume-minus
+    - type: button
+      name: volume_mute
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_mute
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          is_volume_muted: true
+      icon: mdi:volume-mute
+    - type: button
+      name: channel_up
+      tap_action:
+        action: perform-action
+        perform_action: media_player.media_next_track
+        target:
+          entity_id: media_player.tv_sala_ir
+      icon: mdi:chevron-up
+    - type: button
+      name: channel_down
+      tap_action:
+        action: perform-action
+        perform_action: media_player.media_previous_track
+        target:
+          entity_id: media_player.tv_sala_ir
+      icon: mdi:chevron-down
+    - type: button
+      name: back
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Back
+      icon: mdi:arrow-u-left-top
+    - type: button
+      name: home
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Home
+      icon: mdi:home
+    - type: button
+      name: info
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Info
+      icon: mdi:information-outline
+    - type: button
+      name: input
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Input
+      icon: mdi:import
+    - type: button
+      name: settings
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Settings
+      icon: mdi:cog
+    - type: button
+      name: netflix
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Netflix
+      icon: mdi:netflix
+      styles: ':host { --icon-color: #e50914; }'
+    - type: button
+      name: primevideo
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Prime Video
+      icon: mdi:filmstrip
+      styles: ':host { --icon-color: #00a8e1; }'
+    - type: button
+      name: play
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Play
+      icon: mdi:play
+    - type: button
+      name: pause
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_sala_ir
+        data:
+          source: Pause
+      icon: mdi:pause
+    styles: ":host {\n  --icon-size: 24px;\n  max-width: 300px;\n  margin: 0 auto;\n}\nremote-button,\
+      \ remote-circlepad {\n  margin: 3px;\n}\n.circlepad {\n  background: rgba(127,127,127,0.14);\n \
+      \ border-radius: 50%;\n}\n"
+  - type: heading
+    heading: TV Dormitorio
+    icon: mdi:television
+  - type: custom:universal-remote-card
+    media_player_id: media_player.tv_dormitorio_ir
+    rows:
+    - - power
+    - - - volume_up
+        - volume_down
+      - circlepad
+      - - channel_up
+        - channel_down
+    - - back
+      - home
+      - info
+    - - input
+      - settings
+      - volume_mute
+    - - netflix
+      - primevideo
+    - - play
+      - pause
+    custom_actions:
+    - type: button
+      name: power
+      tap_action:
+        action: perform-action
+        perform_action: media_player.toggle
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+      icon: mdi:power
+      styles: ':host { --icon-color: #ff5252; }'
+    - type: circlepad
+      name: circlepad
+      icon: mdi:circle-medium
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: OK
+      up:
+        icon: mdi:chevron-up
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_dormitorio_ir
+          data:
+            source: Up Arrow
+        hold_action:
+          action: repeat
+      down:
+        icon: mdi:chevron-down
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_dormitorio_ir
+          data:
+            source: Down Arrow
+        hold_action:
+          action: repeat
+      left:
+        icon: mdi:chevron-left
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_dormitorio_ir
+          data:
+            source: Left Arrow
+        hold_action:
+          action: repeat
+      right:
+        icon: mdi:chevron-right
+        tap_action:
+          action: perform-action
+          perform_action: media_player.select_source
+          target:
+            entity_id: media_player.tv_dormitorio_ir
+          data:
+            source: Right Arrow
+        hold_action:
+          action: repeat
+    - type: button
+      name: volume_up
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_up
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+      icon: mdi:volume-plus
+    - type: button
+      name: volume_down
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_down
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+      icon: mdi:volume-minus
+    - type: button
+      name: volume_mute
+      tap_action:
+        action: perform-action
+        perform_action: media_player.volume_mute
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          is_volume_muted: true
+      icon: mdi:volume-mute
+    - type: button
+      name: channel_up
+      tap_action:
+        action: perform-action
+        perform_action: media_player.media_next_track
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+      icon: mdi:chevron-up
+    - type: button
+      name: channel_down
+      tap_action:
+        action: perform-action
+        perform_action: media_player.media_previous_track
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+      icon: mdi:chevron-down
+    - type: button
+      name: back
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Back
+      icon: mdi:arrow-u-left-top
+    - type: button
+      name: home
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Home
+      icon: mdi:home
+    - type: button
+      name: info
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Info
+      icon: mdi:information-outline
+    - type: button
+      name: input
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Input
+      icon: mdi:import
+    - type: button
+      name: settings
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Settings
+      icon: mdi:cog
+    - type: button
+      name: netflix
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Netflix
+      icon: mdi:netflix
+      styles: ':host { --icon-color: #e50914; }'
+    - type: button
+      name: primevideo
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Prime Video
+      icon: mdi:filmstrip
+      styles: ':host { --icon-color: #00a8e1; }'
+    - type: button
+      name: play
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Play
+      icon: mdi:play
+    - type: button
+      name: pause
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.tv_dormitorio_ir
+        data:
+          source: Pause
+      icon: mdi:pause
+    styles: ":host {\n  --icon-size: 24px;\n  max-width: 300px;\n  margin: 0 auto;\n}\nremote-button,\
+      \ remote-circlepad {\n  margin: 3px;\n}\n.circlepad {\n  background: rgba(127,127,127,0.14);\n \
+      \ border-radius: 50%;\n}\n"

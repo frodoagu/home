@@ -1,0 +1,34 @@
+{{- if .Values.dashboards.enabled }}
+# Versioned Lovelace dashboards. Each YAML under dashboards/ is bundled here as a
+# data key and mounted read-only at /config/dashboards, alongside a generated
+# lovelace.yaml registry pulled in by `lovelace: !include dashboards/lovelace.yaml`
+# (added by the init container). The include is what makes this declarative: a new
+# dashboard is a ConfigMap change, with no rewrite of configuration.yaml.
+# Dashboard files load via .Files.Get so the raw YAML survives Helm templating.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-dashboards
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+data:
+  lovelace.yaml: |-
+    # Contents of the `lovelace:` key. `mode: storage` keeps the default Overview
+    # dashboard UI-editable; the ones listed here are read from git and are NOT
+    # editable in the UI.
+    mode: storage
+    dashboards:
+    {{- range .Values.dashboards.items }}
+      {{ .urlPath }}:
+        mode: yaml
+        title: {{ .title | quote }}
+        icon: {{ .icon | quote }}
+        show_in_sidebar: {{ .showInSidebar | default true }}
+        require_admin: {{ .requireAdmin | default false }}
+        filename: dashboards/{{ .file }}
+    {{- end }}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.yaml" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

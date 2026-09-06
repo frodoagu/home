@@ -149,6 +149,32 @@ hacs:
 packages:
   enabled: true
 
+# Versioned Lovelace dashboards. Each file under charts/home-assistant/dashboards/
+# is mounted read-only at /config/dashboards and registered as a YAML-mode
+# dashboard through `lovelace: !include dashboards/lovelace.yaml`.
+#
+# YAML mode is the trade: these dashboards come back from git on a fresh PVC and
+# every change is a reviewable diff, but they are NOT editable from the HA UI.
+# The default Overview dashboard stays in storage mode and stays editable.
+#
+# `urlPath` MUST contain a hyphen — HA rejects a custom dashboard path without one
+# — and each `file` is a filename in that directory.
+dashboards:
+  enabled: true
+  items:
+    - urlPath: aires-panel
+      title: "Aires"
+      icon: "mdi:air-conditioner"
+      file: aires.yaml
+    - urlPath: tv-remotes
+      title: "TVs"
+      icon: "mdi:television"
+      file: tvs.yaml
+    - urlPath: lavasecarropas-panel
+      title: "Lavasecarropas"
+      icon: "mdi:washing-machine"
+      file: lavasecarropas.yaml
+
 # Resource requests/limits – tune for RPi
 #
 # The 512Mi limit was too tight: steady-state RSS sits at ~490Mi (recorder +
