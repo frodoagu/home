@@ -431,6 +431,20 @@ two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
 resolves to `heat` or `cool`: the outdoor temperature against a 22 °C line,
 falling back to the living-room thermometer when the weather sensor is down.
 
+**Scheduled shutdown.** "Turn everything off in N hours" and "turn everything off
+at HH:MM" are the same mechanism: a single `timer.aires_apagado`, which
+`aires_apagar_en_horas` starts with a duration and `aires_apagar_a_las` starts with
+the seconds left until the time picked in `input_datetime.aires_apagar_hora`
+(time-only, so its `timestamp` attribute is seconds since midnight; a target
+already past today rolls to tomorrow). One countdown to read, one thing to cancel,
+and re-scheduling replaces rather than stacks.
+
+`aires_apagado_programado` fires on the **`timer.finished` event**, not on a state
+change to `idle` — a cancel also lands on `idle`, so a state trigger would turn the
+house off precisely when you said not to. That is why `aires_cancelar_apagado` is
+enough to unschedule. `restore: true` keeps a running countdown across an HA
+restart.
+
 Turn-on presets fix mode+temperature in a single `climate.set_temperature` call
 (passing `hvac_mode`): IR sends the whole state frame each time, so one blast
 lands the unit in the target state — re-blasting a unit that's already on
@@ -457,8 +471,9 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   and state the outcome of the next tap against the live group state ("hay 2 de 4
   prendidos, así que el próximo toque prende los que faltan"). The sections are:
   the house right now (a rendered on/off summary plus a tile per unit), all four
-  ACs (seasonal toggle, ±1 °C), half the house (day zone, bedrooms,
-  only-the-bedroom, sleep mode) and the manual overrides — the explicit heat/cool
+  ACs (seasonal toggle, ±1 °C), the scheduled shutdown (three preset delays, a
+  time picker, the live countdown and a cancel), half the house (day zone,
+  bedrooms, only-the-bedroom, sleep mode) and the manual overrides — the explicit heat/cool
   toggles and the two non-toggle presets, labelled *Re-enviar* because that is
   what they are for: re-blasting the frame at a unit that missed the IR. Every
   button is a `perform-action` tap on a `script.*`, so the dashboard holds no
