@@ -15,14 +15,19 @@ spec:
     metadata:
       labels:
         {{- include "home-assistant.selectorLabels" . | nindent 8 }}
-      {{- if .Values.packages.enabled }}
+      {{- if or .Values.packages.enabled .Values.dashboards.enabled }}
       annotations:
         # Roll the pod when the packages ConfigMap changes. Without this the
         # Deployment spec is identical across package edits, so k8s never
         # restarts HA and it keeps serving the stale /config/packages mount
         # until a manual restart. Hashing the rendered ConfigMap ties the pod
         # template to the package content, triggering a Recreate on any change.
+        {{- if .Values.packages.enabled }}
         checksum/packages: {{ include (print $.Template.BasePath "/configmap-packages.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.dashboards.enabled }}
+        checksum/dashboards: {{ include (print $.Template.BasePath "/configmap-dashboards.yaml") . | sha256sum }}
+        {{- end }}
       {{- end }}
     spec:
       hostNetwork: {{ .Values.hostNetwork }}
@@ -121,6 +126,16 @@ spec:
                 else
                   printf '\nhomeassistant:\n  packages: !include_dir_named packages\n' >> "$CONFIG"
                 fi
+              fi
+              {{- end }}
+              {{- if .Values.dashboards.enabled }}
+
+              # Versioned dashboards: point the `lovelace:` key at the generated
+              # registry in the /config/dashboards ConfigMap. Appended once — the
+              # dashboard list lives in the included file, so adding one later is
+              # a ConfigMap change and needs no edit here.
+              if ! grep -q '^lovelace:' "$CONFIG"; then
+                printf '\nlovelace: !include dashboards/lovelace.yaml\n' >> "$CONFIG"
               fi
               {{- end }}
 
@@ -228,6 +243,12 @@ spec:
               mountPath: /config/packages
               readOnly: true
             {{- end }}
+            {{- if .Values.dashboards.enabled }}
+            # Versioned Lovelace dashboards + the generated lovelace.yaml registry.
+            - name: dashboards
+              mountPath: /config/dashboards
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -248,6 +269,11 @@ spec:
         - name: packages
           configMap:
             name: {{ include "home-assistant.fullname" . }}-packages
+        {{- end }}
+        {{- if .Values.dashboards.enabled }}
+        - name: dashboards
+          configMap:
+            name: {{ include "home-assistant.fullname" . }}-dashboards
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

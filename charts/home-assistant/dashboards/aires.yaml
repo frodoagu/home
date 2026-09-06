@@ -1,0 +1,512 @@
+views:
+- title: Rápido
+  path: rapido
+  icon: mdi:gesture-tap-button
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Cómo está la casa ahora
+      icon: mdi:home-thermometer
+      heading_style: title
+    - type: markdown
+      content: "{%- set casa = [('Living','climate.aire_living'),('Cocina','climate.aire_cocina'),('Dormitorio','climate.aire_dormitorio'),('Chicos','climate.aire_chicos')]\
+        \ -%}\n{%- set ns = namespace(on=[], off=[]) -%}\n{%- for nombre, e in casa -%}\n  {%- if states(e)\
+        \ in ['off','unavailable','unknown'] -%}\n    {%- set ns.off = ns.off + [nombre] -%}\n  {%- else\
+        \ -%}\n    {%- set ns.on = ns.on + [nombre ~ ' ' ~ (state_attr(e,'temperature') | float(0) | round\
+        \ | int) ~ '°'] -%}\n  {%- endif -%}\n{%- endfor -%}\n{% if ns.on %}\U0001F525 **Prendidos:**\
+        \ {{ ns.on | join(' · ') }}{% else %}**Los cuatro están apagados.**{% endif %}\n{%- if ns.on and\
+        \ ns.off %}\n\n❄️ **Apagados:** {{ ns.off | join(' · ') }}\n{%- endif %}\n\nAfuera {{ states('sensor.temperatura_exterior')\
+        \ }}° · living {{ states('sensor.atc_29a8_temperatura') | float(0) | round(1) }}° · dormitorio\
+        \ {{ states('sensor.dormitorio_atc_b6d2_temperatura') | float(0) | round(1) }}°\n"
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: climate.aire_living
+      name: Living
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: climate.aire_cocina
+      name: Cocina
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: climate.aire_dormitorio
+      name: Dormitorio
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: climate.aire_chicos
+      name: Chicos
+      grid_options:
+        columns: 6
+    column_span: 2
+  - type: grid
+    cards:
+    - type: heading
+      heading: Todos los aires
+      icon: mdi:air-conditioner
+      heading_style: title
+    - type: markdown
+      content: 'Un solo botón para toda la casa. **Apaga solamente cuando los cuatro
+
+        están prendidos** — si hay alguno apagado, primero prende los que
+
+        faltan, y recién el toque siguiente apaga todo.
+
+
+        {% set aires = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_dormitorio'',''climate.aire_chicos'']
+        -%}
+
+        {%- set prendidos = aires | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        | list | count -%}
+
+        {%- set modo = ''frío 24°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else ''calor
+        (21° living y cocina, 20° las piezas)'' -%}
+
+        {%- if prendidos == 4 %}
+
+        👉 Ahora mismo: los cuatro están prendidos, así que el próximo toque **los apaga**.
+
+        {%- elif prendidos == 0 %}
+
+        👉 Ahora mismo: están todos apagados, así que el próximo toque **los prende en {{ modo }}**.
+
+        {%- else %}
+
+        👉 Ahora mismo: hay {{ prendidos }} de 4 prendidos, así que el próximo toque **prende los que faltan**
+        en {{ modo }}. El siguiente ya apaga todo.
+
+        {%- endif %}
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Prender o apagar todo
+      icon: mdi:power
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_toggle_estacional
+      grid_options:
+        columns: 12
+    - type: markdown
+      content: 'Corrigen la temperatura **sin cambiar qué está prendido**: suben o
+
+        bajan un grado a los aires que ya están funcionando y no tocan los
+
+        apagados. Cada equipo respeta su propio tope.
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Un grado más
+      icon: mdi:thermometer-plus
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_subir_grado
+    - type: button
+      name: Un grado menos
+      icon: mdi:thermometer-minus
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_bajar_grado
+  - type: grid
+    cards:
+    - type: heading
+      heading: Apagar más tarde
+      icon: mdi:timer-sand
+      heading_style: title
+    - type: markdown
+      content: '{% set e = ''timer.aires_apagado'' %}
+
+        {%- if is_state(e, ''active'') -%}
+
+        {%- set fin = as_timestamp(state_attr(e, ''finishes_at'')) -%}
+
+        {%- set faltan = (fin - as_timestamp(now())) | int -%}
+
+        ⏱️ **Se apagan los cuatro a las {{ fin | timestamp_custom(''%H:%M'') }}**, faltan {{ faltan //
+        3600 }} h {{ (faltan % 3600) // 60 }} min.
+
+        {%- elif is_state(e, ''paused'') -%}
+
+        ⏸️ Hay un apagado programado **en pausa**.
+
+        {%- else -%}
+
+        No hay ningún apagado programado. Elegí en cuánto tiempo, o una hora exacta.
+
+        {%- endif %}
+
+
+        Cualquiera de las dos formas arranca la misma cuenta regresiva, así que
+
+        programar de nuevo **reemplaza** lo anterior en vez de sumarse. Cancelar
+
+        desprograma; el apagado no se dispara si el timer no llega al final.
+
+        '
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: timer.aires_apagado
+      name: Cuenta regresiva
+      grid_options:
+        columns: 12
+    - type: button
+      name: En 1 hora
+      icon: mdi:numeric-1-circle-outline
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_apagar_en_horas
+        data:
+          horas: 1
+      grid_options:
+        columns: 4
+    - type: button
+      name: En 2 horas
+      icon: mdi:numeric-2-circle-outline
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_apagar_en_horas
+        data:
+          horas: 2
+      grid_options:
+        columns: 4
+    - type: button
+      name: En 4 horas
+      icon: mdi:numeric-4-circle-outline
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_apagar_en_horas
+        data:
+          horas: 4
+      grid_options:
+        columns: 4
+    - type: entities
+      entities:
+      - entity: input_datetime.aires_apagar_hora
+        name: O a esta hora exacta
+      grid_options:
+        columns: 12
+    - type: button
+      name: Programar a esa hora
+      icon: mdi:clock-check-outline
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_apagar_a_las
+      grid_options:
+        columns: 6
+    - type: button
+      name: Cancelar
+      icon: mdi:timer-off-outline
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_cancelar_apagado
+      grid_options:
+        columns: 6
+  - type: grid
+    cards:
+    - type: heading
+      heading: Media casa
+      icon: mdi:home-floor-g
+      heading_style: title
+    - type: markdown
+      content: '**Día** = cocina + living. **Piezas** = dormitorio + chicos.
+
+
+        Funcionan igual que el botón de arriba: apagan la zona solo cuando
+
+        los dos equipos están prendidos.
+
+
+        {% set dia = [''climate.aire_cocina'',''climate.aire_living''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        | list | count -%}
+
+        {%- set noche = [''climate.aire_dormitorio'',''climate.aire_chicos''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        | list | count %}
+
+        👉 Día: {{ ''los dos prendidos, el próximo toque apaga'' if dia == 2 else (''los dos apagados''
+        if dia == 0 else ''1 de 2 prendido'') }} · Piezas: {{ ''las dos prendidas, el próximo toque apaga''
+        if noche == 2 else (''las dos apagadas'' if noche == 0 else ''1 de 2 prendida'') }}
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Día en calor 21°
+      icon: mdi:fire
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_cocina_living_toggle_calor
+    - type: button
+      name: Día en frío 24°
+      icon: mdi:snowflake
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_cocina_living_toggle_frio
+    - type: button
+      name: Piezas en calor 20°
+      icon: mdi:fire
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_zona_noche_toggle_calor
+    - type: button
+      name: Piezas en frío 24°
+      icon: mdi:snowflake
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_zona_noche_toggle_frio
+    - type: markdown
+      content: 'Estos dos no son toggle, hacen siempre lo mismo:
+
+        **Solo el dormitorio** apaga los otros tres y deja el dormitorio en
+
+        calor 20°. **Modo dormir** deja las dos piezas en el modo de la
+
+        época con el ventilador al mínimo, y apaga cocina y living.
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Solo el dormitorio
+      icon: mdi:bed
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_solo_pieza
+    - type: button
+      name: Modo dormir
+      icon: mdi:sleep
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_modo_dormir
+  - type: grid
+    cards:
+    - type: heading
+      heading: Cuando querés elegir vos
+      icon: mdi:tune
+      heading_style: title
+    - type: markdown
+      content: 'El botón de "todos" elige calor o frío mirando la temperatura de
+
+        afuera (la línea está en 22°). {% if states(''sensor.aires_modo_estacional'') == ''cool'' %}Ahora
+        elegiría **frío**{% else %}Ahora elegiría **calor**{% endif %}, porque afuera hay {{ states(''sensor.temperatura_exterior'')
+        }}°.
+
+
+        Los dos primeros botones fuerzan el modo en vez de dejarlo decidir, y
+
+        son toggle igual que el de arriba.
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Todos en calor
+      icon: mdi:fire
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_toggle_calor
+    - type: button
+      name: Todos en frío
+      icon: mdi:snowflake
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_toggle_frio
+    - type: markdown
+      content: 'Los de abajo **nunca apagan**: vuelven a mandar la orden a los cuatro
+
+        equipos. Sirven cuando un aire no captó el infrarrojo y quedó
+
+        distinto al resto.
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Re-enviar calor
+      icon: mdi:fire-alert
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_todos_encender
+    - type: button
+      name: Re-enviar frío
+      icon: mdi:snowflake-alert
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_todos_frio
+  dense_section_placement: true
+- title: Detalle
+  path: detalle
+  icon: mdi:tune-variant
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: markdown
+      content: '⚠️ **Lo que ves acá es lo último que Home Assistant le mandó a cada
+
+        equipo, no lo que el equipo tiene puesto.** El infrarrojo va en un
+
+        solo sentido: si alguien usó el control remoto, HA no se entera y
+
+        queda desincronizado. Tocar cualquier botón lo vuelve a alinear,
+
+        porque cada envío manda el estado completo.
+
+        '
+      grid_options:
+        columns: 12
+  - type: grid
+    cards:
+    - type: heading
+      heading: Living
+      icon: mdi:sofa
+      heading_style: subtitle
+    - type: thermostat
+      entity: climate.aire_living
+      features:
+      - type: climate-hvac-modes
+      - type: climate-fan-modes
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: sensor.atc_29a8_temperatura
+      name: Temperatura
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: sensor.atc_29a8_humedad
+      name: Humedad
+      grid_options:
+        columns: 6
+  - type: grid
+    cards:
+    - type: heading
+      heading: Dormitorio
+      icon: mdi:bed-king
+      heading_style: subtitle
+    - type: thermostat
+      entity: climate.aire_dormitorio
+      features:
+      - type: climate-hvac-modes
+      - type: climate-fan-modes
+      - type: climate-swing-modes
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: sensor.dormitorio_atc_b6d2_temperatura
+      name: Temperatura
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: sensor.dormitorio_atc_b6d2_humedad
+      name: Humedad
+      grid_options:
+        columns: 6
+  - type: grid
+    cards:
+    - type: heading
+      heading: Cocina
+      icon: mdi:countertop
+      heading_style: subtitle
+    - type: markdown
+      content: 'Sin termómetro en el ambiente, así que la tarjeta no muestra
+
+        temperatura actual.
+
+        '
+      grid_options:
+        columns: 12
+    - type: thermostat
+      entity: climate.aire_cocina
+      features:
+      - type: climate-hvac-modes
+      - type: climate-fan-modes
+      grid_options:
+        columns: 12
+  - type: grid
+    cards:
+    - type: heading
+      heading: Chicos
+      icon: mdi:teddy-bear
+      heading_style: subtitle
+    - type: markdown
+      content: 'Sin termómetro en el ambiente, así que la tarjeta no muestra
+
+        temperatura actual.
+
+        '
+      grid_options:
+        columns: 12
+    - type: thermostat
+      entity: climate.aire_chicos
+      features:
+      - type: climate-hvac-modes
+      - type: climate-fan-modes
+      grid_options:
+        columns: 12
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Historial
+      icon: mdi:chart-timeline-variant
+      heading_style: subtitle
+    - type: history-graph
+      hours_to_show: 24
+      entities:
+      - entity: climate.aire_living
+        name: Living
+      - entity: climate.aire_cocina
+        name: Cocina
+      - entity: climate.aire_dormitorio
+        name: Dormitorio
+      - entity: climate.aire_chicos
+        name: Chicos
+      grid_options:
+        columns: 12
+    - type: history-graph
+      hours_to_show: 24
+      entities:
+      - entity: sensor.atc_29a8_temperatura
+        name: Living
+      - entity: sensor.dormitorio_atc_b6d2_temperatura
+        name: Dormitorio
+      - entity: sensor.temperatura_exterior
+        name: Afuera
+      grid_options:
+        columns: 12
+  dense_section_placement: true
