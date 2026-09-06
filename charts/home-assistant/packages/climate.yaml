@@ -50,6 +50,24 @@ template:
           {% set t = exterior if exterior > -900 else interior %}
           {{ 'cool' if t >= 22 else 'heat' }}
 
+# Scheduled shutdown. One timer backs both ways of asking for it — "in N hours"
+# starts it with that duration, "at HH:MM" converts the picked time into the
+# remaining seconds — so there is a single countdown to read and a single thing to
+# cancel. `restore` keeps it running across an HA restart.
+timer:
+  aires_apagado:
+    name: "Apagado programado de los aires"
+    icon: mdi:timer-sand
+    duration: "01:00:00"
+    restore: true
+
+input_datetime:
+  aires_apagar_hora:
+    name: "Hora de apagado de los aires"
+    icon: mdi:clock-outline
+    has_date: false
+    has_time: true
+
 # Escenas de acceso rápido para los aires. Aparecen como entidades script.*
 # (botones en la app HA / el dashboard "Aires") y, al estar `script` en
 # googleAssistant.exposedDomains, también como escenas en Google Home.
@@ -479,6 +497,59 @@ script:
                           state_attr(repeat.item, 'min_temp') | float(16) ] | max }}
     mode: single
 
+  # Both entry points to the scheduled shutdown. The timer is what actually
+  # fires; cancelling it is what unschedules, since `timer.finished` does not fire
+  # on a cancel.
+  aires_apagar_en_horas:
+    alias: Aires - Programar apagado en unas horas
+    icon: mdi:timer-outline
+    fields:
+      horas:
+        name: Horas
+        description: Cuánto falta para que se apaguen los cuatro aires.
+        default: 1
+        selector:
+          number:
+            min: 0.5
+            max: 12
+            step: 0.5
+            unit_of_measurement: h
+    sequence:
+      - action: timer.start
+        target:
+          entity_id: timer.aires_apagado
+        data:
+          duration: "{{ (horas | default(1) | float(1) * 3600) | int }}"
+    mode: single
+
+  # `input_datetime.aires_apagar_hora` is time-only, so its `timestamp` attribute
+  # is seconds since midnight. A target already past today rolls to tomorrow.
+  aires_apagar_a_las:
+    alias: Aires - Programar apagado a una hora
+    icon: mdi:clock-outline
+    sequence:
+      - variables:
+          faltan: >-
+            {% set objetivo = state_attr('input_datetime.aires_apagar_hora', 'timestamp') | int(0) %}
+            {% set ahora = now().hour * 3600 + now().minute * 60 + now().second %}
+            {% set delta = objetivo - ahora %}
+            {{ delta if delta > 0 else delta + 86400 }}
+      - action: timer.start
+        target:
+          entity_id: timer.aires_apagado
+        data:
+          duration: "{{ faltan }}"
+    mode: single
+
+  aires_cancelar_apagado:
+    alias: Aires - Cancelar el apagado programado
+    icon: mdi:timer-off-outline
+    sequence:
+      - action: timer.cancel
+        target:
+          entity_id: timer.aires_apagado
+    mode: single
+
 # ────────────────────────────────────────────────────────────────────────────
 # AUTOMATISMO DE LOS AIRES. Migrado 1:1 desde las automatizaciones de Google
 # Home (google-home/automations/*.yaml): mismos horarios, umbrales y guardas.
@@ -589,6 +660,22 @@ automation:
             - climate.aire_living
             - climate.aire_dormitorio
             - climate.aire_chicos
+    mode: single
+
+  - id: aires_apagado_programado
+    alias: Aires - Apagado programado
+    description: >-
+      Apaga los cuatro aires cuando se termina el timer que arrancan los botones
+      de "apagar en unas horas" / "apagar a las". Dispara con el evento
+      `timer.finished`, que NO se emite cuando el timer se cancela — por eso
+      cancelar el timer alcanza para desprogramar el apagado.
+    trigger:
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.aires_apagado
+    action:
+      - action: script.aires_todos_apagar
     mode: single
 
   - id: aires_frio_dia_caluroso
