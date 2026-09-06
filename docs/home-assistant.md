@@ -815,6 +815,21 @@ A `startupProbe` tolerates HA's slow boot (up to ~150s) while keeping the
 liveness/readiness probes lean, so the pod is marked Ready as soon as HA actually
 responds — rather than after a fixed long `initialDelaySeconds`.
 
+## Time zone
+
+Two different clocks, and only one of them is in git:
+
+- **`TZ` on the container** (`env` in `values.yaml`) stamps the **log lines**. It
+  is set to `America/Argentina/Buenos_Aires`.
+- **HA's own time zone** — what `now()`, `time` triggers and the scheduled
+  automations use — is **`.storage` state** from onboarding (Settings → System →
+  General). Git cannot set it, and a fresh `/config` PVC needs it re-picked, same
+  as the network settings.
+
+They are independent, so a mismatch is quiet: the automations fire at the right
+local time while `home-assistant.log` reads three hours ahead. When correlating a
+log line with an event, check which clock you are reading.
+
 ## Image pinning
 
 `image.tag` is pinned to an explicit version (e.g. `2026.6.4`) and `Chart.yaml`

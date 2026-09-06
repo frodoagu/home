@@ -188,10 +188,14 @@ tolerations: []
 
 affinity: {}
 
-# Extra environment variables
+# Extra environment variables.
+# TZ sets the CONTAINER's clock, which is what stamps the log lines — not Home
+# Assistant's own time zone. That one is `.storage` state from onboarding
+# (Settings > System > General) and already reads America/Argentina/Buenos_Aires,
+# so schedules and `now()` were always local; only the log read UTC.
 env:
   - name: TZ
-    value: "UTC"
+    value: "America/Argentina/Buenos_Aires"
 
 # Extra volume mounts (e.g. to expose USB/Z-Wave sticks)
 # The host D-Bus socket is mounted so Home Assistant's Bluetooth integration can
