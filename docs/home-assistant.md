@@ -828,7 +828,7 @@ setup, is in [docs/shelly.md](shelly.md).
 ### Dusk/dawn schedule
 
 [`packages/luces_afuera.yaml`](../charts/home-assistant/packages/luces_afuera.yaml)
-turns both on 15 min before sunset and off at sunrise. This used to be a **Google
+turns both on at sunset and off at sunrise. This used to be a **Google
 Home automation** (Google's cloud, nothing in git — see
 [google-home/README.md](../google-home/README.md)); if that one is still in the
 app, delete it, otherwise two schedulers drive the same relays.
@@ -849,18 +849,11 @@ local midnight, the off-side only during the day.
 > **The two catch-up windows must not overlap.** Both automations trigger on
 > `homeassistant.start`, so any instant where both conditions hold is an instant
 > where starting HA runs *both* — one turning the lights on, the other off, with
-> the winner decided by a race. The first version had exactly that: the on-side
-> opened 15 min before sunset while the off-side's plain `before: sunset` stayed
-> open until sunset, leaving a **15-minute overlap** — and, worse, it sat right on
-> dusk, the window the catch-up exists to cover. The fix is `before_offset:
-> "-00:15:00"` on the off-side, so its window closes where the on-side's opens.
->
-> That means the **15-minute offset appears in three places** — the on-side's sun
-> trigger `offset`, the on-side condition's `after_offset`, and the off-side
-> condition's `before_offset`. Change one, change all three. (A single-microsecond
-> overlap remains at the exact boundary instant; reaching it needs HA to start on
-> that precise microsecond, so it's left alone rather than papered over with
-> mismatched offsets.)
+> the winner decided by a race. The two windows meet at sunset and do not
+> overlap: the off-side's `before: sunset` closes exactly where the on-side's
+> `after: sunset` opens. Any offset added to one side has to be added to the
+> other (and to the on-side's sun trigger), or dusk — the very window the
+> catch-up exists to cover — becomes the overlap.
 
 ## Probes
 

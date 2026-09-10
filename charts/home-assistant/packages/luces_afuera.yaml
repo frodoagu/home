@@ -1,72 +1,55 @@
-# HA package: prender las luces de afuera al atardecer y apagarlas al amanecer.
-# Los dos relés Shelly 1 Mini Gen4 de la puerta principal y la escalera — el
-# contexto completo del hardware está en docs/shelly.md.
-#
-# Antes esto vivía como automatización de Google Home (nube de Google, sin
-# API ni GitOps: ver google-home/README.md). Acá corre en HA, en el Pi, y queda
-# versionado.
+# HA package: turn the outdoor lights on at sunset and off at sunrise.
+# The two Shelly 1 Mini Gen4 relays at the front door and the stairs — the full
+# hardware context is in docs/shelly.md.
 #
 # ────────────────────────────────────────────────────────────────────────────
-# POR QUÉ NO PELEA CON EL SCRIPT DE LOS DEVICES. La regla de docs/shelly.md
-# ("exactamente UN controlador por tecla") es sobre `input:0`: el script mJS
-# `luces-afuera.js` es el único que reacciona al evento de la tecla de pared.
-# Estas automatizaciones no miran los inputs — llaman `switch.turn_on/off`
-# sobre los relés, igual que lo hace un operador desde la app o Google Home,
-# y eso NO genera un evento de input. Los dos relés se manejan explícitamente
-# acá, así que tampoco dependemos del gang del script.
+# WHY THIS DOESN'T FIGHT THE DEVICE SCRIPT. The docs/shelly.md rule ("exactly ONE
+# controller per wall switch") is about `input:0`: the `luces-afuera.js` mJS
+# script is the only thing reacting to the wall-switch event. These automations
+# don't look at the inputs — they call `switch.turn_on/off` on the relays, the
+# same as an operator from the app, and that raises NO input event. Both relays
+# are driven explicitly here, so we don't depend on the script's gang either.
 #
-# NO apuntar a `switch.luz_escalera_espejo`: es el helper de la UI que agrupa
-# las dos luces en el dashboard, vive en `.storage` (git no lo controla) y es
-# un espejo del relé de la escalera. Acá van los entity_id reales.
+# Do NOT target `switch.luz_escalera_espejo`: that's the UI helper grouping both
+# lights on the dashboard, it lives in `.storage` (outside git) and mirrors the
+# stairs relay. The real entity ids go here.
 #
 # ────────────────────────────────────────────────────────────────────────────
-# POR QUÉ EL TRIGGER `homeassistant.start`. Un trigger de sol dispara una sola
-# vez: si HA está caído en ese instante (un OOMKill, un deploy, un reinicio del
-# Pi), el evento se pierde y no hay reintento — las luces se quedan como
-# estaban hasta el día siguiente. El trigger de arranque vuelve a evaluar la
-# condición al levantar y deja las luces en el estado que corresponde a la hora.
+# WHY THE `homeassistant.start` TRIGGER. A sun trigger fires once: if HA is down
+# at that instant (an OOMKill, a deploy, a Pi reboot) the event is lost and there
+# is no retry — the lights stay as they were until the next day. The start
+# trigger re-evaluates the condition on boot and leaves the lights in the state
+# the current time calls for.
 #
-# Está acotado a propósito para no pisar una decisión manual:
-#   - prender: `after: sunset` sin `before` es true del atardecer a medianoche
-#     (semántica de la condición `sun` de HA), así que un reinicio a las 3 AM
-#     no prende las luces que alguien apagó a las 2.
-#   - apagar: sólo con el sol arriba, donde tenerlas prendidas no es una
-#     decisión deliberada.
+# It is deliberately bounded so it never overrides a manual decision:
+#   - on: `after: sunset` with no `before` is true from sunset to midnight (HA's
+#     `sun` condition semantics), so a restart at 3 AM doesn't turn on lights
+#     somebody switched off at 2.
+#   - off: only with the sun up, where leaving them on isn't a deliberate choice.
 #
-# LAS DOS VENTANAS NO SE PUEDEN SOLAPAR. Las dos automatizaciones disparan en
-# `homeassistant.start`, así que si sus condiciones son true a la vez, arrancar
-# HA en ese rato ejecuta LAS DOS: una prende y la otra apaga, y queda lo que
-# gane la carrera. Pasó: `before: sunset` a secas dejaba la ventana de apagar
-# abierta hasta el atardecer real, mientras la de prender ya abría 15 min antes
-# -> 15 min de solape, justo el rato que el catch-up existe para cubrir.
-#
-# Por eso el -00:15:00 aparece TRES veces y las tres tienen que coincidir:
-#   1. trigger de sol de prender  (`offset`)        -> cuándo prende
-#   2. condición de prender       (`after_offset`)  -> desde cuándo vale prender
-#   3. condición de apagar        (`before_offset`) -> hasta cuándo vale apagar
-# Si se cambia el adelanto, se cambian los tres. Las ventanas quedan pegadas
-# (apagar termina donde prender empieza) y no se pisan.
+# THE TWO WINDOWS MUST NOT OVERLAP. Both automations trigger on
+# `homeassistant.start`, so if their conditions are true at the same time,
+# starting HA runs BOTH: one turns on, the other off, and a race decides. The two
+# windows meet at sunset: off ends where on begins. Any offset added to one has
+# to be added to the other.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: luces_afuera_prender_atardecer
     alias: Luces afuera - Prender al atardecer
     description: >-
-      Prende las dos luces de afuera 15 min antes del atardecer (a esa altura
-      ya oscureció) y las re-evalúa al arrancar HA por si el atardecer pasó
-      con HA caído.
+      Prende las dos luces de afuera al atardecer y las re-evalúa al arrancar
+      HA por si el atardecer pasó con HA caído.
     trigger:
       - platform: sun
         event: sunset
-        offset: "-00:15:00"
       - platform: homeassistant
         event: start
     condition:
-      # Sólo aplica al trigger de arranque; en el de sol ya es true por
-      # definición. De atardecer a medianoche — pasada esa ventana, si están
-      # apagadas es porque alguien las apagó.
+      # Only applies to the start trigger; on the sun one it's true by
+      # definition. Sunset to midnight — past that window, if they're off it's
+      # because somebody turned them off.
       - condition: sun
         after: sunset
-        after_offset: "-00:15:00"
     action:
       - action: switch.turn_on
         target:
@@ -87,14 +70,11 @@ automation:
       - platform: homeassistant
         event: start
     condition:
-      # `before_offset` cierra esta ventana 15 min antes del atardecer, o sea
-      # exactamente donde abre la de prender. Sin él las dos son true entre
-      # atardecer-15min y el atardecer, y un arranque de HA ahí dispara las dos
-      # (ver el comentario de arriba).
+      # `before: sunset` closes this window exactly where the on-side's opens
+      # (see the header).
       - condition: sun
         after: sunrise
         before: sunset
-        before_offset: "-00:15:00"
     action:
       - action: switch.turn_off
         target:
