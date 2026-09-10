@@ -585,17 +585,24 @@ morning" surfaces weeks later and looks like a broken automation.
 | `salud_termometro_living_sin_datos` | living thermometer unavailable 2 h (kills both AC automations) |
 | `salud_termometro_dormitorio_sin_datos` | bedroom thermometer unavailable 2 h |
 | `salud_termometros_pila_baja` | either CR2032 under 2.5 V for 2 h (healthy is ~2.95 V) |
-| `salud_proxy_bluetooth_caido` | BLE proxy unavailable 1 h — takes out both thermometers **and** the gas sensor at once |
+| `salud_proxy_bluetooth_caido` | kitchen BLE proxy unavailable 2 h — takes out both thermometers **and** the gas sensor at once |
 | `salud_backup_atrasado` | checked daily at 10:00; last successful HA backup older than 48 h |
 
 All of them notify through the same Telegram entity as `gas.yaml`, with the same
 caveat: the `entity_id` is assembled by Telegram (bot name + chat name) and can't
 be pinned from git.
 
-The BLE-proxy alert triggers on the device's `update.*` firmware entity because
-that's the only thing it exposes in HA — ESPHome marks *all* of a device's
-entities `unavailable` when the connection drops, so it works as a liveness
-signal. If the proxy ever exposes a real sensor, prefer it.
+The BLE-proxy alert triggers on `sensor.gas_tubo_wifi`, the kitchen proxy's WiFi
+signal sensor: it reports every 60 s, so ESPHome marking it `unavailable` is a
+real heartbeat. **Do not use a proxy's `update.*` firmware entity as the liveness
+signal** — the bedroom 4a0670's flaps in a ~3-min-down / ~5-min-up cycle (1034
+transitions and 62 % of the time `unavailable` over a 10-day sample), so every
+threshold either alerts on a blink or misses a real outage.
+
+Only the kitchen proxy is watched. Both proxies cover the same three sensors well
+enough that losing one changes nothing measurable — the bedroom proxy was offline
+for two days with every sensor still reporting — so a per-proxy alert is noise;
+real data loss is what the per-sensor alerts above catch.
 
 ## LG webOS TVs — Wake on LAN turn-on
 

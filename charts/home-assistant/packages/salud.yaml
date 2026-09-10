@@ -90,31 +90,35 @@ automation:
   - id: salud_proxy_bluetooth_caido
     alias: Salud - Proxy Bluetooth caído
     description: >-
-      El proxy ESPHome que acerca los BLE fuera del alcance del Pi. Se lleva
-      puestos los DOS termómetros y el sensor de gas a la vez, así que tiene
-      aviso propio y más corto que el de cada sensor.
+      El proxy ESPHome de la cocina, que acerca los BLE fuera del alcance del
+      Pi. Se lleva puestos los DOS termómetros y el sensor de gas a la vez, así
+      que tiene aviso propio y más corto que el de cada sensor.
 
-      Dispara sobre la entidad `update` del firmware porque es lo único que el
-      device expone en HA (las otras son botones de config): ESPHome marca
-      TODAS sus entidades `unavailable` al perder la conexión, así que sirve de
-      señal de vida. Si algún día el device expone un sensor propio, es mejor
-      trigger que este.
+      Dispara sobre `sensor.gas_tubo_wifi` — el sensor de señal WiFi del device,
+      que reporta cada 60 s y por eso es un latido real: ESPHome lo marca
+      `unavailable` en cuanto se corta la conexión. NO usar la entidad `update`
+      de firmware de un proxy: la del 4a0670 se cae y vuelve sola cada pocos
+      minutos, así que no distingue un corte de un parpadeo.
+
+      El 4a0670 del dormitorio no tiene aviso: con dos proxies, que se caiga uno
+      no corta ningún sensor, y si la pérdida de datos es real la avisan los
+      controles de cada sensor de acá arriba.
     trigger:
       - platform: state
-        entity_id: update.bluetooth_proxy_4a0670_firmware
+        entity_id: sensor.gas_tubo_wifi
         to:
           - "unavailable"
           - "unknown"
-        for: "01:00:00"
+        for: "02:00:00"
     action:
       - action: notify.send_message
         target:
           entity_id: notify.afuera_telegram_gateway_fede_a
         data:
           message: >-
-            Proxy Bluetooth: hace 1 h que no responde. Sin él se cortan los dos
-            termómetros y el sensor de gas. Revisar que el ESP32 tenga corriente
-            y esté en la WiFi.
+            Proxy Bluetooth de la cocina: hace 2 h que no responde. Sin él se
+            cortan los dos termómetros y el sensor de gas. Revisar que el ESP32
+            tenga corriente y esté en la WiFi.
     mode: single
 
   - id: salud_backup_atrasado
