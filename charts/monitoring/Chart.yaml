@@ -9,7 +9,7 @@ description: >-
   private services.
 type: application
 version: 0.1.0
-appVersion: "v1.150.0"
+appVersion: "v1.152.0"
 keywords:
   - monitoring
   - victoriametrics
@@ -24,7 +24,7 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: victoria-metrics-k8s-stack
-    version: "0.91.2"
+    version: "0.93.0"
     repository: https://victoriametrics.github.io/helm-charts/
   - name: prometheus-blackbox-exporter
     version: "11.18.0"

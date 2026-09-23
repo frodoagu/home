@@ -309,7 +309,7 @@ victoria-metrics-k8s-stack:
     # sending the operator's email authenticates as Admin without any secret.
     extraContainers: |
       - name: playlist-provisioner
-        image: curlimages/curl:8.21.0
+        image: curlimages/curl:8.22.0
         command: ["/bin/sh", "-c"]
         args:
           - |
