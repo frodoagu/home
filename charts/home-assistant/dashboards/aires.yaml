@@ -18,9 +18,9 @@ views:
         \ -%}\n    {%- set ns.on = ns.on + [nombre ~ ' ' ~ (state_attr(e,'temperature') | float(0) | round\
         \ | int) ~ '°'] -%}\n  {%- endif -%}\n{%- endfor -%}\n{% if ns.on %}\U0001F525 **Prendidos:**\
         \ {{ ns.on | join(' · ') }}{% else %}**Los cuatro están apagados.**{% endif %}\n{%- if ns.on and\
-        \ ns.off %}\n\n❄️ **Apagados:** {{ ns.off | join(' · ') }}\n{%- endif %}\n\nAfuera {{ states('sensor.temperatura_exterior')\
-        \ }}° · living {{ states('sensor.atc_29a8_temperatura') | float(0) | round(1) }}° · dormitorio\
-        \ {{ states('sensor.dormitorio_atc_b6d2_temperatura') | float(0) | round(1) }}°\n"
+        \ ns.off %}\n\n❄️ **Apagados:** {{ ns.off | join(' · ') }}\n{%- endif %}\n\n{% macro t(e) -%}{{ (states(e) | float | round(1) ~ '°') if has_value(e) else '—' }}{%-\
+        \ endmacro -%}\nAfuera {{ t('sensor.temperatura_exterior') }} · living {{ t('sensor.atc_29a8_temperatura')\
+        \ }} · dormitorio {{ t('sensor.dormitorio_atc_b6d2_temperatura') }}\n"
       grid_options:
         columns: 12
     - type: tile

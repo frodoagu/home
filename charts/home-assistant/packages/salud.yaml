@@ -100,9 +100,11 @@ automation:
       de firmware de un proxy: la del 4a0670 se cae y vuelve sola cada pocos
       minutos, así que no distingue un corte de un parpadeo.
 
-      El 4a0670 del dormitorio no tiene aviso: con dos proxies, que se caiga uno
-      no corta ningún sensor, y si la pérdida de datos es real la avisan los
-      controles de cada sensor de acá arriba.
+      El 4a0670 del dormitorio no tiene aviso: si se cae, el termómetro del
+      dormitorio sigue llegando por el de la cocina pero al límite del alcance,
+      así que parpadea `unavailable` unos minutos cada tanto (cortes más cortos
+      que el aviso de 2 h de acá arriba). Ese parpadeo es la señal de que hay
+      que reiniciar el 4a0670.
     trigger:
       - platform: state
         entity_id: sensor.gas_tubo_wifi

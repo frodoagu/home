@@ -599,10 +599,12 @@ signal** — the bedroom 4a0670's flaps in a ~3-min-down / ~5-min-up cycle (1034
 transitions and 62 % of the time `unavailable` over a 10-day sample), so every
 threshold either alerts on a blink or misses a real outage.
 
-Only the kitchen proxy is watched. Both proxies cover the same three sensors well
-enough that losing one changes nothing measurable — the bedroom proxy was offline
-for two days with every sensor still reporting — so a per-proxy alert is noise;
-real data loss is what the per-sensor alerts above catch.
+Only the kitchen proxy is watched. Losing the bedroom proxy does NOT leave the
+sensors dark, but it does degrade the bedroom thermometer: the kitchen proxy hears
+it only at the edge of its range, so it flaps `unavailable` for a few minutes
+every 30-80 min (seen 2026-09-21/22 and 09-24 with 4a0670 off the network). Those
+gaps are too short for the 2 h per-sensor alert, so a flapping bedroom
+thermometer is the symptom that the bedroom proxy is down — power-cycle it.
 
 ## LG webOS TVs — Wake on LAN turn-on
 
