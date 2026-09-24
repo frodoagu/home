@@ -60,12 +60,14 @@ updateCron: "@every 5m"
 # Optional timezone for log timestamps / cron.
 timezone: "America/Argentina/Buenos_Aires"
 
+# No CPU limit: the pod idles between checks and each check is a sub-second
+# multi-threaded burst, so any CFS quota throttles most of the few periods it
+# runs in and CPUThrottlingHigh flaps. Memory stays bounded.
 resources:
   requests:
     cpu: 10m
     memory: 16Mi
   limits:
-    cpu: 200m
     memory: 32Mi
 
 nodeSelector: {}
