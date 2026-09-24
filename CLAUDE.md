@@ -174,13 +174,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - **sealed-secrets.** Its canonical Helm repo `bitnami-labs.github.io/sealed-secrets`
   **404s** (post-2025 Bitnami/Broadcom catalog changes), so this chart is NOT a
   wrapper — it **vendors** the upstream release `controller.yaml` into
-  `templates/controller.yaml`. Only image/`imagePullPolicy`/`resources` are
-  parameterized; controller + CRD + RBAC + Services stay verbatim in kube-system
+  `templates/controller.yaml`. Only image/`imagePullPolicy`/`resources`/`revisionHistoryLimit`
+  are parameterized; controller + CRD + RBAC + Services stay verbatim in kube-system
   with name `sealed-secrets-controller` (so kubeseal needs no flags). The image
   `docker.io/bitnami/sealed-secrets-controller:<ver>` is still published (it's
   maintained by the sealed-secrets project, NOT the Bitnami app catalog → not hit
   by the bitnamilegacy migration). To bump: re-fetch
-  `…/releases/download/v<X.Y.Z>/controller.yaml`, re-apply the same 3 edits, sync
+  `…/releases/download/v<X.Y.Z>/controller.yaml`, re-apply the same 4 edits, sync
   `appVersion`. Back up the controller key (Secret labelled
   `sealedsecrets.bitnami.com/sealed-secrets-key`) — losing it = unrecoverable.
 - **homepage.** v1.x validates the request `Host` header, so set

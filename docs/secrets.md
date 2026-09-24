@@ -253,5 +253,5 @@ kubectl get secret -n kube-system \
 
 > Packaging note: the chart **vendors** the upstream `controller.yaml` (the
 > project's Helm repo `bitnami-labs.github.io/sealed-secrets` now 404s). To bump
-> the controller, re-fetch the release manifest, re-apply the image/resources
+> the controller, re-fetch the release manifest, re-apply the image/resources/revisionHistoryLimit
 > edits, and sync `Chart.yaml` `appVersion`. See `charts/sealed-secrets/`.

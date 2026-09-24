@@ -3,6 +3,9 @@
 # Full reference: https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml
 
 argo-cd:
+  global:
+    revisionHistoryLimit: 1
+
   # -- Expose Argo CD server via Traefik ingress
   server:
     ingress:
@@ -76,6 +79,7 @@ argo-cd:
   # -- Use a single replica for a home / RPi environment
   controller:
     replicas: 1
+    revisionHistoryLimit: 1
 
   repoServer:
     replicas: 1

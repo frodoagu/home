@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "cloudflare-ddns.labels" . | nindent 4 }}
 spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   replicas: 1
   strategy:
     type: Recreate

@@ -1,6 +1,8 @@
 # Cloudflare dynamic-DNS updater (favonia/cloudflare-ddns).
 # Keeps the A records below in sync with this network's public IPv4 address.
 
+revisionHistoryLimit: 1
+
 image:
   repository: favonia/cloudflare-ddns
   # Human-readable tag (used only when digest is empty). Releases:

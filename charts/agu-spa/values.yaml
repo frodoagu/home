@@ -2,6 +2,8 @@
 # Adjust these to match your environment.
 
 replicaCount: 1
+revisionHistoryLimit: 1
+
 image:
   # The agu.com.ar SPA, built from images/home-site/ and baked into an nginx image by the
   # build-site GitHub Action (.github/workflows/site.yml). CI pushes the mutable

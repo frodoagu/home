@@ -30,6 +30,7 @@ metadata:
     {{- include "monitoring.labels" . | nindent 4 }}
     app.kubernetes.io/component: rpi-throttle-exporter
 spec:
+  revisionHistoryLimit: {{ .Values.rpiThrottleExporter.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "monitoring.selectorLabels" . | nindent 6 }}
