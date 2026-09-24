@@ -10,6 +10,8 @@ metadata:
   namespace: argocd
   annotations:
     link.argocd.argoproj.io/external-link: "https://grafana.agu.com.ar"
+    # Any key under this prefix adds a link; one key per URL.
+    link.argocd.argoproj.io/alertmanager: "https://alertmanager.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
