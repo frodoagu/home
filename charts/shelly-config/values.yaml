@@ -22,6 +22,11 @@ fullnameOverride: ""
 schedule: "*/30 * * * *"
 successfulJobsHistoryLimit: 1
 failedJobsHistoryLimit: 3
+# Finished CronJob runs are deleted after this long. KubeJobFailed fires while a
+# failed Job object exists, so without it a single run that hit a device off the
+# LAN keeps the alert up for weeks after the next runs succeed. A device that
+# stays down still re-fires it on every new failed run.
+ttlSecondsAfterFinished: 21600
 # Don't fire a pile of catch-up runs if the node was down at the scheduled time.
 startingDeadlineSeconds: 300
 # The reconcile is idempotent, so a retry is always safe.
