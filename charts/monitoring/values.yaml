@@ -259,14 +259,6 @@ victoria-metrics-k8s-stack:
             matchers:
               - alertname = "KubeJobFailed"
               - job_name =~ "shelly-config-[0-9]+"
-      # InfoInhibitor fires whenever a namespace has only info alerts; it mutes
-      # them so info-level alerts never reach Telegram.
-      inhibit_rules:
-        - source_matchers:
-            - alertname = "InfoInhibitor"
-          target_matchers:
-            - severity = "info"
-          equal: ["namespace"]
       receivers:
         - name: blackhole
         - name: telegram
