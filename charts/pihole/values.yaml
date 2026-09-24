@@ -129,6 +129,7 @@ dns:
         - pihole.agu.com.ar
         - logs.agu.com.ar
         - dash.agu.com.ar
+        - alertmanager.agu.com.ar
 
 # DHCP server. The router's own DHCP is OFF and the Pi has a static IP, so Pi-hole
 # owns DHCP and advertises itself as the resolver. (Keep this in sync with the

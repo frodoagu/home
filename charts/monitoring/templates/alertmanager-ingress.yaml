@@ -1,0 +1,28 @@
+{{- if .Values.alertmanagerIngress.enabled }}
+# Traefik IngressRoute for the Alertmanager UI, gated by google-auth like Grafana.
+# The VM operator names the VMAlertmanager's service "vmalertmanager-<cr name>",
+# where the CR name is the k8s-stack fullname.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "monitoring.fullname" . }}-alertmanager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{{ .Values.alertmanagerIngress.host }}`)
+      kind: Rule
+      {{- if .Values.googleAuth.enabled }}
+      middlewares:
+        - name: google-auth-signin
+        - name: google-auth
+      {{- end }}
+      services:
+        - name: vmalertmanager-{{ .Release.Name }}-victoria-metrics-k8s-stack
+          port: 9093
+  tls:
+    certResolver: {{ .Values.ingress.certResolver }}
+{{- end }}

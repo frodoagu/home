@@ -69,9 +69,10 @@ flowchart TD
     Traefik -->|auth.agu.com.ar| OA2
     Traefik -->|grafana.agu.com.ar| MON
     Traefik -->|logs.agu.com.ar| VL
+    Traefik -->|alertmanager.agu.com.ar| MON
     Traefik -->|dash.agu.com.ar| HP
     Traefik -->|pihole.agu.com.ar| PIHOLE
-    Traefik -.->|ForwardAuth on dashboard +<br/>grafana · logs · dash · pihole| OA2
+    Traefik -.->|ForwardAuth on dashboard +<br/>grafana · alertmanager · logs · dash · pihole| OA2
 
     Argo -.->|App of Apps sync| Traefik
     Argo -.-> HA
@@ -119,6 +120,7 @@ ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedo
   - `traefik.agu.com.ar` → Traefik dashboard
   - `auth.agu.com.ar` → oauth2-proxy (Google sign-in for the dashboard)
   - `grafana.agu.com.ar` → Grafana (monitoring, gated by the same Google sign-in)
+  - `alertmanager.agu.com.ar` → Alertmanager UI: active alerts, silences (google-auth gated)
   - `logs.agu.com.ar` → VictoriaLogs UI (google-auth gated)
   - `dash.agu.com.ar` → homepage start page (google-auth gated)
   - `pihole.agu.com.ar` → Pi-hole admin UI (google-auth gated)

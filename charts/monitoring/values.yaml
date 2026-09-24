@@ -19,6 +19,12 @@ ingress:
   host: grafana.agu.com.ar
   certResolver: letsencrypt
 
+# Alertmanager UI (silences, active alerts), same google-auth gate as Grafana.
+# See templates/alertmanager-ingress.yaml; must match the alertmanager externalURL below.
+alertmanagerIngress:
+  enabled: true
+  host: alertmanager.agu.com.ar
+
 # ForwardAuth → oauth2-proxy. Mirrors charts/traefik-config's googleAuth block so
 # Grafana (in the monitoring namespace) can require Google sign-in without relying
 # on Traefik cross-namespace middleware references.
@@ -71,6 +77,7 @@ blackboxTargets:
     - https://grafana.agu.com.ar
     - https://logs.agu.com.ar
     - https://dash.agu.com.ar
+    - https://alertmanager.agu.com.ar
 
 # ── prometheus-blackbox-exporter (upstream) ────────────────────────────────────
 prometheus-blackbox-exporter:
@@ -228,6 +235,8 @@ victoria-metrics-k8s-stack:
     enabled: true
     spec:
       replicaCount: 1
+      # Public URL (alertmanagerIngress.host) so the UI's and alerts' links point at it.
+      externalURL: https://alertmanager.agu.com.ar
       # Mounts secret `alertmanager-telegram` at /etc/vm/secrets/alertmanager-telegram/
       # so the bot token never lives in git (referenced via bot_token_file below).
       secrets:

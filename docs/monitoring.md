@@ -10,6 +10,10 @@ Grafana: **https://grafana.agu.com.ar** (Google sign-in via the same
 `google-auth` ForwardAuth as the other private services; only the all-listed
 email gets in). It opens on the *Raspberry Pi — Health* dashboard.
 
+Alertmanager: **https://alertmanager.agu.com.ar** (same google-auth gate) —
+active alerts and silences. Its `externalURL` is set to that host so the links
+it generates resolve.
+
 ## Components
 
 | Piece | Role |
