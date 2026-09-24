@@ -4,6 +4,8 @@
 # reachable through Cloudflare (all services are CF-proxied) or the local LAN.
 # See docs/origin-firewall.md for how it works and the router-SNAT caveat.
 
+revisionHistoryLimit: 1
+
 image:
   # Prebuilt by CI (images/origin-firewall/Dockerfile → GHCR) with nftables/curl
   # baked in, so nothing is installed on pod (re)start. Debian base, NOT Alpine:

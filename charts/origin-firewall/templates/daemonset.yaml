@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "origin-firewall.labels" . | nindent 4 }}
 spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "origin-firewall.selectorLabels" . | nindent 6 }}

@@ -12,6 +12,7 @@ ingress:
 oauth2-proxy:
   # Predictable service name — prevents release-name + chart-name doubling.
   fullnameOverride: oauth2-proxy
+  revisionHistoryLimit: 1
 
   # ── Authentication secret ──────────────────────────────────────────────────
   # Created out-of-band; see docs/secrets.md. Must contain:

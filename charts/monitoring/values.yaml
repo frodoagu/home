@@ -44,6 +44,7 @@ googleAuth:
 rpiThrottleExporter:
   enabled: true
   image: busybox:1.38
+  revisionHistoryLimit: 1
   # How often to poll `vcgencmd get_throttled` and rewrite the textfile metric.
   intervalSeconds: 30
   resources:
@@ -81,6 +82,7 @@ blackboxTargets:
 
 # ── prometheus-blackbox-exporter (upstream) ────────────────────────────────────
 prometheus-blackbox-exporter:
+  revisionHistoryLimit: 1
   # Predictable service name so the VMProbe can target `blackbox-exporter:9115`.
   fullnameOverride: blackbox-exporter
   resources:
@@ -149,6 +151,7 @@ victoria-metrics-k8s-stack:
   # ── Metrics database (single node) ──────────────────────────────────────────
   vmsingle:
     spec:
+      revisionHistoryLimitCount: 1
       # SD-card friendly: 15 days of history is plenty for a home lab.
       retentionPeriod: "15d"
       replicaCount: 1
@@ -171,6 +174,7 @@ victoria-metrics-k8s-stack:
   # ── Scraper ────────────────────────────────────────────────────────────────
   vmagent:
     spec:
+      revisionHistoryLimitCount: 1
       # 60s scrape interval => far fewer samples/writes than the 30s default.
       scrapeInterval: 60s
       resources:
@@ -183,6 +187,7 @@ victoria-metrics-k8s-stack:
   # ── Rule evaluation ──────────────────────────────────────────────────────────
   vmalert:
     spec:
+      revisionHistoryLimitCount: 1
       resources:
         requests:
           cpu: 10m
@@ -234,6 +239,7 @@ victoria-metrics-k8s-stack:
   alertmanager:
     enabled: true
     spec:
+      revisionHistoryLimitCount: 1
       replicaCount: 1
       # Public URL (alertmanagerIngress.host) so the UI's and alerts' links point at it.
       externalURL: https://alertmanager.agu.com.ar
@@ -287,6 +293,7 @@ victoria-metrics-k8s-stack:
   # ── Grafana ──────────────────────────────────────────────────────────────────
   grafana:
     enabled: true
+    revisionHistoryLimit: 1
     # We expose Grafana via our own Traefik IngressRoute (templates/grafana-ingress.yaml).
     ingress:
       enabled: false
@@ -376,6 +383,7 @@ victoria-metrics-k8s-stack:
   # ── node-exporter (hardware: CPU/RAM/disk/temperature) ───────────────────────
   prometheus-node-exporter:
     enabled: true
+    revisionHistoryLimit: 1
     resources:
       requests:
         cpu: 10m
@@ -399,6 +407,7 @@ victoria-metrics-k8s-stack:
   # ── kube-state-metrics (pod/deployment/workload state) ───────────────────────
   kube-state-metrics:
     enabled: true
+    revisionHistoryLimit: 1
     resources:
       requests:
         cpu: 10m

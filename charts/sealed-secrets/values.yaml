@@ -4,6 +4,8 @@
 # templates/controller.yaml from the upstream release; only the image and the
 # controller's resources are wired to the values below.
 
+revisionHistoryLimit: 1
+
 image:
   # The controller image is maintained by the sealed-secrets project (NOT the
   # Bitnami application catalog), so it is unaffected by the bitnamilegacy

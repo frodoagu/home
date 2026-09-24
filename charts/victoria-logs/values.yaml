@@ -38,6 +38,9 @@ victoria-logs-single:
   #   http://victoria-logs.victoria-logs.svc.cluster.local:9428
   server:
     fullnameOverride: victoria-logs
+    statefulSet:
+      spec:
+        revisionHistoryLimit: 1
 
     # SD-card friendly retention. VictoriaLogs is very write-efficient, but the
     # collector ships EVERY pod's logs, so cap both by time AND by disk usage.
@@ -65,6 +68,7 @@ victoria-logs-single:
   # server above; the default customConfig already parses k8s logs as JSON.
   vector:
     enabled: true
+    revisionHistoryLimit: 1
     # The kubernetes_logs source watches every pod log on the node and buffers
     # in memory; 192Mi was too tight and got OOMKilled (exit 137). The Pi has
     # 8 GB RAM, so give it real headroom.

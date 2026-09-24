@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "pihole.labels" . | nindent 4 }}
 spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   replicas: 1
   # Pi-hole binds host ports (53/67) via hostNetwork, and a single PVC holds its
   # state, so never run two pods at once.

@@ -7,11 +7,11 @@
 # chart fully self-contained (no external chart repo to resolve at ArgoCD sync
 # time) and pins the exact, still-published controller image.
 #
-# Kept verbatim EXCEPT: the container image, imagePullPolicy and resources are
-# parameterized via values.yaml. Everything (controller, CRD, RBAC, Services)
+# Kept verbatim EXCEPT: the container image, imagePullPolicy, resources and
+# revisionHistoryLimit are parameterized via values.yaml. Everything (controller, CRD, RBAC, Services)
 # stays in kube-system with name `sealed-secrets-controller` so `kubeseal`
 # works with zero flags. To bump: re-fetch the release manifest for the new
-# tag, re-apply these same three edits, and update Chart.yaml appVersion.
+# tag, re-apply these same four edits, and update Chart.yaml appVersion.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -33,7 +33,7 @@ metadata:
 spec:
   minReadySeconds: 30
   replicas: 1
-  revisionHistoryLimit: 10
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       name: sealed-secrets-controller

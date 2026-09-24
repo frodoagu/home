@@ -3,6 +3,8 @@
 
 replicaCount: 1
 
+revisionHistoryLimit: 1
+
 image:
   repository: ghcr.io/home-assistant/home-assistant
   pullPolicy: IfNotPresent

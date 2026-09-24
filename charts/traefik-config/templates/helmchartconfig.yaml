@@ -79,6 +79,7 @@ spec:
       path: {{ .Values.persistence.path }}
     # acme.json must be mode 0600; create it with the right perms on startup.
     deployment:
+      revisionHistoryLimit: 1
       initContainers:
         - name: volume-permissions
           image: busybox:1.38
