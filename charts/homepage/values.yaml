@@ -102,6 +102,10 @@ config:
             href: https://logs.agu.com.ar
             description: Cluster logs
             icon: victoriametrics.png
+        - Alertmanager:
+            href: https://alertmanager.agu.com.ar
+            description: Active alerts & silences
+            icon: alertmanager.png
     - Home:
         - Home Assistant:
             href: https://home.agu.com.ar

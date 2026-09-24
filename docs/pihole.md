@@ -264,6 +264,7 @@ dns:
         - pihole.agu.com.ar
         - logs.agu.com.ar
         - dash.agu.com.ar
+        - alertmanager.agu.com.ar
 ```
 
 Renders into `FTLCONF_dns_hosts` as one `IP host1 host2 ...` entry per `ip` (hosts-file

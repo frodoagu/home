@@ -1,4 +1,4 @@
-import { Activity, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, BellRing, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -125,6 +125,19 @@ export const privateLinks = [
     tag: { es: "Monitoreo", en: "Monitoring" },
     icon: Activity,
     accent: "#f59e0b",
+  },
+  {
+    slug: "alertmanager",
+    title: { es: "Alertmanager", en: "Alertmanager" },
+    description: {
+      es: "Alertas activas y silencios.",
+      en: "Active alerts and silences.",
+    },
+    href: "https://alertmanager.agu.com.ar",
+    categories: ["devops"],
+    tag: { es: "Alertas", en: "Alerts" },
+    icon: BellRing,
+    accent: "#dc2626",
   },
   {
     slug: "pihole",
