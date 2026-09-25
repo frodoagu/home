@@ -443,10 +443,12 @@ two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
 - `aires_toggle_calor` — one-button toggle. Only turns **off** when **all four**
   ACs are on; in any other state (mixed, or all off) it turns all on to heat. So a
   mixed state is first driven to "all on" and only the next tap turns everything
-  off. Ideal for a single Android home-screen widget / iOS Shortcut.
+  off.
 - `aires_toggle_frio` — same one-button toggle, cool 24 °C.
 - `aires_toggle_estacional` — the same toggle without picking a season: the "on"
-  side reads `sensor.aires_modo_estacional` and goes heat or cool.
+  side reads `sensor.aires_modo_estacional` and goes heat or cool. This is the
+  dashboard's main button and the one to put on a home-screen widget / iOS
+  Shortcut; the two above force a season.
 - `aires_cocina_living_toggle_calor` / `aires_cocina_living_toggle_frio` — the
   same toggle scoped to the **day zone** (kitchen + living, no bedrooms): off only
   when **both** are on, otherwise both to heat 21 °C / cool 24 °C.
@@ -463,7 +465,7 @@ two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
   repeat a failed condition aborts the whole script instead of skipping the item.
 
 `sensor.aires_modo_estacional` is a template sensor in the same package that
-resolves to `heat` or `cool`: the outdoor temperature against a 22 °C line,
+resolves to `heat` or `cool`: the outdoor temperature against a 24 °C line,
 falling back to the living-room thermometer when the weather sensor is down.
 
 **Scheduled shutdown.** "Turn everything off in N hours" and "turn everything off
