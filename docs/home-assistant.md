@@ -435,9 +435,6 @@ Google Home:
 Setpoints throughout: heat is **21 °C** in the living areas and **20 °C** in the
 two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
 
-- `aires_todos_encender` — living + kitchen to heat 21 °C, both bedrooms to
-  heat 20 °C.
-- `aires_todos_frio` — all four ACs to cool 24 °C.
 - `aires_solo_pieza` — bedroom to heat 20 °C, everything else **off**.
 - `aires_todos_apagar` — all four **off**.
 - `aires_toggle_calor` — one-button toggle. Only turns **off** when **all four**
@@ -449,11 +446,16 @@ two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
   side reads `sensor.aires_modo_estacional` and goes heat or cool. This is the
   dashboard's main button and the one to put on a home-screen widget / iOS
   Shortcut; the two above force a season.
-- `aires_cocina_living_toggle_calor` / `aires_cocina_living_toggle_frio` — the
-  same toggle scoped to the **day zone** (kitchen + living, no bedrooms): off only
-  when **both** are on, otherwise both to heat 21 °C / cool 24 °C.
-- `aires_zona_noche_toggle_calor` / `aires_zona_noche_toggle_frio` — the night
-  mirror of those two: the **two bedrooms** together, heat 20 °C / cool 24 °C.
+- `aires_cocina_living_toggle` — the seasonal toggle scoped to the **day zone**
+  (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
+  to heat 21 °C / cool 24 °C.
+- `aires_zona_noche_toggle` — the night mirror: the **two bedrooms** together,
+  heat 20 °C / cool 24 °C.
+- `aires_reenviar` — re-blasts what HA believes each unit holds, `off`
+  included, and changes nothing HA shows. It exists for a unit that missed an IR
+  frame. SmartIR builds every frame from the entity's whole state (mode, fan,
+  swing, setpoint), so a `set_temperature` with the current mode and setpoint
+  resends all of it.
 - `aires_modo_dormir` — bedrooms at the seasonal setpoint on the slowest fan each
   unit declares (`level1` on the 5140, `low` on the 3340), living areas off. The
   fan frame is sent a second after the temperature frame so the two IR blasts
@@ -511,8 +513,8 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   ACs (seasonal toggle, ±1 °C), the scheduled shutdown (three preset delays, a
   time picker, the live countdown and a cancel), half the house (day zone,
   bedrooms, only-the-bedroom, sleep mode) and the manual overrides — the explicit heat/cool
-  toggles and the two non-toggle presets, labelled *Re-enviar* because that is
-  what they are for: re-blasting the frame at a unit that missed the IR. Every
+  toggles and *Re-enviar*, which re-blasts the current state at a unit that
+  missed the IR. Every
   button is a `perform-action` tap on a `script.*`, so the dashboard holds no
   logic of its own: it is a view over the package.
 - **Detalle** — opens with the caveat that matters most here: the state shown is
@@ -522,8 +524,9 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   JSON declares a swing table), the ATC thermometer tiles where a room has one,
   and 24 h history of the four units and the three temperatures.
 
-Button labels carry their setpoint (*Día en calor 21°*, *Piezas en frío 24°*)
-rather than naming the script, so the panel needs no legend.
+The seasonal buttons (*Prender o apagar todo*, *Día*, *Piezas*) cannot carry a
+setpoint in a static label, so the card above each one names the mode and
+setpoint the next tap would pick.
 
 Its config is [`dashboards/aires.yaml`](../charts/home-assistant/dashboards/aires.yaml)
 in git — see [Versioned dashboards](#versioned-dashboards). Edits go through a PR,

@@ -82,42 +82,41 @@ input_datetime:
 # HA reports the state it ASSUMED; IR is one-way, so a physical remote goes
 # unnoticed.
 script:
-  aires_todos_encender:
-    alias: Aires - Encender todos (calor 21, piezas 20)
-    icon: mdi:air-conditioner
+  # Re-blasts what HA believes each unit holds, `off` included. SmartIR builds
+  # every frame from the entity's whole state (mode, fan, swing, setpoint), so a
+  # `set_temperature` with the current mode and setpoint resends all of it. For a
+  # unit that missed an IR frame; it never changes what HA shows.
+  aires_reenviar:
+    alias: Aires - Re-enviar el estado actual
+    icon: mdi:send
     sequence:
-      - action: climate.set_temperature
-        target:
-          entity_id:
+      - repeat:
+          for_each:
             - climate.aire_living
             - climate.aire_cocina
-        data:
-          hvac_mode: heat
-          temperature: 21
-      - action: climate.set_temperature
-        target:
-          entity_id:
             - climate.aire_dormitorio
             - climate.aire_chicos
-        data:
-          hvac_mode: heat
-          temperature: 20
-    mode: single
-
-  aires_todos_frio:
-    alias: Aires - Encender todos (frío 24)
-    icon: mdi:snowflake
-    sequence:
-      - action: climate.set_temperature
-        target:
-          entity_id:
-            - climate.aire_living
-            - climate.aire_dormitorio
-            - climate.aire_cocina
-            - climate.aire_chicos
-        data:
-          hvac_mode: cool
-          temperature: 24
+          sequence:
+            - choose:
+                - conditions:
+                    - condition: template
+                      value_template: "{{ is_state(repeat.item, 'off') }}"
+                  sequence:
+                    - action: climate.turn_off
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                - conditions:
+                    - condition: template
+                      value_template: >-
+                        {{ states(repeat.item) not in ['unavailable', 'unknown']
+                           and state_attr(repeat.item, 'temperature') is not none }}
+                  sequence:
+                    - action: climate.set_temperature
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        hvac_mode: "{{ states(repeat.item) }}"
+                        temperature: "{{ state_attr(repeat.item, 'temperature') }}"
     mode: single
 
   aires_solo_pieza:
@@ -280,14 +279,13 @@ script:
                   temperature: 20
     mode: single
 
-  # Mismos dos toggles pero sin las piezas: la zona de estar (cocina + living),
-  # que es la que se usa de día. Misma regla — solo apaga cuando LOS DOS están
-  # prendidos. El blast va a los dos aunque uno ya esté prendido: con IR cada
-  # envío manda el frame completo, así que reafirma modo+temperatura en vez de
-  # togglear.
-  aires_cocina_living_toggle_calor:
-    alias: Aires - Toggle cocina + living (calor 21 / off)
-    icon: mdi:fire
+  # The seasonal toggle scoped to half the house: the day zone (kitchen + living)
+  # and the two bedrooms. Off only when BOTH units are on. The "on" side blasts
+  # both even if one is already on: every IR send carries the whole frame, so it
+  # re-asserts mode+setpoint instead of toggling.
+  aires_cocina_living_toggle:
+    alias: Aires - Toggle cocina + living (según la estación)
+    icon: mdi:sofa
     sequence:
       - choose:
           - conditions:
@@ -303,49 +301,21 @@ script:
                     - climate.aire_cocina
                     - climate.aire_living
         default:
+          - variables:
+              frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           - action: climate.set_temperature
             target:
               entity_id:
                 - climate.aire_cocina
                 - climate.aire_living
             data:
-              hvac_mode: heat
-              temperature: 21
+              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+              temperature: "{{ 24 if frio else 21 }}"
     mode: single
 
-  aires_cocina_living_toggle_frio:
-    alias: Aires - Toggle cocina + living (frío 24 / off)
-    icon: mdi:snowflake
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {% set aires = ['climate.aire_cocina', 'climate.aire_living'] %}
-                  {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
-                     | list | count == aires | count }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id:
-                    - climate.aire_cocina
-                    - climate.aire_living
-        default:
-          - action: climate.set_temperature
-            target:
-              entity_id:
-                - climate.aire_cocina
-                - climate.aire_living
-            data:
-              hvac_mode: cool
-              temperature: 24
-    mode: single
-
-  # El espejo de noche de los dos de arriba: las dos piezas juntas, a 20 en calor
-  # (se duerme mejor un grado abajo) y 24 en frío.
-  aires_zona_noche_toggle_calor:
-    alias: Aires - Toggle piezas (calor 20 / off)
-    icon: mdi:fire
+  aires_zona_noche_toggle:
+    alias: Aires - Toggle piezas (según la estación)
+    icon: mdi:bed-double
     sequence:
       - choose:
           - conditions:
@@ -361,42 +331,16 @@ script:
                     - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
+          - variables:
+              frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           - action: climate.set_temperature
             target:
               entity_id:
                 - climate.aire_dormitorio
                 - climate.aire_chicos
             data:
-              hvac_mode: heat
-              temperature: 20
-    mode: single
-
-  aires_zona_noche_toggle_frio:
-    alias: Aires - Toggle piezas (frío 24 / off)
-    icon: mdi:snowflake
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {% set aires = ['climate.aire_dormitorio', 'climate.aire_chicos'] %}
-                  {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
-                     | list | count == aires | count }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id:
-                    - climate.aire_dormitorio
-                    - climate.aire_chicos
-        default:
-          - action: climate.set_temperature
-            target:
-              entity_id:
-                - climate.aire_dormitorio
-                - climate.aire_chicos
-            data:
-              hvac_mode: cool
-              temperature: 24
+              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+              temperature: "{{ 24 if frio else 20 }}"
     mode: single
 
   # Bedrooms on at the seasonal setpoint and the slowest fan each unit declares
