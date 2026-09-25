@@ -224,56 +224,53 @@ views:
       content: '**Día** = cocina + living. **Piezas** = dormitorio + chicos.
 
 
-        Funcionan igual que el botón de arriba: apagan la zona solo cuando
+        Funcionan igual que el botón de arriba: eligen calor o frío según la
 
-        los dos equipos están prendidos.
+        temperatura de afuera, y apagan la zona solo cuando los dos equipos
+
+        están prendidos.
 
 
-        {% set dia = [''climate.aire_cocina'',''climate.aire_living''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        {% set frio = is_state(''sensor.aires_modo_estacional'', ''cool'') -%}
+
+        {%- set dia = [''climate.aire_cocina'',''climate.aire_living''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
         {%- set noche = [''climate.aire_dormitorio'',''climate.aire_chicos''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
-        | list | count %}
+        | list | count -%}
 
-        👉 Día: {{ ''los dos prendidos, el próximo toque apaga'' if dia == 2 else (''los dos apagados''
-        if dia == 0 else ''1 de 2 prendido'') }} · Piezas: {{ ''las dos prendidas, el próximo toque apaga''
-        if noche == 2 else (''las dos apagadas'' if noche == 0 else ''1 de 2 prendida'') }}
+        {%- set m_dia = ''frío 24°'' if frio else ''calor 21°'' -%}
+
+        {%- set m_noche = ''frío 24°'' if frio else ''calor 20°'' %}
+
+        👉 **Día:** {% if dia == 2 %}los dos prendidos, el próximo toque los apaga.{% elif dia == 0 %}los
+        dos apagados, el próximo toque los prende en {{ m_dia }}.{% else %}1 de 2 prendido, el próximo
+        toque prende el que falta en {{ m_dia }}.{% endif %}
+
+
+        👉 **Piezas:** {% if noche == 2 %}las dos prendidas, el próximo toque las apaga.{% elif noche == 0 %}las
+        dos apagadas, el próximo toque las prende en {{ m_noche }}.{% else %}1 de 2 prendida, el próximo
+        toque prende la que falta en {{ m_noche }}.{% endif %}
 
         '
       grid_options:
         columns: 12
     - type: button
-      name: Día en calor 21°
-      icon: mdi:fire
+      name: Día
+      icon: mdi:sofa
       grid_options:
         columns: 6
       tap_action:
         action: perform-action
-        perform_action: script.aires_cocina_living_toggle_calor
+        perform_action: script.aires_cocina_living_toggle
     - type: button
-      name: Día en frío 24°
-      icon: mdi:snowflake
+      name: Piezas
+      icon: mdi:bed-double
       grid_options:
         columns: 6
       tap_action:
         action: perform-action
-        perform_action: script.aires_cocina_living_toggle_frio
-    - type: button
-      name: Piezas en calor 20°
-      icon: mdi:fire
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_zona_noche_toggle_calor
-    - type: button
-      name: Piezas en frío 24°
-      icon: mdi:snowflake
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_zona_noche_toggle_frio
+        perform_action: script.aires_zona_noche_toggle
     - type: markdown
       content: 'Estos dos no son toggle, hacen siempre lo mismo:
 
@@ -340,31 +337,25 @@ views:
         action: perform-action
         perform_action: script.aires_toggle_frio
     - type: markdown
-      content: 'Los de abajo **nunca apagan**: vuelven a mandar la orden a los cuatro
+      content: '**Re-enviar** no cambia nada: le vuelve a mandar a cada aire lo que
 
-        equipos. Sirven cuando un aire no captó el infrarrojo y quedó
+        Home Assistant cree que tiene puesto (modo, temperatura y ventilador, o
 
-        distinto al resto.
+        apagado). Sirve cuando un equipo no captó el infrarrojo y quedó distinto
+
+        a lo que muestra el panel.
 
         '
       grid_options:
         columns: 12
     - type: button
-      name: Re-enviar calor
-      icon: mdi:fire-alert
+      name: Re-enviar
+      icon: mdi:send
       grid_options:
-        columns: 6
+        columns: 12
       tap_action:
         action: perform-action
-        perform_action: script.aires_todos_encender
-    - type: button
-      name: Re-enviar frío
-      icon: mdi:snowflake-alert
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_todos_frio
+        perform_action: script.aires_reenviar
   dense_section_placement: true
 - title: Detalle
   path: detalle
