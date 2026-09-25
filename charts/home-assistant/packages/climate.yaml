@@ -584,6 +584,10 @@ script:
 #
 # `climate.aire_chicos` is in every group script but only in the turn-OFF
 # schedule: nothing here starts that unit on a timer, the room is driven by hand.
+#
+# Every automation reports what it did with a push to Fede's phone, on the
+# "Aires" Android channel. The push is the LAST step, so a failed notify never
+# keeps a unit from switching.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: aires_calor_manana
@@ -632,6 +636,15 @@ automation:
         data:
           hvac_mode: heat
           temperature: 21
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            El living está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
+            prendí cocina y living en calor 21 °C.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
     mode: single
 
   - id: aires_apagar_templado
@@ -660,6 +673,15 @@ automation:
             - climate.aire_living
             - climate.aire_dormitorio
             - climate.aire_chicos
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            Afuera llegó a {{ states('sensor.temperatura_exterior') }} °C: apagué
+            los cuatro aires, que estaban en calor.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
     mode: single
 
   - id: aires_apagado_programado
@@ -676,6 +698,13 @@ automation:
           entity_id: timer.aires_apagado
     action:
       - action: script.aires_todos_apagar
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: "Terminó el apagado programado: apagué los cuatro aires."
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
     mode: single
 
   - id: aires_frio_dia_caluroso
@@ -704,4 +733,86 @@ automation:
         data:
           hvac_mode: cool
           temperature: 24
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            Afuera hace {{ states('sensor.temperatura_exterior') }} °C y el living
+            está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
+            prendí cocina, living y dormitorio en frío 24 °C.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
     mode: single
+
+  # Each thermometer triggers its own zone; 09:00 (and a manual run, which has no
+  # trigger id) checks both, because a crossing inside the night window is not
+  # seen again. `queued`: one update of the outdoor sensor can fire both zones.
+  - id: aires_apagar_frio_afuera_fresco
+    alias: Aires - Apagar el frío cuando afuera está más fresco
+    description: >-
+      Apaga los aires que están en frío cuando afuera hace la misma temperatura
+      o menos que adentro. Cocina y living miran el termómetro del living;
+      dormitorio y chicos, el del dormitorio. No actúa entre las 23 y las 9, y a
+      las 9 revisa las dos zonas. Si falta un termómetro no apaga nada.
+    trigger:
+      - platform: template
+        value_template: >-
+          {{ states('sensor.temperatura_exterior') | float(99)
+             <= states('sensor.atc_29a8_temperatura') | float(-99) }}
+        id: living
+      - platform: template
+        value_template: >-
+          {{ states('sensor.temperatura_exterior') | float(99)
+             <= states('sensor.dormitorio_atc_b6d2_temperatura') | float(-99) }}
+        id: piezas
+      - platform: time
+        at: "09:00:00"
+        id: manana
+    condition:
+      - condition: time
+        after: "09:00:00"
+        before: "23:00:00"
+    action:
+      - variables:
+          zonas:
+            - id: living
+              termometro: sensor.atc_29a8_temperatura
+              aires: [climate.aire_living, climate.aire_cocina]
+            - id: piezas
+              termometro: sensor.dormitorio_atc_b6d2_temperatura
+              aires: [climate.aire_dormitorio, climate.aire_chicos]
+          exterior: "{{ states('sensor.temperatura_exterior') }}"
+          # Zones where it is as cool or cooler outside AND something is in cool.
+          frescas: >-
+            {% set ns = namespace(zonas=[]) %}
+            {% for z in zonas if (trigger.id | default('manana', true)) in [z.id, 'manana'] %}
+              {% set adentro = states(z.termometro) %}
+              {% if exterior | is_number and adentro | is_number
+                    and exterior | float <= adentro | float
+                    and z.aires | select('is_state', 'cool') | list %}
+                {% set ns.zonas = ns.zonas + [z] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.zonas }}
+          apagar: >-
+            {{ frescas | map(attribute='aires') | sum(start=[])
+               | select('is_state', 'cool') | list }}
+      - condition: template
+        value_template: "{{ apagar | count > 0 }}"
+      - action: climate.turn_off
+        target:
+          entity_id: "{{ apagar }}"
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            Afuera hace {{ exterior }} °C y adentro
+            {% for z in frescas %}{{ states(z.termometro) | float | round(1) }} °C
+            ({{ state_attr(z.termometro, 'friendly_name') | lower }}){{ ', ' if not loop.last }}{% endfor %}.
+            Apagué {{ apagar | map('state_attr', 'friendly_name') | join(', ') }}.
+            Abrí las ventanas.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
+    mode: queued
