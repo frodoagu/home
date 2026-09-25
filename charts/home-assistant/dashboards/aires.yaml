@@ -311,7 +311,7 @@ views:
     - type: markdown
       content: 'El botón de "todos" elige calor o frío mirando la temperatura de
 
-        afuera (la línea está en 22°). {% if states(''sensor.aires_modo_estacional'') == ''cool'' %}Ahora
+        afuera (la línea está en 24°). {% if states(''sensor.aires_modo_estacional'') == ''cool'' %}Ahora
         elegiría **frío**{% else %}Ahora elegiría **calor**{% endif %}, porque afuera hay {{ states(''sensor.temperatura_exterior'')
         }}°.
 

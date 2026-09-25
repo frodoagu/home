@@ -48,7 +48,7 @@ template:
           {% set exterior = states('sensor.temperatura_exterior') | float(-999) %}
           {% set interior = states('sensor.atc_29a8_temperatura') | float(-999) %}
           {% set t = exterior if exterior > -900 else interior %}
-          {{ 'cool' if t >= 22 else 'heat' }}
+          {{ 'cool' if t >= 24 else 'heat' }}
 
 # Scheduled shutdown. One timer backs both ways of asking for it — "in N hours"
 # starts it with that duration, "at HH:MM" converts the picked time into the
