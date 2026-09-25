@@ -16,10 +16,11 @@ automation:
   - id: salud_termometro_living_sin_datos
     alias: Salud - Termómetro del living sin datos
     description: >-
-      El termómetro del living alimenta `aires_calor_manana` y
-      `aires_frio_dia_caluroso` (climate.yaml) además del `temperature_sensor`
-      del aire del living. Si se cae, esas automatizaciones dejan de dispararse
-      en silencio. 2 h de tolerancia para no avisar por un bache de BLE.
+      El termómetro del living alimenta `aires_calor_manana`,
+      `aires_frio_dia_caluroso` y `aires_apagar_frio_afuera_fresco`
+      (climate.yaml) además del `temperature_sensor` del aire del living. Si se
+      cae, esas automatizaciones dejan de dispararse en silencio. 2 h de
+      tolerancia para no avisar por un bache de BLE.
     trigger:
       - platform: state
         entity_id: sensor.atc_29a8_temperatura
@@ -42,7 +43,8 @@ automation:
     alias: Salud - Termómetro del dormitorio sin datos
     description: >-
       Mismo caso que el del living, pero este es el `temperature_sensor` del
-      aire del dormitorio: sin él el equipo no sabe a qué temperatura está.
+      aire del dormitorio: sin él el equipo no sabe a qué temperatura está, y
+      `aires_apagar_frio_afuera_fresco` no apaga las piezas.
     trigger:
       - platform: state
         entity_id: sensor.dormitorio_atc_b6d2_temperatura

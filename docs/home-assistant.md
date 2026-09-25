@@ -554,6 +554,34 @@ Nothing here starts that unit on a timer — the room is driven by hand, from th
 dashboard or Google Home. It joins `aires_apagar_templado` because leaving one AC
 running while the rest of the house shuts down is a leak, not a policy.
 
+### Cool off when it's cooler outside
+
+`aires_apagar_frio_afuera_fresco` has no Google Home original. It turns off the
+units that are in `cool` once the outdoor temperature is at or below the indoor
+one, in two zones: kitchen + living read the living thermometer, bedroom + kids
+read the bedroom one (the kids' room and the kitchen have none of their own).
+
+- **Crossing trigger, one per zone.** A template trigger per thermometer fires on
+  the false → true transition of `exterior ≤ interior`, so switching a unit back
+  on by hand is left alone until the next crossing. `mode: queued` because one
+  update of the outdoor sensor can fire both zones at once.
+- **Night window 23:00–09:00.** Nothing fires inside it, and a crossing there is
+  not seen again, so a 09:00 trigger checks both zones.
+- **A dead thermometer turns nothing off**, and neither does a missing outdoor
+  reading.
+- **While a unit cools, "indoor" is roughly its setpoint**, so in practice the
+  rule reads "outside dropped below ~24 °C". And the outdoor value is the `met`
+  forecast for the town, refreshed once an hour — not a measurement at the house.
+
+### Push notifications
+
+Every AC automation (the four above plus `aires_apagado_programado`) ends with a
+push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
+target as the washer's cycle-done alert — on an Android channel called `Aires`,
+so its sound and priority are set per channel on the phone. The push is always the
+last step: a failed notify never keeps a unit from switching. If the companion
+app is re-registered the service name changes, and every one of these steps fails.
+
 Notes that matter when editing them:
 
 - **Presence** is `zone.home > 0` (a zone's state is the number of people in it),
@@ -584,7 +612,7 @@ morning" surfaces weeks later and looks like a broken automation.
 
 | Automation | Fires when |
 | --- | --- |
-| `salud_termometro_living_sin_datos` | living thermometer unavailable 2 h (kills both AC automations) |
+| `salud_termometro_living_sin_datos` | living thermometer unavailable 2 h (kills the AC automations that read it) |
 | `salud_termometro_dormitorio_sin_datos` | bedroom thermometer unavailable 2 h |
 | `salud_termometros_pila_baja` | either CR2032 under 2.5 V for 2 h (healthy is ~2.95 V) |
 | `salud_proxy_bluetooth_caido` | kitchen BLE proxy unavailable 2 h — takes out both thermometers **and** the gas sensor at once |
