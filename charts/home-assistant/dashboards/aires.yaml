@@ -58,6 +58,11 @@ views:
         faltan, y recién el toque siguiente apaga todo.
 
 
+        Calor o frío lo decide la temperatura de afuera: con 24° o más, frío;
+
+        abajo de eso, calor.
+
+
         {% set aires = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_dormitorio'',''climate.aire_chicos'']
         -%}
 
@@ -119,6 +124,26 @@ views:
       tap_action:
         action: perform-action
         perform_action: script.aires_bajar_grado
+    - type: markdown
+      content: '**Re-enviar** no cambia nada: le vuelve a mandar a cada aire lo que
+
+        Home Assistant cree que tiene puesto (modo, temperatura y ventilador, o
+
+        apagado). Sirve cuando un equipo no captó el infrarrojo y quedó distinto
+
+        a lo que muestra el panel.
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Re-enviar
+      icon: mdi:send
+      grid_options:
+        columns: 12
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_reenviar
   - type: grid
     cards:
     - type: heading
@@ -272,90 +297,23 @@ views:
         action: perform-action
         perform_action: script.aires_zona_noche_toggle
     - type: markdown
-      content: 'Estos dos no son toggle, hacen siempre lo mismo:
+      content: '{% set m = ''frío 24°'' if is_state(''sensor.aires_modo_estacional'', ''cool'') else ''calor 20°'' -%}
 
-        **Solo el dormitorio** apaga los otros tres y deja el dormitorio en
+        **Modo dormir** no es toggle, hace siempre lo mismo: deja las dos piezas
 
-        calor 20°. **Modo dormir** deja las dos piezas en el modo de la
-
-        época con el ventilador al mínimo, y apaga cocina y living.
+        en {{ m }} con el ventilador al mínimo, y apaga cocina y living.
 
         '
       grid_options:
         columns: 12
-    - type: button
-      name: Solo el dormitorio
-      icon: mdi:bed
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_solo_pieza
     - type: button
       name: Modo dormir
       icon: mdi:sleep
       grid_options:
-        columns: 6
+        columns: 12
       tap_action:
         action: perform-action
         perform_action: script.aires_modo_dormir
-  - type: grid
-    cards:
-    - type: heading
-      heading: Cuando querés elegir vos
-      icon: mdi:tune
-      heading_style: title
-    - type: markdown
-      content: 'El botón de "todos" elige calor o frío mirando la temperatura de
-
-        afuera (la línea está en 24°). {% if states(''sensor.aires_modo_estacional'') == ''cool'' %}Ahora
-        elegiría **frío**{% else %}Ahora elegiría **calor**{% endif %}, porque afuera hay {{ states(''sensor.temperatura_exterior'')
-        }}°.
-
-
-        Los dos primeros botones fuerzan el modo en vez de dejarlo decidir, y
-
-        son toggle igual que el de arriba.
-
-        '
-      grid_options:
-        columns: 12
-    - type: button
-      name: Todos en calor
-      icon: mdi:fire
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_toggle_calor
-    - type: button
-      name: Todos en frío
-      icon: mdi:snowflake
-      grid_options:
-        columns: 6
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_toggle_frio
-    - type: markdown
-      content: '**Re-enviar** no cambia nada: le vuelve a mandar a cada aire lo que
-
-        Home Assistant cree que tiene puesto (modo, temperatura y ventilador, o
-
-        apagado). Sirve cuando un equipo no captó el infrarrojo y quedó distinto
-
-        a lo que muestra el panel.
-
-        '
-      grid_options:
-        columns: 12
-    - type: button
-      name: Re-enviar
-      icon: mdi:send
-      grid_options:
-        columns: 12
-      tap_action:
-        action: perform-action
-        perform_action: script.aires_reenviar
   dense_section_placement: true
 - title: Detalle
   path: detalle

@@ -435,17 +435,16 @@ Google Home:
 Setpoints throughout: heat is **21 °C** in the living areas and **20 °C** in the
 two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
 
-- `aires_solo_pieza` — bedroom to heat 20 °C, everything else **off**.
+Every "on" side picks heat or cool from `sensor.aires_modo_estacional`; nothing
+here forces a season. To force one, use a unit's thermostat card on the
+dashboard's *Detalle* view.
+
 - `aires_todos_apagar` — all four **off**.
-- `aires_toggle_calor` — one-button toggle. Only turns **off** when **all four**
-  ACs are on; in any other state (mixed, or all off) it turns all on to heat. So a
-  mixed state is first driven to "all on" and only the next tap turns everything
-  off.
-- `aires_toggle_frio` — same one-button toggle, cool 24 °C.
-- `aires_toggle_estacional` — the same toggle without picking a season: the "on"
-  side reads `sensor.aires_modo_estacional` and goes heat or cool. This is the
-  dashboard's main button and the one to put on a home-screen widget / iOS
-  Shortcut; the two above force a season.
+- `aires_toggle_estacional` — one-button toggle for the whole house. Only turns
+  **off** when **all four** ACs are on; in any other state (mixed, or all off) it
+  turns all on in the seasonal mode. So a mixed state is first driven to "all on"
+  and only the next tap turns everything off. This is the dashboard's main button
+  and the one to put on a home-screen widget / iOS Shortcut.
 - `aires_cocina_living_toggle` — the seasonal toggle scoped to the **day zone**
   (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
   to heat 21 °C / cool 24 °C.
@@ -510,13 +509,12 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   and state the outcome of the next tap against the live group state ("hay 2 de 4
   prendidos, así que el próximo toque prende los que faltan"). The sections are:
   the house right now (a rendered on/off summary plus a tile per unit), all four
-  ACs (seasonal toggle, ±1 °C), the scheduled shutdown (three preset delays, a
-  time picker, the live countdown and a cancel), half the house (day zone,
-  bedrooms, only-the-bedroom, sleep mode) and the manual overrides — the explicit heat/cool
-  toggles and *Re-enviar*, which re-blasts the current state at a unit that
-  missed the IR. Every
-  button is a `perform-action` tap on a `script.*`, so the dashboard holds no
-  logic of its own: it is a view over the package.
+  ACs (seasonal toggle, ±1 °C, and *Re-enviar*, which re-blasts the current
+  state at a unit that missed the IR), the scheduled shutdown (three preset
+  delays, a time picker, the live countdown and a cancel) and half the house (day
+  zone, bedrooms, sleep mode). Every button is a `perform-action` tap on a
+  `script.*`, so the dashboard holds no logic of its own: it is a view over the
+  package.
 - **Detalle** — opens with the caveat that matters most here: the state shown is
   the last thing HA *sent*, not what the unit holds, because IR is one-way. Then a
   `thermostat` card per room with the `climate-hvac-modes` and `climate-fan-modes`
@@ -524,9 +522,9 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   JSON declares a swing table), the ATC thermometer tiles where a room has one,
   and 24 h history of the four units and the three temperatures.
 
-The seasonal buttons (*Prender o apagar todo*, *Día*, *Piezas*) cannot carry a
-setpoint in a static label, so the card above each one names the mode and
-setpoint the next tap would pick.
+The seasonal buttons (*Prender o apagar todo*, *Día*, *Piezas*, *Modo dormir*)
+cannot carry a setpoint in a static label, so the card above each one names the
+mode and setpoint the next tap would pick.
 
 Its config is [`dashboards/aires.yaml`](../charts/home-assistant/dashboards/aires.yaml)
 in git — see [Versioned dashboards](#versioned-dashboards). Edits go through a PR,
