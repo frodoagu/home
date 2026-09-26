@@ -12,7 +12,7 @@
 // wall switch does NOT drive its own relay and the whole decision lands here.
 // Both are reconciled by the shelly-config CronJob (charts/shelly-config).
 //
-// Logic (idempotent toggle, same shape as `aires_toggle_calor` in the climate
+// Logic (idempotent toggle, same shape as `aires_toggle_estacional` in the climate
 // package): if BOTH are on, a flip turns both off; in any other state (mixed or
 // both off) it turns both on. So a mixed state left by the app is normalised to
 // "both on" and the next flip turns them off.
