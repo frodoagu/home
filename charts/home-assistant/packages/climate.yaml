@@ -669,3 +669,57 @@ automation:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: queued
+
+  # Catches a stray tap on the home-screen widget. A script run shares its
+  # context with the state changes it causes, so `user_id` names who pressed the
+  # button; automations never set one, so the pushes above are not doubled.
+  # `restart` + the delay fold a multi-unit button into one push of the end state.
+  - id: aires_avisar_afuera
+    alias: Aires - Avisar cambios hechos desde afuera
+    description: >-
+      Si Fede prende, apaga o cambia de modo algún aire estando fuera de casa, le
+      manda un push con cómo quedaron los cuatro. Las automatizaciones no avisan
+      por acá: ya mandan su propio push.
+    trigger:
+      - platform: state
+        entity_id:
+          - climate.aire_living
+          - climate.aire_cocina
+          - climate.aire_dormitorio
+          - climate.aire_chicos
+        to: ~
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.context.user_id is not none
+             and trigger.to_state.context.user_id == state_attr('person.federico_agu', 'user_id') }}
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: person.federico_agu
+            state: home
+    action:
+      - delay: "00:00:05"
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            {% set modos = {'heat': 'calor', 'cool': 'frío', 'dry': 'seco',
+                            'fan_only': 'ventilador', 'heat_cool': 'auto'} %}
+            {% set aires = ['climate.aire_living', 'climate.aire_cocina',
+                            'climate.aire_dormitorio', 'climate.aire_chicos'] %}
+            {% set prendidos = aires | reject('is_state', ['off', 'unavailable', 'unknown']) | list %}
+            {% set apagados = aires | reject('in', prendidos) | map('state_attr', 'friendly_name')
+                              | map('replace', 'Aire ', '') | list %}
+            {% if prendidos %}
+            Prendidos: {% for a in prendidos %}{{ state_attr(a, 'friendly_name') | replace('Aire ', '') }}
+            ({{ modos.get(states(a), states(a)) }} {{ state_attr(a, 'temperature') }} °C){{ ', ' if not loop.last }}{% endfor %}.
+            {{ 'Apagados: ' ~ apagados | join(', ') ~ '.' if apagados }}
+            {% else %}
+            Quedaron todos apagados.
+            {% endif %}
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
+            tag: aires_afuera
+    mode: restart
