@@ -279,27 +279,39 @@ dig @1.1.1.1 agu.com.ar +short                # -> Cloudflare's public IP (uncha
 resolves via Cloudflare even on the LAN. Add it to `localRecords` the same way if
 that hairpin ever becomes annoying.
 
-### Caveat: the HTTPS (SVCB) record still comes from Cloudflare
+### Caveat: the HTTPS (SVCB) record must be served locally too
 
 `localRecords` are hosts-file entries, so they override **A/AAAA only**. Browsers
-also query the **HTTPS record (type 65)**, and that one is forwarded upstream and
-answered by Cloudflare — advertising `alpn="h3,h2"` (plus an ECH config):
+also query the **HTTPS record (type 65)**, and left alone that one is forwarded
+upstream and answered by Cloudflare — advertising `alpn="h3,h2"` plus an **ECH
+config** whose public name is `cloudflare-ech.com`.
+
+That ECH config breaks the LAN path. Chromium's built-in resolver (the default on
+Windows, unlike Linux where it goes through `getaddrinfo`) fetches the record,
+encrypts the real SNI and sends `cloudflare-ech.com` as the outer SNI — to the Pi,
+because the A record is local. Traefik has no certificate for that name, answers
+with `TRAEFIK DEFAULT CERT`, and the browser fails with
+`ERR_ECH_FALLBACK_CERTIFICATE_INVALID`.
+
+So the chart also serves the HTTPS record locally for every `localRecords` host:
+`dns.localHttpsRecord` (hex RDATA of `1 . alpn="h3,h2"`) becomes one dnsmasq
+`dns-rr=<host>,65,<hex>` line each, via `FTLCONF_misc_dnsmasq_lines`:
 
 ```bash
 dig @192.168.0.100 A      home.agu.com.ar +short   # -> 192.168.0.100 (local record)
-dig @192.168.0.100 TYPE65 home.agu.com.ar +short   # -> alpn="h3,h2" ... (from Cloudflare)
+dig @192.168.0.100 TYPE65 home.agu.com.ar +short   # -> 1 . alpn="h3,h2" (local, no ech)
 ```
 
-So on the LAN a browser connects to the Pi while believing the origin speaks
-HTTP/3. Traefik must actually serve QUIC on udp/443 (`http3.enabled` in
-`charts/traefik-config`, see [tls.md](tls.md#http3-udp443--lan-only)) or Chromium
-fails with `ERR_QUIC_PROTOCOL_ERROR` instead of falling back to TCP.
+The ALPN still says h3, so Traefik must actually serve QUIC on udp/443
+(`http3.enabled` in `charts/traefik-config`, see
+[tls.md](tls.md#http3-udp443--lan-only)) or Chromium fails with
+`ERR_QUIC_PROTOCOL_ERROR` instead of falling back to TCP.
 
-Suppressing the record instead is the wrong lever: a global dnsmasq `filter-rr=65`
-disables ECH for the whole LAN, and scoping it per host with `local=/home.agu.com.ar/`
-also swallows `_acme-challenge.home.agu.com.ar`, breaking DNS-01 renewal for that
-certificate. (ECH itself stays dormant here — Chrome only attempts it when the
-HTTPS record arrives over DoH, which bypasses Pi-hole anyway.)
+The record is scoped to exact names on purpose: a global dnsmasq `filter-rr=65`
+disables ECH for every site on the LAN, and `local=/home.agu.com.ar/` also
+swallows `_acme-challenge.home.agu.com.ar`, breaking DNS-01 renewal for that
+certificate. `dns-rr` touches only type 65 of the listed names. A host added to
+`localRecords` gets its HTTPS record automatically.
 
 State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 `/etc/pihole`. Image is pinned in `values.yaml` (`pihole/pihole`, keep `Chart.yaml`

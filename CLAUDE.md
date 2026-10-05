@@ -228,14 +228,17 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   HA and the Pi being down). Renumbering a device is never just a `values.yaml`
   edit — Broadlink, webOS and ESPHome are config-flow integrations whose host
   lives in HA's `/config/.storage`, unreachable from git. See docs/pihole.md.
-- **traefik-config + pihole — split-horizon DNS does NOT cover the HTTPS (SVCB)
+- **traefik-config + pihole — split-horizon DNS must also cover the HTTPS (SVCB)
   record.** Pi-hole's `localRecords` are hosts-file entries, so they override
-  A/AAAA only; the type-65 HTTPS query is forwarded and Cloudflare answers
-  `alpn="h3,h2"`. On the LAN a browser therefore resolves to the Pi but attempts
-  QUIC, and Chromium fails with `ERR_QUIC_PROTOCOL_ERROR` rather than falling back
-  to TCP. The fix is Traefik actually serving QUIC (`http3.enabled` →
-  `--entryPoints.websecure.http3`, adds udp/443 to the LB Service), NOT suppressing
-  the record: a global dnsmasq `filter-rr=65` kills ECH LAN-wide, and a scoped
+  A/AAAA only; forwarded, the type-65 query gets Cloudflare's answer with an
+  `ech=` config (public name `cloudflare-ech.com`). Chromium on Windows uses it,
+  sends that outer SNI to the Pi, gets `TRAEFIK DEFAULT CERT` →
+  `ERR_ECH_FALLBACK_CERTIFICATE_INVALID`. So `dns.localHttpsRecord` serves
+  `1 . alpn="h3,h2"` locally per host (dnsmasq `dns-rr`, via
+  `FTLCONF_misc_dnsmasq_lines`). It still advertises h3, so Traefik must serve
+  QUIC (`http3.enabled` → `--entryPoints.websecure.http3`, adds udp/443 to the
+  LB Service) or Chromium fails with `ERR_QUIC_PROTOCOL_ERROR`. Don't suppress the
+  record instead: a global dnsmasq `filter-rr=65` kills ECH LAN-wide, and a scoped
   `local=/home.agu.com.ar/` also swallows `_acme-challenge.home.agu.com.ar` and
   breaks that cert's DNS-01 renewal. udp/443 stays LAN-only — Cloudflare reaches
   the origin over TCP, so origin-firewall's `quic_filter` drops non-local QUIC and

@@ -80,6 +80,12 @@ spec:
             # Split-horizon local DNS records (agu.com.ar -> the Pi's LAN IP).
             - name: FTLCONF_dns_hosts
               value: {{ include "pihole.dnsHosts" . | quote }}
+            {{- if .Values.dns.localHttpsRecord }}
+            # Local HTTPS records for the same hosts, so Cloudflare's ECH config
+            # never reaches LAN clients that connect to the Pi directly.
+            - name: FTLCONF_misc_dnsmasq_lines
+              value: {{ include "pihole.dnsmasqLines" . | quote }}
+            {{- end }}
             {{- end }}
             {{- if .Values.admin.existingSecret }}
             - name: FTLCONF_webserver_api_password
