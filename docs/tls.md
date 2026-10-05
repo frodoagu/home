@@ -59,8 +59,42 @@ still forward:
 `http3.enabled: true` in [charts/traefik-config/values.yaml](../charts/traefik-config/values.yaml)
 renders `--entryPoints.websecure.http3`, which adds a **udp/443** port
 (`websecure-http3`) to Traefik's LoadBalancer Service — klipper opens the matching
-host port — and makes the entrypoint advertise `Alt-Svc: h3=":443"`. Same
-entrypoint, same Let's Encrypt certificate, just also over QUIC.
+host port — and makes the entrypoint advertise `Alt-Svc: h3=":443"`
+(`http3.advertisedPort: 443`; left unset, Traefik advertises its container port
+8443). Same entrypoint, same Let's Encrypt certificate, just also over QUIC.
+
+#### Helm can't add the UDP ports to an existing release
+
+The chart renders the UDP ports correctly, but enabling http3 on a release that
+already exists never gets them onto the live objects. Helm upgrades with a
+strategic-merge patch, which keys Service ports on `port` alone and container
+ports on `containerPort` alone, so `websecure-http3` 443/UDP merges into
+`websecure` 443/TCP on the Service, and 8443/UDP merges into 8443/TCP on the
+Deployment. The release manifest has both, the cluster has only the TCP ones,
+udp/443 answers "connection refused", and nothing reports drift. A fresh install
+(a create, not a patch) gets every port right.
+
+So on this cluster they were added once by hand, which makes the live objects
+match the release manifest:
+
+```bash
+kubectl -n kube-system patch svc traefik --type=json -p '[{"op":"add","path":"/spec/ports/-",
+  "value":{"name":"websecure-http3","port":443,"targetPort":"websecure-http3","protocol":"UDP"}}]'
+kubectl -n kube-system patch deploy traefik --type=json -p '[{"op":"add","path":"/spec/template/spec/containers/0/ports/-",
+  "value":{"name":"websecure-http3","containerPort":8443,"protocol":"UDP"}}]'
+```
+
+Later upgrades leave them alone, because manifest, release and cluster now
+agree. Two things re-trigger the bug:
+
+- **Don't turn http3 off, and don't switch to the chart's `service.single: false`.**
+  Removing the UDP port also patches away the TCP port that shares its number
+  (reproduced: the Service loses 443/TCP, so HTTPS goes down until the next
+  upgrade restores it).
+- After a fresh `/var/lib/rancher` or a k3s reinstall nothing is needed, since
+  that's a create. If udp/443 is refused, check `kubectl -n kube-system get
+  endpointslice -l kubernetes.io/service-name=traefik` lists `websecure-http3
+  8443/UDP` and re-run the patches above if it doesn't.
 
 It exists for on-LAN clients. Pi-hole's split-horizon records point `*.agu.com.ar`
 at the Pi, but the zone's Cloudflare **HTTPS (SVCB, type 65)** record — which
@@ -87,5 +121,9 @@ every non-local source ([origin-firewall.md](origin-firewall.md)).
   the browser got Cloudflare's ECH config and sent `cloudflare-ech.com` as the
   SNI. Check `dig @192.168.0.100 TYPE65 <host>` has no `ech=`; a host missing
   from Pi-hole's `localRecords` doesn't get the local record.
+- **HTTP/3 refused on the LAN** (`curl --http3-only` → `QUIC: connection
+  refused`): the UDP ports are missing from the live Service or Deployment, see
+  [Helm can't add the UDP ports](#helm-cant-add-the-udp-ports-to-an-existing-release).
+  Browsers fall back to TCP, so nothing looks broken; only `curl` shows it.
 - **Rate limits:** Let's Encrypt limits issuance per domain per week. If you're
   iterating, point `acme.caServer` at the staging endpoint first.

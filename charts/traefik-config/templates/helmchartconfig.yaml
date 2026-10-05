@@ -44,8 +44,15 @@ spec:
         # Adds a udp/443 port (name `websecure-http3`) to Traefik's LoadBalancer
         # Service — klipper opens the matching host port — and makes the
         # entrypoint answer QUIC and advertise `Alt-Svc: h3=":443"`.
+        # advertisedPort: without it Traefik advertises the container port
+        # (h3=":8443"), which nothing outside the pod listens on.
+        # Turning http3 on for an EXISTING release does not add the UDP ports:
+        # Helm's patch keys Service ports on `port` and container ports on
+        # `containerPort`, so 443/UDP and 8443/UDP collapse into their TCP twins.
+        # They were added once by hand (docs/tls.md); don't toggle http3 off.
         http3:
           enabled: true
+          advertisedPort: 443
         {{- end }}
     certificatesResolvers:
       letsencrypt:

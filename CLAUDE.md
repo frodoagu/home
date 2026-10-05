@@ -243,6 +243,16 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   breaks that cert's DNS-01 renewal. udp/443 stays LAN-only — Cloudflare reaches
   the origin over TCP, so origin-firewall's `quic_filter` drops non-local QUIC and
   the router must not forward UDP 443. See docs/tls.md + docs/pihole.md.
+- **traefik-config — Helm can't add udp/443 to an existing Traefik release.**
+  Strategic-merge patches key Service ports on `port` and container ports on
+  `containerPort`, so on upgrade the `websecure-http3` 443/UDP (Service) and
+  8443/UDP (Deployment) entries fold into their TCP twins. The release manifest
+  has them, the cluster doesn't, QUIC is refused, and browsers silently fall back
+  to TCP. They were added once with `kubectl patch` (docs/tls.md), and upgrades
+  leave them alone. **Never remove them through Helm** (http3 off, or
+  `service.single: false`): the same merge deletes the TCP 443 port too, and HTTPS
+  goes down. Reproduced in a scratch release. `http3.advertisedPort: 443` is
+  required as well, or Alt-Svc advertises `:8443`.
 - **shelly-config — exactly ONE controller per wall switch.** The outdoor lights
   run `in_mode: "detached"` (the wall switch does not drive its own relay) and an
   on-device mJS script gangs the two. Do NOT also add a Home Assistant automation
