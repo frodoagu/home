@@ -67,8 +67,9 @@ at the Pi, but the zone's Cloudflare **HTTPS (SVCB, type 65)** record — which
 Pi-hole forwards upstream, because local records only cover A/AAAA — advertises
 `alpn="h3,h2"`. Browsers therefore try QUIC against Traefik and, with nothing
 listening on udp/443, Chromium surfaces `ERR_QUIC_PROTOCOL_ERROR` instead of
-falling back to TCP. See
-[pihole.md](pihole.md#caveat-the-https-svcb-record-still-comes-from-cloudflare).
+falling back to TCP. Pi-hole now serves that HTTPS record locally (same ALPN,
+no ECH), so h3 is still advertised and still needs this listener. See
+[pihole.md](pihole.md#caveat-the-https-svcb-record-must-be-served-locally-too).
 
 **Do not port-forward UDP 443 on the router.** Internet visitors terminate HTTP/3
 at the Cloudflare edge, which reaches this origin over TCP, so inbound QUIC from
@@ -82,5 +83,9 @@ every non-local source ([origin-firewall.md](origin-firewall.md)).
   scoped to the wrong zone.
 - **`acme.json` permission errors:** confirm the `volume-permissions` init
   container ran and the file is mode `0600`.
+- **`TRAEFIK DEFAULT CERT` / `ERR_ECH_FALLBACK_CERTIFICATE_INVALID` on the LAN:**
+  the browser got Cloudflare's ECH config and sent `cloudflare-ech.com` as the
+  SNI. Check `dig @192.168.0.100 TYPE65 <host>` has no `ech=`; a host missing
+  from Pi-hole's `localRecords` doesn't get the local record.
 - **Rate limits:** Let's Encrypt limits issuance per domain per week. If you're
   iterating, point `acme.caServer` at the staging endpoint first.

@@ -132,6 +132,16 @@ dns:
         - logs.agu.com.ar
         - dash.agu.com.ar
         - alertmanager.agu.com.ar
+  # HTTPS (SVCB, type 65) record served locally for every localRecords host.
+  # localRecords only override A/AAAA, so without this the HTTPS query is
+  # forwarded and Cloudflare's answer carries an `ech=` config whose public name
+  # is cloudflare-ech.com. Chromium on Windows (built-in resolver) then sends
+  # that as the outer SNI to the Pi, Traefik has no cert for it and answers with
+  # its default cert, and the browser fails with
+  # ERR_ECH_FALLBACK_CERTIFICATE_INVALID. This record keeps the ALPN Traefik
+  # actually serves and drops ech/ipv4hint/ipv6hint. Hex RDATA of
+  # `1 . alpn="h3,h2"`, as dnsmasq's dns-rr expects. Empty disables it.
+  localHttpsRecord: "00010000010006026833026832"
 
 # DHCP server. The router's own DHCP is OFF and the Pi has a static IP, so Pi-hole
 # owns DHCP and advertises itself as the resolver. (Keep this in sync with the
