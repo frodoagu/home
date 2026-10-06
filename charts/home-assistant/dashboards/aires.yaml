@@ -303,6 +303,16 @@ views:
 
         en {{ m }} con el ventilador al mínimo, y apaga cocina y living.
 
+
+        {% set otros = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_chicos''] | map(''states'')
+        | reject(''in'',[''off'',''unavailable'',''unknown'']) | list | count -%}
+
+        {%- set mio = states(''climate.aire_dormitorio'') not in [''off'',''unavailable'',''unknown''] %}
+
+        👉 **Solo dormitorio:** {% if mio and otros == 0 %}está prendido solo el dormitorio, el próximo
+        toque lo apaga.{% else %}el próximo toque deja solo el dormitorio en {{ m }} con el ventilador
+        al mínimo, y les manda apagar a los otros tres.{% endif %}
+
         '
       grid_options:
         columns: 12
@@ -310,10 +320,18 @@ views:
       name: Modo dormir
       icon: mdi:sleep
       grid_options:
-        columns: 12
+        columns: 6
       tap_action:
         action: perform-action
         perform_action: script.aires_modo_dormir
+    - type: button
+      name: Solo dormitorio
+      icon: mdi:bed-king
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_solo_dormitorio_toggle
   dense_section_placement: true
 - title: Detalle
   path: detalle
