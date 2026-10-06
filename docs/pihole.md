@@ -144,12 +144,35 @@ dhcp:
     - { mac: "34:8e:89:2d:d9:ca", ip: "192.168.0.30", name: "broadlink-1" }  # dormitorio
     - { mac: "34:8e:89:2d:c3:19", ip: "192.168.0.31", name: "broadlink-2" }  # living
     - { mac: "34:8e:89:2d:bb:4b", ip: "192.168.0.32", name: "broadlink-3" }  # cocina
+    - { mac: "34:8e:89:2e:29:c7", ip: "192.168.0.33", name: "broadlink-4" }  # chicos
     # .40-.49  electrodomesticos
     - { mac: "48:55:19:c1:90:bb", ip: "192.168.0.40", name: "lavarropas" }
     # .50-.59  TVs / media
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
+    # .70-.79  computers
+    - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }   # gaming
+    - { mac: "a8:e2:91:b8:67:1a", ip: "192.168.0.72", name: "pc-noah" }
+    - { mac: "60:ff:9e:8d:f9:7a", ip: "192.168.0.73", name: "pc-julian" }
+    # .80-.89  phones
+    - { mac: "28:12:d0:99:e5:e1", ip: "192.168.0.80", name: "celu-fede" }  # motorola edge 70
 ```
+
+### Random MACs (laptops, phones)
+
+A reservation is keyed on the MAC, so a device that randomizes it silently falls
+back to the dynamic pool. The tell is a locally-administered address (second hex
+digit `2`, `6`, `A` or `E`, e.g. `b6:ca:…`) and a device that shows up in
+Pi-hole's network table under many MACs. Pin the real MAC on the device first,
+reconnect, and only then copy the address from `dhcp.leases`:
+
+- **Android**: Wi-Fi → the network → Privacy → *Use device MAC*. Each SSID keeps
+  its own setting, so repeat it for every SSID the phone joins.
+- **iOS**: Wi-Fi → (i) → *Private Wi-Fi Address* → Off.
+- **Windows**: Wi-Fi → *Random hardware addresses* → Off (global and per network).
+- **NetworkManager** (`think`): `nmcli connection modify <conn>
+  802-11-wireless.cloned-mac-address permanent` (the burned-in MAC) or `stable`
+  (a fixed per-network MAC), then reconnect.
 
 To find a new Shelly's MAC/IP: it registers on the LAN with no reverse-DNS hostname
 (`nmap -sn 192.168.0.0/24`), and its local HTTP API confirms the model —

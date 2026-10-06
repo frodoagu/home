@@ -106,6 +106,36 @@ flowchart TD
 
 ArgoCD manages all deployments using the [App of Apps](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) pattern – every chart in this repo is declared as an `Application` under `apps/`.
 
+## LAN devices
+
+Pi-hole is the LAN's DHCP server and gives a fixed address to every device that
+something addresses by IP, plus the household's computers and phones. Each one
+also resolves as `<name>.lan`. The source of truth is
+`dhcp.reservations` in [charts/pihole/values.yaml](charts/pihole/values.yaml),
+so update this table whenever you change that list. The address plan and the
+renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservations).
+
+| IP | Name (`.lan`) | Device | Where |
+|---|---|---|---|
+| `192.168.0.1` | — | Router (gateway) | |
+| `192.168.0.10` | `esphome-btproxy` | ESPHome BLE proxy (prebuilt) | bedroom |
+| `192.168.0.11` | `ble-proxy` | ESPHome BLE proxy ([esphome/ble-proxy.yaml](esphome/ble-proxy.yaml)) | kitchen |
+| `192.168.0.20` | `shelly-escalera` | Shelly 1 Mini Gen4, outdoor light | stairs door |
+| `192.168.0.21` | `shelly-puerta-principal` | Shelly 1 Mini Gen4, outdoor light | front door |
+| `192.168.0.30` | `broadlink-1` | Broadlink IR blaster | bedroom |
+| `192.168.0.31` | `broadlink-2` | Broadlink IR blaster | living |
+| `192.168.0.32` | `broadlink-3` | Broadlink IR blaster | kitchen |
+| `192.168.0.33` | `broadlink-4` | Broadlink IR blaster | kids' room |
+| `192.168.0.40` | `lavarropas` | Candy simply-Fi washer-dryer | |
+| `192.168.0.50` | `tv-sala` | LG webOS TV | living |
+| `192.168.0.51` | `tv-dormitorio` | LG webOS TV | bedroom |
+| `192.168.0.70` | `pc-fede` | Fede's gaming PC | |
+| `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |
+| `192.168.0.73` | `pc-julian` | Julian's PC (Wi-Fi) | |
+| `192.168.0.80` | `celu-fede` | Fede's phone, motorola edge 70 | |
+| `192.168.0.100` | — | Raspberry Pi (k3s, Home Assistant, Pi-hole). Static on the host | |
+| `.150 – .250` | — | Dynamic DHCP pool | |
+
 ## Prerequisites
 
 - Raspberry Pi (tested on RPi 4) running [k3s](https://k3s.io/)
