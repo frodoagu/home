@@ -212,10 +212,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - **pihole — LAN addressing: a static block, and `.lan` names instead of hardcoded
   IPs.** `192.168.0.0/24` is split so the halves never meet: `.10-.99` static
   reservations (one decade per device class — `.1x` ESPHome/BLE, `.2x` Shelly,
-  `.3x` Broadlink, `.4x` electrodomesticos, `.5x` TVs), `.100` the Pi (static on
-  the host, NOT a reservation), `.101-.149` headroom, `.150-.250` the dynamic
-  pool. dnsmasq would keep a reservation out of the pool even if it sat inside
-  it — the split is for legibility, not correctness. Pi-hole also serves the
+  `.3x` Broadlink, `.4x` electrodomesticos, `.5x` TVs, `.7x` computers,
+  `.8x` phones), `.100` the Pi (static on the host, NOT a
+  reservation), `.101-.149` headroom, `.150-.250` the dynamic pool. dnsmasq
+  would keep a reservation out of the pool even if it sat inside it — the split
+  is for legibility, not correctness. Laptops and phones randomize their Wi-Fi
+  MAC by default, so a reservation only sticks once the device uses its real
+  MAC (docs/pihole.md#random-macs-laptops-phones). Pi-hole also serves the
   reservations as DNS under `dns.domain` (`lan`), so `lavarropas.lan` resolves
   from the reservation and consumers can stop hardcoding IPs. **Pods can't
   resolve that by default** (CoreDNS forwards to the node's upstream, not to
