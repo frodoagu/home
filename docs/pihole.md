@@ -152,6 +152,7 @@ dhcp:
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
     # .70-.79  computers
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }   # gaming
+    - { mac: "f4:4e:e3:98:c9:4d", ip: "192.168.0.71", name: "think" }     # work laptop
     - { mac: "a8:e2:91:b8:67:1a", ip: "192.168.0.72", name: "pc-noah" }
     - { mac: "60:ff:9e:8d:f9:7a", ip: "192.168.0.73", name: "pc-julian" }
     # .80-.89  phones
