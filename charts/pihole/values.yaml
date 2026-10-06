@@ -181,6 +181,7 @@ dhcp:
   #   .30–.39  Broadlink IR blasters
   #   .40–.49  electrodomesticos
   #   .50–.59  TVs / media
+  #   .60–.69  WiZ lights
   #   .70–.79  computers
   #   .80–.89  phones
   #
@@ -210,6 +211,10 @@ dhcp:
     # packet target) never drift when the DHCP lease renews.
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
+    # WiZ lights — Home Assistant's wiz config entry addresses each one by IP.
+    # TODO: fill in the MAC (WiZ app → device → Settings → Device info) and
+    # uncomment. A malformed entry breaks FTL's DHCP config for the whole LAN.
+    # - { mac: "TODO", ip: "192.168.0.60", name: "lampara-dormitorio" }   # WiZ Squire
     # Computers. Pinned by their real (burned-in) MAC; anything that randomizes
     # it per connection can't hold a reservation (docs/pihole.md).
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }        # gaming
@@ -218,6 +223,8 @@ dhcp:
     - { mac: "60:ff:9e:8d:f9:7a", ip: "192.168.0.73", name: "pc-julian" }
     # Phones, on their device MAC ("use device MAC" in each SSID's privacy setting).
     - { mac: "28:12:d0:99:e5:e1", ip: "192.168.0.80", name: "celu-fede" }      # motorola edge 70
+    # TODO: still on a private (random) MAC; switch it, reconnect, fill in, uncomment.
+    # - { mac: "TODO", ip: "192.168.0.81", name: "celu-noah" }                 # Galaxy S23 FE
 
 # Resource requests/limits – tuned small for the RPi.
 resources:

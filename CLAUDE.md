@@ -212,8 +212,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - **pihole — LAN addressing: a static block, and `.lan` names instead of hardcoded
   IPs.** `192.168.0.0/24` is split so the halves never meet: `.10-.99` static
   reservations (one decade per device class — `.1x` ESPHome/BLE, `.2x` Shelly,
-  `.3x` Broadlink, `.4x` electrodomesticos, `.5x` TVs, `.7x` computers,
-  `.8x` phones), `.100` the Pi (static on the host, NOT a
+  `.3x` Broadlink, `.4x` electrodomesticos, `.5x` TVs, `.6x` WiZ lights, `.7x`
+  computers, `.8x` phones), `.100` the Pi (static on the host, NOT a
   reservation), `.101-.149` headroom, `.150-.250` the dynamic pool. dnsmasq
   would keep a reservation out of the pool even if it sat inside it — the split
   is for legibility, not correctness. Laptops and phones randomize their Wi-Fi
@@ -229,7 +229,7 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `proxy_pass` resolves at STARTUP, so an unresolvable name = pod refuses to
   start) and `scripts/luces-afuera.js` (runs on the Shelly; it exists to survive
   HA and the Pi being down). Renumbering a device is never just a `values.yaml`
-  edit — Broadlink, webOS and ESPHome are config-flow integrations whose host
+  edit — Broadlink, webOS, WiZ and ESPHome are config-flow integrations whose host
   lives in HA's `/config/.storage`, unreachable from git. See docs/pihole.md.
 - **traefik-config + pihole — split-horizon DNS must also cover the HTTPS (SVCB)
   record.** Pi-hole's `localRecords` are hosts-file entries, so they override

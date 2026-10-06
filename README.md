@@ -129,11 +129,13 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
 | `192.168.0.40` | `lavarropas` | Candy simply-Fi washer-dryer | |
 | `192.168.0.50` | `tv-sala` | LG webOS TV | living |
 | `192.168.0.51` | `tv-dormitorio` | LG webOS TV | bedroom |
+| `192.168.0.60` | `lampara-dormitorio` | WiZ Squire lamp (reservation pending its MAC) | bedroom |
 | `192.168.0.70` | `pc-fede` | Fede's gaming PC | |
 | `192.168.0.71` | `think` | Fede's work laptop | |
 | `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |
 | `192.168.0.73` | `pc-julian` | Julian's PC (Wi-Fi) | |
 | `192.168.0.80` | `celu-fede` | Fede's phone, motorola edge 70 | |
+| `192.168.0.81` | `celu-noah` | Noah's phone, Galaxy S23 FE (pending its device MAC) | |
 | `192.168.0.100` | — | Raspberry Pi (k3s, Home Assistant, Pi-hole). Static on the host | |
 | `.150 – .250` | — | Dynamic DHCP pool | |
 
