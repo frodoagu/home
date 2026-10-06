@@ -96,6 +96,17 @@ dns:
   # "lan" is also FTL's default; it is set explicitly because the CoreDNS stanza
   # below and several consumers now depend on this exact suffix.
   domain: "lan"
+  # TTL (seconds) on answers Pi-hole builds itself: DHCP leases, reservations
+  # and localRecords (dnsmasq `local-ttl`). dnsmasq's default is 0, which no
+  # client can cache — every lookup of `lavarropas.lan` reached Pi-hole, five
+  # times a minute while the washer was off and its poller retried. The
+  # clusterForwarding CoreDNS block caches `.<domain>` for the same time.
+  localTTL: 300
+  # TTL (seconds) on blocked answers. FTL's default is 2, so a client's resolver
+  # cache expires before the next retry of a blocked tracker and every retry
+  # becomes a query. Trade-off: a domain unblocked in the UI keeps failing on
+  # clients for up to this long.
+  blockTTL: 300
   # Make `*.<dns.domain>` resolvable from INSIDE the cluster.
   #
   # Pods resolve through CoreDNS, which forwards everything it doesn't own to the

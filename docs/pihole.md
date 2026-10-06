@@ -222,7 +222,10 @@ NXDOMAIN in a pod. `dns.clusterForwarding` fixes that by rendering the
 ```
 lan:53 {
     errors
-    cache 30
+    cache 300 {
+        success 9984 300 300
+        denial 9984 300 300
+    }
     forward . 192.168.0.100
 }
 ```
@@ -234,6 +237,19 @@ server block without touching the k3s-managed Corefile, and no Deployment change
 needed. `forward` points at the **node's LAN IP** because Pi-hole runs hostNetwork
 (there is no Service for :53). CoreDNS's `reload` plugin picks the change up within
 ~2 min; `kubectl -n kube-system rollout restart deploy/coredns` forces it.
+
+#### Why the TTLs are pinned
+
+dnsmasq answers everything it builds itself — leases, reservations, `localRecords` —
+with **TTL 0**, and the NODATA for an IPv4-only device's AAAA carries no SOA, so no
+TTL at all. Nothing downstream can cache either: before `dns.localTTL`, CoreDNS
+forwarded every `lavarropas.lan` lookup (A + AAAA) to Pi-hole, and while the washer
+was off the Candy poller's 5 retries a minute made that ~13k queries a day, the
+single biggest client on the LAN. `dns.localTTL` (300 s) fixes both ends: it renders
+`local-ttl` into `misc.dnsmasq_lines` for every LAN client, and the CoreDNS block
+above floors both success and denial at the same value (the `MINTTL` field), which
+is what makes the TTL-less NODATA cacheable. The cost is that a renumbered device
+can take up to 5 min to resolve to its new address.
 
 Who uses names, and who deliberately doesn't:
 
@@ -260,6 +276,8 @@ Everything is driven by `FTLCONF_*` env vars rendered from `values.yaml`:
 | `dns.upstreams` | `FTLCONF_dns_upstreams` | Cloudflare `1.1.1.1;1.0.0.1` |
 | `dns.listeningMode` | `FTLCONF_dns_listeningMode` | `all` (safe — :53 isn't internet-exposed) |
 | `dns.dnssec` | `FTLCONF_dns_dnssec` | `false` |
+| `dns.localTTL` | `local-ttl` in `FTLCONF_misc_dnsmasq_lines` + CoreDNS `.lan` cache | `300` (dnsmasq's own default is 0) |
+| `dns.blockTTL` | `FTLCONF_dns_blockTTL` | `300` (FTL's default is 2, so blocked trackers are re-queried on every retry; an unblock takes up to this long to reach clients) |
 | `dns.localRecords` | `FTLCONF_dns_hosts` | see below |
 | `webPort` | `FTLCONF_webserver_port` | `8080` |
 | `dhcp.{start,end,router,leaseTime}` | `FTLCONF_dhcp_*` | `.150 / .250 / .1 / 24h` |
