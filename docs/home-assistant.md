@@ -459,6 +459,10 @@ dashboard's *Detalle* view.
   unit declares (`level1` on the 5140, `low` on the 3340), living areas off. The
   fan frame is sent a second after the temperature frame so the two IR blasts
   don't step on each other.
+- `aires_solo_dormitorio_toggle` — Fede's bedroom alone. Off only when the
+  bedroom is the **only** unit on (in any mode); otherwise the bedroom goes to the
+  seasonal setpoint on `level1` and the other three get an off frame, sent even
+  to units HA already has off so one started from its remote is caught too.
 - `aires_subir_grado` / `aires_bajar_grado` — ±1 °C on every unit that is **on**,
   each clamped to its own limits (they differ: 17-30 on the 1382, 16-31 on the
   5140, 16-32 on the 3340). Units that are off stay off. They are one `repeat`
