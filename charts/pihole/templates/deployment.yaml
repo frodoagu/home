@@ -76,16 +76,19 @@ spec:
             # reachable as <reservation name>.<domain> instead of by IP.
             - name: FTLCONF_dns_domain
               value: {{ .Values.dns.domain | quote }}
+            - name: FTLCONF_dns_blockTTL
+              value: {{ .Values.dns.blockTTL | quote }}
             {{- if .Values.dns.localRecords }}
             # Split-horizon local DNS records (agu.com.ar -> the Pi's LAN IP).
             - name: FTLCONF_dns_hosts
               value: {{ include "pihole.dnsHosts" . | quote }}
-            {{- if .Values.dns.localHttpsRecord }}
-            # Local HTTPS records for the same hosts, so Cloudflare's ECH config
-            # never reaches LAN clients that connect to the Pi directly.
-            - name: FTLCONF_misc_dnsmasq_lines
-              value: {{ include "pihole.dnsmasqLines" . | quote }}
             {{- end }}
+            {{- with include "pihole.dnsmasqLines" . }}
+            # local-ttl for locally built answers, plus local HTTPS records for
+            # the localRecords hosts so Cloudflare's ECH config never reaches LAN
+            # clients that connect to the Pi directly.
+            - name: FTLCONF_misc_dnsmasq_lines
+              value: {{ . | quote }}
             {{- end }}
             {{- if .Values.admin.existingSecret }}
             - name: FTLCONF_webserver_api_password

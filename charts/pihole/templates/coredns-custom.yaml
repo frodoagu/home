@@ -10,6 +10,9 @@
 # in as an extra server block with no change to the k3s-managed Corefile. The name
 # and namespace are fixed by that contract — don't template them.
 #
+# The cache floors both TTLs at dns.localTTL (MINTTL): the NODATA Pi-hole returns
+# for an IPv4-only device's AAAA has no SOA, so it carries no TTL to honour.
+#
 # CoreDNS's `reload` plugin picks the change up on its own (up to ~2 min); a
 # `kubectl -n kube-system rollout restart deploy/coredns` forces it.
 apiVersion: v1
@@ -23,7 +26,10 @@ data:
   {{ .Values.dns.domain }}.server: |
     {{ .Values.dns.domain }}:53 {
         errors
-        cache 30
+        cache {{ .Values.dns.localTTL }} {
+            success 9984 {{ .Values.dns.localTTL }} {{ .Values.dns.localTTL }}
+            denial 9984 {{ .Values.dns.localTTL }} {{ .Values.dns.localTTL }}
+        }
         forward . {{ .Values.dns.clusterForwarding.piholeIP }}
     }
 {{- end }}
