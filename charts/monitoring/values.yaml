@@ -294,6 +294,9 @@ victoria-metrics-k8s-stack:
   grafana:
     enabled: true
     revisionHistoryLimit: 1
+    # `helm test` hook pod; Argo CD never runs it.
+    testFramework:
+      enabled: false
     # We expose Grafana via our own Traefik IngressRoute (templates/grafana-ingress.yaml).
     ingress:
       enabled: false
