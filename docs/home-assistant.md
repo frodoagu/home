@@ -933,8 +933,9 @@ Setup, in order:
    `192.168.0.60`. Put the device in the *Dormitorio* area as *Lámpara
    dormitorio* and rename its entities to `light.lampara_dormitorio` and
    `*.lampara_dormitorio_*`.
-4. **Update the firmware** from the WiZ app. Per-zone control is validated on
-   `1.38.0`. The lamp shipped on `1.24.2`, which **ignores the zone index**: a
+4. **Update the firmware** from the WiZ app. Per-zone control works on
+   `1.38.0`, with the zone index described under
+   [Per-zone control](#per-zone-control-lampara_dormitorioyaml). The lamp shipped on `1.24.2`, which **ignores the zone index**: a
    `setPilot` with `"devices": 2` repaints both zones, and `getPilot` answers the
    same for either index, with no `devices` field in the reply. On that firmware
    the package below leaves both zone lights `unavailable`.
@@ -955,8 +956,16 @@ The current `wiz` integration exposes the lamp as **one** `light`, so both zones
 always share a state and colour. Its only per-zone control is
 `number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness balance
 between the two zones (the lamp's `ratio`, 0-100). The WiZ local API can address
-each zone, though: `setPilot`/`getPilot` take `"devices": 1|2`, the same index
-pywizlight 0.6.6 uses.
+each zone, though, with an index that is **not symmetric** on `1.38.0`:
+
+| Call | Zone 1 | Zone 2 |
+|---|---|---|
+| `setPilot` `params.devices` | `1` | `2` |
+| `getPilot` `params.devices` | `0` | `1` (`2` → `Invalid params`) |
+| `devices` in the `getPilot` reply | `1` | `2` |
+
+`getPilot` with no `devices` answers for zone 1 and leaves the field out.
+`getModelConfig` reports `devTotal: 2`.
 [`packages/lampara_dormitorio.yaml`](../charts/home-assistant/packages/lampara_dormitorio.yaml)
 builds two lights on top of it:
 

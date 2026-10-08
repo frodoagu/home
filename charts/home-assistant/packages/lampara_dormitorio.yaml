@@ -1,9 +1,11 @@
 # HA package: the bedroom WiZ Squire as two independent lights, one per zone.
 # The core `wiz` integration exposes the lamp as a single light; until it splits
 # the zones (home-assistant/core#177502) this package drives each zone over the
-# WiZ local UDP API itself: `setPilot` / `getPilot` with `"devices": 1|2`, the
-# same index pywizlight 0.6.6 uses. Delete this package once the integration
-# ships per-zone entities. See docs/home-assistant.md#bedroom-lamp-wiz-squire.
+# WiZ local UDP API itself. On firmware 1.38.0 the zone index is NOT symmetric:
+# `setPilot` takes `"devices": 1|2`, `getPilot` takes `"devices": 0|1` (2 is
+# `Invalid params`) and labels its reply `"devices": 1|2`. Delete this package
+# once the integration ships per-zone entities.
+# See docs/home-assistant.md#bedroom-lamp-wiz-squire.
 
 command_line:
   - sensor:
@@ -22,7 +24,7 @@ command_line:
         for z in (1, 2):
             out[z] = None
             for _ in range(3):
-                s.sendto(json.dumps({'method': 'getPilot', 'params': {'devices': z}}).encode(), ('lampara-dormitorio.lan', 38899))
+                s.sendto(json.dumps({'method': 'getPilot', 'params': {'devices': z - 1}}).encode(), ('lampara-dormitorio.lan', 38899))
                 end = time.monotonic() + 1
                 while out[z] is None and time.monotonic() < end:
                     try:
