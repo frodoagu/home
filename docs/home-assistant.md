@@ -1006,7 +1006,10 @@ git: `light.lampara_dormitorio` (the wiz entity), both zone lights,
 `hidden_by: user`, the zone lights carry the *Dormitorio* area (template entities
 have no device to inherit it from), and the dead dual-head ratio entity is
 `disabled_by: user`. Hidden entities keep working, the group's members included.
-On a fresh PVC, redo these in the UI (entity → settings).
+The zone lights' names (*arriba* / *abajo*) are also set in the registry: a
+template light keeps the name it first registered with, so renaming it in the
+package alone changes nothing in the UI or in Google. On a fresh PVC the package
+names apply as they are; elsewhere, redo these in the UI (entity → settings).
 
 ### When the integration gets zones
 
