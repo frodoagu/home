@@ -80,14 +80,20 @@ Pi-hole's dns.hosts config key (FTL parses env-var arrays on ";" or "\n").
 {{- end }}
 
 {{/*
-Render dns.localHttpsRecord into dnsmasq dns-rr lines, one per localRecords
-host, for Pi-hole's misc.dnsmasq_lines (same ";"-separated env-var array).
+Extra dnsmasq lines for Pi-hole's misc.dnsmasq_lines (";"-separated env-var
+array): local-ttl from dns.localTTL, and dns.localHttpsRecord as one dns-rr line
+per localRecords host.
 */}}
 {{- define "pihole.dnsmasqLines" -}}
 {{- $entries := list -}}
+{{- if .Values.dns.localTTL -}}
+{{- $entries = append $entries (printf "local-ttl=%d" (int .Values.dns.localTTL)) -}}
+{{- end -}}
+{{- if .Values.dns.localHttpsRecord -}}
 {{- range .Values.dns.localRecords -}}
 {{- range .hosts -}}
 {{- $entries = append $entries (printf "dns-rr=%s,65,%s" . $.Values.dns.localHttpsRecord) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- join ";" $entries -}}
