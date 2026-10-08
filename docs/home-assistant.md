@@ -48,7 +48,8 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`climate.yaml`, `gas.yaml`, `luces_afuera.yaml`, `salud.yaml`, `tv.yaml`,
+  (`climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
+  `luces_afuera.yaml`, `salud.yaml`, `simulacion_presencia.yaml`, `tv.yaml`,
   `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
@@ -1059,6 +1060,81 @@ init container writes that block **only once**, so on the current PVC add the
 lines by hand to `/config/configuration.yaml` and restart HA (same as the TV
 overrides). Do **not** also link the WiZ action in the Google Home app,
 or the lamp shows up twice.
+
+## Presence simulation
+
+[`packages/simulacion_presencia.yaml`](../charts/home-assistant/packages/simulacion_presencia.yaml)
+runs an evening routine on the bedroom lamp and the bedroom TV while nobody is
+home, at different times every night. The outdoor lights already follow
+dusk/dawn on their own ([luces_afuera.yaml](#duskdawn-schedule)); this adds a
+room that changes during the evening.
+
+**Tonight's schedule** is four timestamp sensors, drawn at 12:00 (a "night"
+runs noon to noon, so an off time past midnight belongs to the evening before):
+
+| Sensor | Window | Fri/Sat nights |
+|---|---|---|
+| `sensor.simulacion_presencia_lampara_prender` | 19:30 + 0-44 min | — |
+| `sensor.simulacion_presencia_tv_prender` | 20:45 + 0-44 min | — |
+| `sensor.simulacion_presencia_tv_apagar` | 23:00 + 0-44 min | +30 min |
+| `sensor.simulacion_presencia_lampara_apagar` | 23:50 + 0-29 min | +30 min |
+
+The windows don't overlap, so the order (lamp on, TV on, TV off, lamp off) always
+holds. The sensors also draw on HA start, but keep a restored time that still
+falls in tonight's window, so a restart never moves a time that already went by.
+Only a stale schedule (HA down at noon) is drawn again. They're trigger-based
+template sensors: the state comes back from the restore cache, nothing in
+`.storage` is needed.
+
+**What drives the devices** (`automation.simulacion_de_presencia_lampara_y_tv_del_dormitorio`):
+
+| Trigger | Effect |
+|---|---|
+| One of the four times | That device only, in that direction |
+| `zone.home` at `0` for 15 min | Both devices reconciled with their window: on inside it, off outside |
+| Pause switched off while away | Same reconcile |
+| HA start | Same reconcile, after 1 min and a second look at `zone.home` |
+
+A device already in the target state isn't touched, so a lamp left on keeps its
+colour or scene. A reconcile also turns off what is on outside its window: a
+bedroom TV left on in the morning goes off 15 min after the last person leaves.
+A change made remotely while away (the lamp switched off from the app) holds
+until that device's next time. Nothing re-applies the schedule every minute.
+
+On 2026.9, `homeassistant: start` fires at `EVENT_HOMEASSISTANT_STARTED`, after
+startup has finished, so the 1-min `delay` doesn't hold up the boot.
+
+**"Nobody home"** is `zone.home` == `0`, the count of `person`s in the zone
+(see [Push notifications](#push-notifications)). People without a tracked phone
+don't count: kids with a babysitter, guests, someone home with a dead phone. For
+those there's **`input_boolean.simulacion_presencia_pausa`** (*Pausar simulación
+de presencia*). While it's on, nothing in the package acts. Pausing doesn't turn
+off what is already on.
+
+**Coming back** (`automation.simulacion_de_presencia_volvio_alguien`) after a
+real absence (`zone.home` was `0` for 15 min or more) turns the TV off if it's
+inside its window and the simulation wasn't paused. The lamp stays as it is.
+The return also clears the pause, so a pause covers one outing and can't be
+left on by mistake. A return under 15 min changes nothing.
+
+Entities it drives:
+
+- **The lamp goes through `light.lampara_dormitorio_grupo`**, not the wiz
+  entity. The group keeps its meaning after the upstream zone split (see
+  [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
+  entity becomes zone A. Turned on at 60 % and 2700 K.
+- **The TV goes through `script.tv_dormitorio_turn_on`/`_off`** from
+  [tv.yaml](#lg-webos-tvs--unified-webos--ir-entity), not
+  `media_player.tv_dormitorio`. HA skips service calls to unavailable entities,
+  so an unavailable universal entity drops a `turn_on`, while the script still
+  has its IR fallback. The state check
+  before each call matters because that IR power code is a toggle. The TV comes
+  back on whatever input it was on. If that's an empty HDMI input, the room
+  shows a "no signal" box instead of a changing picture.
+
+The pause helper is **not on the saved Overview** (a storage-mode dashboard
+doesn't pick up new entities; see the bedroom lamp section above). Add it there by
+hand, next to the four schedule sensors if you want tonight's times in view.
 
 ## Probes
 
