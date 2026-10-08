@@ -911,6 +911,39 @@ local midnight, the off-side only during the day.
 > other (and to the on-side's sun trigger), or dusk — the very window the
 > catch-up exists to cover — becomes the overlap.
 
+## Bedroom lamp (WiZ Squire)
+
+The bedroom lamp is a **WiZ Squire** (`ESP20_DHRGB_01B`), a portable RGB table
+lamp with two light zones. HA's core `wiz` integration drives it **locally**
+over UDP `38899`, with no WiZ cloud in the path. `wiz` is a config-flow
+integration, so git doesn't hold the entry. Git only holds the address it points
+at: the reservation `lampara-dormitorio` → `192.168.0.60` in
+[charts/pihole/values.yaml](../charts/pihole/values.yaml) (decade `.6x`, WiZ
+lights).
+
+Setup, in order:
+
+1. **Provision it with the WiZ app** onto the `IoT-Fede` SSID, and turn on
+   **Allow local communication** in the app's settings. It ships **off**: the
+   lamp answers ping but ignores UDP `38899`, and the integration can't reach it.
+2. **Pin its address.** Copy the MAC from `dhcp.leases` (the lamp registers as
+   `wiz_<last 6 hex of the MAC>`) into the reservation, then power-cycle the lamp
+   so it takes `.60`.
+3. **Add it to HA.** Add **WiZ** under Settings → Devices & services with host
+   `192.168.0.60`. Put the device in the *Dormitorio* area as *Lámpara
+   dormitorio* and rename its entities to `light.lampara_dormitorio` and
+   `*.lampara_dormitorio_*`.
+
+**One light for both zones.** The integration exposes the lamp as a single
+`light`, so both zones share a state and colour. The only per-zone control it
+has is `number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness
+balance between the two zones (the lamp's `ratio`, 0-100).
+
+**Google Home.** Lights reach Google through HA's `google_assistant` (the `light`
+domain is exposed by default), so the lamp shows up there as one light. Do
+**not** also link the WiZ action in the Google Home app, or the lamp shows up
+twice.
+
 ## Probes
 
 A `startupProbe` tolerates HA's slow boot (up to ~150s) while keeping the
