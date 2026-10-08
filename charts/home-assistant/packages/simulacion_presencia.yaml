@@ -1,0 +1,329 @@
+# HA package: presence simulation. While nobody is home, the bedroom lamp and the
+# bedroom TV follow an evening routine, at different times every night, so the
+# house doesn't look empty from the street.
+# See docs/home-assistant.md#presence-simulation.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# THE NIGHT'S SCHEDULE is the four timestamp sensors below. A "night" runs from
+# noon to noon, so an off time past midnight still belongs to the evening that
+# started it (and to that evening's weekday). Each sensor draws a random minute
+# inside its window:
+#
+#   lamp on    sunset - 15 min, kept within 19:30-20:00, + 0-44 min
+#   TV on      20:45 + 0-44 min
+#   TV off     23:30 + 0-44 min   (+60 min on Friday and Saturday nights)
+#   lamp off   00:15 + 0-44 min   (+60 min on Friday and Saturday nights)
+#
+# The windows follow Argentine habits rather than the house's own history (too
+# little of it so far): dinner around 21:30, broadcast prime time until about
+# midnight with its peaks after 23:00, and an average bedtime around 01:00.
+# The lamp waits for dusk in summer, when sunset is past 20:00.
+#
+# The windows don't overlap, so the order is always lamp on < TV on < TV off <
+# lamp off. Changing a window means checking that this still holds.
+#
+# They draw at 12:00 and at HA start, but a start KEEPS a restored time that
+# still falls in tonight's window: only a stale schedule (HA was down at noon)
+# is drawn again. So a restart never moves a time that already went by.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# WHO DRIVES WHAT. Each time trigger moves only its own device, in its own
+# direction: "lamp on" turns the lamp on and touches nothing else. The other
+# triggers (the absence starting, un-pausing, an HA start) reconcile BOTH
+# devices with where the schedule says they should be right now, which is the
+# catch-up for a time that went by with HA down (same reason as
+# luces_afuera.yaml). A reconcile also turns OFF what is on outside its window:
+# with nobody home, a bedroom TV left on at 10:00 goes off when the absence
+# starts.
+#
+# A remote change while away (the lamp switched off from the app) holds until
+# that device's next time; nothing here re-applies the schedule every minute.
+#
+# ────────────────────────────────────────────────────────────────────────────
+# "NOBODY HOME" is `zone.home` == 0, the count of `person`s inside the zone
+# (both have the mobile app's device_tracker, see climate.yaml). An ABSENCE is
+# that count held at 0 for 15 min, so a GPS blip at the edge of the zone isn't
+# one. It's recorded in `input_boolean.simulacion_presencia_ausencia` rather
+# than read from `zone.home`'s last_changed, which an HA restart resets. A
+# return is the count above 0 for 5 min, for the same reason.
+#
+# Anyone without a tracked phone is invisible to it: kids with a babysitter,
+# guests, or someone home with a dead phone. For that there's
+# `input_boolean.simulacion_presencia_pausa`: while it's on nothing here acts.
+# A return clears it, so a pause covers one outing and can't be forgotten on.
+# Pausing does not turn off what is already on.
+#
+# The lamp is driven through its group, `light.lampara_dormitorio_grupo`, not
+# the wiz entity: the group survives the upstream zone split unchanged (see
+# lampara_dormitorio.yaml), the wiz entity becomes zone A. The TV goes through
+# the WoL/IR scripts of tv.yaml, which keep the IR fallback for a TV that
+# reports off but doesn't wake. Their IR code is a power TOGGLE, so nothing here
+# calls them unless the TV's state is known: an unavailable TV is left alone in
+# both directions. `input_boolean.simulacion_presencia_tv` records that the
+# simulation turned the TV on, so a return turns off only that.
+# ────────────────────────────────────────────────────────────────────────────
+
+# No `initial` on any of them: the state is restored across restarts, and a
+# brand-new helper starts off.
+input_boolean:
+  simulacion_presencia_pausa:
+    name: Pausar simulación de presencia
+    icon: mdi:home-off-outline
+  simulacion_presencia_ausencia:
+    name: Simulación de presencia - casa vacía
+    icon: mdi:home-export-outline
+  simulacion_presencia_tv:
+    name: Simulación de presencia - prendió la TV
+    icon: mdi:television-classic
+
+template:
+  - trigger:
+      - platform: time
+        at: "12:00:00"
+      - platform: homeassistant
+        event: start
+    sensor:
+      - name: "Simulación presencia - prende lámpara"
+        unique_id: simulacion_presencia_lampara_prender
+        default_entity_id: sensor.simulacion_presencia_lampara_prender
+        device_class: timestamp
+        icon: mdi:lamp
+        # `desde` window start (HH:MM; before 12:00 means after midnight),
+        # `minutos` its length, `finde` the shift on Friday and Saturday nights.
+        # `next_setting` is today's or tomorrow's sunset, a minute or two off
+        # tonight's; only its time of day is used.
+        variables:
+          desde: >-
+            {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
+            {%- set hora = (ocaso | as_local - timedelta(minutes=15)).strftime('%H:%M') if ocaso else '19:30' %}
+            {{- [[hora, '19:30'] | max, '20:00'] | min }}
+          minutos: 45
+          finde: 0
+        # The 5 min of slack keep a restored lamp time when the sunset has moved
+        # a minute between the noon draw and a restart.
+        state: &horario >-
+          {%- set dia = (1 if desde < '12:00' else 0) - (1 if now().hour < 12 else 0) %}
+          {%- set inicio = today_at(desde) + timedelta(days=dia) %}
+          {%- set tarde = inicio - timedelta(hours=12) %}
+          {%- set inicio = inicio + timedelta(minutes=finde if tarde.weekday() in [4, 5] else 0) %}
+          {%- set holgura = timedelta(minutes=5) %}
+          {%- set hora = this.state | as_datetime(none) %}
+          {%- if hora is none or not inicio - holgura <= hora < inicio + timedelta(minutes=minutos) + holgura %}
+          {%- set hora = inicio + timedelta(minutes=range(minutos) | random) %}
+          {%- endif %}
+          {{- hora.isoformat() }}
+
+      - name: "Simulación presencia - prende TV"
+        unique_id: simulacion_presencia_tv_prender
+        default_entity_id: sensor.simulacion_presencia_tv_prender
+        device_class: timestamp
+        icon: mdi:television
+        variables:
+          desde: "20:45"
+          minutos: 45
+          finde: 0
+        state: *horario
+
+      - name: "Simulación presencia - apaga TV"
+        unique_id: simulacion_presencia_tv_apagar
+        default_entity_id: sensor.simulacion_presencia_tv_apagar
+        device_class: timestamp
+        icon: mdi:television-off
+        variables:
+          desde: "23:30"
+          minutos: 45
+          finde: 60
+        state: *horario
+
+      - name: "Simulación presencia - apaga lámpara"
+        unique_id: simulacion_presencia_lampara_apagar
+        default_entity_id: sensor.simulacion_presencia_lampara_apagar
+        device_class: timestamp
+        icon: mdi:lamp-outline
+        variables:
+          desde: "00:15"
+          minutos: 45
+          finde: 60
+        state: *horario
+
+automation:
+  # On a start the 15 min count from the start: `zone.home` has no history
+  # across a restart, and an absence already under way is restored on.
+  - id: simulacion_presencia_ausencia
+    alias: Simulación de presencia - Casa vacía
+    description: >-
+      Marca la casa como vacía cuando no queda nadie durante 15 min. Es lo que
+      arranca la simulación.
+    trigger:
+      - platform: state
+        entity_id: zone.home
+        to: "0"
+        for: "00:15:00"
+      - platform: homeassistant
+        event: start
+        id: arranque
+    action:
+      - if:
+          - condition: trigger
+            id: arranque
+        then:
+          - wait_template: "{{ not is_state('zone.home', '0') }}"
+            timeout: "00:15:00"
+          - condition: template
+            value_template: "{{ not wait.completed }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.simulacion_presencia_ausencia
+    mode: restart
+
+  - id: simulacion_presencia
+    alias: Simulación de presencia - Lámpara y TV del dormitorio
+    description: >-
+      Con la casa vacía prende y apaga la lámpara y la tele del dormitorio a los
+      horarios de los sensores "Simulación presencia", que cambian cada noche.
+      Al vaciarse la casa, al sacar la pausa y al arrancar HA deja cada equipo
+      como tendría que estar a esa hora.
+    trigger:
+      - platform: time
+        at: sensor.simulacion_presencia_lampara_prender
+        id: lampara_prender
+      - platform: time
+        at: sensor.simulacion_presencia_lampara_apagar
+        id: lampara_apagar
+      - platform: time
+        at: sensor.simulacion_presencia_tv_prender
+        id: tv_prender
+      - platform: time
+        at: sensor.simulacion_presencia_tv_apagar
+        id: tv_apagar
+      - platform: state
+        entity_id: input_boolean.simulacion_presencia_ausencia
+        from: "off"
+        to: "on"
+        id: conciliar
+      - platform: state
+        entity_id: input_boolean.simulacion_presencia_pausa
+        from: "on"
+        to: "off"
+        id: conciliar
+      - platform: homeassistant
+        event: start
+        id: arranque
+    # The conditions live in the action, after the start's delay: a top-level
+    # condition would read the person/zone states before they've settled.
+    action:
+      - if:
+          - condition: trigger
+            id: arranque
+        then:
+          - delay: "00:01:00"
+      - condition: state
+        entity_id: input_boolean.simulacion_presencia_pausa
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.simulacion_presencia_ausencia
+        state: "on"
+      - condition: state
+        entity_id: zone.home
+        state: "0"
+      - variables:
+          # 'on', 'off', or '' when the TV's state is unknown.
+          tv_estado: &tv_estado >-
+            {%- set estado = states('media_player.tv_dormitorio') %}
+            {{- '' if estado in ['unavailable', 'unknown'] else 'off' if estado in ['off', 'standby'] else 'on' }}
+          # 'on', 'off', or '' to leave the device alone. A time trigger says
+          # it outright; a reconcile reads the window. Without a valid schedule
+          # nothing is touched.
+          lampara: >-
+            {%- set desde = states('sensor.simulacion_presencia_lampara_prender') | as_datetime(none) %}
+            {%- set hasta = states('sensor.simulacion_presencia_lampara_apagar') | as_datetime(none) %}
+            {%- if trigger.id == 'lampara_prender' %}on
+            {%- elif trigger.id == 'lampara_apagar' %}off
+            {%- elif trigger.id in ['conciliar', 'arranque'] and desde and hasta %}
+            {{- 'on' if desde <= now() < hasta else 'off' }}
+            {%- endif %}
+          tv: >-
+            {%- set desde = states('sensor.simulacion_presencia_tv_prender') | as_datetime(none) %}
+            {%- set hasta = states('sensor.simulacion_presencia_tv_apagar') | as_datetime(none) %}
+            {%- if trigger.id == 'tv_prender' %}on
+            {%- elif trigger.id == 'tv_apagar' %}off
+            {%- elif trigger.id in ['conciliar', 'arranque'] and desde and hasta %}
+            {{- 'on' if desde <= now() < hasta else 'off' }}
+            {%- endif %}
+      # Each device is touched only when it isn't already where it should be,
+      # so a lamp left on keeps whatever colour or scene it had.
+      - if: "{{ lampara == 'on' and not is_state('light.lampara_dormitorio_grupo', 'on') }}"
+        then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: light.lampara_dormitorio_grupo
+            data:
+              brightness_pct: 60
+              color_temp_kelvin: 2700
+      - if: "{{ lampara == 'off' and is_state('light.lampara_dormitorio_grupo', 'on') }}"
+        then:
+          - action: light.turn_off
+            continue_on_error: true
+            target:
+              entity_id: light.lampara_dormitorio_grupo
+      - if: "{{ tv == 'on' and tv_estado == 'off' }}"
+        then:
+          - action: script.tv_dormitorio_turn_on
+            continue_on_error: true
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.simulacion_presencia_tv
+      - if: "{{ tv == 'off' }}"
+        then:
+          - if: "{{ tv_estado == 'on' }}"
+            then:
+              - action: script.tv_dormitorio_turn_off
+                continue_on_error: true
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.simulacion_presencia_tv
+    # queued: an HA start and a time trigger can overlap, and the TV scripts
+    # take up to 20 s.
+    mode: queued
+
+  # A return without a recorded absence changes nothing: coming back sooner
+  # never had anything turned on, nor clears a pause set for the outing. The
+  # start trigger covers someone who got back while HA was down.
+  - id: simulacion_presencia_fin
+    alias: Simulación de presencia - Volvió alguien
+    description: >-
+      Cuando vuelve alguien después de que la casa quedó vacía, apaga la tele
+      del dormitorio si la prendió la simulación y saca la pausa. La lámpara
+      queda como está.
+    trigger:
+      - platform: template
+        value_template: "{{ states('zone.home') | int(0) > 0 }}"
+        for: "00:05:00"
+      - platform: homeassistant
+        event: start
+        id: arranque
+    action:
+      - if:
+          - condition: trigger
+            id: arranque
+        then:
+          - delay: "00:05:00"
+      - condition: state
+        entity_id: input_boolean.simulacion_presencia_ausencia
+        state: "on"
+      - condition: template
+        value_template: "{{ states('zone.home') | int(0) > 0 }}"
+      - variables:
+          tv_estado: *tv_estado
+      - if: "{{ is_state('input_boolean.simulacion_presencia_tv', 'on') and tv_estado == 'on' }}"
+        then:
+          - action: script.tv_dormitorio_turn_off
+            continue_on_error: true
+      - action: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.simulacion_presencia_tv
+            - input_boolean.simulacion_presencia_ausencia
+            - input_boolean.simulacion_presencia_pausa
+    mode: queued
