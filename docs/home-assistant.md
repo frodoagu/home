@@ -1070,30 +1070,47 @@ dusk/dawn on their own ([luces_afuera.yaml](#duskdawn-schedule)); this adds a
 room that changes during the evening.
 
 **Tonight's schedule** is four timestamp sensors, drawn at 12:00 (a "night"
-runs noon to noon, so an off time past midnight belongs to the evening before):
+runs noon to noon, so an off time past midnight belongs to the evening before,
+weekday included):
 
 | Sensor | Window | Fri/Sat nights |
 |---|---|---|
-| `sensor.simulacion_presencia_lampara_prender` | 19:30 + 0-44 min | — |
+| `sensor.simulacion_presencia_lampara_prender` | sunset − 15 min, kept within 19:30-20:00, + 0-44 min | — |
 | `sensor.simulacion_presencia_tv_prender` | 20:45 + 0-44 min | — |
-| `sensor.simulacion_presencia_tv_apagar` | 23:00 + 0-44 min | +30 min |
-| `sensor.simulacion_presencia_lampara_apagar` | 23:50 + 0-29 min | +30 min |
+| `sensor.simulacion_presencia_tv_apagar` | 23:30 + 0-44 min | +60 min |
+| `sensor.simulacion_presencia_lampara_apagar` | 00:15 + 0-44 min | +60 min |
+
+The windows follow Argentine habits, not the house's own history (the lamp
+has too little of it so far): dinner around 21:30, broadcast prime time until
+about midnight with its peaks after 23:00, and an average bedtime around 01:00
+([Samsung, 2021-2023](https://news.samsung.com/ar/un-estudio-de-samsung-revela-como-duermen-los-argentinos-y-sus-tendencias-de-sueno)).
+The lamp follows the sunset so it doesn't come on in daylight in summer, when
+the sun sets past 20:00 in AMBA. The 20:00 cap keeps it ahead of the TV.
+Once the recorder has a few months of the lamp and the TV, their real times
+are a better source than national averages.
 
 The windows don't overlap, so the order (lamp on, TV on, TV off, lamp off) always
 holds. The sensors also draw on HA start, but keep a restored time that still
-falls in tonight's window, so a restart never moves a time that already went by.
-Only a stale schedule (HA down at noon) is drawn again. They're trigger-based
+falls in tonight's window (with 5 min of slack, because the sunset moves between
+the noon draw and a restart), so a restart never moves a time that already went
+by. Only a stale schedule (HA down at noon) is drawn again. They're trigger-based
 template sensors: the state comes back from the restore cache, nothing in
 `.storage` is needed.
 
-**What drives the devices** (`automation.simulacion_de_presencia_lampara_y_tv_del_dormitorio`):
+**An absence** is `zone.home` at `0` for 15 min. `automation.simulacion_de_presencia_casa_vacia`
+records it in **`input_boolean.simulacion_presencia_ausencia`**, which survives
+a restart (`zone.home`'s `last_changed` doesn't). After an HA start the 15 min
+count from the start.
+
+**What drives the devices** (`automation.simulacion_de_presencia_lampara_y_tv_del_dormitorio`),
+only while an absence is recorded, `zone.home` is `0` and the pause is off:
 
 | Trigger | Effect |
 |---|---|
 | One of the four times | That device only, in that direction |
-| `zone.home` at `0` for 15 min | Both devices reconciled with their window: on inside it, off outside |
+| The absence is recorded | Both devices reconciled with their window: on inside it, off outside |
 | Pause switched off while away | Same reconcile |
-| HA start | Same reconcile, after 1 min and a second look at `zone.home` |
+| HA start | Same reconcile, after 1 min for the person/zone states to settle |
 
 A device already in the target state isn't touched, so a lamp left on keeps its
 colour or scene. A reconcile also turns off what is on outside its window: a
@@ -1102,7 +1119,7 @@ A change made remotely while away (the lamp switched off from the app) holds
 until that device's next time. Nothing re-applies the schedule every minute.
 
 On 2026.9, `homeassistant: start` fires at `EVENT_HOMEASSISTANT_STARTED`, after
-startup has finished, so the 1-min `delay` doesn't hold up the boot.
+startup has finished, so the start delays don't hold up the boot.
 
 **"Nobody home"** is `zone.home` == `0`, the count of `person`s in the zone
 (see [Push notifications](#push-notifications)). People without a tracked phone
@@ -1111,11 +1128,15 @@ those there's **`input_boolean.simulacion_presencia_pausa`** (*Pausar simulació
 de presencia*). While it's on, nothing in the package acts. Pausing doesn't turn
 off what is already on.
 
-**Coming back** (`automation.simulacion_de_presencia_volvio_alguien`) after a
-real absence (`zone.home` was `0` for 15 min or more) turns the TV off if it's
-inside its window and the simulation wasn't paused. The lamp stays as it is.
-The return also clears the pause, so a pause covers one outing and can't be
-left on by mistake. A return under 15 min changes nothing.
+**Coming back** (`automation.simulacion_de_presencia_volvio_alguien`) is
+`zone.home` above `0` for 5 min, so a GPS blip doesn't count. With an absence
+recorded, it turns the TV off if the simulation turned it on
+(**`input_boolean.simulacion_presencia_tv`**) and it's still on, and clears the
+absence and the pause. A pause covers one outing and can't be left on by mistake.
+A TV that was already on when everyone left isn't the simulation's, so it stays
+on, and so does the lamp. A return before the absence was recorded changes
+nothing. The same check runs 5 min after an HA start, for someone who got back
+while HA was down.
 
 Entities it drives:
 
@@ -1124,17 +1145,19 @@ Entities it drives:
   [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
   entity becomes zone A. Turned on at 60 % and 2700 K.
 - **The TV goes through `script.tv_dormitorio_turn_on`/`_off`** from
-  [tv.yaml](#lg-webos-tvs--unified-webos--ir-entity), not
-  `media_player.tv_dormitorio`. HA skips service calls to unavailable entities,
-  so an unavailable universal entity drops a `turn_on`, while the script still
-  has its IR fallback. The state check
-  before each call matters because that IR power code is a toggle. The TV comes
-  back on whatever input it was on. If that's an empty HDMI input, the room
-  shows a "no signal" box instead of a changing picture.
+  [tv.yaml](#lg-webos-tvs--unified-webos--ir-entity), which keep the IR
+  fallback for a TV that reports off but doesn't wake. That IR power code is a
+  toggle, so the package calls a script only when `media_player.tv_dormitorio`
+  says the TV is in the opposite state. While it's `unavailable` or `unknown`
+  the TV is left alone in both directions: a blind toggle could turn it on with
+  nothing left to turn it off. The TV comes back on whatever input it was on.
+  If that's an empty HDMI input, the room shows a "no signal" box instead of a
+  changing picture.
 
-The pause helper is **not on the saved Overview** (a storage-mode dashboard
-doesn't pick up new entities; see the bedroom lamp section above). Add it there by
-hand, next to the four schedule sensors if you want tonight's times in view.
+The helpers are **not on the saved Overview** (a storage-mode dashboard
+doesn't pick up new entities; see the bedroom lamp section above). Add the pause
+there by hand, next to the four schedule sensors if you want tonight's times in
+view. The other two are internal flags.
 
 ## Probes
 
