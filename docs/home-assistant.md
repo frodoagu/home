@@ -993,6 +993,15 @@ A change made from the WiZ app shows up in HA within one poll. The integration's
 own `light.lampara_dormitorio` still drives both zones together. It's hidden
 from Google (see below), but it stays in HA for whole-lamp automations.
 
+**Two lights in the HA UI too.** Like the TVs, the leftovers are entity-registry
+state in `.storage`, not git: `light.lampara_dormitorio`,
+`sensor.lampara_dormitorio_zonas` and `script.lampara_dormitorio_zona` are
+`hidden_by: user`, the zone lights carry the *Dormitorio* area (template entities
+have no device to inherit it from), and the dead dual-head ratio entity is
+`disabled_by: user`. Hidden entities keep working. A hidden script also drops out
+of Google's default exposure, so the helper script no longer shows up there as a
+scene. On a fresh PVC, redo these in the UI (entity → settings).
+
 ### When the integration gets zones
 
 Independent Zone A/Zone B entities are pending upstream in
