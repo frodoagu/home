@@ -122,9 +122,14 @@ googleAssistant:
     media_player.tv_sala_ir: { expose: false }
     media_player.dormitorio: { expose: false }
     media_player.tv_dormitorio_ir: { expose: false }
-    # Whole-lamp WiZ entity; Google gets the two per-zone template lights instead
-    # (packages/lampara_dormitorio.yaml).
+    # Google gets the two per-zone template lights, not the whole-lamp WiZ entity
+    # or the HA group (packages/lampara_dormitorio.yaml). The zones are hidden in
+    # the HA UI, and hidden entities aren't exposed by default, hence the explicit
+    # `expose: true`.
     light.lampara_dormitorio: { expose: false }
+    light.lampara_dormitorio_grupo: { expose: false }
+    light.lampara_dormitorio_zona_a: { expose: true }
+    light.lampara_dormitorio_zona_b: { expose: true }
   # HomeGraph service-account JSON. OPTIONAL: leave secretName empty to run
   # without it (account linking and device control still work; only report_state
   # and request_sync are unavailable). To enable it, create the Secret in this

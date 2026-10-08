@@ -191,3 +191,14 @@ template:
         set_level: *set_level
         set_rgb: *set_rgb
         set_temperature: *set_temperature
+
+# One tile for the whole lamp; its more-info dialog lists both zones. Lands as
+# light.lampara_dormitorio_2 (the wiz entity holds the plain id) and is renamed
+# to light.lampara_dormitorio_grupo in the registry.
+light:
+  - platform: group
+    name: "Lámpara dormitorio"
+    unique_id: lampara_dormitorio_grupo
+    entities:
+      - light.lampara_dormitorio_zona_a
+      - light.lampara_dormitorio_zona_b

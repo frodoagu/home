@@ -993,14 +993,20 @@ A change made from the WiZ app shows up in HA within one poll. The integration's
 own `light.lampara_dormitorio` still drives both zones together. It's hidden
 from Google (see below), but it stays in HA for whole-lamp automations.
 
-**Two lights in the HA UI too.** Like the TVs, the leftovers are entity-registry
-state in `.storage`, not git: `light.lampara_dormitorio`,
+**One lamp in the HA UI.** The package also defines a light group,
+`light.lampara_dormitorio_grupo` (*Lámpara dormitorio*), over the two zone lights.
+It's the lamp's single tile: on/off and brightness drive both zones, and its
+more-info dialog lists each zone with its own controls (HA ≥ 2025.8). It lands as
+`light.lampara_dormitorio_2`, because the wiz entity already holds the plain id,
+and is renamed to `_grupo` in the registry.
+
+Everything else is hidden, and that's entity-registry state in `.storage`, not
+git: `light.lampara_dormitorio` (the wiz entity), both zone lights,
 `sensor.lampara_dormitorio_zonas` and `script.lampara_dormitorio_zona` are
 `hidden_by: user`, the zone lights carry the *Dormitorio* area (template entities
 have no device to inherit it from), and the dead dual-head ratio entity is
-`disabled_by: user`. Hidden entities keep working. A hidden script also drops out
-of Google's default exposure, so the helper script no longer shows up there as a
-scene. On a fresh PVC, redo these in the UI (entity → settings).
+`disabled_by: user`. Hidden entities keep working, the group's members included.
+On a fresh PVC, redo these in the UI (entity → settings).
 
 ### When the integration gets zones
 
@@ -1025,13 +1031,15 @@ Read that PR's final release notes before doing this: the entity names or the
 split could still change before it merges.
 
 **Google Home.** Lights reach Google through HA's `google_assistant` (the `light`
-domain is exposed by default). The two zone lights are exposed, and the
-integration's whole-lamp entity is hidden with `entity_config`
-(`light.lampara_dormitorio: { expose: false }` in
-[values.yaml](../charts/home-assistant/values.yaml)), so Google shows two lights,
-not three. The init container writes that block **only once**, so on the current
-PVC add the line by hand to `/config/configuration.yaml` and restart HA (same as
-the TV overrides). Do **not** also link the WiZ action in the Google Home app,
+domain is exposed by default). Google gets the two zone lights; the wiz
+whole-lamp entity and the group get `expose: false` in `entity_config`
+([values.yaml](../charts/home-assistant/values.yaml)), so Google shows two lights,
+not four. The zones need an explicit `expose: true`: they're hidden in the HA UI,
+and a hidden entity counts as auxiliary, which `expose_by_default` skips. The same
+rule keeps the hidden helper script from showing up in Google as a scene. The
+init container writes that block **only once**, so on the current PVC add the
+lines by hand to `/config/configuration.yaml` and restart HA (same as the TV
+overrides). Do **not** also link the WiZ action in the Google Home app,
 or the lamp shows up twice.
 
 ## Probes
