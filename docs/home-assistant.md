@@ -985,6 +985,12 @@ builds two lights on top of it:
   right away.
 - If the lamp doesn't answer, both lights go `unavailable`. They don't keep a
   stale state.
+- Each zone light has WiZ's scenes as **effects** (`effect_list`, Spanish names
+  mapped to `sceneId` in the package's `escenas` variable, without Rhythm, which
+  needs the app's music sync). `set_effect` sends `sceneId` to that zone only (a
+  scene applies per zone on `1.38.0`); the group merges both lists, so an effect
+  set on the group lands on both zones. A scene set from the WiZ app shows up as
+  the zone's effect.
 - In a WiZ scene (set from the app) a zone reports only `sceneId` and `dimming`,
   with no colour or temperature. A zone light that has never had a colour mode
   then shows no brightness in HA, until a plain colour or white is set on it.

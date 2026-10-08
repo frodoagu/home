@@ -95,6 +95,10 @@ script:
         name: Temperatura de color (K)
         selector:
           color_temp: { unit: kelvin, min: 2200, max: 6500 }
+      escena:
+        name: Escena WiZ (sceneId)
+        selector:
+          number: { min: 1, max: 35 }
     sequence:
       - action: shell_command.lampara_dormitorio_enviar
         continue_on_error: true
@@ -112,6 +116,9 @@ script:
             {%- if kelvin is defined and kelvin not in [none, ''] %}
             {%- set p = dict(p, temp=kelvin | int) %}
             {%- endif %}
+            {%- if escena is defined and escena not in [none, ''] %}
+            {%- set p = dict(p, sceneId=escena | int) %}
+            {%- endif %}
             {%- endif %}
             {{- p | to_json }}
       - action: homeassistant.update_entity
@@ -127,6 +134,43 @@ template:
         variables:
           zona: 1
           attr: zona_a
+          # WiZ sceneId -> effect name, pywizlight's SCENES minus Rhythm (1000),
+          # which needs the app's music sync.
+          escenas: &escenas
+            1: Océano
+            2: Romance
+            3: Atardecer
+            4: Fiesta
+            5: Chimenea
+            6: Acogedor
+            7: Bosque
+            8: Colores pastel
+            9: Despertar
+            10: Hora de dormir
+            11: Blanco cálido
+            12: Luz de día
+            13: Blanco frío
+            14: Luz nocturna
+            15: Concentración
+            16: Relajación
+            17: Colores reales
+            18: Hora de TV
+            19: Plantas
+            20: Primavera
+            21: Verano
+            22: Otoño
+            23: Inmersión
+            24: Selva
+            25: Mojito
+            27: Navidad
+            28: Halloween
+            29: Velas
+            30: Blanco dorado
+            31: Pulso
+            32: Steampunk
+            33: Diwali
+            34: Blanco
+            35: Alarma
         availability: &availability >-
           {{ state_attr('sensor.lampara_dormitorio_zonas', attr) is mapping }}
         state: &state >-
@@ -140,6 +184,11 @@ template:
         temperature: &temperature >-
           {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
           {{ (1000000 / z.temp) | round(0) | int if z.temp is defined else none }}
+        effect_list: &effect_list "{{ escenas.values() | list }}"
+        effect: &effect >-
+          {%- set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {%- set id = z.sceneId | default(0) | int %}
+          {{- escenas.get(id, escenas.get(id | string, '')) }}
         # Mireds: 6500 K .. 2200 K.
         min_mireds: &min_mireds "154"
         max_mireds: &max_mireds "455"
@@ -173,17 +222,27 @@ template:
               encender: true
               brillo: "{{ brightness_pct | default(none) }}"
               kelvin: "{{ color_temp_kelvin }}"
+        set_effect: &set_effect
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: true
+              escena: >-
+                {% for id, nombre in escenas.items() if nombre == effect %}{{ id }}{% endfor %}
 
       - name: "Lámpara dormitorio abajo"
         unique_id: lampara_dormitorio_zona_b
         variables:
           zona: 2
           attr: zona_b
+          escenas: *escenas
         availability: *availability
         state: *state
         level: *level
         rgb: *rgb
         temperature: *temperature
+        effect_list: *effect_list
+        effect: *effect
         min_mireds: *min_mireds
         max_mireds: *max_mireds
         turn_on: *turn_on
@@ -191,6 +250,7 @@ template:
         set_level: *set_level
         set_rgb: *set_rgb
         set_temperature: *set_temperature
+        set_effect: *set_effect
 
 # One tile for the whole lamp; its more-info dialog lists both zones. Lands as
 # light.lampara_dormitorio_2 (the wiz entity holds the plain id) and is renamed
