@@ -27,7 +27,7 @@ see [.gitignore](../.gitignore).
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
-| `pihole-admin` | `pihole` | Pi-hole web UI | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI) |
+| `pihole-admin` | `pihole` (+ `monitoring`) | Pi-hole web UI (+ pihole-exporter) | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI). When it is set, the exporter needs a copy in `monitoring` (`piholeExporter.passwordSecret`) |
 
 ## Create them
 
@@ -108,6 +108,10 @@ kubectl create secret generic ha-google-sa -n home-assistant \
 
 ```bash
 kubectl create secret generic pihole-admin -n pihole \
+  --from-literal=password='your-password'
+# Same password for the Grafana exporter, which reads the Pi-hole API from
+# the monitoring namespace (then set piholeExporter.passwordSecret.name):
+kubectl create secret generic pihole-admin -n monitoring \
   --from-literal=password='your-password'
 ```
 

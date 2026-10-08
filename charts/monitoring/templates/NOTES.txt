@@ -8,6 +8,7 @@ Components (VictoriaMetrics k8s-stack + blackbox):
   * kube-state-metrics             – pod/deployment/workload state
   * rpi-throttle-exporter          – throttling/under-voltage (vcgencmd)
   * blackbox-exporter + VMProbe    – external uptime/TLS probes
+  * pihole-exporter + VMPodScrape  – Pi-hole stats from its v6 API ("Pi-hole — DNS" dashboard)
 
 Before alerts can reach you (created out-of-band — see docs/secrets.md):
   kubectl -n {{ .Release.Namespace }} create secret generic alertmanager-telegram \

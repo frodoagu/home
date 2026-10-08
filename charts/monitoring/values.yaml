@@ -60,6 +60,35 @@ traefikScrape:
   enabled: true
   namespace: kube-system
 
+# Pi-hole stats exporter (eko/pihole-exporter) + its VMPodScrape. Drives the
+# "Pi-hole — DNS" dashboard. Pi-hole has no Prometheus endpoint of its own; this
+# polls its v6 REST API on every scrape. See templates/pihole-exporter.yaml.
+piholeExporter:
+  enabled: true
+  image:
+    repository: ekofr/pihole-exporter
+    tag: "v1.2.0"
+  revisionHistoryLimit: 1
+  # Pi-hole's in-cluster web/API Service (charts/pihole), NOT pihole.agu.com.ar:
+  # the public route sits behind google-auth and would answer the exporter with
+  # a sign-in redirect. Also the `hostname` label on every series.
+  pihole:
+    protocol: http
+    host: pihole.pihole.svc.cluster.local
+    port: 8080
+  # Pi-hole API password, only needed if charts/pihole ever stops running with
+  # admin.disablePassword. Name a Secret in THIS namespace (created out-of-band);
+  # empty = no password, which FTL answers with a session-less `valid: true`.
+  passwordSecret:
+    name: ""
+    key: password
+  resources:
+    requests:
+      cpu: 5m
+      memory: 16Mi
+    limits:
+      memory: 48Mi
+
 # External endpoints probed by blackbox for uptime + TLS-expiry. Probed from
 # inside the cluster against the public hostnames, so this also exercises the
 # whole Traefik + Let's Encrypt path end-to-end.

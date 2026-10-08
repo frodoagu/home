@@ -7,7 +7,7 @@ for the stack overview and bootstrap; come here for per-topic detail.
 |---|---|
 | [secrets.md](secrets.md) | Every secret committed as a `SealedSecret` (none in plaintext): controller-key bootstrap, minting/rotation/adoption, off-repo key backup |
 | [tls.md](tls.md) | Let's Encrypt via the **DNS-01** Cloudflare challenge, and how `acme.json` is persisted |
-| [monitoring.md](monitoring.md) | VictoriaMetrics + Grafana stack: custom dashboards, Telegram alerts, blackbox uptime/TLS probes, Traefik metrics, operating notes |
+| [monitoring.md](monitoring.md) | VictoriaMetrics + Grafana stack: custom dashboards, Telegram alerts, blackbox uptime/TLS probes, Traefik + Pi-hole metrics, operating notes |
 | [home-assistant.md](home-assistant.md) | Home Assistant chart specifics: config bootstrap, device discovery (host networking), Bluetooth, IR air conditioners (SmartIR + Broadlink) |
 | [gas-mopeka.md](gas-mopeka.md) | Nivel del tubo de 45 kg con un sensor Mopeka Pro Check Universal vía Bluetooth nativo de HA: por qué (a diferencia del M1001 revertido) no hace falta ESPHome, calibración, filtrado del eco doble cerca del fondo, efectos térmicos y alertas por Telegram |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
