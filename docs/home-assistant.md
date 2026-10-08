@@ -923,19 +923,21 @@ lights).
 
 Setup, in order:
 
-1. **Provision it with the WiZ app** onto the `IoT-Fede` SSID. In the app,
-   leave **Settings → Security → Allow local communication** on, because the
-   integration can't talk to the lamp without it.
-2. **Pin its address.** Copy the MAC from the app (device → Settings → Device
-   info) or from `dhcp.leases` into the reservation, then power-cycle the lamp so
-   it takes `.60`.
-3. **Add it to HA.** With `hostNetwork` the integration's DHCP/broadcast
-   discovery shows it under Settings → Devices & services. If it doesn't, add
-   **WiZ** by hand with host `192.168.0.60`. Assign the device to the
-   *Dormitorio* area and rename the entity to `light.lampara_dormitorio`.
-
+1. **Provision it with the WiZ app** onto the `IoT-Fede` SSID, and turn on
+   **Allow local communication** in the app's settings. It ships **off**: the
+   lamp answers ping but ignores UDP `38899`, and the integration can't reach it.
+2. **Pin its address.** Copy the MAC from `dhcp.leases` (the lamp registers as
+   `wiz_<last 6 hex of the MAC>`) into the reservation, then power-cycle the lamp
+   so it takes `.60`.
+3. **Add it to HA.** Add **WiZ** under Settings → Devices & services with host
+   `192.168.0.60`. Put the device in the *Dormitorio* area as *Lámpara
+   dormitorio* and rename its entities to `light.lampara_dormitorio` and
+   `*.lampara_dormitorio_*`.
 4. **Update the firmware** from the WiZ app. Per-zone control is validated on
-   `1.38.0`.
+   `1.38.0`. The lamp shipped on `1.24.2`, which **ignores the zone index**: a
+   `setPilot` with `"devices": 2` repaints both zones, and `getPilot` answers the
+   same for either index, with no `devices` field in the reply. On that firmware
+   the package below leaves both zone lights `unavailable`.
 5. **Check that the zones answer on their own** before trusting the package
    below. This should change only one zone:
 
@@ -950,9 +952,12 @@ Setup, in order:
 ### Per-zone control (`lampara_dormitorio.yaml`)
 
 The current `wiz` integration exposes the lamp as **one** `light`, so both zones
-always share a state and colour. The WiZ local API can address each zone, though:
-`setPilot`/`getPilot` take `"devices": 1|2`, the same index pywizlight 0.6.6
-uses. [`packages/lampara_dormitorio.yaml`](../charts/home-assistant/packages/lampara_dormitorio.yaml)
+always share a state and colour. Its only per-zone control is
+`number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness balance
+between the two zones (the lamp's `ratio`, 0-100). The WiZ local API can address
+each zone, though: `setPilot`/`getPilot` take `"devices": 1|2`, the same index
+pywizlight 0.6.6 uses.
+[`packages/lampara_dormitorio.yaml`](../charts/home-assistant/packages/lampara_dormitorio.yaml)
 builds two lights on top of it:
 
 - `sensor.lampara_dormitorio_zonas` polls `getPilot` for both zones every 15 s
