@@ -122,7 +122,7 @@ script:
 # so both lights share these blocks through YAML anchors.
 template:
   - light:
-      - name: "Lámpara dormitorio zona A"
+      - name: "Lámpara dormitorio arriba"
         unique_id: lampara_dormitorio_zona_a
         variables:
           zona: 1
@@ -174,7 +174,7 @@ template:
               brillo: "{{ brightness_pct | default(none) }}"
               kelvin: "{{ color_temp_kelvin }}"
 
-      - name: "Lámpara dormitorio zona B"
+      - name: "Lámpara dormitorio abajo"
         unique_id: lampara_dormitorio_zona_b
         variables:
           zona: 2

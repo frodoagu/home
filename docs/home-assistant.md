@@ -952,15 +952,15 @@ Setup, in order:
      | nc -u -w1 lampara-dormitorio.lan 38899
    ```
 
-   Note which physical zone is `devices: 1` and which is `devices: 2`, and
-   rename the two template lights to match.
+   Zone 1 (`devices: 1`) is the **top** head and zone 2 the **bottom** one; the
+   template lights are named after them.
 
 ### Per-zone control (`lampara_dormitorio.yaml`)
 
 The current `wiz` integration exposes the lamp as **one** `light`, so both zones
-always share a state and colour. Its only per-zone control is
-`number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness balance
-between the two zones (the lamp's `ratio`, 0-100). The WiZ local API can address
+always share a state and colour. Its dual-head balance,
+`number.lampara_dormitorio_relacion_de_cabezal_doble`, is `unavailable` on
+`1.38.0`: the lamp no longer reports `ratio`. The WiZ local API can address
 each zone, though, with an index that is **not symmetric** on `1.38.0`:
 
 | Call | Zone 1 | Zone 2 |
@@ -977,13 +977,17 @@ builds two lights on top of it:
 - `sensor.lampara_dormitorio_zonas` polls `getPilot` for both zones every 15 s
   and keeps each raw result in the `zona_a`/`zona_b` attributes. A reply only
   counts for the zone named in its own `devices` field.
-- `light.lampara_dormitorio_zona_a` / `_zona_b` are template lights. They read
+- `light.lampara_dormitorio_zona_a` (*Lámpara dormitorio arriba*) /
+  `_zona_b` (*Lámpara dormitorio abajo*) are template lights. They read
   state, brightness, RGB and colour temperature from those attributes, and their
   actions call `script.lampara_dormitorio_zona`. That script sends a `setPilot`
   through `shell_command.lampara_dormitorio_enviar` and refreshes the sensor
   right away.
 - If the lamp doesn't answer, both lights go `unavailable`. They don't keep a
   stale state.
+- In a WiZ scene (set from the app) a zone reports only `sceneId` and `dimming`,
+  with no colour or temperature. A zone light that has never had a colour mode
+  then shows no brightness in HA, until a plain colour or white is set on it.
 
 A change made from the WiZ app shows up in HA within one poll. The integration's
 own `light.lampara_dormitorio` still drives both zones together. It's hidden
