@@ -470,7 +470,7 @@ dashboard's *Detalle* view.
   repeat a failed condition aborts the whole script instead of skipping the item.
 
 `sensor.aires_modo_estacional` is a template sensor in the same package that
-resolves to `heat` or `cool`: the outdoor temperature against a 24 °C line,
+resolves to `heat` or `cool`: the outdoor temperature against a 26 °C line,
 falling back to the living-room thermometer when the weather sensor is down.
 
 **Scheduled shutdown.** "Turn everything off in N hours" and "turn everything off
