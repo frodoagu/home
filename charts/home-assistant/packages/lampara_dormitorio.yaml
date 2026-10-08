@@ -1,0 +1,191 @@
+# HA package: the bedroom WiZ Squire as two independent lights, one per zone.
+# The core `wiz` integration exposes the lamp as a single light; until it splits
+# the zones (home-assistant/core#177502) this package drives each zone over the
+# WiZ local UDP API itself: `setPilot` / `getPilot` with `"devices": 1|2`, the
+# same index pywizlight 0.6.6 uses. Delete this package once the integration
+# ships per-zone entities. See docs/home-assistant.md#bedroom-lamp-wiz-squire.
+
+command_line:
+  - sensor:
+      # Both zones in one poll. Attributes `zona_a` / `zona_b` hold each zone's
+      # raw getPilot result, or null when the lamp doesn't answer. A reply is
+      # only accepted for the zone it carries in `devices`, so a late answer to
+      # a retry can't land on the other zone.
+      name: "Lámpara dormitorio zonas"
+      unique_id: lampara_dormitorio_zonas
+      command: |-
+        python3 -c "
+        import json, socket, time
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        out = {}
+        for z in (1, 2):
+            out[z] = None
+            for _ in range(3):
+                s.sendto(json.dumps({'method': 'getPilot', 'params': {'devices': z}}).encode(), ('lampara-dormitorio.lan', 38899))
+                end = time.monotonic() + 1
+                while out[z] is None and time.monotonic() < end:
+                    try:
+                        r = json.loads(s.recv(2048)).get('result') or {}
+                    except Exception:
+                        break
+                    if r.get('devices') == z:
+                        out[z] = r
+                if out[z] is not None:
+                    break
+        print(json.dumps({'ok': sum(v is not None for v in out.values()), 'zona_a': out[1], 'zona_b': out[2]}))
+        "
+      command_timeout: 15
+      scan_interval: 15
+      value_template: "{{ value_json.ok }}"
+      json_attributes:
+        - zona_a
+        - zona_b
+
+shell_command:
+  # `pilot` is the setPilot params, as JSON or as a mapping. A template in the
+  # command makes HA exec it without a shell, splitting it with shlex, so the
+  # code stays inside double quotes and the JSON inside single quotes.
+  lampara_dormitorio_enviar: |-
+    python3 -c "
+    import json, socket, sys
+    m = json.dumps({'id': 1, 'method': 'setPilot', 'params': json.loads(sys.argv[1])}).encode()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(1)
+    for _ in range(3):
+        s.sendto(m, ('lampara-dormitorio.lan', 38899))
+        try:
+            if (json.loads(s.recv(2048)).get('result') or {}).get('success'):
+                sys.exit(0)
+        except Exception:
+            pass
+    sys.exit(1)
+    " '{{ pilot if pilot is string else pilot | to_json }}'
+
+script:
+  lampara_dormitorio_zona:
+    alias: Lámpara dormitorio - Enviar a una zona
+    description: >-
+      Manda un setPilot a una sola zona de la lámpara y refresca el sensor de
+      estado. Los campos que vienen vacíos no se tocan.
+    mode: queued
+    fields:
+      zona:
+        name: Zona
+        description: 1 o 2
+        required: true
+        selector:
+          number: { min: 1, max: 2 }
+      encender:
+        name: Encender
+        required: true
+        selector:
+          boolean:
+      brillo:
+        name: Brillo (%)
+        selector:
+          number: { min: 1, max: 100, unit_of_measurement: "%" }
+      rgb:
+        name: Color RGB
+        selector:
+          color_rgb:
+      kelvin:
+        name: Temperatura de color (K)
+        selector:
+          color_temp: { unit: kelvin, min: 2200, max: 6500 }
+    sequence:
+      - action: shell_command.lampara_dormitorio_enviar
+        continue_on_error: true
+        data:
+          # WiZ ignores dimming below 10.
+          pilot: >-
+            {%- set p = {'devices': zona | int, 'state': encender | bool} %}
+            {%- if encender | bool %}
+            {%- if brillo is defined and brillo not in [none, ''] %}
+            {%- set p = dict(p, dimming=[brillo | int, 10] | max) %}
+            {%- endif %}
+            {%- if rgb is defined and rgb not in [none, ''] %}
+            {%- set p = dict(p, r=rgb[0] | int, g=rgb[1] | int, b=rgb[2] | int) %}
+            {%- endif %}
+            {%- if kelvin is defined and kelvin not in [none, ''] %}
+            {%- set p = dict(p, temp=kelvin | int) %}
+            {%- endif %}
+            {%- endif %}
+            {{- p | to_json }}
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.lampara_dormitorio_zonas
+
+# The two zones are identical apart from the index and the attribute they read,
+# so both lights share these blocks through YAML anchors.
+template:
+  - light:
+      - name: "Lámpara dormitorio zona A"
+        unique_id: lampara_dormitorio_zona_a
+        variables:
+          zona: 1
+          attr: zona_a
+        availability: &availability >-
+          {{ state_attr('sensor.lampara_dormitorio_zonas', attr) is mapping }}
+        state: &state >-
+          {{ (state_attr('sensor.lampara_dormitorio_zonas', attr) or {}).get('state', false) }}
+        level: &level >-
+          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {{ ((z.dimming | default(100) | int) * 255 / 100) | round(0) | int }}
+        rgb: &rgb >-
+          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {{ (z.r, z.g, z.b) if z.r is defined and z.temp is not defined else none }}
+        temperature: &temperature >-
+          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {{ (1000000 / z.temp) | round(0) | int if z.temp is defined else none }}
+        # Mireds: 6500 K .. 2200 K.
+        min_mireds: &min_mireds "154"
+        max_mireds: &max_mireds "455"
+        turn_on: &turn_on
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: true
+        turn_off: &turn_off
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: false
+        set_level: &set_level
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: true
+              brillo: "{{ brightness_pct }}"
+        set_rgb: &set_rgb
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: true
+              brillo: "{{ brightness_pct | default(none) }}"
+              rgb: "{{ [r, g, b] }}"
+        set_temperature: &set_temperature
+          - action: script.lampara_dormitorio_zona
+            data:
+              zona: "{{ zona }}"
+              encender: true
+              brillo: "{{ brightness_pct | default(none) }}"
+              kelvin: "{{ color_temp_kelvin }}"
+
+      - name: "Lámpara dormitorio zona B"
+        unique_id: lampara_dormitorio_zona_b
+        variables:
+          zona: 2
+          attr: zona_b
+        availability: *availability
+        state: *state
+        level: *level
+        rgb: *rgb
+        temperature: *temperature
+        min_mireds: *min_mireds
+        max_mireds: *max_mireds
+        turn_on: *turn_on
+        turn_off: *turn_off
+        set_level: *set_level
+        set_rgb: *set_rgb
+        set_temperature: *set_temperature

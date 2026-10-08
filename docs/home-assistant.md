@@ -933,16 +933,79 @@ Setup, in order:
    `192.168.0.60`. Put the device in the *Dormitorio* area as *Lámpara
    dormitorio* and rename its entities to `light.lampara_dormitorio` and
    `*.lampara_dormitorio_*`.
+4. **Update the firmware** from the WiZ app. Per-zone control is validated on
+   `1.38.0`. The lamp shipped on `1.24.2`, which **ignores the zone index**: a
+   `setPilot` with `"devices": 2` repaints both zones, and `getPilot` answers the
+   same for either index, with no `devices` field in the reply. On that firmware
+   the package below leaves both zone lights `unavailable`.
+5. **Check that the zones answer on their own** before trusting the package
+   below. This should change only one zone:
 
-**One light for both zones.** The integration exposes the lamp as a single
-`light`, so both zones share a state and colour. The only per-zone control it
-has is `number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness
-balance between the two zones (the lamp's `ratio`, 0-100).
+   ```bash
+   echo -n '{"method":"setPilot","params":{"devices":2,"state":true,"r":120,"g":0,"b":255}}' \
+     | nc -u -w1 lampara-dormitorio.lan 38899
+   ```
+
+   Note which physical zone is `devices: 1` and which is `devices: 2`, and
+   rename the two template lights to match.
+
+### Per-zone control (`lampara_dormitorio.yaml`)
+
+The current `wiz` integration exposes the lamp as **one** `light`, so both zones
+always share a state and colour. Its only per-zone control is
+`number.lampara_dormitorio_relacion_de_cabezal_doble`, the brightness balance
+between the two zones (the lamp's `ratio`, 0-100). The WiZ local API can address
+each zone, though: `setPilot`/`getPilot` take `"devices": 1|2`, the same index
+pywizlight 0.6.6 uses.
+[`packages/lampara_dormitorio.yaml`](../charts/home-assistant/packages/lampara_dormitorio.yaml)
+builds two lights on top of it:
+
+- `sensor.lampara_dormitorio_zonas` polls `getPilot` for both zones every 15 s
+  and keeps each raw result in the `zona_a`/`zona_b` attributes. A reply only
+  counts for the zone named in its own `devices` field.
+- `light.lampara_dormitorio_zona_a` / `_zona_b` are template lights. They read
+  state, brightness, RGB and colour temperature from those attributes, and their
+  actions call `script.lampara_dormitorio_zona`. That script sends a `setPilot`
+  through `shell_command.lampara_dormitorio_enviar` and refreshes the sensor
+  right away.
+- If the lamp doesn't answer, both lights go `unavailable`. They don't keep a
+  stale state.
+
+A change made from the WiZ app shows up in HA within one poll. The integration's
+own `light.lampara_dormitorio` still drives both zones together. It's hidden
+from Google (see below), but it stays in HA for whole-lamp automations.
+
+### When the integration gets zones
+
+Independent Zone A/Zone B entities are pending upstream in
+[home-assistant/core#177502](https://github.com/home-assistant/core/pull/177502),
+which was validated on the Squire. **If it merges as it stands today, it replaces
+this workaround**: the `wiz` integration creates both zone lights itself and
+keeps them updated with the lamp's push updates instead of a poll. That isn't
+automatic here. Once an HA release with it is pinned in
+[values.yaml](../charts/home-assistant/values.yaml):
+
+1. The existing `light.lampara_dormitorio` becomes Zone A (same id) and Zone B
+   appears as a new entity. Rename it to `light.lampara_dormitorio_zona_b`.
+2. Delete `packages/lampara_dormitorio.yaml`, then remove the `restored: true`
+   orphans its entities leave behind
+   (`config/entity_registry/remove` over the WebSocket API).
+3. Re-point whatever used `light.lampara_dormitorio_zona_a` to
+   `light.lampara_dormitorio`, and swap the Google `entity_config` override:
+   the integration's two entities become the exposed ones.
+
+Read that PR's final release notes before doing this: the entity names or the
+split could still change before it merges.
 
 **Google Home.** Lights reach Google through HA's `google_assistant` (the `light`
-domain is exposed by default), so the lamp shows up there as one light. Do
-**not** also link the WiZ action in the Google Home app, or the lamp shows up
-twice.
+domain is exposed by default). The two zone lights are exposed, and the
+integration's whole-lamp entity is hidden with `entity_config`
+(`light.lampara_dormitorio: { expose: false }` in
+[values.yaml](../charts/home-assistant/values.yaml)), so Google shows two lights,
+not three. The init container writes that block **only once**, so on the current
+PVC add the line by hand to `/config/configuration.yaml` and restart HA (same as
+the TV overrides). Do **not** also link the WiZ action in the Google Home app,
+or the lamp shows up twice.
 
 ## Probes
 
