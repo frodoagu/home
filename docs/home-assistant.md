@@ -726,8 +726,9 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
 
 1. **IR entity — SmartIR `media_player`, LG `device_code: 1042`.** Same pattern as
    the ACs (SmartIR + Broadlink), just the `media_player` platform. `1042` is the LG
-   webOS profile (43UM7510 / OLED B8/B9) and — key for reliability — it has
-   **discrete `on` and `off`** codes (not a power toggle), plus volume/mute/channels
+   webOS profile (43UM7510 / OLED B8/B9). Its `on` and `off` are the **same
+   power toggle** (identical codes in `1042.json`), so an IR power command is only
+   safe once the TV's state is known. It also has volume/mute/channels
    and a full `sources` map (Input, Home, Back, Netflix, Prime, Settings, OK, arrows,
    Play/Pause, Info, digits). `controller_data` is the room's Broadlink:
 
@@ -771,21 +772,25 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
 
 3. **Fallback scripts** (`packages/tv.yaml`, under `script:`). `turn_on` calls
    `media_player.turn_on` on the webOS entity (which fires the existing
-   `webostv.turn_on` → WoL automation), waits ~4s, and **only if the TV is still
-   off/unavailable** sends the IR `on`.
-   Because IR `on`/`off` are discrete, the guard makes the fallback safe — no toggle
-   can flip an already-on TV. `turn_off` mirrors it (webOS off → if still on, IR off):
+   `webostv.turn_on` → WoL automation), then **waits up to 20 s for webOS to report
+   the TV on**, and sends the IR power code only if it never does. The wait has to
+   outlast a cold boot: an LG woken by WoL takes several seconds to reconnect, and
+   the IR toggle sent in that gap turns it straight back off (what a fixed 4 s delay
+   did). `turn_off` mirrors it (webOS off → wait for off → IR only if it never
+   lands):
 
    ```yaml
    tv_sala_turn_on:
      sequence:
        - action: media_player.turn_on
          target: { entity_id: media_player.sala_de_estar }
-       - delay: "00:00:04"
+       - wait_template: >-
+           {{ states('media_player.sala_de_estar') not in ['off', 'unavailable', 'unknown', 'standby'] }}
+         timeout: "00:00:20"
+         continue_on_timeout: true
        - if:
-           - condition: state
-             entity_id: media_player.sala_de_estar
-             state: ["off", "unavailable", "standby"]
+           - condition: template
+             value_template: "{{ not wait.completed }}"
          then:
            - action: media_player.turn_on
              target: { entity_id: media_player.tv_sala_ir }

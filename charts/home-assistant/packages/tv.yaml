@@ -54,9 +54,10 @@ media_player:
     attributes:
       state: media_player.dormitorio
 
-# turn_on: webOS/WoL primero, IR de respaldo si sigue apagada tras ~4s (los
-# codigos IR on/off son discretos, asi el guard no puede togglear una TV ya
-# encendida). turn_off es el espejo.
+# turn_on: webOS/WoL first, IR only if webOS hasn't reported the TV on within
+# 20s. The 1042 IR "on" and "off" are the SAME power toggle, so an IR sent while
+# the TV is still booting from WoL turns it back off: the wait has to outlast a
+# cold boot, not just the WoL send. turn_off mirrors it.
 script:
   tv_sala_turn_on:
     alias: TV Sala - Encender (WoL + IR fallback)
@@ -64,14 +65,13 @@ script:
       - action: media_player.turn_on
         target:
           entity_id: media_player.sala_de_estar
-      - delay: "00:00:04"
+      - wait_template: >-
+          {{ states('media_player.sala_de_estar') not in ['off', 'unavailable', 'unknown', 'standby'] }}
+        timeout: "00:00:20"
+        continue_on_timeout: true
       - if:
-          - condition: state
-            entity_id: media_player.sala_de_estar
-            state:
-              - "off"
-              - "unavailable"
-              - "standby"
+          - condition: template
+            value_template: "{{ not wait.completed }}"
         then:
           - action: media_player.turn_on
             target:
@@ -84,15 +84,13 @@ script:
       - action: media_player.turn_off
         target:
           entity_id: media_player.sala_de_estar
-      - delay: "00:00:04"
+      - wait_template: >-
+          {{ states('media_player.sala_de_estar') in ['off', 'unavailable', 'standby'] }}
+        timeout: "00:00:20"
+        continue_on_timeout: true
       - if:
-          - condition: state
-            entity_id: media_player.sala_de_estar
-            state:
-              - "on"
-              - "playing"
-              - "paused"
-              - "idle"
+          - condition: template
+            value_template: "{{ not wait.completed }}"
         then:
           - action: media_player.turn_off
             target:
@@ -105,14 +103,13 @@ script:
       - action: media_player.turn_on
         target:
           entity_id: media_player.dormitorio
-      - delay: "00:00:04"
+      - wait_template: >-
+          {{ states('media_player.dormitorio') not in ['off', 'unavailable', 'unknown', 'standby'] }}
+        timeout: "00:00:20"
+        continue_on_timeout: true
       - if:
-          - condition: state
-            entity_id: media_player.dormitorio
-            state:
-              - "off"
-              - "unavailable"
-              - "standby"
+          - condition: template
+            value_template: "{{ not wait.completed }}"
         then:
           - action: media_player.turn_on
             target:
@@ -125,15 +122,13 @@ script:
       - action: media_player.turn_off
         target:
           entity_id: media_player.dormitorio
-      - delay: "00:00:04"
+      - wait_template: >-
+          {{ states('media_player.dormitorio') in ['off', 'unavailable', 'standby'] }}
+        timeout: "00:00:20"
+        continue_on_timeout: true
       - if:
-          - condition: state
-            entity_id: media_player.dormitorio
-            state:
-              - "on"
-              - "playing"
-              - "paused"
-              - "idle"
+          - condition: template
+            value_template: "{{ not wait.completed }}"
         then:
           - action: media_player.turn_off
             target:
