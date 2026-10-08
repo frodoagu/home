@@ -159,7 +159,6 @@ dhcp:
     - { mac: "60:ff:9e:8d:f9:7a", ip: "192.168.0.73", name: "pc-julian" }
     # .80-.89  phones
     - { mac: "28:12:d0:99:e5:e1", ip: "192.168.0.80", name: "celu-fede" }  # motorola edge 70
-    - { mac: "<mac>",             ip: "192.168.0.81", name: "celu-noah" }  # Galaxy S23 FE
 ```
 
 ### Random MACs (laptops, phones)

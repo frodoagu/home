@@ -135,7 +135,6 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
 | `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |
 | `192.168.0.73` | `pc-julian` | Julian's PC (Wi-Fi) | |
 | `192.168.0.80` | `celu-fede` | Fede's phone, motorola edge 70 | |
-| `192.168.0.81` | `celu-noah` | Noah's phone, Galaxy S23 FE (pending its device MAC) | |
 | `192.168.0.100` | — | Raspberry Pi (k3s, Home Assistant, Pi-hole). Static on the host | |
 | `.150 – .250` | — | Dynamic DHCP pool | |
 
