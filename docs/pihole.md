@@ -151,7 +151,7 @@ dhcp:
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
     # .60-.69  WiZ lights
-    - { mac: "<mac>",             ip: "192.168.0.60", name: "lampara-dormitorio" }  # WiZ Squire
+    - { mac: "d8:a0:11:b2:6b:45", ip: "192.168.0.60", name: "lampara-dormitorio" }  # WiZ Squire
     # .70-.79  computers
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }   # gaming
     - { mac: "f4:4e:e3:98:c9:4d", ip: "192.168.0.71", name: "think" }     # work laptop
