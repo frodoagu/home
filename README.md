@@ -129,6 +129,7 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
 | `192.168.0.40` | `lavarropas` | Candy simply-Fi washer-dryer | |
 | `192.168.0.50` | `tv-sala` | LG webOS TV | living |
 | `192.168.0.51` | `tv-dormitorio` | LG webOS TV | bedroom |
+| `192.168.0.60` | `lampara-dormitorio` | WiZ Squire lamp | bedroom |
 | `192.168.0.70` | `pc-fede` | Fede's gaming PC | |
 | `192.168.0.71` | `think` | Fede's work laptop | |
 | `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |

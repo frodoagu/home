@@ -126,7 +126,7 @@ readable, and it means the pool can be widened without auditing every reservatio
 ### The reservations
 
 Devices that must keep their address because something else addresses them by IP —
-**Broadlink** and the **webOS TVs** (Home Assistant config entries), the **Shelly**
+**Broadlink**, the **webOS TVs** and the **WiZ** lights (Home Assistant config entries), the **Shelly**
 door switches (`charts/shelly-config` + `charts/shelly-proxy`), the **Candy**
 washer-dryer (`packages/lavarropas.yaml`, `scripts/candyctl.py`) and the **ESPHome
 BLE proxies** — get MAC→IP reservations in `dhcp.reservations`, grouped by class:
@@ -150,6 +150,8 @@ dhcp:
     # .50-.59  TVs / media
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
+    # .60-.69  WiZ lights
+    - { mac: "d8:a0:11:b2:6b:45", ip: "192.168.0.60", name: "lampara-dormitorio" }  # WiZ Squire
     # .70-.79  computers
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }   # gaming
     - { mac: "f4:4e:e3:98:c9:4d", ip: "192.168.0.71", name: "think" }     # work laptop
@@ -192,7 +194,7 @@ curl -s https://api.macvendors.com/<mac>   # identify the vendor
 > **Renumbering one of these is never just an edit in `values.yaml`.** Grep the repo
 > for the old address (`charts/shelly-config`, `charts/shelly-proxy`,
 > `packages/lavarropas.yaml`, `scripts/candyctl.py`, `docs/`) and re-point the
-> matching Home Assistant config entry **by hand** — Broadlink, webOS and ESPHome are
+> matching Home Assistant config entry **by hand** — Broadlink, webOS, WiZ and ESPHome are
 > config-flow integrations that keep the host in `/config/.storage`, where git can't
 > reach it. The device itself only picks up the new address when its lease renews
 > (`leaseTime: 24h`) or it is power-cycled.
