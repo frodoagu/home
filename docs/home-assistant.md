@@ -1006,12 +1006,20 @@ more-info dialog lists each zone with its own controls (HA ≥ 2025.8). It lands
 `light.lampara_dormitorio_2`, because the wiz entity already holds the plain id,
 and is renamed to `_grupo` in the registry.
 
-Everything else is hidden, and that's entity-registry state in `.storage`, not
-git: `light.lampara_dormitorio` (the wiz entity), both zone lights,
-`sensor.lampara_dormitorio_zonas` and `script.lampara_dormitorio_zona` are
-`hidden_by: user`, the zone lights carry the *Dormitorio* area (template entities
-have no device to inherit it from), and the dead dual-head ratio entity is
-`disabled_by: user`. Hidden entities keep working, the group's members included.
+The group's dialog only lists members that **aren't hidden**, and the
+auto-generated Overview shows every entity that isn't hidden, so the two can't
+both hold on an auto-generated dashboard. The zone lights therefore stay visible,
+and the **Overview is a saved (storage-mode) dashboard** since 2026-10-07: a copy
+of the auto-generated layout with the group as the lamp's only light. A saved
+dashboard doesn't pick up new devices on its own; add them by hand, or delete its
+config (`lovelace/config/delete` over the WebSocket API) to go back to
+auto-generated.
+
+The rest is entity-registry state in `.storage`, not git: `light.lampara_dormitorio`
+(the wiz entity), `sensor.lampara_dormitorio_zonas` and
+`script.lampara_dormitorio_zona` are `hidden_by: user`, the zone lights carry the
+*Dormitorio* area (template entities have no device to inherit it from), and the
+dead dual-head ratio entity is `disabled_by: user`. Hidden entities keep working.
 The zone lights' names (*arriba* / *abajo*) are also set in the registry: a
 template light keeps the name it first registered with, so renaming it in the
 package alone changes nothing in the UI or in Google. On a fresh PVC the package
@@ -1043,8 +1051,9 @@ split could still change before it merges.
 domain is exposed by default). Google gets the two zone lights; the wiz
 whole-lamp entity and the group get `expose: false` in `entity_config`
 ([values.yaml](../charts/home-assistant/values.yaml)), so Google shows two lights,
-not four. The zones need an explicit `expose: true`: they're hidden in the HA UI,
-and a hidden entity counts as auxiliary, which `expose_by_default` skips. The same
+not four. The zones also carry an explicit `expose: true`, so they stay in Google
+even if they're hidden in the HA UI (a hidden entity counts as auxiliary, which
+`expose_by_default` skips). The same
 rule keeps the hidden helper script from showing up in Google as a scene. The
 init container writes that block **only once**, so on the current PVC add the
 lines by hand to `/config/configuration.yaml` and restart HA (same as the TV
