@@ -123,9 +123,9 @@ googleAssistant:
     media_player.dormitorio: { expose: false }
     media_player.tv_dormitorio_ir: { expose: false }
     # Google gets the two per-zone template lights, not the whole-lamp WiZ entity
-    # or the HA group (packages/lampara_dormitorio.yaml). The zones are hidden in
-    # the HA UI, and hidden entities aren't exposed by default, hence the explicit
-    # `expose: true`.
+    # or the HA group (packages/lampara_dormitorio.yaml). The explicit
+    # `expose: true` keeps the zones in Google even if they're hidden in the HA UI
+    # (hidden entities aren't exposed by default).
     light.lampara_dormitorio: { expose: false }
     light.lampara_dormitorio_grupo: { expose: false }
     light.lampara_dormitorio_zona_a: { expose: true }
