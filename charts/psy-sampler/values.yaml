@@ -2,7 +2,6 @@
 
 replicaCount: 1
 revisionHistoryLimit: 1
-
 image:
   # The psy.agu.com.ar sampler, built from images/psy-sampler/ by the
   # psy-sampler-image GitHub Action (.github/workflows/psy-sampler-image.yml).
@@ -13,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
-  tag: "latest"
+  tag: "latest@sha256:233e5a65da6c7db0225df86ba18404b37b4e1ece7f5c7e63d09cceb6e8c6ffb4"
 # The image is static, public content (anyone can fetch the same files from
 # psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
 # secret. GHCR creates it private on the first push: flip it once in GitHub >
