@@ -46,6 +46,29 @@ export default {
     confirmSounds: "Este link traz seus próprios sons e substitui suas edições. Carregar?",
     badLink: "O link está quebrado: não foi possível ler os sons.",
   },
+  cloud: {
+    pitch: "☁ Salve sua configuração na nuvem e use em qualquer dispositivo:",
+    signedIn: (email) => `☁ ${email}`,
+    phases: {
+      idle: "",
+      pending: "alterações não enviadas…",
+      saving: "salvando…",
+      saved: "salvo na nuvem ✓",
+      offline: "sem conexão: salvo localmente, envia depois",
+      error: "não foi possível salvar na nuvem",
+      conflict: "há alterações de outro dispositivo",
+    },
+    signOut: "Sair",
+    deleteAccount: "Apagar meus dados",
+    confirmDelete: "Apagar sua conta e sua configuração da nuvem? O que está neste navegador fica.",
+    deleted: "Pronto: seus dados da nuvem foram apagados.",
+    pulled: "Carreguei sua configuração da nuvem.",
+    conflict:
+      "Sua configuração na nuvem mudou em outro dispositivo e aqui também há alterações.\n\n" +
+      "OK: usar a da nuvem (as alterações daqui se perdem).\nCancelar: ficar com a daqui e enviá-la.",
+    signInFailed: "Não foi possível entrar.",
+    privacy: "Só seu e-mail e sua configuração são guardados.",
+  },
   layers: {
     kick: { name: "Kick", hint: "Uma batida por semínima. Compare o click do ataque com o comprimento da cauda." },
     bass: {

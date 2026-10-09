@@ -1,0 +1,94 @@
+name: ☁️ Psy-sync · Build & Publish Image
+
+# Build the psy.agu.com.ar cloud-save API (images/psy-sync, Bun) and push it to
+# GHCR as `latest` (plus an immutable `sha-<commit>` tag). Argo CD Image Updater
+# watches `latest`'s digest and writes it to `sync.image.tag` in
+# charts/psy-sampler/values.yaml. CI does not touch git. The package is meant
+# to be public (see that values.yaml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "images/psy-sync/**"
+      - ".github/workflows/psy-sync-image.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/frodoagu/psy-sync
+
+jobs:
+  build:
+    name: Build & push arm64 image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to checkout the (private) repo
+      packages: write # to push to GHCR
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Compute image tag
+        id: tag
+        run: echo "sha=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: 🧰 Set up QEMU
+        # Needed to cross-build the arm64 image on amd64 runners (the k3s node
+        # is a Raspberry Pi / arm64).
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: mirror.gcr.io/tonistiigi/binfmt:latest
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          # FROM oven/bun (and the dockerfile frontend) resolve
+          # through Google's Docker Hub mirror, like QEMU and BuildKit above:
+          # Docker Hub throttles and times out on GitHub's runners (429s,
+          # auth timeouts, 500s), with or without a login. Docker Hub is only
+          # the fallback.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+
+      - name: 🔑 Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build & push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./images/psy-sync
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 📦 Image summary
+        if: always()
+        run: |
+          {
+            echo "## ☁️ Published image"
+            echo ""
+            if [ -n "${{ steps.build.outputs.digest }}" ]; then
+              echo "✅ Image built (\`linux/arm64\`) and pushed to GHCR."
+              echo ""
+              echo "| Field | Value |"
+              echo "| --- | --- |"
+              echo "| Repository | \`${IMAGE}\` |"
+              echo "| Tags | \`${{ steps.tag.outputs.sha }}\`, \`latest\` |"
+              echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+              echo "| Commit | \`${GITHUB_SHA::12}\` |"
+              echo ""
+              echo "Argo CD Image Updater will detect the new \`latest\` digest and pin it into \`sync.image.tag\` in \`charts/psy-sampler/values.yaml\` for the rollout."
+            else
+              echo "⚠️ The build did not complete."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

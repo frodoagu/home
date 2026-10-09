@@ -12,10 +12,11 @@ sintetiza en el browser con Web Audio: el pod sólo sirve ~80 kB de estáticos.
 | Pieza | Dónde |
 |---|---|
 | Código (Vite + JS vanilla, sin dependencias de runtime) | [`images/psy-sampler/`](../images/psy-sampler) |
+| Guardado en la nube (Bun + SQLite) | [`images/psy-sync/`](../images/psy-sync) |
 | Chart (nginx) | [`charts/psy-sampler/`](../charts/psy-sampler) |
 | Argo CD Application | [`apps/psy-sampler.yaml`](../apps/psy-sampler.yaml) |
 | Auto-update de la imagen | [`psy-sampler-imageupdater.yaml`](../charts/argocd-image-updater/templates/psy-sampler-imageupdater.yaml) |
-| CI | [`psy-sampler-test.yml`](../.github/workflows/psy-sampler-test.yml) (lint + tests + build), [`psy-sampler-image.yml`](../.github/workflows/psy-sampler-image.yml) (imagen arm64 → GHCR) |
+| CI | [`psy-sampler-test.yml`](../.github/workflows/psy-sampler-test.yml) (lint + tests + build), [`psy-sampler-image.yml`](../.github/workflows/psy-sampler-image.yml) (imagen arm64 → GHCR), [`psy-sync-test.yml`](../.github/workflows/psy-sync-test.yml) y [`psy-sync-image.yml`](../.github/workflows/psy-sync-image.yml) (lo mismo para la API) |
 
 ## Motor de audio
 
@@ -223,6 +224,111 @@ funciona igual sin recordar.
   24-bit estéreo (`audio/wav.js`).
 - **Exportar / Importar preset**: el workspace + lo que suena, en JSON
   (`app: "psy-sampler"`). Importar lo reemplaza entero y pone a sonar su mix.
+
+## Guardado en la nube
+
+Cualquiera con cuenta de Google puede guardar su workspace en el servidor y
+usarlo en otro dispositivo. La fila aparece en el panel de herramientas sólo si
+la API responde.
+
+```mermaid
+sequenceDiagram
+  participant P as página
+  participant G as Google (GIS)
+  participant A as psy-sync /api
+  P->>A: GET /api/health, /api/session
+  P->>G: botón «Acceder con Google»
+  G-->>P: ID token (JWT)
+  P->>A: POST /api/session {credential}
+  A->>A: verifica RS256 contra las claves de Google, aud, iss, exp, email_verified
+  A-->>P: cookie psy_session (HttpOnly, Secure, SameSite=Lax, Path=/api, 30 días)
+  P->>A: GET /api/state → reconcile → pull / push / preguntar
+  P->>A: PUT /api/state {state, base} (2,5 s después del último cambio)
+```
+
+**Por qué no oauth2-proxy**: el `google-auth` del cluster es un allowlist que
+abre los dashboards (Traefik, Grafana, Pi-hole, Shelly, logs); abrirlo a
+cualquier mail no es opción, y un segundo oauth2-proxy significa otro
+deployment, otra cookie y redirects que un `fetch` no sigue. En cambio la página
+usa *Sign in with Google* (el mismo client OAuth que agu.com.ar) y la API
+verifica el token ella misma y emite su propia cookie de sesión.
+
+**API** ([`images/psy-sync`](../images/psy-sync), Bun sin dependencias:
+`bun:sqlite` + WebCrypto):
+
+| Ruta | |
+|---|---|
+| `GET /api/health` | `{ ok, clientId }`: la página decide si muestra la fila |
+| `POST /api/session` | `{ credential }` → cookie |
+| `GET /api/session` | `{ email }` (`null` sin sesión: no es un error en cada visita) |
+| `DELETE /api/session` | salir |
+| `GET /api/state` | `{ state, updatedAt }` o 404 |
+| `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, o **409** con la copia guardada si `base` quedó viejo |
+| `DELETE /api/account` | borra el usuario y su workspace |
+
+- El server **no interpreta** el workspace: guarda un objeto JSON opaco (tope
+  256 KB) y la página lo pasa por `normalize()` al traerlo, como a un preset.
+- Escrituras: además de `SameSite=Lax`, el header `Origin` tiene que ser
+  `https://psy.agu.com.ar`.
+- La sesión es un HMAC sin estado (`sub.vencimiento.firma`); la clave se genera
+  en el primer arranque en el volumen, al lado de la base: **no hay Secret que
+  crear**. Borrar la cuenta borra la fila del usuario, y una cookie de un
+  usuario que no existe no abre nada.
+- Topes: `sync.maxUsers` (5000 cuentas; las existentes siguen entrando) y un
+  `rateLimit` de Traefik por IP real (`Cf-Connecting-IP`, como Home Assistant)
+  en la ruta `/api/`.
+
+**Sincronización** ([`cloud.js`](../images/psy-sampler/src/cloud.js)): cada
+browser recuerda, por cuenta, el `updatedAt` y un hash del contenido de la
+última sincronización (`psy-sampler:cloud`). Al entrar:
+
+| Nube | Acá | Qué hace |
+|---|---|---|
+| vacía | | sube lo de acá |
+| igual contenido | | nada |
+| donde la dejé | sin cambios / con cambios | nada / sube |
+| más nueva | sin cambios (o de fábrica) | la baja |
+| más nueva | con cambios | **pregunta** (Aceptar = la de la nube, Cancelar = pisarla con la de acá) |
+
+Cada guardado local sube 2,5 s después del último cambio, con `base` = la
+versión sobre la que se construyó; un 409 (otro dispositivo guardó en el medio)
+hace la misma pregunta. Al ocultar la pestaña lo pendiente sube con
+`keepalive`. Sin conexión queda local y sube con el próximo cambio.
+
+**Infra** (en el chart `psy-sampler`, `sync.*` en `values.yaml`): un Deployment
+aparte (si la API está caída, o su imagen todavía no es pública, el sitio
+estático sigue andando y la página esconde la fila), `strategy: Recreate`
+(SQLite en un volumen RWO), PVC de 2 Gi en `local-path` con
+`helm.sh/resource-policy: keep` y `Prune=false`, contenedor sin root, root
+filesystem de sólo lectura y sin capabilities.
+
+### Puesta en marcha (una vez)
+
+1. Google Cloud → APIs & Services → Credentials → el client OAuth de
+   agu.com.ar → **Authorized JavaScript origins**: agregar
+   `https://psy.agu.com.ar` (y `http://localhost:5173` para desarrollo). Sin eso
+   el botón de Google no carga ("origin is not allowed for the given client ID").
+2. Mergear; esperar `psy-sync-image.yml`; GitHub → Packages → `psy-sync` →
+   **Public** (igual que `psy-sampler`). Hasta entonces el pod de la API queda
+   en `ImagePullBackOff` y sólo la fila de la nube no aparece.
+
+### Datos y backups
+
+La base (`psy-sync.db`) y la clave de sesión viven en el PVC, en la SD del Pi.
+**No hay backup automático**: perder la SD pierde las cuentas y lo guardado en
+la nube (cada browser conserva su copia local, que se vuelve a subir al
+entrar). Para copiar a mano:
+`kubectl -n psy-sampler exec deploy/psy-sampler-sync -- cat /data/psy-sync.db > psy-sync.db`
+(con WAL, mejor `sqlite3 .backup` si hace falta una copia consistente bajo
+carga).
+
+### Desarrollo
+
+```bash
+cd images/psy-sync && bun test
+DATA_DIR=/tmp/psd GOOGLE_CLIENT_ID=<client> ALLOWED_ORIGINS=http://localhost:5173 bun src/server.js
+cd images/psy-sampler && npm run dev   # Vite proxya /api a :8787
+```
 
 ## Piloto automático y semillas
 

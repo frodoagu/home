@@ -43,6 +43,41 @@ resources:
   limits:
     cpu: 100m
     memory: 64Mi
+# Cloud save: images/psy-sync, a Bun + SQLite API under /api/ (templates/sync.yaml).
+# Anyone with a Google account can sign in and keep their workspace there.
+sync:
+  enabled: true
+  image:
+    # Built by .github/workflows/psy-sync-image.yml; like the sampler, the GHCR
+    # package must be flipped to PUBLIC once after the first push (until then
+    # only /api/ is down: the page hides the cloud UI).
+    repository: ghcr.io/frodoagu/psy-sync
+    pullPolicy: IfNotPresent
+    # Managed by Argo CD Image Updater (pinned to latest@sha256:...).
+    tag: "latest"
+  # Public by design (it ships in the page). Same "Web application" client as
+  # agu.com.ar: https://psy.agu.com.ar must be listed among its Authorized
+  # JavaScript origins in Google Cloud, or the sign-in button refuses to load.
+  googleClientId: "1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com"
+  # New sign-ups stop here (existing accounts keep working). A workspace is
+  # capped at 256 KB, so this bounds the database at ~1.3 GB worst case.
+  maxUsers: 5000
+  persistence:
+    size: 2Gi
+    storageClass: "" # cluster default (k3s local-path)
+  # Per client IP: `average` requests per `period`, `burst` deep. A page
+  # saves at most every few seconds while editing.
+  rateLimit:
+    average: 60
+    period: 1m
+    burst: 30
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
 nodeSelector: {}
 tolerations: []
 affinity: {}

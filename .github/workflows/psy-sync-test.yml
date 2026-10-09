@@ -1,0 +1,45 @@
+name: ☁️ Psy-sync · Tests
+
+# Unit and API tests for the psy.agu.com.ar cloud-save API (bun test: token
+# verification, sessions, the HTTP routes against an in-memory SQLite). The
+# image build (psy-sync-image.yml) is separate and gated on push to main.
+on:
+  push:
+    paths:
+      - "images/psy-sync/**"
+      - ".github/workflows/psy-sync-test.yml"
+  pull_request:
+    paths:
+      - "images/psy-sync/**"
+      - ".github/workflows/psy-sync-test.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test the API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: images/psy-sync
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🥟 Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+
+      - name: 🧪 Run tests
+        run: bun test 2>&1 | tee test.log
+
+      - name: 📊 Test summary
+        if: always()
+        run: |
+          {
+            echo "## ☁️ psy-sync tests"
+            echo ""
+            echo '```'
+            grep -E "^\s*[0-9]+ (pass|fail)|^Ran " test.log || echo "no test output"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

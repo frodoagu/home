@@ -181,6 +181,26 @@ h1 {
   border-color: color-mix(in srgb, var(--stop) 45%, var(--border));
 }
 
+/* ---- cloud save ---- */
+.account[hidden] {
+  display: none;
+}
+
+.account-pitch,
+.account-phase {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.account-email {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.gsi-slot {
+  min-height: 32px;
+}
+
 .status {
   margin: 0;
   min-height: 1.2em;

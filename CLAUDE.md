@@ -28,9 +28,10 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   psy-sampler/       nginx serving the psy.agu.com.ar psytrance layer sampler (images/psy-sampler → GHCR,
                      digest pinned by Image Updater). Public, no google-auth, no pull secret (the GHCR
-                     package must be public). See docs/psy-sampler.md + gotchas.
+                     package must be public). Also deploys its cloud-save API (images/psy-sync) as a
+                     separate Deployment + PVC behind /api/. See docs/psy-sampler.md + gotchas.
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + one ImageUpdater CR per CI-built image
-                     (agu-spa, psy-sampler, origin-firewall).
+                     (agu-spa, psy-sampler + psy-sync, origin-firewall).
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
                      (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes,
                      Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard).
@@ -71,11 +72,16 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
+  psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
+                     any Google account signs in (ID token verified server-side, own HMAC
+                     cookie), one opaque JSON workspace per user on a PVC. Deployed by
+                     charts/psy-sampler (sync.*). `bun test`. See docs/psy-sampler.md.
   origin-firewall/   Firewall base image (Debian + nftables/curl) → GHCR.
 .github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for images/home-site/;
                      origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);
                      psy-sampler-test.yml (lint+Vitest+build) and psy-sampler-image.yml (arm64 → GHCR)
                      for images/psy-sampler/;
+                     psy-sync-test.yml (bun test) and psy-sync-image.yml (arm64 → GHCR) for images/psy-sync/;
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
@@ -423,7 +429,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
   reads pools sorted by id and consumes its PRNG even when it skips a user-owned
   part — keep both when touching it. All UI text lives in `src/i18n/{es,en,pt}.js`
-  (same shape, enforced by a test). See docs/psy-sampler.md.
+  (same shape, enforced by a test). Cloud save is deliberately NOT behind
+  google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
+  ID tokens itself and issues its own cookie — never route /api/ through
+  oauth2-proxy. The server stores the workspace opaquely; the page's
+  `normalize()` is still the only gate. Its PVC (SQLite + session key) has no
+  backup. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

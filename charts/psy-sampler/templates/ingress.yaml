@@ -9,6 +9,16 @@ spec:
   entryPoints:
     - websecure
   routes:
+    {{- if .Values.sync.enabled }}
+    # Cloud save. Longer rule than the catch-all, so Traefik prefers it for /api/.
+    - match: Host(`{{ .Values.ingress.host }}`) && PathPrefix(`/api/`)
+      kind: Rule
+      middlewares:
+        - name: {{ include "psy-sampler.syncName" . }}-ratelimit
+      services:
+        - name: {{ include "psy-sampler.syncName" . }}
+          port: 8787
+    {{- end }}
     - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       services:
