@@ -6,7 +6,8 @@
 //
 // Each section has a shape (how many variants per layer). Changes favour
 // continuity: a playing variant usually survives a section change, and inside
-// a section only one small swap happens now and then. The build's last loop
+// a section a small swap can only happen on a phrase line (8 bars), never on
+// any loop. Sections run 8-32 bars, like a real track. The build's last loop
 // fires a 2-bar riser so it lands on the peak; entering a section can fire an
 // FX and ask for a part to be rewritten (a new lead or bass line).
 //
@@ -18,18 +19,19 @@ import { laneKey } from "./selection.js";
 import { layerOfVariant } from "./workspace.js";
 
 export const SECTIONS = {
-  intro: { loops: 2, next: ["groove"], shape: { kick: 1, bass: 0, perc: [1, 1], lead: 0, pad: 0 } },
-  groove: { loops: 4, next: ["build"], shape: { kick: 1, bass: 1, perc: [1, 2], lead: 0, pad: 0 } },
-  build: { loops: 2, next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: 0 } },
-  peak: { loops: 4, next: ["breakdown", "groove"], shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1 } },
-  breakdown: { loops: 2, next: ["build"], shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1 } },
+  intro: { loops: 4, next: ["groove"], shape: { kick: 1, bass: 0, perc: [1, 1], lead: 0, pad: 0 } },
+  groove: { loops: 8, next: ["build"], shape: { kick: 1, bass: 1, perc: [1, 2], lead: 0, pad: 0 } },
+  build: { loops: 4, next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: 0 } },
+  peak: { loops: 16, next: ["breakdown", "groove"], shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1 } },
+  breakdown: { loops: 8, next: ["build"], shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1 } },
 };
 
 const ENTRY_FX = { peak: ["fx.crash", "fx.impact"], breakdown: ["fx.down"], groove: [null, null, "fx.zap", "fx.siren"] };
 const BUILD_FX = ["fx.riser", "fx.riserImpact"];
 const REWRITE = { build: ["lead", 0.5], breakdown: ["lead", 0.6], groove: ["bass", 0.25] };
 const KEEP = 0.75; // a playing variant survives a section change
-const VARY = 0.3; // one swap on a loop inside a section
+const VARY = 0.3; // one swap on a phrase line inside a section
+export const PHRASE = 4; // loops: 8 bars
 
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
@@ -92,7 +94,8 @@ export function advance(pilot, active, lists, rng) {
   if (pilot.left > 1) {
     const left = pilot.left - 1;
     const fx = pilot.section === "build" && left === 1 ? [pick(BUILD_FX, rng)] : [];
-    const next = rng() < VARY ? vary(active, lists, rng) : active;
+    const onPhrase = (SECTIONS[pilot.section].loops - left) % PHRASE === 0;
+    const next = onPhrase && rng() < VARY ? vary(active, lists, rng) : active;
     return { pilot: { section: pilot.section, left }, active: next, fx, rewrite: [] };
   }
   const section = pick(SECTIONS[pilot.section].next, rng);

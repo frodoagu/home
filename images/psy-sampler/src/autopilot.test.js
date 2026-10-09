@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SECTIONS, advance, arrange, startPilot } from "./autopilot.js";
+import { PHRASE, SECTIONS, advance, arrange, startPilot } from "./autopilot.js";
 import { seeded } from "./editing.js";
 import { normalize, layerOfVariant } from "./workspace.js";
 
@@ -22,7 +22,7 @@ function run(seed, loops) {
 describe("autopilot", () => {
   it("starts an intro: one kick and one percussion", () => {
     const { pilot, active } = startPilot(lists, seeded(1));
-    expect(pilot).toEqual({ section: "intro", left: 2 });
+    expect(pilot).toEqual({ section: "intro", left: SECTIONS.intro.loops });
     expect(count(active, "kick")).toBe(1);
     expect(count(active, "perc")).toBe(1);
     expect(Object.keys(active)).toHaveLength(2);
@@ -46,7 +46,7 @@ describe("autopilot", () => {
 
   it("walks the sections in order and holds each for its length", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
-      const log = run(seed, 60);
+      const log = run(seed, 200);
       for (let i = 1; i < log.length; i++) {
         const [prev, cur] = [log[i - 1].pilot, log[i].pilot];
         if (prev.left > 1) expect(cur).toEqual({ section: prev.section, left: prev.left - 1 });
@@ -61,7 +61,7 @@ describe("autopilot", () => {
 
   it("every section change matches the section's shape", () => {
     for (const seed of [7, 8, 9]) {
-      for (const { pilot, active } of run(seed, 60).filter((m) => m.pilot.left === SECTIONS[m.pilot.section].loops)) {
+      for (const { pilot, active } of run(seed, 200).filter((m) => m.pilot.left === SECTIONS[m.pilot.section].loops)) {
         const shape = SECTIONS[pilot.section].shape;
         for (const [layer, spec] of Object.entries(shape)) {
           const [lo, hi] = Array.isArray(spec) ? spec : [spec, spec];
@@ -73,10 +73,10 @@ describe("autopilot", () => {
   });
 
   it("the build's last loop fires a riser; a breakdown enters with a downlifter and no kick", () => {
-    const log = run(11, 80);
+    const log = run(11, 200);
     for (const m of log) {
       if (m.pilot.section === "build" && m.pilot.left === 1) expect(m.fx[0]).toMatch(/^fx\.riser/);
-      if (m.pilot.section === "breakdown" && m.pilot.left === 2) {
+      if (m.pilot.section === "breakdown" && m.pilot.left === SECTIONS.breakdown.loops) {
         expect(m.fx).toEqual(["fx.down"]);
         expect(m.active.kick).toBeUndefined();
         expect(m.active.bass).toBeUndefined();
@@ -84,8 +84,24 @@ describe("autopilot", () => {
     }
   });
 
+  it("sections are whole phrases, and inside one the mix only changes on a phrase line", () => {
+    for (const { loops } of Object.values(SECTIONS)) expect(loops % PHRASE).toBe(0);
+    let swaps = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const log = run(seed, 200);
+      for (let i = 1; i < log.length; i++) {
+        const [prev, cur] = [log[i - 1], log[i]];
+        if (cur.pilot.section !== prev.pilot.section || cur.pilot.left !== prev.pilot.left - 1) continue;
+        if (cur.active === prev.active) continue;
+        swaps++;
+        expect((SECTIONS[cur.pilot.section].loops - cur.pilot.left) % PHRASE).toBe(0);
+      }
+    }
+    expect(swaps).toBeGreaterThan(0);
+  });
+
   it("only asks to rewrite parts that play, and lanes follow the layer rules", () => {
-    for (const m of run(5, 80)) {
+    for (const m of run(5, 200)) {
       for (const id of m.rewrite) expect(Object.values(m.active)).toContain(id);
       for (const [key, id] of Object.entries(m.active)) {
         const layer = layerOfVariant(id);

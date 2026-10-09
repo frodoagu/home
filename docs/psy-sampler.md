@@ -229,17 +229,20 @@ funciona igual sin recordar.
 **🤖 Piloto automático** (`autopilot.js`) recorre las secciones de un tema y en
 cada inicio de loop decide qué suena:
 
-| Sección | Loops | Kick | Bajo | Perc | Lead | Pad | Al entrar |
+| Sección | Compases | Kick | Bajo | Perc | Lead | Pad | Al entrar |
 |---|---|---|---|---|---|---|---|
-| Intro | 2 | 1 | – | 1 | – | – | |
-| Groove | 4 | 1 | 1 | 1-2 | – | – | a veces láser o sirena; 25 % bajo nuevo |
-| Subida | 2 | 1 | 1 | 2 | 1 | – | 50 % lead nuevo; el último loop dispara un riser de 2 compases que cae en el Pico |
-| Pico | 4 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
-| Break | 2 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
+| Intro | 8 | 1 | – | 1 | – | – | |
+| Groove | 16 | 1 | 1 | 1-2 | – | – | a veces láser o sirena; 25 % bajo nuevo |
+| Subida | 8 | 1 | 1 | 2 | 1 | – | 50 % lead nuevo; el último loop dispara un riser de 2 compases que cae en el Pico |
+| Pico | 32 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
+| Break | 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
 
 Después del Pico va al Break o al Groove; del Break a la Subida. Una variante
-que suena sobrevive al cambio de sección con 75 %, y dentro de una sección hay
-un cambio chico (un sonido por otro de la misma capa) con 30 % por loop. Usa
+que suena sobrevive al cambio de sección con 75 %. Dentro de una sección, el
+mix sólo puede cambiar en una línea de frase (cada 8 compases, `PHRASE`): ahí
+hay un cambio chico (un sonido por otro de la misma capa) con 30 %. Así una
+Intro o una Subida no se tocan, y un Pico tiene 3 oportunidades en 32 compases.
+Toda sección dura frases enteras, como en un tema de verdad. Usa
 también las copias. Mientras corre, el kick de fondo no suena (el Break es sin
 kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
 
