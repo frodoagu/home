@@ -72,8 +72,10 @@ input_datetime:
 # (botones en la app HA / el dashboard "Aires") y, al estar `script` en
 # googleAssistant.exposedDomains, también como escenas en Google Home.
 #
-# Setpoints: heat is 21 in the living areas and 20 in the two bedrooms, cool is
-# 24 everywhere. Turning on sets mode and temperature in ONE
+# Setpoints: heat is 21 in the living areas and the kids' room, 20 in Fede's
+# bedroom; cool is 24 everywhere. So the two bedrooms share a cool setpoint but
+# not a heat one, and every script that heats both sends them separately.
+# Turning on sets mode and temperature in ONE
 # `climate.set_temperature` call: every IR send carries the whole frame, so a
 # single blast leaves the unit in the wanted state.
 #
@@ -176,14 +178,13 @@ script:
                   entity_id:
                     - climate.aire_living
                     - climate.aire_cocina
+                    - climate.aire_chicos
                 data:
                   hvac_mode: heat
                   temperature: 21
               - action: climate.set_temperature
                 target:
-                  entity_id:
-                    - climate.aire_dormitorio
-                    - climate.aire_chicos
+                  entity_id: climate.aire_dormitorio
                 data:
                   hvac_mode: heat
                   temperature: 20
@@ -245,12 +246,16 @@ script:
               frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           - action: climate.set_temperature
             target:
-              entity_id:
-                - climate.aire_dormitorio
-                - climate.aire_chicos
+              entity_id: climate.aire_dormitorio
             data:
               hvac_mode: "{{ 'cool' if frio else 'heat' }}"
               temperature: "{{ 24 if frio else 20 }}"
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.aire_chicos
+            data:
+              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+              temperature: "{{ 24 if frio else 21 }}"
     mode: single
 
   # Bedrooms on at the seasonal setpoint and the slowest fan each unit declares
@@ -269,12 +274,16 @@ script:
             - climate.aire_cocina
       - action: climate.set_temperature
         target:
-          entity_id:
-            - climate.aire_dormitorio
-            - climate.aire_chicos
+          entity_id: climate.aire_dormitorio
         data:
           hvac_mode: "{{ 'cool' if frio else 'heat' }}"
           temperature: "{{ 24 if frio else 20 }}"
+      - action: climate.set_temperature
+        target:
+          entity_id: climate.aire_chicos
+        data:
+          hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+          temperature: "{{ 24 if frio else 21 }}"
       - delay: "00:00:01"
       - action: climate.set_fan_mode
         target:
