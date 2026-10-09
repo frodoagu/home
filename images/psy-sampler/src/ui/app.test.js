@@ -616,6 +616,16 @@ describe("autopilot", () => {
     expect(sections.size).toBeGreaterThanOrEqual(3);
   });
 
+  it("over a playing mix it carries on from there instead of starting over", () => {
+    click("bass.rolling");
+    advanceSeconds(BAR);
+    autoBtn().click();
+    expect($(".section-badge").textContent).toBe("Groove");
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Groove");
+    expect(pressed()).toEqual(expect.arrayContaining(["bass.rolling", "kick.punchy"]));
+  });
+
   it("the same seed plays the same track", () => {
     const record = (node, c) => {
       const log = [];

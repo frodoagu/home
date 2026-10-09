@@ -9,7 +9,7 @@ import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, isCopy } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
 import { encodeWav } from "../audio/wav.js";
-import { advance, startPilot } from "../autopilot.js";
+import { advance, joinPilot, startPilot } from "../autopilot.js";
 import { improvise, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
@@ -677,7 +677,20 @@ export function mountApp(root, engine, opts = {}) {
     if (shared) loadShared(shared);
   };
 
+  // Over a playing mix the autopilot takes it as it is and carries on from
+  // there; the background kick becomes a real kick so it does not drop out.
+  // From silence it starts an intro.
   function engageAuto() {
+    const playing = { ...(state.pending ?? state.active) };
+    if (Object.keys(playing).length) {
+      if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
+      state.auto = true;
+      state.rng = seeded(hashSeed(ws.seed));
+      state.pilot = joinPilot(playing);
+      commit(playing);
+      showSection();
+      return;
+    }
     // Parts the autopilot wrote go back to factory, so a seed always replays
     // the same track.
     for (const id of ws.auto) {
