@@ -26,7 +26,11 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      working); a Traefik rateLimit on /auth/* throttles login brute-force (see gotchas).
   cloudflare-ddns/   Dynamic DNS updater.
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
-  argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
+  psy-sampler/       nginx serving the psy.agu.com.ar psytrance layer sampler (images/psy-sampler → GHCR,
+                     digest pinned by Image Updater). Public, no google-auth, no pull secret (the GHCR
+                     package must be public). See docs/psy-sampler.md + gotchas.
+  argocd-image-updater/  Argo CD Image Updater (wrapper chart) + one ImageUpdater CR per CI-built image
+                     (agu-spa, psy-sampler, origin-firewall).
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
                      (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes,
                      Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard).
@@ -62,9 +66,15 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.
+  psy-sampler/       The psy.agu.com.ar ear-training sampler (Vite + vanilla JS, Web Audio, no runtime
+                     deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
+                     src/selection.js; voices/engine tested against a fake AudioContext
+                     (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
   origin-firewall/   Firewall base image (Debian + nftables/curl) → GHCR.
 .github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for images/home-site/;
                      origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);
+                     psy-sampler-test.yml (lint+Vitest+build) and psy-sampler-image.yml (arm64 → GHCR)
+                     for images/psy-sampler/;
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
@@ -114,8 +124,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `kubeseal` encrypts a Secret into a `SealedSecret` only this cluster can decrypt.
 - **SPA image auto-updates**: CI builds `images/home-site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
-  `charts/agu-spa/values.yaml` via git write-back. The v1.x Image Updater
-  controller only reconciles `ImageUpdater` CRs — NOT Application annotations.
+  `charts/agu-spa/values.yaml` via git write-back. Same for `images/psy-sampler/`
+  → `charts/psy-sampler` and `images/origin-firewall/` → `charts/origin-firewall`.
+  The v1.x Image Updater controller only reconciles `ImageUpdater` CRs — NOT
+  Application annotations.
 - **Instant sync**: a GitHub push webhook → `argocd.agu.com.ar/api/webhook`
   refreshes apps on push (no secret configured); otherwise ArgoCD polls ~3 min.
 - **Releases**: every change lands via **squash-merge of a Conventional-Commit
@@ -383,6 +395,22 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   cycle recovers it — so the HA scripts send one command per press and the
   `shell_command` retries 3× at most. Protocol, program table and the measured
   presets in docs/lavarropas-candy.md §8.
+- **psy-sampler — public image, no Pi-hole local record, click-free by lanes.**
+  `imagePullSecrets: []` because the image only holds what anyone downloads from
+  psy.agu.com.ar; GHCR creates the package PRIVATE on the first CI push, so it must
+  be flipped to public once by hand (GitHub > Packages > Change visibility) or the
+  pod sits in ImagePullBackOff. The host is deliberately NOT in Pi-hole's
+  `localRecords`: those render into the Pi-hole Deployment's env with
+  `strategy: Recreate`, so every host added there restarts Pi-hole and blips LAN
+  DNS + DHCP — not worth it for 20 kB of static files. Audio: never cancel queued
+  notes one by one; a variant change fades the whole per-layer gain "lane" (30 ms,
+  starting on the step where the new lane enters, so it is a grid-aligned
+  crossfade) and opens a fresh one that backfills the lookahead window; Parar
+  fades immediately. Nothing may be
+  scheduled closer than `SAFETY` (15 ms) to `currentTime`: a note whose start is
+  already past begins mid-envelope = click. `voices.test.js` enforces "every
+  audible source starts and ends at gain 0" for every variant and FX — keep it
+  passing when adding a voice. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,
@@ -410,6 +438,14 @@ Site (`images/home-site/`) — CI runs these on PRs/pushes, but run them locally
 cd images/home-site
 npm test            # Vitest unit + component tests (vitest run)
 npm run build       # production bundle (also catches import/JSX errors)
+```
+
+Sampler (`images/psy-sampler/`) — same commands, plus lint; CI runs them in
+`psy-sampler-test.yml`:
+
+```bash
+cd images/psy-sampler
+npm run lint && npm test && npm run build
 ```
 
 When adding logic to a site app, keep the pure/computational part in a plain

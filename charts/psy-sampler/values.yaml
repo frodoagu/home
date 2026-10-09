@@ -1,0 +1,49 @@
+# Default values for psy-sampler.
+
+replicaCount: 1
+revisionHistoryLimit: 1
+
+image:
+  # The psy.agu.com.ar sampler, built from images/psy-sampler/ by the
+  # psy-sampler-image GitHub Action (.github/workflows/psy-sampler-image.yml).
+  # CI pushes the mutable `latest` tag; Argo CD Image Updater (ImageUpdater CR in
+  # charts/argocd-image-updater) rewrites `tag` below to `latest@sha256:...` via
+  # git, so what runs is always an immutable digest — do not hand-edit image.tag.
+  repository: ghcr.io/frodoagu/psy-sampler
+  pullPolicy: IfNotPresent
+  # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
+  # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
+  tag: "latest"
+# The image is static, public content (anyone can fetch the same files from
+# psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
+# secret. GHCR creates it private on the first push: flip it once in GitHub >
+# Packages > psy-sampler > Package settings > Change visibility. To keep it
+# private instead, seal a docker-registry Secret named ghcr-creds into this
+# namespace (see docs/secrets.md) and list it here.
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+service:
+  type: ClusterIP
+  port: 80
+# Filesystem path inside the container that nginx serves as the web root.
+contentRoot: /usr/share/nginx/html
+# Ingress via Traefik IngressRoute
+ingress:
+  enabled: true
+  host: psy.agu.com.ar
+  # TLS certificate resolver name configured in the Traefik chart (see charts/traefik-config)
+  certResolver: letsencrypt
+  # Public on purpose (like agu.com.ar): no google-auth.
+  middlewares: []
+# nginx serving ~20 kB of static files. All audio runs in the browser.
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+nodeSelector: {}
+tolerations: []
+affinity: {}

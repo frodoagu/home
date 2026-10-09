@@ -1,0 +1,29 @@
+---
+# ArgoCD Application – nginx serving the psy.agu.com.ar psytrance layer sampler (static SPA).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: psy-sampler
+  namespace: argocd
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://psy.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/psy-sampler
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: psy-sampler
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

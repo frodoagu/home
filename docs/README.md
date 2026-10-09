@@ -12,5 +12,6 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [gas-mopeka.md](gas-mopeka.md) | Nivel del tubo de 45 kg con un sensor Mopeka Pro Check Universal vía Bluetooth nativo de HA: por qué (a diferencia del M1001 revertido) no hace falta ESPHome, calibración, filtrado del eco doble cerca del fondo, efectos térmicos y alertas por Telegram |
 | [google-assistant.md](google-assistant.md) | End-to-end runbook for the Google Home / `google_assistant` integration |
 | [agu-spa.md](agu-spa.md) | SPA chart: how `images/home-site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
+| [psy-sampler.md](psy-sampler.md) | Sampler de capas de psytrance en `psy.agu.com.ar`: scheduler con lookahead, cambios sin clics (lanes con fade), tabla de capas, niveles medidos, paso manual de visibilidad del paquete GHCR |
 | [pihole.md](pihole.md) | Pi-hole as DNS ad-blocker + LAN DHCP: hostNetwork, the static-IP cold-boot chicken-and-egg, phased rollout, MAC→IP reservations |
 | [email-migration.md](email-migration.md) | **Design / migration runbook (not yet deployed)** — self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + AWS SES relay) |

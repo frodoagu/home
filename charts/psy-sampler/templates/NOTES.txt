@@ -1,0 +1,15 @@
+psy-sampler has been deployed!
+
+1. Open the sampler at:
+   https://{{ .Values.ingress.host }}
+
+2. Serving the static build baked into
+   "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+   from {{ .Values.contentRoot }}.
+{{- if not .Values.imagePullSecrets }}
+
+   No imagePullSecrets: the GHCR package must be PUBLIC, or pulls fail with
+   ImagePullBackOff (GitHub > Packages > psy-sampler > Change visibility).
+{{- end }}
+
+3. All audio is synthesized in the browser (Web Audio); the pod only serves files.

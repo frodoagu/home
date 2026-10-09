@@ -1,0 +1,33 @@
+# Per-app image-update config for the psy-sampler SPA (psy.agu.com.ar). The
+# v1.x controller only reconciles ImageUpdater CRs (it ignores Application
+# annotations), so each app that wants auto-updates gets one of these.
+#
+# Tracks the digest of the mutable `latest` tag CI pushes to GHCR and writes the
+# pinned `latest@sha256:...` back to charts/psy-sampler/values.yaml over HTTPS
+# using the git-creds secret. Registry auth comes from the registries.conf
+# credentials in this chart's values.yaml (same GHCR creds as the other images;
+# they also work once the package is public).
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: psy-sampler
+  namespace: {{ .Release.Namespace }}
+spec:
+  writeBackConfig:
+    method: "git:secret:argocd/git-creds"
+    gitConfig:
+      repository: "https://github.com/frodoagu/home.git"
+      branch: main
+      # Relative to the psy-sampler Application's source path (charts/psy-sampler).
+      writeBackTarget: "helmvalues:./values.yaml"
+  applicationRefs:
+    - namePattern: psy-sampler
+      images:
+        - alias: psy
+          imageName: ghcr.io/frodoagu/psy-sampler:latest
+          commonUpdateSettings:
+            updateStrategy: digest
+          manifestTargets:
+            helm:
+              name: image.repository
+              tag: image.tag
