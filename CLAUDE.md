@@ -59,8 +59,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      same-origin RPC instead. Separate from shelly-config. See docs/shelly.md + gotchas.
 images/              Dockerfiles + build contexts for CI-built container images (one dir per image).
   home-site/         The agu.com.ar landing SPA (Vite + React + Tailwind) AND its Dockerfile.
-                     Public apps (in-app tools, src/apps/registry.jsx `apps`) + a private section of
-                     external links (`privateLinks`) gated by client-side Google sign-in (src/auth/).
+                     Public apps (src/apps/registry.jsx `apps`: in-app tools, or an `href` to an
+                     app on its own subdomain like psy.agu.com.ar) + a private section of external
+                     links (`privateLinks`) gated by client-side Google sign-in (src/auth/).
                      Pure logic lives in plain .js modules next to each component (mandelbrot.js,
                      neutralCurrent.js, auth.js) and is unit-tested with Vitest (*.test.js[x]).
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;

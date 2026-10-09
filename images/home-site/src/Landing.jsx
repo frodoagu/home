@@ -135,12 +135,10 @@ export default function Landing() {
 function AppCard({ app }) {
   const { language } = useLanguage();
   const { icon: Icon, accent } = app;
-  return (
-    <Link
-      to={`/app/${app.slug}`}
-      className="group relative flex flex-col rounded-xl border border-slate-800 bg-slate-900 p-5
-                 transition-colors hover:border-slate-600 hover:bg-slate-800/60"
-    >
+  const className = `group relative flex flex-col rounded-xl border border-slate-800 bg-slate-900 p-5
+                 transition-colors hover:border-slate-600 hover:bg-slate-800/60`;
+  const body = (
+    <>
       <div className="mb-3 flex items-center justify-between">
         <div
           className="rounded-lg border border-slate-800 bg-slate-950 p-2"
@@ -167,6 +165,16 @@ function AppCard({ app }) {
           {localizeText(app.tag, language)}
         </span>
       )}
+    </>
+  );
+  // Apps on their own subdomain link out; the rest are routed in-app.
+  return app.href ? (
+    <a href={app.href} target="_blank" rel="noopener noreferrer" className={className}>
+      {body}
+    </a>
+  ) : (
+    <Link to={`/app/${app.slug}`} className={className}>
+      {body}
     </Link>
   );
 }

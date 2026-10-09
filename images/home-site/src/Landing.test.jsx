@@ -26,6 +26,13 @@ describe("Landing", () => {
     expect(screen.getByText("Mandelbrot")).toBeInTheDocument();
   });
 
+  it("las apps externas abren su subdominio en otra pestaña", () => {
+    renderLanding();
+    const psy = screen.getByRole("link", { name: /Psy Layers/i });
+    expect(psy).toHaveAttribute("href", "https://psy.agu.com.ar");
+    expect(psy).toHaveAttribute("target", "_blank");
+  });
+
   it("muestra la sección privada bloqueada cuando no hay sesión", () => {
     renderLanding();
     expect(screen.getByText("Zona privada")).toBeInTheDocument();

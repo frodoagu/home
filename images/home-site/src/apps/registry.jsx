@@ -1,4 +1,4 @@
-import { Activity, BellRing, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, AudioWaveform, BellRing, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 
@@ -7,7 +7,7 @@ import MandelbrotExplorer from "./MandelbrotExplorer";
  * Each app declares which of these it belongs to (`categories`), and the
  * chips filter the grid by them. Keep this list in sync with app entries.
  * ---------------------------------------------------------------------- */
-export const CATEGORIES = ["devops", "rider", "enduro", "dad", "trades", "mate"];
+export const CATEGORIES = ["devops", "rider", "enduro", "dad", "trades", "mate", "music"];
 
 export const CATEGORY_LABELS = {
   devops: { es: "DevOps", en: "DevOps" },
@@ -16,6 +16,7 @@ export const CATEGORY_LABELS = {
   dad: { es: "Papa", en: "Dad" },
   trades: { es: "Oficios", en: "Trades" },
   mate: { es: "Mate", en: "Mate" },
+  music: { es: "Musica", en: "Music" },
 };
 
 export const getCategoryLabel = (key, language) =>
@@ -32,6 +33,8 @@ export const getCategoryLabel = (key, language) =>
  *   icon        a lucide-react icon component
  *   accent      hex color for the card accent
  *   Component   the React component rendered at /app/<slug>
+ *   href        instead of Component: an app hosted on its own subdomain; the
+ *               card links out (new tab) and there is no /app/<slug> route
  * ---------------------------------------------------------------------- */
 export const apps = [
   {
@@ -60,9 +63,22 @@ export const apps = [
     accent: "#c026d3",
     Component: MandelbrotExplorer,
   },
+  {
+    slug: "psy-sampler",
+    title: { es: "Psy Layers", en: "Psy Layers" },
+    description: {
+      es: "Entrena el oido: escucha en loop cada capa de un groove de psytrance.",
+      en: "Ear training: loop each layer of a psytrance groove.",
+    },
+    href: "https://psy.agu.com.ar",
+    categories: ["music"],
+    tag: { es: "Psytrance", en: "Psytrance" },
+    icon: AudioWaveform,
+    accent: "#a855f7",
+  },
 ];
 
-export const getApp = (slug) => apps.find((a) => a.slug === slug);
+export const getApp = (slug) => apps.find((a) => a.slug === slug && a.Component);
 
 /* -------------------------------------------------------------------------
  * Private links — external links to other self-hosted services, shown only

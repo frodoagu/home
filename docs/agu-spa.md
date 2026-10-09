@@ -75,8 +75,11 @@ a `main`.
 
 The landing has two halves (see [`images/home-site/src/Landing.jsx`](../images/home-site/src/Landing.jsx)):
 
-- **Públicas** — the existing grid of in-app tools, visible to everyone. Source of
-  truth: `apps` in [`images/home-site/src/apps/registry.jsx`](../images/home-site/src/apps/registry.jsx).
+- **Públicas** — the grid of public apps, visible to everyone. Source of truth:
+  `apps` in [`images/home-site/src/apps/registry.jsx`](../images/home-site/src/apps/registry.jsx).
+  An entry is either an in-app tool (`Component`, routed at `/app/<slug>`) or an
+  app on its own subdomain (`href`, e.g. `psy.agu.com.ar`), whose card opens in a
+  new tab.
 - **Privadas** — external links to other self-hosted services (Traefik dashboard,
   Home Assistant, ArgoCD), revealed only after a Google sign-in with an allowed
   email. Source of truth: `privateLinks` in the same registry — adjust the

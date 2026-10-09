@@ -144,6 +144,8 @@ Para dejarlo privado: sellar un `ghcr-creds` docker-registry en el namespace
   Para 20 kB de estáticos el atajo no aporta nada; desde la LAN resuelve a
   Cloudflare, igual que `shelly` y `yaskia.com`.
 - Probe de blackbox (`blackboxTargets.public`) para uptime + vencimiento de TLS.
+- Tarjeta en la grilla pública de `agu.com.ar` (entrada con `href` en `apps` de
+  [`registry.jsx`](../images/home-site/src/apps/registry.jsx)).
 
 ## Desarrollo y tests
 
