@@ -71,11 +71,13 @@ piholeExporter:
   revisionHistoryLimit: 1
   # Pi-hole's in-cluster web/API Service (charts/pihole), NOT pihole.agu.com.ar:
   # the public route sits behind google-auth and would answer the exporter with
-  # a sign-in redirect. Also the `hostname` label on every series.
+  # a sign-in redirect.
   pihole:
     protocol: http
     host: pihole.pihole.svc.cluster.local
     port: 8080
+    # Value of the `hostname` label on every series (the dashboard's $node).
+    label: pihole
   # Pi-hole API password, only needed if charts/pihole ever stops running with
   # admin.disablePassword. Name a Secret in THIS namespace (created out-of-band);
   # empty = no password, which FTL answers with a session-less `valid: true`.

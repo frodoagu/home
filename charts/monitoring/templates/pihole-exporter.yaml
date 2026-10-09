@@ -113,4 +113,10 @@ spec:
     - port: metrics
       path: /metrics
       interval: 60s
+      # The exporter labels every series with PIHOLE_HOSTNAME, i.e. the Service
+      # FQDN; rewrite it to a short name for the dashboard's $node selector.
+      metricRelabelConfigs:
+        - action: replace
+          target_label: hostname
+          replacement: {{ .Values.piholeExporter.pihole.label | quote }}
 {{- end }}
