@@ -70,7 +70,7 @@ views:
         | list | count -%}
 
         {%- set modo = ''frío 24°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else ''calor
-        (21° living y cocina, 20° las piezas)'' -%}
+        (21° living, cocina y chicos, 20° el dormitorio)'' -%}
 
         {%- if prendidos == 4 %}
 
@@ -266,7 +266,7 @@ views:
 
         {%- set m_dia = ''frío 24°'' if frio else ''calor 21°'' -%}
 
-        {%- set m_noche = ''frío 24°'' if frio else ''calor 20°'' %}
+        {%- set m_noche = ''frío 24°'' if frio else ''calor (20° el dormitorio, 21° chicos)'' %}
 
         👉 **Día:** {% if dia == 2 %}los dos prendidos, el próximo toque los apaga.{% elif dia == 0 %}los
         dos apagados, el próximo toque los prende en {{ m_dia }}.{% else %}1 de 2 prendido, el próximo
@@ -297,11 +297,15 @@ views:
         action: perform-action
         perform_action: script.aires_zona_noche_toggle
     - type: markdown
-      content: '{% set m = ''frío 24°'' if is_state(''sensor.aires_modo_estacional'', ''cool'') else ''calor 20°'' -%}
+      content: '{% set frio = is_state(''sensor.aires_modo_estacional'', ''cool'') -%}
+
+        {%- set m = ''frío 24°'' if frio else ''calor 20°'' -%}
+
+        {%- set m_piezas = ''frío 24°'' if frio else ''calor (20° el dormitorio, 21° chicos)'' -%}
 
         **Modo dormir** no es toggle, hace siempre lo mismo: deja las dos piezas
 
-        en {{ m }} con el ventilador al mínimo, y apaga cocina y living.
+        en {{ m_piezas }} con el ventilador al mínimo, y apaga cocina y living.
 
 
         {% set otros = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_chicos''] | map(''states'')

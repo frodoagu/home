@@ -433,8 +433,10 @@ presets — they show up as `script.*` entities (buttons on the HA app / dashboa
 cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes in
 Google Home:
 
-Setpoints throughout: heat is **21 °C** in the living areas and **20 °C** in the
-two bedrooms (a degree cooler for sleeping), cool is **24 °C** everywhere.
+Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
+and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is **24 °C**
+everywhere. The two bedrooms share a cool setpoint but not a heat one, so every
+script that heats both sends each its own `climate.set_temperature`.
 
 Every "on" side picks heat or cool from `sensor.aires_modo_estacional`; nothing
 here forces a season. To force one, use a unit's thermostat card on the
@@ -450,7 +452,7 @@ dashboard's *Detalle* view.
   (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
   to heat 21 °C / cool 24 °C.
 - `aires_zona_noche_toggle` — the night mirror: the **two bedrooms** together,
-  heat 20 °C / cool 24 °C.
+  heat 20 °C in Fede's and 21 °C in the kids', cool 24 °C in both.
 - `aires_reenviar` — re-blasts what HA believes each unit holds, `off`
   included, and changes nothing HA shows. It exists for a unit that missed an IR
   frame. SmartIR builds every frame from the entity's whole state (mode, fan,
