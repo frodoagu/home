@@ -66,6 +66,10 @@ const button = (variant) => $(`[data-variant="${variant}"]`);
 const pressed = () => [...root.querySelectorAll('[aria-pressed="true"][data-variant]')].map((b) => b.dataset.variant);
 const queued = () => [...root.querySelectorAll(".is-queued")].map((b) => b.dataset.variant);
 const click = (variant) => button(variant).click();
+// A real double click: two clicks counting up in `detail`, then dblclick.
+const dblclick = (variant) => {
+  for (const detail of [1, 2]) button(variant).dispatchEvent(new MouseEvent("click", { bubbles: true, detail }));
+};
 const flushFrame = () => frames.splice(0).forEach((cb) => cb());
 const advance = (ticks) => {
   for (let i = 0; i < ticks; i++) {
@@ -185,6 +189,21 @@ describe("on the beat (queued clicks)", () => {
     advanceSeconds(BAR + 0.2);
     expect(engine.isRunning()).toBe(false);
     expect(pressed()).toEqual([]);
+  });
+
+  it("a double click enters at once instead of waiting for the bar", () => {
+    click("kick.long");
+    advance(10);
+    dblclick("bass.rolling");
+    expect(pressed()).toEqual(["bass.rolling"]);
+    expect(queued()).toEqual([]);
+  });
+
+  it("a double click does not undo itself when clicks already apply at once", () => {
+    immediate();
+    click("kick.long");
+    dblclick("bass.rolling");
+    expect(pressed()).toEqual(["bass.rolling"]);
   });
 
   it("is remembered", () => {
@@ -436,12 +455,68 @@ describe("improvise toggle", () => {
     expect(button("lead.melodic").parentElement.classList.contains("is-varying")).toBe(false);
   });
 
+  it("Restaurar turns it off along with the edits", () => {
+    openEditor("perc.clap");
+    editor("perc.clap").querySelector('[data-action="vary"]').click();
+    editor("perc.clap").querySelector('[data-action="reset"]').click();
+    expect(editor("perc.clap").querySelector('[data-action="vary"]').getAttribute("aria-pressed")).toBe("false");
+    expect(button("perc.clap").parentElement.classList.contains("is-varying")).toBe(false);
+  });
+
   it("keeps going with the editor closed, and shows its state when reopened", () => {
     openEditor("perc.clap");
     editor("perc.clap").querySelector('[data-action="vary"]').click();
     editor("perc.clap").querySelector('[data-action="close"]').click();
     openEditor("perc.clap");
     expect(editor("perc.clap").querySelector('[data-action="vary"]').getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("drum tools", () => {
+  const hits = (variant) =>
+    [...editor(variant).querySelectorAll("[data-step]")].filter((c) => c.dataset.state).map((c) => Number(c.dataset.step));
+
+  it("×2 doubles the marked hits: quarters -> 8ths -> 16ths", () => {
+    openEditor("kick.long");
+    const double = editor("kick.long").querySelector('[data-action="double"]');
+    expect(hits("kick.long")).toHaveLength(8);
+    double.click();
+    expect(hits("kick.long")).toHaveLength(16);
+    double.click();
+    expect(hits("kick.long")).toHaveLength(32);
+    expect(saved().variants["kick.long"].steps.every(Boolean)).toBe(true);
+  });
+
+  it("only kicks have a build-up", () => {
+    openEditor("perc.hat");
+    expect(editor("perc.hat").querySelector('[data-action="build-up"]')).toBeNull();
+  });
+
+  it("a build-up plays the next bar as a doubling roll, then the kick goes back to its part", () => {
+    const sd = stepDuration(145);
+    const kickSteps = (from, to) =>
+      ctx
+        .sources()
+        .filter((s) => s.kind === "oscillator" && s.frequency.events[0]?.[1] === 170)
+        .map((s) => Math.round((s.startTime - 0.06) / sd))
+        .filter((s) => s >= from && s < to);
+    openEditor("kick.punchy");
+    const toggle = editor("kick.punchy").querySelector('[data-action="build-up"]');
+    toggle.click(); // a silent kick: arming it switches it on
+    expect(pressed()).toEqual(["kick.punchy"]);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(button("kick.punchy").parentElement.classList.contains("is-building")).toBe(true);
+    advanceSeconds(BAR); // started right away: the first bar is the build-up
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    toggle.click(); // armed again: bar 2 is already queued, so it takes bar 3
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    advanceSeconds(3 * BAR);
+    expect(kickSteps(0, 16)).toEqual([0, 4, 8, 10, 12, 13, 14, 15]);
+    expect(kickSteps(32, 48)).toEqual([32, 36, 40, 42, 44, 45, 46, 47]);
+    expect(kickSteps(48, 64)).toEqual([48, 52, 56, 60]);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(button("kick.punchy").parentElement.classList.contains("is-building")).toBe(false);
+    expect(saved()?.variants?.["kick.punchy"]).toBeUndefined(); // never stored
   });
 });
 

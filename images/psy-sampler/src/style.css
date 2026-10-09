@@ -493,7 +493,8 @@ h1 {
 }
 
 /* Edited away from the factory data: a pencil after the name. A copy is
-   the user's own sound: a plus. Improvising: a shuffle. */
+   the user's own sound: a plus. Improvising: a shuffle. A kick build-up,
+   armed or playing: ⏫ (it wins over the shuffle while it lasts). */
 .tile.is-edited .variant-label::after {
   content: " ✎";
   font-weight: 400;
@@ -507,6 +508,10 @@ h1 {
 
 .tile.is-varying .variant-detail::before {
   content: "🔀 ";
+}
+
+.tile.is-building .variant-detail::before {
+  content: "⏫ ";
 }
 
 /* ---- editor panel ---- */

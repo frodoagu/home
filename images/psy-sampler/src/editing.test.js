@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { inScale, isRoot, scaleRows } from "./audio/music.js";
 import { ACCENT, HIT, OFF } from "./audio/patterns.js";
-import { cycleNote, cycleStep, improvise, noteAt, placeNote, seeded, varyNotes, varySteps } from "./editing.js";
+import {
+  BUILD_UP,
+  cycleNote,
+  cycleStep,
+  doubleSteps,
+  improvise,
+  noteAt,
+  placeNote,
+  seeded,
+  varyNotes,
+  varySteps,
+  withBuildUp,
+} from "./editing.js";
 
 const n = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
 
@@ -12,6 +24,44 @@ describe("cycleStep", () => {
     const b = cycleStep(a, 3);
     expect([a[3], b[3], cycleStep(b, 3)[3]]).toEqual([HIT, ACCENT, OFF]);
     expect(steps[3]).toBe(OFF);
+  });
+});
+
+describe("doubleSteps", () => {
+  const row = (hits) => Array.from({ length: 32 }, (_, s) => (hits.includes(s) ? HIT : OFF));
+  const hitsOf = (steps) => steps.flatMap((v, s) => (v ? [s] : []));
+
+  it("quarters -> 8ths -> 16ths, then stays full", () => {
+    const quarters = row([0, 4, 8, 12, 16, 20, 24, 28]);
+    const eighths = doubleSteps(quarters);
+    expect(hitsOf(eighths)).toEqual(Array.from({ length: 16 }, (_, i) => i * 2));
+    const sixteenths = doubleSteps(eighths);
+    expect(hitsOf(sixteenths)).toHaveLength(32);
+    expect(doubleSteps(sixteenths)).toEqual(sixteenths);
+    expect(hitsOf(quarters)).toHaveLength(8); // not mutated
+  });
+
+  it("splits uneven gaps, wraps around the loop and keeps accents", () => {
+    const steps = row([3, 8]);
+    steps[3] = ACCENT;
+    // 3 -> 8 (gap 5) adds 5; 8 -> 35 (gap 27, wrapping) adds 21.
+    const out = doubleSteps(steps);
+    expect(hitsOf(out)).toEqual([3, 5, 8, 21]);
+    expect(out[3]).toBe(ACCENT);
+    expect(doubleSteps(row([]))).toEqual(row([]));
+  });
+});
+
+describe("withBuildUp", () => {
+  it("replaces one bar, wherever it starts, with a roll that doubles its rate", () => {
+    const steps = Array(32).fill(HIT);
+    const hitsOf = (list) => list.flatMap((v, s) => (v ? [s] : []));
+    expect(hitsOf(BUILD_UP)).toEqual([0, 4, 8, 10, 12, 13, 14, 15]);
+    const second = withBuildUp(steps, 16);
+    expect(second.slice(0, 16)).toEqual(steps.slice(0, 16));
+    expect(second.slice(16)).toEqual(BUILD_UP);
+    expect(withBuildUp(steps, 0).slice(0, 16)).toEqual(BUILD_UP);
+    expect(steps.every((v) => v === HIT)).toBe(true);
   });
 });
 

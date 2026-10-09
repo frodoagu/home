@@ -9,7 +9,7 @@ import { LEVEL, SYNTHS } from "../audio/params.js";
 import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleStep, improvise, placeNote, styleOf } from "../editing.js";
+import { cycleNote, cycleStep, doubleSteps, improvise, placeNote, styleOf } from "../editing.js";
 import { t } from "../i18n/index.js";
 import { el, select, slider } from "./dom.js";
 
@@ -30,12 +30,15 @@ export function createEditor({
   onWav,
   varying = false,
   onVary,
+  buildUp = false,
+  onBuildUp,
 }) {
   const def = defOf(id);
   const tx = t().editor;
   let current = data;
   let paintGrid = () => {};
   let refreshGrid = () => {};
+  let buildUpBtn = null;
   const cleanups = [];
 
   function set(patch) {
@@ -144,12 +147,34 @@ export function createEditor({
     };
     paintGrid = paintColumns(cells.map((c) => [c]));
     refreshGrid();
+    const double = el("button", { type: "button", class: "ghost", "data-action": "double", text: tx.doubleHits });
+    double.title = tx.doubleHitsTitle;
+    double.addEventListener("click", () => {
+      set({ steps: doubleSteps(current.steps) });
+      refreshGrid();
+    });
     const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
       set({ steps: current.steps.map(() => 0) });
       refreshGrid();
     });
-    return [legend(tx.drumLegend), wrap(grid), el("div", { class: "editor-actions" }, varyToggle(), clear)];
+    const tools = [varyToggle(), ...(def.voice === "kick" ? [buildUpToggle()] : []), double, clear];
+    return [legend(tx.drumLegend), wrap(grid), el("div", { class: "editor-actions" }, ...tools)];
+  }
+
+  // Kicks: a build-up on the next bar line. Pressed while armed or playing;
+  // the app releases it when the bar is over.
+  function buildUpToggle() {
+    buildUpBtn = el("button", {
+      type: "button",
+      class: "action toggle",
+      "data-action": "build-up",
+      "aria-pressed": String(buildUp),
+      text: tx.buildUp,
+    });
+    buildUpBtn.title = tx.buildUpTitle;
+    buildUpBtn.addEventListener("click", () => onBuildUp(buildUpBtn.getAttribute("aria-pressed") !== "true"));
+    return buildUpBtn;
   }
 
   /* ---- notes: synth + view controls ---- */
@@ -330,6 +355,7 @@ export function createEditor({
       current = data;
       refreshGrid();
     },
+    showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     destroy: () => cleanups.forEach((fn) => fn()),
   };
 }

@@ -10,7 +10,7 @@ import { baseOf, defOf, defaultData, isCopy } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
 import { encodeWav } from "../audio/wav.js";
 import { advance, startPilot } from "../autopilot.js";
-import { improvise, seeded, styleOf, varyNotes, varySteps } from "../editing.js";
+import { improvise, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
@@ -45,6 +45,7 @@ export function mountApp(root, engine, opts = {}) {
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
+    buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
   };
   let open = null; // the one open editor: { layer, id, editor }
   const persist = () => saveState(storage, { lang: lang(), ...ws });
@@ -56,8 +57,17 @@ export function mountApp(root, engine, opts = {}) {
   const detailOf = (id) => (isCopy(id) ? tx.tile.copyDetail(factoryLabel(id)) : tx.variants[id][1]);
   const layerOf = (id) => layerById(id.split(".")[0]);
 
-  for (const id of allIds()) engine.setData(id, dataOf(id));
-  for (const [id, anchor] of state.varying) engine.setData(id, varied(id, anchor));
+  // What each variant plays apart from a build-up, which feed() lays on top.
+  const fed = new Map();
+  function feed(id, data) {
+    fed.set(id, data);
+    const b = state.buildUp;
+    const live = b?.id === id && b.from !== null ? { ...data, steps: withBuildUp(data.steps, b.from) } : data;
+    engine.setData(id, live);
+  }
+
+  for (const id of allIds()) feed(id, dataOf(id));
+  for (const [id, anchor] of state.varying) feed(id, varied(id, anchor));
   engine.setEffects(ws.effects);
   engine.setBpm(ws.bpm);
 
@@ -149,7 +159,7 @@ export function mountApp(root, engine, opts = {}) {
     );
     if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
     if (id === BG_KICK_VARIANT) node.title = tx.tile.bgKick;
-    node.addEventListener("click", () => press(layer, id));
+    node.addEventListener("click", (e) => press(layer, id, e.detail));
     const edit = el("button", {
       type: "button",
       class: "edit",
@@ -265,6 +275,7 @@ export function mountApp(root, engine, opts = {}) {
       node.classList.toggle("is-background", lanes.bgKick === id);
       tile.classList.toggle("is-edited", id in ws.variants && !isCopy(id));
       tile.classList.toggle("is-varying", state.varying.has(id));
+      tile.classList.toggle("is-building", state.buildUp?.id === id);
       if (!layer.oneShot) node.setAttribute("aria-pressed", String(on));
     }
   }
@@ -331,18 +342,32 @@ export function mountApp(root, engine, opts = {}) {
     sync();
   }
 
-  function press(layer, id) {
+  // A double click (its second click, `clicks` 2) skips the bar line: the
+  // first click's selection applies right away.
+  let lastPress = null; // { id, from }: the selection a tile's click started from
+  function press(layer, id, clicks = 1) {
     if (layer.oneShot) {
       fire(id);
       return;
     }
-    commit(pressVariant(state.pending ?? state.active, laneKey(layer, id), id, ws.combine));
+    const key = laneKey(layer, id);
+    if (clicks === 2 && lastPress?.id === id) {
+      state.pending = null;
+      state.active = pressVariant(lastPress.from, key, id, ws.combine);
+      lastPress = null;
+      sync();
+      return;
+    }
+    const from = state.pending ?? state.active;
+    lastPress = { id, from };
+    commit(pressVariant(from, key, id, ws.combine));
   }
 
   /* ---- the bar hook: everything that must land on the grid ---- */
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
     if (loopStart) varyAll();
+    rollBuildUp(step);
     let changed = false;
     if (state.pending) {
       state.active = state.pending;
@@ -369,7 +394,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.auto = ws.auto.filter((x) => x !== id);
     if (generated) ws.auto.push(id);
     if (state.varying.has(id)) state.varying.set(id, data);
-    engine.setData(id, state.varying.has(id) ? varied(id, data) : data);
+    feed(id, state.varying.has(id) ? varied(id, data) : data);
     persist();
     renderButtons();
   }
@@ -396,7 +421,7 @@ export function mountApp(root, engine, opts = {}) {
   function varyAll() {
     for (const [id, anchor] of state.varying) {
       const next = varied(id, anchor);
-      engine.setData(id, next);
+      feed(id, next);
       if (open?.id === id) open.editor.show(next);
     }
   }
@@ -407,10 +432,31 @@ export function mountApp(root, engine, opts = {}) {
       // The first variation waits for the next loop: nothing jumps on click.
     } else {
       state.varying.delete(id);
-      engine.setData(id, dataOf(id));
+      feed(id, dataOf(id));
       if (open?.id === id) open.editor.show(dataOf(id));
     }
     renderButtons();
+  }
+
+  /* ---- kick build-up: one bar, on the next bar line ---- */
+  function setBuildUp(id, on) {
+    const was = state.buildUp;
+    state.buildUp = on ? { id, from: null } : null;
+    if (was?.from != null) feed(was.id, fed.get(was.id));
+    open?.editor.showBuildUp(state.buildUp?.id === open.id);
+    renderButtons();
+  }
+
+  // From the bar hook: an armed build-up takes this bar, a playing one ends.
+  function rollBuildUp(step) {
+    const b = state.buildUp;
+    if (!b) return;
+    if (b.from === null) {
+      b.from = step;
+      feed(b.id, fed.get(b.id));
+      return;
+    }
+    setBuildUp(b.id, false);
   }
 
   /* ---- editors: one open at a time ---- */
@@ -444,8 +490,8 @@ export function mountApp(root, engine, opts = {}) {
         if (isCopy(id)) ws.variants[id] = defaultData(id);
         else delete ws.variants[id];
         ws.auto = ws.auto.filter((x) => x !== id);
-        if (state.varying.has(id)) state.varying.set(id, dataOf(id));
-        engine.setData(id, dataOf(id));
+        state.varying.delete(id); // back to the factory part, improvise off too
+        feed(id, dataOf(id));
         persist();
         renderButtons();
         openEditor(layer, id); // rebuild with the factory values
@@ -457,6 +503,13 @@ export function mountApp(root, engine, opts = {}) {
       onRemove: () => remove(layer, id),
       onWav: () => exportWav({ layer, id }),
       onVary: (on) => setVarying(id, on),
+      buildUp: state.buildUp?.id === id,
+      onBuildUp: (on) => {
+        setBuildUp(id, on);
+        // Like an edit: arming a silent kick switches it on, so the build-up is heard.
+        const target = state.pending ?? state.active;
+        if (on && target[laneKey(layer, id)] !== id) press(layer, id);
+      },
     });
     open = { layer, id, editor };
     sections.get(layer.id).slot.replaceChildren(editor.node);
@@ -491,7 +544,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.lists[layer.id] = [...list.slice(0, at), copy, ...list.slice(at)];
     ws.variants[copy] = structuredClone(dataOf(id));
     ws.names[copy] = tx.tile.copyName(labelOf(id));
-    engine.setData(copy, ws.variants[copy]);
+    feed(copy, ws.variants[copy]);
     persist();
     closeEditor();
     renderTiles(layer);
@@ -507,6 +560,7 @@ export function mountApp(root, engine, opts = {}) {
     delete ws.names[id];
     ws.auto = ws.auto.filter((x) => x !== id);
     state.varying.delete(id);
+    if (state.buildUp?.id === id) state.buildUp = null;
     const without = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v !== id));
     if (state.pending) state.pending = without(state.pending);
     state.active = without(state.active);
@@ -587,7 +641,7 @@ export function mountApp(root, engine, opts = {}) {
     for (const id of ws.auto) {
       if (isCopy(id)) ws.variants[id] = defaultData(id);
       else delete ws.variants[id];
-      engine.setData(id, dataOf(id));
+      feed(id, dataOf(id));
     }
     ws.auto = [];
     persist();
@@ -639,6 +693,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = null;
     state.auto = false;
     state.pilot = null;
+    if (state.buildUp) setBuildUp(state.buildUp.id, false);
     lanes = {};
     engine.stop();
     if (frame) cancelAnimationFrame(frame);
