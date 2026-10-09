@@ -154,19 +154,6 @@ token. Prefer narrower scope? Drop `repo` and give the Argo CD repository a
 read-write deploy key instead, then point the `ImageUpdater` CR's write-back at
 the SSH `repoURL` (see the [README](../README.md)).
 
-## GitHub Actions: Docker Hub login
-
-The image workflows (`site.yml`, `psy-sampler-image.yml`,
-`origin-firewall-image.yml`) pull their base images from Docker Hub. Anonymous
-pulls share the runner IP's quota and fail with `429 Too Many Requests`, so
-they log in when these repo settings exist (and skip the login otherwise):
-
-```bash
-# Docker Hub > Account settings > Personal access tokens: "Public Repo Read-only"
-gh variable set DOCKERHUB_USERNAME --body <docker-hub-user>
-gh secret set DOCKERHUB_TOKEN   # paste the token when prompted
-```
-
 ## Rotation
 
 To rotate, re-seal the new value and commit — the controller overwrites the
