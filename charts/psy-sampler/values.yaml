@@ -12,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
-  tag: "latest@sha256:cb84d6338310687b82c03d0e08bc2cb9cddbfa68568f446b765b5e6c7f5aeb78"
+  tag: "latest@sha256:7f6201d00d862c001b12722177206e307e9d160f3c83adc0a6f3ff2b8408ce86"
 # The image is static, public content (anyone can fetch the same files from
 # psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
 # secret. GHCR creates it private on the first push: flip it once in GitHub >
@@ -54,7 +54,7 @@ sync:
     repository: ghcr.io/frodoagu/psy-sync
     pullPolicy: IfNotPresent
     # Managed by Argo CD Image Updater (pinned to latest@sha256:...).
-    tag: "latest"
+    tag: "latest@sha256:7aab0058a86e3eaaee6baee4e1d509d694c1b5a270308051d64f83be039a7978"
   # Public by design (it ships in the page). Same "Web application" client as
   # agu.com.ar: https://psy.agu.com.ar must be listed among its Authorized
   # JavaScript origins in Google Cloud, or the sign-in button refuses to load.
