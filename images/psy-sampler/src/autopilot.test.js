@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PHRASE, SECTIONS, advance, arrange, startPilot } from "./autopilot.js";
+import { PHRASE, SECTIONS, advance, arrange, guessSection, joinPilot, startPilot } from "./autopilot.js";
 import { seeded } from "./editing.js";
 import { normalize, layerOfVariant } from "./workspace.js";
 
@@ -26,6 +26,15 @@ describe("autopilot", () => {
     expect(count(active, "kick")).toBe(1);
     expect(count(active, "perc")).toBe(1);
     expect(Object.keys(active)).toHaveLength(2);
+  });
+
+  it("joins a playing mix in the section it looks like, at its start", () => {
+    expect(guessSection({ kick: "kick.punchy", "perc.shaker": "perc.shaker" })).toBe("intro");
+    expect(guessSection({ kick: "kick.punchy", bass: "bass.rolling" })).toBe("groove");
+    expect(guessSection({ kick: "kick.punchy", "lead.acid": "lead.acid" })).toBe("build");
+    expect(guessSection({ kick: "kick.punchy", "pad.air": "pad.air" })).toBe("peak");
+    expect(guessSection({ "pad.air": "pad.air" })).toBe("breakdown");
+    expect(joinPilot({ kick: "kick.punchy", bass: "bass.rolling" })).toEqual({ section: "groove", left: SECTIONS.groove.loops });
   });
 
   it("a seed replays the same track, whatever the tile order", () => {

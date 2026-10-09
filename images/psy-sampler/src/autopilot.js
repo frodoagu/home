@@ -12,8 +12,8 @@
 // FX and ask for a part to be rewritten (a new lead or bass line).
 //
 // Every choice comes from `rng`, so a seeded rng replays the same track:
-// pools are read in id order (never in the user's tile order) and a run
-// always starts from silence.
+// pools are read in id order (never in the user's tile order). A run from
+// silence starts an intro; over a playing mix it carries on from that mix.
 import { LAYERS } from "./catalog.js";
 import { laneKey } from "./selection.js";
 import { layerOfVariant } from "./workspace.js";
@@ -84,6 +84,22 @@ function vary(active, lists, rng) {
 /** Engaging: an intro, from silence. */
 export function startPilot(lists, rng) {
   return { pilot: { section: "intro", left: SECTIONS.intro.loops }, active: arrange("intro", {}, lists, rng) };
+}
+
+/** A best guess of the section a mix belongs to, read off the shapes. */
+export function guessSection(active) {
+  const has = (layerId) => Object.values(active).some((id) => layerOfVariant(id) === layerId);
+  if (!has("kick") && (has("lead") || has("pad"))) return "breakdown";
+  if (has("kick") && has("pad")) return "peak";
+  if (has("kick") && has("lead")) return "build";
+  if (has("bass")) return "groove";
+  return "intro";
+}
+
+/** Engaging over a playing mix: it carries on, in the section the mix looks like. */
+export function joinPilot(active) {
+  const section = guessSection(active);
+  return { section, left: SECTIONS[section].loops };
 }
 
 /**

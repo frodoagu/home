@@ -375,8 +375,14 @@ kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
 así **la misma semilla genera el mismo tema en cualquier browser**. Para que eso
 sea cierto:
 
-- Prender el piloto arranca siempre de la Intro, en silencio.
-- Las partes que el piloto escribió (`ws.auto`) vuelven a fábrica al prenderlo.
+- Prender el piloto en silencio arranca de la Intro. Con algo sonando no
+  empieza de nuevo: toma el mix tal cual, adivina en qué sección está
+  (`guessSection`, por las capas que suenan) y sigue desde ahí con la semilla;
+  el kick de fondo pasa a ser un kick real para que no se corte. Ese tema
+  depende de la semilla *y* del mix de partida: para compartir uno
+  reproducible, arrancá de silencio.
+- Las partes que el piloto escribió (`ws.auto`) vuelven a fábrica al prenderlo
+  desde silencio (sobre un mix sonando se quedan, para no cambiar lo que suena).
   Si editás una a mano pasa a ser tuya y el piloto no la toca más.
 - Los pools se leen ordenados por id, nunca en el orden de los cuadraditos.
 - Una parte nueva se calcula (y consume el PRNG) aunque no se aplique porque la
