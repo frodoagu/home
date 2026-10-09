@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BG_KICK_VARIANT, desiredLanes, pressVariant } from "./selection.js";
+import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "./selection.js";
 
 describe("pressVariant · solo", () => {
   it("replaces whatever was active", () => {
@@ -35,6 +35,24 @@ describe("pressVariant · combine", () => {
     const prev = { bass: "bass.rolling" };
     pressVariant(prev, "lead", "lead.acid", true);
     expect(prev).toEqual({ bass: "bass.rolling" });
+  });
+});
+
+describe("laneKey", () => {
+  const kick = { id: "kick", exclusive: true };
+  const perc = { id: "perc" };
+
+  it("exclusive layers share one lane; the rest get one per variant", () => {
+    expect(laneKey(kick, "kick.long")).toBe("kick");
+    expect(laneKey(perc, "perc.hat")).toBe("perc.hat");
+  });
+
+  it("so percussion stacks while a second kick replaces the first", () => {
+    let a = pressVariant({}, laneKey(perc, "perc.hat"), "perc.hat", true);
+    a = pressVariant(a, laneKey(perc, "perc.clap"), "perc.clap", true);
+    a = pressVariant(a, laneKey(kick, "kick.long"), "kick.long", true);
+    a = pressVariant(a, laneKey(kick, "kick.tok"), "kick.tok", true);
+    expect(a).toEqual({ "perc.hat": "perc.hat", "perc.clap": "perc.clap", kick: "kick.tok" });
   });
 });
 

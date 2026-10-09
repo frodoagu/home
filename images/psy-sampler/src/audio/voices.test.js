@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeAudioContext, FakeNode, FakeParam, FakeSource } from "../test/fakeAudio.js";
-import { LOOP_VARIANTS, notesAt } from "./patterns.js";
-import { FX, VOICES, kick } from "./voices.js";
-import { KICK_LONG, KICK_PUNCHY } from "./patterns.js";
+import { DEFAULTS, KICK_LONG, KICK_PUNCHY, LOOP_VARIANTS, eventsAt } from "./patterns.js";
+import { PARAMS, SYNTH_IDS } from "./params.js";
+import { ACID_SWEEP_PERIOD, FX, INSTRUMENTS, VOICES, acidCutoff, kick } from "./voices.js";
 
 const T = 1;
 const STEP = 60 / 145 / 4;
@@ -75,13 +75,19 @@ describe("kick", () => {
     const env = envelopesOf(sources[0])[0];
     expect(env.find(([k]) => k === "exp")[2]).toBeCloseTo(T + 0.002 + 0.34, 9);
   });
+
+  it("the click slider scales the noise transient", () => {
+    kick(ctx, out, T, { ...KICK_PUNCHY, click: 0.5 });
+    const noiseGain = ctx.sources()[1].outputs[0].outputs[0];
+    expect(noiseGain.gain.events[1]).toEqual(["linear", 0.25, T + 0.0005]);
+  });
 });
 
 describe("loop voices are click-free", () => {
   for (const variant of LOOP_VARIANTS) {
     it(variant, () => {
       for (let step = 0; step < 32; step++) {
-        for (const ev of notesAt(variant, step)) VOICES[ev.voice](ctx, out, T + step * STEP, ev, STEP);
+        for (const ev of eventsAt(variant, step)) VOICES[ev.voice](ctx, out, T + step * STEP, ev, STEP);
       }
       expectClickFree(T);
     });
@@ -89,12 +95,46 @@ describe("loop voices are click-free", () => {
 });
 
 describe("entry notes (lane opened mid-phrase) are click-free", () => {
-  for (const variant of ["lead.melodic", "pad.chord"]) {
+  for (const variant of LOOP_VARIANTS.filter((v) => DEFAULTS[v].kind === "notes")) {
     it(variant, () => {
       // Every possible entry point, including the 1-step remainder.
       for (let step = 0; step < 32; step++) {
-        for (const ev of notesAt(variant, step, true)) VOICES[ev.voice](ctx, out, T + step * STEP, ev, STEP);
+        for (const ev of eventsAt(variant, step, true)) VOICES[ev.voice](ctx, out, T + step * STEP, ev, STEP);
       }
+      expectClickFree(T);
+    });
+  }
+});
+
+describe("every synth plays any note length click-free", () => {
+  it("covers the editor's synth list", () => {
+    expect(Object.keys(INSTRUMENTS).sort()).toEqual([...SYNTH_IDS].sort());
+  });
+
+  for (const id of SYNTH_IDS) {
+    it(id, () => {
+      let t = T;
+      for (const steps of [1, 2, 4, 8, 16, 32]) {
+        for (const [freq, bright, accent] of [[55, 0.25, false], [440, 4, true], [1760, 1, false]]) {
+          INSTRUMENTS[id](ctx, out, t, { freq, steps, bright, accent }, STEP);
+          t += steps * STEP;
+        }
+      }
+      expectClickFree(T);
+      for (const f of ctx.nodes.filter((n) => n.kind === "filter")) {
+        expect(f.frequency.value).toBeLessThanOrEqual(18000); // under Nyquist at 44.1 kHz
+      }
+    });
+  }
+});
+
+describe("drum voices stay click-free across their sliders", () => {
+  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride"]) {
+    it(voice, () => {
+      const spec = PARAMS[voice];
+      const at = (pick) => Object.fromEntries(spec.map((p) => [p.key, p[pick]]));
+      VOICES[voice](ctx, out, T, { ...at("min"), accent: false }, STEP);
+      VOICES[voice](ctx, out, T + 1, { ...at("max"), accent: true }, STEP);
       expectClickFree(T);
     });
   }
@@ -102,13 +142,20 @@ describe("entry notes (lane opened mid-phrase) are click-free", () => {
 
 describe("FX", () => {
   for (const [id, fx] of Object.entries(FX)) {
-    it(`${id} is click-free and reports its end`, () => {
-      const end = fx(ctx, out, T, STEP);
-      expectClickFree(T);
-      expect(end).toBeGreaterThan(T);
-      expect(Math.max(...ctx.sources().map((s) => s.stopTime))).toBeGreaterThanOrEqual(end - 1e-9);
-    });
+    for (const pick of ["def", "min", "max"]) {
+      it(`${id} (${pick} params) is click-free and reports its end`, () => {
+        const params = Object.fromEntries(PARAMS[id].map((p) => [p.key, p[pick]]));
+        const end = fx(ctx, out, T, STEP, params);
+        expectClickFree(T);
+        expect(end).toBeGreaterThan(T);
+        expect(Math.max(...ctx.sources().map((s) => s.stopTime))).toBeGreaterThanOrEqual(end - 1e-9);
+      });
+    }
   }
+
+  it("length follows the bars slider", () => {
+    expect(FX["fx.sweep"](ctx, out, T, STEP, { bars: 4 })).toBeCloseTo(T + 64 * STEP, 9);
+  });
 
   it("riser lasts 2 bars and sweeps the band 300 -> 9000 Hz with rising gain", () => {
     const end = FX["fx.riser"](ctx, out, T, STEP);
@@ -124,9 +171,21 @@ describe("FX", () => {
     FX["fx.riserImpact"](ctx, out, T, STEP);
     const boom = ctx.sources().find((s) => s.kind === "oscillator");
     expect(boom.startTime).toBeCloseTo(T + 32 * STEP, 9);
-    expect(boom.frequency.events).toEqual([
-      ["set", 90, boom.startTime],
-      ["exp", 28, boom.startTime + 0.8],
-    ]);
+    const [set, exp] = boom.frequency.events;
+    expect(set).toEqual(["set", 90, boom.startTime]);
+    expect(exp[1]).toBeCloseTo(28, 0);
+    expect(exp[2]).toBeCloseTo(boom.startTime + 0.8, 9);
+  });
+});
+
+describe("acidCutoff", () => {
+  it("drifts slowly between 300 Hz and 1.5 kHz", () => {
+    expect(acidCutoff(0)).toBeCloseTo(300, 6);
+    expect(acidCutoff(ACID_SWEEP_PERIOD / 2)).toBeCloseTo(1500, 6);
+    expect(acidCutoff(ACID_SWEEP_PERIOD * 3 + 1)).toBeCloseTo(acidCutoff(1), 6);
+    for (let t = 0; t < ACID_SWEEP_PERIOD; t += 0.37) {
+      expect(acidCutoff(t)).toBeGreaterThanOrEqual(300 - 1e-9);
+      expect(acidCutoff(t)).toBeLessThanOrEqual(1500 + 1e-9);
+    }
   });
 });

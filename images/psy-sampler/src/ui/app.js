@@ -1,28 +1,31 @@
-// DOM wiring. Holds the selection state, renders it, and forwards changes to
-// the engine; all timing lives in the engine.
+// DOM wiring. Holds the selection and the edits, renders them, and forwards
+// changes to the engine; all timing lives in the engine.
 import { LAYERS } from "../catalog.js";
-import { BG_KICK_VARIANT, desiredLanes, pressVariant } from "../selection.js";
+import { DEFAULTS, defaultData, sanitize } from "../audio/patterns.js";
+import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
 import { BAR_STEPS, BPM_DEFAULT, BPM_MAX, BPM_MIN } from "../audio/timing.js";
+import { browserStorage, loadState, saveState } from "../storage.js";
+import { checkbox, el } from "./dom.js";
+import { createEditor } from "./editor.js";
 
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === "class") node.className = v;
-    else if (k === "text") node.textContent = v;
-    else node.setAttribute(k, v);
+export function mountApp(root, engine, { storage = browserStorage() } = {}) {
+  const saved = loadState(storage);
+  const state = {
+    active: {},
+    combine: false,
+    bgKick: true,
+    effects: { delay: saved.effects?.delay !== false, reverb: saved.effects?.reverb !== false },
+  };
+  // Only variants that differ from the factory data; that is all that is stored.
+  const edits = {};
+  for (const [id, data] of Object.entries(saved.variants ?? {})) {
+    if (!DEFAULTS[id]) continue;
+    edits[id] = sanitize(id, data);
+    engine.setData(id, edits[id]);
   }
-  node.append(...children);
-  return node;
-}
-
-function checkbox(id, label, checked) {
-  const input = el("input", { type: "checkbox", id });
-  input.checked = checked;
-  return { input, node: el("label", { class: "check", for: id }, input, el("span", { text: label })) };
-}
-
-export function mountApp(root, engine) {
-  const state = { active: {}, combine: false, bgKick: true };
+  engine.setEffects(state.effects);
+  const dataOf = (id) => edits[id] ?? DEFAULTS[id].data;
+  const persist = () => saveState(storage, { effects: state.effects, variants: edits });
 
   /* ---- transport ---- */
   const bpm = el("input", {
@@ -36,6 +39,8 @@ export function mountApp(root, engine) {
   const bpmOut = el("output", { for: "bpm", class: "bpm-value", text: String(BPM_DEFAULT) });
   const combine = checkbox("combine", "Combinar capas", state.combine);
   const bgKick = checkbox("bgkick", "Kick de fondo", state.bgKick);
+  const delay = checkbox("delay", "Delay 3/16", state.effects.delay);
+  const reverb = checkbox("reverb", "Reverb", state.effects.reverb);
   const stopBtn = el("button", { type: "button", class: "stop", text: "Parar" });
 
   /* ---- step bar: 16 cells, one 4/4 bar; the loop is 2 bars ---- */
@@ -45,7 +50,8 @@ export function mountApp(root, engine) {
   const barLabel = el("span", { class: "bar-label", text: "Compás –" });
 
   /* ---- layer rows ---- */
-  const buttons = []; // { layer, variant, node }
+  const tiles = []; // { layer, variant, node, tile, edit }
+  const slots = new Map(); // layer id -> { node, editor, variant }
   const rows = LAYERS.map((layer) => {
     const group = el("div", { class: "variants", role: "group", "aria-label": layer.name });
     for (const variant of layer.variants) {
@@ -58,14 +64,28 @@ export function mountApp(root, engine) {
       if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
       if (variant.id === BG_KICK_VARIANT) node.title = "Borde punteado: suena como kick de fondo";
       node.addEventListener("click", () => press(layer, variant));
-      group.append(node);
-      buttons.push({ layer, variant, node });
+      const edit = el("button", {
+        type: "button",
+        class: "edit",
+        "data-edit": variant.id,
+        "aria-expanded": "false",
+        "aria-label": `Editar ${variant.label}`,
+        title: "Editar",
+        text: "▾",
+      });
+      edit.addEventListener("click", () => toggleEditor(layer, variant));
+      const tile = el("div", { class: "tile" }, node, edit);
+      group.append(tile);
+      tiles.push({ layer, variant, node, tile, edit });
     }
+    const slot = el("div", { class: "editor-slot" });
+    slots.set(layer.id, { node: slot, editor: null, variant: null });
     return el(
       "section",
       { class: "layer", "data-layer": layer.id },
       el("div", { class: "layer-meta" }, el("h2", { text: layer.name }), el("p", { class: "hint", text: layer.hint })),
       group,
+      slot,
     );
   });
 
@@ -78,7 +98,8 @@ export function mountApp(root, engine) {
         class: "lede",
         text:
           "Entrenamiento de oído: escuchá en loop cada capa de un groove de psytrance. " +
-          "Un clic reemplaza lo que suena; con «Combinar capas» las vas sumando.",
+          "Un clic reemplaza lo que suena; con «Combinar capas» las vas sumando. " +
+          "Cada botón tiene su editor (▾): notas, pasos, sinte y perillas.",
       }),
     ),
     el(
@@ -87,6 +108,8 @@ export function mountApp(root, engine) {
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: "BPM" }), bpm, bpmOut),
       combine.node,
       bgKick.node,
+      delay.node,
+      reverb.node,
       stopBtn,
     ),
     el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
@@ -95,18 +118,21 @@ export function mountApp(root, engine) {
 
   /* ---- rendering ---- */
   let lanes = {};
+  const isOn = (layer, variant) => state.active[laneKey(layer, variant.id)] === variant.id;
 
   function renderButtons(playingFx = new Set()) {
-    for (const { layer, variant, node } of buttons) {
-      const on = layer.oneShot ? playingFx.has(variant.id) : state.active[layer.id] === variant.id;
+    for (const { layer, variant, node, tile } of tiles) {
+      const on = layer.oneShot ? playingFx.has(variant.id) : isOn(layer, variant);
       node.classList.toggle("is-active", on);
       node.classList.toggle("is-background", lanes.bgKick === variant.id);
+      tile.classList.toggle("is-edited", variant.id in edits);
       if (!layer.oneShot) node.setAttribute("aria-pressed", String(on));
     }
   }
 
   let shownStep = null;
   function paintStep(step) {
+    for (const slot of slots.values()) slot.editor?.paint(step);
     if (step === shownStep) return;
     if (shownStep !== null) cells[shownStep % BAR_STEPS].classList.remove("is-current");
     if (step !== null) cells[step % BAR_STEPS].classList.add("is-current");
@@ -141,15 +167,73 @@ export function mountApp(root, engine) {
     else paintStep(null);
   }
 
+  function fire(id) {
+    engine.triggerFx(id);
+    fxShown = ""; // force a repaint so the button lights up this frame
+    animate();
+  }
+
   function press(layer, variant) {
     if (layer.oneShot) {
-      engine.triggerFx(variant.id);
-      fxShown = ""; // force a repaint so the button lights up this frame
-      animate();
+      fire(variant.id);
       return;
     }
-    state.active = pressVariant(state.active, layer.id, variant.id, state.combine);
+    state.active = pressVariant(state.active, laneKey(layer, variant.id), variant.id, state.combine);
     sync();
+  }
+
+  /* ---- editors: one open per layer ---- */
+  function closeEditor(layerId) {
+    const slot = slots.get(layerId);
+    if (!slot.editor) return;
+    slot.editor.destroy();
+    slot.node.replaceChildren();
+    tiles.find((t) => t.variant.id === slot.variant)?.edit.setAttribute("aria-expanded", "false");
+    slot.editor = null;
+    slot.variant = null;
+  }
+
+  function openEditor(layer, variant) {
+    closeEditor(layer.id);
+    const slot = slots.get(layer.id);
+    const id = variant.id;
+    const editor = createEditor({
+      id,
+      label: variant.label,
+      data: dataOf(id),
+      onChange: (next) => {
+        edits[id] = next;
+        engine.setData(id, next);
+        persist();
+        // Editing something silent switches it on: what you edit is what you hear.
+        if (!layer.oneShot && !isOn(layer, variant)) press(layer, variant);
+        else renderButtons(engine.activeFx());
+      },
+      onAudition: (note) => {
+        // A drum hit off the grid while the loop runs only sounds like a mistake.
+        if (layer.oneShot || (DEFAULTS[id].kind === "drum" && engine.isRunning())) return;
+        engine.audition(id, note);
+      },
+      onReset: () => {
+        delete edits[id];
+        engine.setData(id, defaultData(id));
+        persist();
+        renderButtons(engine.activeFx());
+        openEditor(layer, variant); // rebuild with the factory values
+      },
+      onClose: () => closeEditor(layer.id),
+      onTrigger: () => fire(id),
+    });
+    slot.editor = editor;
+    slot.variant = id;
+    slot.node.replaceChildren(editor.node);
+    tiles.find((t) => t.variant.id === id).edit.setAttribute("aria-expanded", "true");
+    editor.paint(engine.visibleStep());
+  }
+
+  function toggleEditor(layer, variant) {
+    if (slots.get(layer.id).variant === variant.id) closeEditor(layer.id);
+    else openEditor(layer, variant);
   }
 
   /* ---- controls ---- */
@@ -165,6 +249,13 @@ export function mountApp(root, engine) {
     state.bgKick = bgKick.input.checked;
     sync();
   });
+  for (const [key, box] of [["delay", delay], ["reverb", reverb]]) {
+    box.input.addEventListener("change", () => {
+      state.effects = { ...state.effects, [key]: box.input.checked };
+      engine.setEffects(state.effects);
+      persist();
+    });
+  }
   stopBtn.addEventListener("click", () => {
     state.active = {};
     lanes = {};
@@ -176,5 +267,6 @@ export function mountApp(root, engine) {
     paintStep(null);
   });
 
-  return { state };
+  renderButtons();
+  return { state, edits };
 }

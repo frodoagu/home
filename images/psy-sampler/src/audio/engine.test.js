@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAudioContext } from "../test/fakeAudio.js";
 import { createEngine } from "./engine.js";
+import { defaultData } from "./patterns.js";
 import { stepDuration, TICK_MS } from "./timing.js";
 
 let ctx;
@@ -49,7 +50,7 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> compressor -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
@@ -59,7 +60,12 @@ describe("context lifecycle", () => {
     const comp = ctx.nodes.find((n) => n.kind === "compressor");
     const master = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === comp);
     expect(master.gain.value).toBe(0.7);
-    expect(comp.outputs[0]).toBe(ctx.destination);
+    const limiter = comp.outputs[0];
+    expect(limiter.kind).toBe("compressor");
+    expect([limiter.threshold.value, limiter.ratio.value]).toEqual([-1.5, 20]);
+    const trim = limiter.outputs[0];
+    expect(trim.gain.value).toBe(0.8);
+    expect(trim.outputs[0]).toBe(ctx.destination);
   });
 });
 
@@ -208,5 +214,123 @@ describe("visibleStep", () => {
     expect(engine.visibleStep()).toBeNull();
     run(0.025);
     expect(engine.visibleStep()).toBe(0);
+  });
+});
+
+describe("edits (setData)", () => {
+  const STEP = stepDuration(145);
+
+  it("new notes play from the next scheduled step, without restarting the lane", () => {
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.5);
+    const lanesBefore = laneGains().length;
+    const edited = { ...defaultData("bass.offbeat"), notes: [...Array(32).keys()].map((step) => ({ step, midi: 33, len: 1, accent: false })) };
+    const now = ctx.currentTime;
+    engine.setData("bass.offbeat", edited);
+    run(0.5);
+    expect(laneGains()).toHaveLength(lanesBefore);
+    const later = startTimes("oscillator").filter((t) => t > now + 0.12);
+    later.slice(1).forEach((t, i) => expect(t - later[i]).toBeCloseTo(STEP, 9));
+  });
+
+  it("a synth change applies to the following notes", () => {
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.3);
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), synth: "sub" });
+    run(1);
+    expect(ctx.sources().some((s) => s.type === "triangle")).toBe(true);
+  });
+
+  it("a volume change glides the playing lane instead of jumping", () => {
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.2);
+    const [lane] = laneGains();
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 });
+    expect(lane.gain.events.at(-1)).toEqual(["target", 0.3, ctx.currentTime, 0.02]);
+    // Same level again: nothing new is automated.
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 });
+    expect(lane.gain.events).toHaveLength(1);
+  });
+
+  it("a new lane opens at its edited volume", () => {
+    engine.setData("lead.arp", { ...defaultData("lead.arp"), level: 1.5 });
+    engine.setLanes({ "lead.arp": "lead.arp" });
+    expect(laneGains()[0].gain.value).toBeCloseTo(0.45, 9);
+  });
+
+  it("FX read their sliders: a 4-bar sweep lasts 4 bars", () => {
+    engine.setData("fx.sweep", { ...defaultData("fx.sweep"), params: { bars: 4, top: 6000 } });
+    const { start, end } = engine.triggerFx("fx.sweep");
+    expect(end - start).toBeCloseTo(64 * STEP, 9);
+  });
+});
+
+describe("delay + reverb", () => {
+  const bus = () => {
+    const delay = ctx.nodes.find((n) => n.kind === "delay");
+    const damp = delay.outputs[0];
+    const convolver = ctx.nodes.find((n) => n.kind === "convolver");
+    return { delay, delayReturn: damp.outputs[1], feedback: damp.outputs[0], reverbReturn: convolver.outputs[0] };
+  };
+
+  it("is a 3/16 delay with damped feedback and a convolver, both on by default", () => {
+    engine.setLanes({ lead: "lead.arp" });
+    const { delay, feedback, delayReturn, reverbReturn } = bus();
+    expect(delay.delayTime.value).toBeCloseTo(3 * stepDuration(145), 9);
+    expect(feedback.outputs[0]).toBe(delay);
+    expect(delayReturn.gain.value).toBe(0.7);
+    expect(reverbReturn.gain.value).toBe(0.7);
+    expect(ctx.nodes.find((n) => n.kind === "convolver").buffer.numberOfChannels).toBe(2);
+  });
+
+  it("leads send to both, bass stays dry", () => {
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp" });
+    const [bassLane, leadLane] = laneGains();
+    expect(bassLane.outputs).toHaveLength(1);
+    expect(leadLane.outputs).toHaveLength(3);
+  });
+
+  it("switching an effect fades its return", () => {
+    engine.setLanes({ lead: "lead.arp" });
+    engine.setEffects({ delay: false });
+    const { delayReturn, reverbReturn } = bus();
+    expect(delayReturn.gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.03]);
+    expect(reverbReturn.gain.events.at(-1)).toEqual(["target", 0.7, ctx.currentTime, 0.03]);
+  });
+
+  it("effects chosen before the first click start in that state", () => {
+    engine.setEffects({ reverb: false });
+    engine.setLanes({ lead: "lead.arp" });
+    expect(bus().reverbReturn.gain.value).toBe(0);
+  });
+
+  it("the echo follows the BPM", () => {
+    engine.setLanes({ lead: "lead.arp" });
+    engine.setBpm(180);
+    expect(bus().delay.delayTime.events.at(-1)).toEqual(["target", 3 * stepDuration(180), ctx.currentTime, 0.05]);
+  });
+
+  it("stop also disconnects a lane's sends", () => {
+    engine.setLanes({ "lead.arp": "lead.arp" });
+    run(0.2);
+    const [lane] = laneGains();
+    const sends = lane.outputs.slice(1);
+    engine.stop();
+    vi.runOnlyPendingTimers();
+    expect(sends.every((g) => g.disconnected)).toBe(true);
+  });
+});
+
+describe("audition", () => {
+  it("plays one note through the variant's synth right away, then fades", () => {
+    engine.setData("lead.arp", { ...defaultData("lead.arp"), synth: "fmBell" });
+    engine.audition("lead.arp", { midi: 69 });
+    const [carrier, mod] = ctx.sources();
+    expect(carrier.frequency.value).toBe(440);
+    expect(mod.frequency.value).toBe(440 * 3.5);
+    expect(carrier.startTime).toBeCloseTo(0.015, 9);
+    expect(engine.isRunning()).toBe(false);
+    vi.runOnlyPendingTimers();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

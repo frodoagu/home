@@ -410,8 +410,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   fades immediately. Nothing may be
   scheduled closer than `SAFETY` (15 ms) to `currentTime`: a note whose start is
   already past begins mid-envelope = click. `voices.test.js` enforces "every
-  audible source starts and ends at gain 0" for every variant and FX — keep it
-  passing when adding a voice. See docs/psy-sampler.md.
+  audible source starts and ends at gain 0" for every variant, synth and FX — keep
+  it passing when adding a voice. Every variant is DATA (patterns.js `DEFAULTS`:
+  drum steps / piano-roll notes + synth / FX params) that the UI edits and hands
+  to `engine.setData()`; edits persist per browser in localStorage and are run
+  through `sanitize()` on load. Kick and bass are exclusive lanes, perc/lead/pad
+  stack. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
+  compressors add makeup gain, so re-measure at the destination before touching
+  them. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

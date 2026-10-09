@@ -102,6 +102,14 @@ export class FakeAudioContext {
       release: 0.25,
     });
   }
+  createDelay() {
+    return withParams(new FakeNode(this, "delay"), { delayTime: 0 });
+  }
+  createConvolver() {
+    const n = new FakeNode(this, "convolver");
+    n.buffer = null;
+    return n;
+  }
   createBuffer(channels, length, sampleRate) {
     const data = new Float32Array(length);
     return { length, sampleRate, numberOfChannels: channels, getChannelData: () => data };
