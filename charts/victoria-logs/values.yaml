@@ -78,3 +78,62 @@ victoria-logs-single:
         memory: 192Mi
       limits:
         memory: 512Mi
+
+    # GeoIP: every Traefik access log carrying Cf-Connecting-Ip gets
+    # log.client_country (ISO code) and log.client_country_name, looked up in
+    # DB-IP's free IP-to-Country Lite database (CC BY 4.0). The init container
+    # refreshes it on each pod start into the node's /var/lib/vector, and keeps
+    # the cached copy when the download fails. See docs/monitoring.md#geoip.
+    initContainers:
+      - name: geoip
+        image: curlimages/curl:8.11.1
+        securityContext:
+          runAsUser: 0 # the hostPath data dir belongs to root, like Vector itself
+        volumeMounts:
+          - name: data
+            mountPath: /vector-data-dir
+        command:
+          - sh
+          - -c
+          - |
+            set -eu
+            dir=/vector-data-dir/geoip
+            db="$dir/country.mmdb"
+            mkdir -p "$dir"
+            y=$(date +%Y); m=$(date +%m)
+            # The current month's file appears a few days in: fall back to last month's.
+            for _ in 1 2; do
+              url="https://download.db-ip.com/free/dbip-country-lite-$y-$m.mmdb.gz"
+              if curl -fsSL --retry 3 --max-time 120 "$url" | gunzip > "$db.tmp" && [ -s "$db.tmp" ]; then
+                mv "$db.tmp" "$db"
+                echo "GeoIP: $url"
+                exit 0
+              fi
+              m=$(( ${m#0} - 1 ))
+              [ "$m" -eq 0 ] && m=12 && y=$((y - 1))
+              m=$(printf %02d "$m")
+            done
+            rm -f "$db.tmp"
+            [ -s "$db" ] && echo "GeoIP: download failed, keeping the cached database" && exit 0
+            echo "GeoIP: no database and no download" >&2
+            exit 1
+    # Merged into the upstream chart's default Vector config (sources, sinks and
+    # the parser's inputs stay as shipped).
+    customConfig:
+      enrichment_tables:
+        geoip:
+          type: mmdb
+          path: /vector-data-dir/geoip/country.mmdb
+      transforms:
+        parser:
+          source: |
+            .log = parse_json(.message) ?? .message
+            del(.message)
+            ip = .log."request_Cf-Connecting-Ip"
+            if is_string(ip) {
+              geo, err = get_enrichment_table_record("geoip", {"ip": ip})
+              if err == null {
+                .log.client_country = geo.country.iso_code
+                .log.client_country_name = geo.country.names.en
+              }
+            }

@@ -41,6 +41,7 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   pihole/            Pi-hole DNS ad-blocker + DHCP server (hostNetwork). UI at pihole.agu.com.ar (google-auth).
   victoria-logs/     VictoriaLogs single + bundled Vector collector (wrapper chart). Cluster-wide log DB;
                      UI (vmui) at logs.agu.com.ar (google-auth) + queryable from Grafana. SD-friendly retention.
+                     Vector GeoIP-tags Traefik access logs (log.client_country, DB-IP Lite; docs/monitoring.md#geoip).
   sealed-secrets/    Bitnami Sealed Secrets controller, VENDORED from the upstream release manifest
                      (its Helm repo 404s). In kube-system as `sealed-secrets-controller` (kubeseal zero-flag).
   homepage/          gethomepage dashboard/start page at dash.agu.com.ar (google-auth). k8s service
@@ -76,6 +77,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      any Google account signs in (ID token verified server-side, own HMAC
                      cookie), one opaque JSON workspace per user on a PVC. Deployed by
                      charts/psy-sampler (sync.*). `bun test`. See docs/psy-sampler.md.
+                     /metrics on :9787 (in-cluster only) → "psy-sampler — Cloud save"
+                     dashboard + psy-sampler.sync alerts (docs/monitoring.md).
   origin-firewall/   Firewall base image (Debian + nftables/curl) → GHCR.
 .github/workflows/   CI. site-test.yml (Vitest+build) and site.yml (SPA image build) for images/home-site/;
                      origin-firewall-image.yml builds images/origin-firewall → GHCR (arm64);

@@ -60,6 +60,7 @@ keep Grafana focused on these:
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 | Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
+| psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
 the `home` tag — see *Playlist* below) and commit — no template changes needed.
@@ -182,6 +183,91 @@ Limitations (in the exporter, not fixable here):
   that drops out of the top 10 keeps its last count until the exporter restarts.
 - **"today" means the last 24h.** `*_today` comes from FTL's in-memory window
   (`/api/stats/summary`), not from the calendar day.
+
+## psy-sampler cloud save
+
+[`images/psy-sync`](../images/psy-sync) serves `/metrics` on its own port
+(`9787`), which neither the Service nor the IngressRoute exposes; a
+`VMPodScrape` in [`charts/psy-sampler`](../charts/psy-sampler)
+(`sync.metrics.enabled`) scrapes it as `job="psy-sampler/psy-sampler-sync"`.
+Database figures are queried from SQLite on every scrape, so they are exact
+after a restart; only `psy_sync_http_requests_total` lives in memory.
+
+| Metric | What |
+|---|---|
+| `psy_sync_users`, `psy_sync_users_max` | accounts, and the sign-up cap (`sync.maxUsers`) |
+| `psy_sync_users_created{window}`, `psy_sync_users_active{window}` | accounts created / seen in the last `1d`, `7d`, `30d` |
+| `psy_sync_anonymous_visitors`, `…_active{window}`, `…_new{window}` | browsers that never signed in (see below) |
+| `psy_sync_visitors_stored`, `psy_sync_visitors_max` | browser rows, and their cap (100 000) |
+| `psy_sync_user_workspace_bytes{email}` | workspace size of the `sync.metrics.topUsers` (20) largest accounts |
+| `psy_sync_workspaces`, `psy_sync_workspace_bytes_total`, `psy_sync_workspaces_by_size{le}` | saved workspaces, their total size, and a cumulative size distribution |
+| `psy_sync_workspace_bytes_limit` | largest workspace the API accepts (256 KB) |
+| `psy_sync_db_bytes{file="db\|wal"}`, `psy_sync_volume_request_bytes` | SQLite files on the PVC, and the PVC request (`sync.persistence.size`) |
+| `psy_sync_volume_size_bytes`, `psy_sync_volume_avail_bytes` | `statfs` of the data volume: with local-path, the SD card |
+| `psy_sync_http_requests_total{route,status}` | API requests; unknown paths fold into `route="other"` |
+
+- **Anonymous visitors.** The page keeps a random id in localStorage
+  (`psy-sampler:visitor`) and sends it as `X-Psy-Visitor` on the session check
+  that every page load makes. psy-sync stores one row per id; a signed-in check
+  links the row to the account, and deleting the account unlinks it. Anonymous =
+  rows with no account. It counts browsers that ran the page with the API up,
+  not people: a user on two browsers who signed in on one counts once as an
+  account and once as anonymous. Ids are client-made, so the number can be
+  inflated by a script (bounded by the `/api/` rate limit and the 100 000-row
+  cap); anonymous rows unseen for 90 days are pruned.
+- **Active** is `seen_at`, written at most once an hour per account or browser,
+  so the session check on every page load doesn't turn into an SD write.
+- **Disk per account** is the byte length of the stored JSON. The SQLite files
+  are larger (pages, indexes, WAL, the visitor table). local-path does not
+  enforce the PVC size, so the database can outgrow its 2 Gi into the SD card's
+  free space. That is why `PsySyncDataVolumeHigh` compares against the request.
+- **Emails are labels** on `psy_sync_user_workspace_bytes`, so they land in
+  VictoriaMetrics. Grafana is behind google-auth, and only the top N accounts
+  are exported.
+
+- **Countries** don't come from psy-sync: the dashboard's 🌍 row queries
+  Traefik's access log in VictoriaLogs (`log.RequestHost:="psy.agu.com.ar"`),
+  counting distinct `log.request_Cf-Connecting-Ip` per `log.client_country`
+  (see *GeoIP* below). It follows the time picker but logs only keep 7 days, and
+  it counts every client, crawlers and link previews included.
+
+Alerts (group `psy-sampler.sync` in `templates/vmrules.yaml`):
+
+| Alert | Fires when |
+|---|---|
+| `PsySyncDown` / `PsySyncNotScraped` | scrape failing for 5m / no target for 15m |
+| `PsySyncServerErrors` | any 500 in 15m |
+| `PsySyncSignInFailures` | > 20 rejected Google tokens in 1h (forgery, or a client-id/clock problem locking everyone out) |
+| `PsySyncUsersNearCap` / `PsySyncSignupsClosed` | accounts > 80% of `sync.maxUsers` for 1h / at the cap (critical) |
+| `PsySyncSignupBurst` | > 25 new accounts in 1h |
+| `PsySyncAnonymousBurst` / `PsySyncVisitorsCapReached` | > 500 new browser rows in 1h / visitor table full (anonymous counts frozen) |
+| `PsySyncWorkspaceNearLimit` | an account's workspace > 90% of 256 KB for 1h (its saves are about to get 413) |
+| `PsySyncDataVolumeHigh` | SQLite files > 80% of the PVC request for 30m |
+
+## GeoIP
+
+Vector (the log shipper in [`charts/victoria-logs`](../charts/victoria-logs))
+looks up every log line that carries Traefik's `request_Cf-Connecting-Ip` and
+adds `log.client_country` (ISO code) and `log.client_country_name`, so any
+host's visitors can be grouped by country in LogsQL:
+
+```
+log.RequestHost:="psy.agu.com.ar" | stats by (log.client_country) count_uniq("log.request_Cf-Connecting-Ip")
+```
+
+- The database is DB-IP's free **IP-to-Country Lite** (`mmdb`, CC BY 4.0,
+  attribution in the panel descriptions), read by Vector's `mmdb` enrichment
+  table. An init container (`geoip`, `curlimages/curl`) downloads the current
+  month's file (falling back to last month's) on every Vector pod start into
+  the node's `/var/lib/vector/geoip/country.mmdb`. It is never refreshed
+  between restarts; `kubectl -n victoria-logs rollout restart ds` picks up a
+  new month.
+- If the download fails, the cached copy stays. With **no** cached copy (a
+  fresh node offline) the init container fails and retries: Vector can't start
+  without the file, so log shipping waits for the first successful download.
+- Only lines with a public IP get a country: LAN and cluster addresses, and logs
+  without the header, are left as they were. Lines ingested before the change
+  have no country.
 
 ## Operating notes
 

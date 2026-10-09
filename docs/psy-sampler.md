@@ -335,7 +335,7 @@ verifica el token ella misma y emite su propia cookie de sesión.
 |---|---|
 | `GET /api/health` | `{ ok, clientId }`: la página decide si muestra la fila |
 | `POST /api/session` | `{ credential }` → cookie |
-| `GET /api/session` | `{ email }` (`null` sin sesión: no es un error en cada visita) |
+| `GET /api/session` | `{ email }` (`null` sin sesión: no es un error en cada visita); registra el header `X-Psy-Visitor` |
 | `DELETE /api/session` | salir |
 | `GET /api/state` | `{ state, updatedAt }` o 404 |
 | `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, o **409** con la copia guardada si `base` quedó viejo |
@@ -376,6 +376,9 @@ estático sigue andando y la página esconde la fila), `strategy: Recreate`
 (SQLite en un volumen RWO), PVC de 2 Gi en `local-path` con
 `helm.sh/resource-policy: keep` y `Prune=false`, contenedor sin root, root
 filesystem de sólo lectura y sin capabilities.
+
+Metrics, dashboard and alerts (accounts, anonymous browsers, disk per
+account): [monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
 
 ### Puesta en marcha (una vez)
 

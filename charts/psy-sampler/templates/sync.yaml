@@ -73,9 +73,17 @@ spec:
               value: {{ printf "https://%s" .Values.ingress.host | quote }}
             - name: MAX_USERS
               value: {{ .Values.sync.maxUsers | quote }}
+            - name: DATA_VOLUME_SIZE
+              value: {{ .Values.sync.persistence.size | quote }}
+            - name: METRICS_TOP_USERS
+              value: {{ .Values.sync.metrics.topUsers | quote }}
           ports:
             - name: http
               containerPort: 8787
+              protocol: TCP
+            # /metrics, in-cluster only: neither the Service nor the IngressRoute exposes it.
+            - name: metrics
+              containerPort: 9787
               protocol: TCP
           livenessProbe:
             httpGet:
@@ -139,4 +147,23 @@ spec:
     period: {{ .Values.sync.rateLimit.period }}
     sourceCriterion:
       requestHeaderName: Cf-Connecting-IP
+{{- if .Values.sync.metrics.enabled }}
+---
+# Feeds the "psy-sampler — Cloud save" dashboard and the psy-sync alerts in
+# charts/monitoring (job="<namespace>/<this name>").
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "psy-sampler.syncName" . }}
+  labels:
+    {{- include "psy-sampler.syncLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "psy-sampler.syncSelectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+{{- end }}
 {{- end }}
