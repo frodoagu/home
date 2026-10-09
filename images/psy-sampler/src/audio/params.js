@@ -32,6 +32,7 @@ export const PARAMS = {
   clap: [tone(1800, 800, 4000, "band"), decay(0.17, 0.06, 0.5)],
   snare: [tone(190, 120, 320), decay(0.15, 0.05, 0.4)],
   ride: [tone(9000, 5000, 12000, "band"), decay(0.45, 0.1, 1.2, 0.01)],
+  rim: [tone(1700, 800, 3500), decay(0.04, 0.015, 0.15)],
 
   /* every melodic synth */
   synth: [{ key: "bright", label: "bright", min: 0.25, max: 4, step: 0.05, def: 1, fmt: times }],
@@ -51,6 +52,7 @@ export const PARAMS = {
   ],
   "fx.crash": [tone(6000, 3000, 10000, "hpCut"), decay(2, 0.5, 4, 0.1, sec)],
   "fx.siren": [length(1), { key: "rate", label: "vibrato", min: 2, max: 12, step: 0.5, def: 7, fmt: (v) => `${v} Hz` }],
+  "fx.reverse": [length(2), tone(5000, 2000, 10000, "hpCut")],
 };
 
 // Every variant, of any kind, also gets a volume relative to its layer's level.

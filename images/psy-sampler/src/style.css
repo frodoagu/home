@@ -338,6 +338,105 @@ html {
   display: none;
 }
 
+/* Autopilot: now, what is left, the queue, next; the phases; changes. */
+.pilot-row {
+  min-height: 2em;
+}
+
+.section-left {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-queue[hidden] {
+  display: none;
+}
+
+.queued {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--current);
+  border: 1px dashed var(--current);
+  border-radius: 999px;
+}
+
+.queued::before {
+  content: "→";
+  font-weight: 400;
+}
+
+.queued.is-auto {
+  padding-right: 10px;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.queued.is-next {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.unqueue {
+  padding: 0 4px;
+  font: inherit;
+  line-height: 1.2;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.unqueue:hover {
+  color: var(--on-current);
+  background: var(--current);
+}
+
+.phases {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ghost.phase {
+  padding: 3px 10px;
+}
+
+.changes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.changes input {
+  width: min(140px, 40vw);
+  accent-color: var(--current);
+}
+
+.changes output {
+  min-width: 11ch;
+  color: var(--text);
+}
+
 .seed {
   display: flex;
   align-items: center;
@@ -598,7 +697,7 @@ html {
 
 .variants {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
 }
 
@@ -718,15 +817,61 @@ html {
   border-color: var(--layer);
 }
 
+/* Loop sounds stack improvise over ▾ in one column. Improvise is dim while
+   off; on, it fills from the bottom up to how much it varies. */
+.tile-side {
+  display: flex;
+  flex: 0 0 32px;
+  flex-direction: column;
+}
+
+.tile-side .edit {
+  flex: 1;
+  border-top: none;
+  border-radius: 0 0 8px 0;
+}
+
+.vary-tile {
+  --amount: 50%;
+  flex: 1;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 0 0;
+  cursor: pointer;
+}
+
+.vary-tile[aria-pressed="false"] {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.vary-tile[aria-pressed="true"] {
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--layer) 55%, var(--surface-2)) var(--amount),
+    var(--surface-2) var(--amount)
+  );
+  border-color: var(--layer);
+}
+
+.vary-tile:hover {
+  opacity: 1;
+  border-color: var(--layer);
+}
+
 .edit[aria-expanded="true"] {
   color: var(--on-layer);
   background: var(--layer);
   border-color: var(--layer);
 }
 
-/* Edited away from the factory data: a pencil after the name. A copy is
-   the user's own sound: a plus. Improvising: a shuffle. A kick build-up,
-   armed or playing: ⏫ (it wins over the shuffle while it lasts). */
+/* Edited away from the factory data: a pencil after the name. Written or
+   dressed by the autopilot's seed: a die. A copy is the user's own sound: a
+   plus. A kick build-up, armed or playing: ⏫. */
 .tile.is-edited .variant-label::after {
   content: " ✎";
   font-weight: 400;
@@ -738,8 +883,10 @@ html {
   opacity: 0.75;
 }
 
-.tile.is-varying .variant-detail::before {
-  content: "🔀 ";
+.tile.is-auto .variant-label::after {
+  content: " 🎲";
+  font-size: 0.8em;
+  opacity: 0.75;
 }
 
 .tile.is-building .variant-detail::before {
@@ -890,6 +1037,48 @@ html {
 .action.toggle[aria-pressed="true"] {
   color: var(--on-layer);
   background: var(--layer);
+}
+
+/* Improvise in the editor: a toggle and a slider. The fill, left to right,
+   is how much it varies; on, it is stronger and the border solid. */
+.action.vary {
+  --amount: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 13em;
+  color: var(--text);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--layer) 18%, transparent) var(--amount),
+    transparent var(--amount)
+  );
+  border-style: dashed;
+  touch-action: pan-y;
+  cursor: ew-resize;
+}
+
+.action.vary[aria-pressed="true"] {
+  color: var(--text);
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--layer) 50%, transparent) var(--amount),
+    transparent var(--amount)
+  );
+  border-style: solid;
+}
+
+.vary-amount {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/* 🎲 New part waiting for the next loop. */
+.ghost[data-action="new-part"][aria-pressed="true"] {
+  border-style: dashed;
+  border-color: var(--layer);
+  animation: pulse 0.9s ease-in-out infinite alternate;
 }
 
 .editor-actions {

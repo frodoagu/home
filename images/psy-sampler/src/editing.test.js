@@ -6,7 +6,9 @@ import {
   cycleNote,
   cycleStep,
   doubleSteps,
+  changesFor,
   improvise,
+  newPart,
   noteAt,
   placeNote,
   seeded,
@@ -191,5 +193,64 @@ describe("variations", () => {
       });
       expect(out.filter((v, s) => v !== kick[s]).length).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+describe("improvise amount", () => {
+  const kick = Array.from({ length: 32 }, (_, s) => (s % 4 === 0 ? 1 : 0));
+  const diff = (out) => out.filter((v, s) => v !== kick[s]).length;
+
+  it("changes nothing at 0, 1-2 things at the default and a lot at the top", () => {
+    for (let seed = 1; seed < 50; seed++) {
+      expect(changesFor(0, seeded(seed))).toBe(0);
+      expect([1, 2]).toContain(changesFor(0.5, seeded(seed)));
+      expect(changesFor(1, seeded(seed))).toBeGreaterThanOrEqual(6);
+      expect(varySteps(kick, seeded(seed), 0)).toEqual(kick);
+    }
+    const total = (amount) =>
+      Array.from({ length: 40 }, (_, i) => diff(varySteps(kick, seeded(i), amount))).reduce((a, b) => a + b);
+    expect(total(1)).toBeGreaterThan(total(0.5) * 2);
+    expect(total(0.25)).toBeLessThan(total(0.5));
+  });
+
+  it("moves notes further at a higher amount, always on the rows", () => {
+    const rows = scaleRows("minor", 45, 81);
+    const part = [n(0, 57), n(8, 60), n(16, 64), n(24, 69)];
+    const spread = (amount) => {
+      let max = 0;
+      for (let seed = 0; seed < 80; seed++) {
+        for (const o of varyNotes(part, rows, seeded(seed), amount)) {
+          expect(rows).toContain(o.midi);
+          const src = part.find((p) => p.step === o.step);
+          if (src) max = Math.max(max, Math.abs(rows.indexOf(o.midi) - rows.indexOf(src.midi)));
+        }
+      }
+      return max;
+    };
+    expect(spread(0.5)).toBeLessThanOrEqual(2);
+    expect(spread(1)).toBeGreaterThan(spread(0.5));
+    expect(varyNotes(part, rows, seeded(3), 0)).toEqual(part);
+  });
+});
+
+describe("newPart", () => {
+  const rows = scaleRows("minor", 45, 81);
+
+  it("keeps the rhythm and the chord shapes of chordal or long leads, on new degrees", () => {
+    const stabs = [57, 60, 64].flatMap((m) => [n(3, m, 2), n(11, m, 2)]);
+    const outs = new Set();
+    for (let seed = 1; seed < 20; seed++) {
+      const out = newPart("lead", stabs, rows, seeded(seed));
+      expect(out.map((o) => `${o.step}:${o.len}`).sort()).toEqual(stabs.map((o) => `${o.step}:${o.len}`).sort());
+      for (const o of out) expect(rows).toContain(o.midi);
+      outs.add(JSON.stringify(out));
+    }
+    expect(outs.size).toBeGreaterThan(3);
+  });
+
+  it("writes a fresh motif for single-step leads and other styles, reproducibly", () => {
+    const arp = Array.from({ length: 32 }, (_, s) => n(s, 57));
+    expect(newPart("lead", arp, rows, seeded(4))).toEqual(improvise("lead", rows, seeded(4)));
+    expect(newPart("bass", [], rows, seeded(4))).toEqual(improvise("bass", rows, seeded(4)));
   });
 });

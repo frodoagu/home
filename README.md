@@ -18,7 +18,7 @@ services running on a Raspberry Pi with k3s.
 | [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `images/home-site/` into a GHCR image) | `charts/agu-spa/` |
-| [nginx](https://nginx.org/) | Serves `psy.agu.com.ar`, a psytrance layer sampler for ear training (Web Audio, built from `images/psy-sampler/` into a GHCR image) | `charts/psy-sampler/` |
+| [nginx](https://nginx.org/) | Serves `psy.agu.com.ar`, a live electronic music machine (Web Audio, built from `images/psy-sampler/` into a GHCR image) | `charts/psy-sampler/` |
 | [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the CI-built images (SPA, sampler, firewall) — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |

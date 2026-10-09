@@ -25,10 +25,17 @@ describe("seeds", () => {
 });
 
 describe("share links", () => {
-  it("carry only seed and BPM with factory sounds", async () => {
-    const ws = { ...normalize({ bpm: 150 }), seed: "abc" };
-    expect(await shareFragment(ws)).toBe("#seed=abc&bpm=150");
-    expect(readFragment("#seed=abc&bpm=150")).toEqual({ seed: "abc", bpm: 150, sounds: null });
+  it("carry only seed, style and BPM with factory sounds", async () => {
+    const ws = { ...normalize({ bpm: 150, style: "goa" }), seed: "abc" };
+    expect(await shareFragment(ws)).toBe("#seed=abc&style=goa&bpm=150");
+    expect(readFragment("#seed=abc&style=goa&bpm=150")).toEqual({ seed: "abc", style: "goa", bpm: 150, sounds: null });
+  });
+
+  it("leave out what the autopilot wrote: the seed writes it again", async () => {
+    const ws = { ...normalize({ variants: { "kick.punchy": { level: 0.5 } }, auto: ["kick.punchy"] }), seed: "s" };
+    expect(await shareFragment(ws)).not.toContain("&s=");
+    const mine = { ...ws, variants: { ...ws.variants, "perc.hat": { ...ws.variants["kick.punchy"] } } };
+    expect(Object.keys((await unpackSounds(await packSounds(mine))).variants)).toEqual(["perc.hat"]);
   });
 
   it("carry edited and duplicated sounds, compressed", async () => {

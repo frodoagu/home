@@ -173,7 +173,7 @@ describe("defaults are consistent", () => {
         expect(n.midi).toBeGreaterThanOrEqual(low);
         expect(n.midi).toBeLessThanOrEqual(high);
         expect(n.step + n.len).toBeLessThanOrEqual(32);
-        expect(inScale(n.midi, id === "pad.prog" ? "phrygian" : "minor"), `${id} ${n.midi}`).toBe(true);
+        expect(inScale(n.midi, id === "pad.prog" ? "phrygian" : data.scale), `${id} ${n.midi}`).toBe(true);
       }
     }
   });
@@ -233,7 +233,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(24);
+  expect(LOOP_VARIANTS).toHaveLength(45);
 });
 
 describe("copies", () => {

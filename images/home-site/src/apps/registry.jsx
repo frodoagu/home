@@ -67,8 +67,8 @@ export const apps = [
     slug: "psy-sampler",
     title: { es: "Psy Layers", en: "Psy Layers" },
     description: {
-      es: "Entrena el oido: escucha en loop cada capa de un groove de psytrance.",
-      en: "Ear training: loop each layer of a psytrance groove.",
+      es: "Maquina de musica electronica en vivo: arma, edita y mezcla un tema de psytrance o techno mientras suena.",
+      en: "A live electronic music machine: build, edit and mix a psytrance or techno track while it plays.",
     },
     href: "https://psy.agu.com.ar",
     categories: ["music"],

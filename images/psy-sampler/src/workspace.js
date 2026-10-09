@@ -5,7 +5,7 @@
 import { LAYERS, LAYER_IDS, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
-import { SECTIONS } from "./autopilot.js";
+import { CHANGE_BARS, CHANGE_DEFAULT, SECTIONS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
 import { laneKey } from "./selection.js";
 import { SNAP_MAX } from "./snapshots.js";
 import { RAMP_BARS, RAMP_DEFAULT } from "./tempo.js";
@@ -25,12 +25,15 @@ export { layerOfVariant };
  * {
  *   bpm, combine, bgKick, quantize, effects: { delay, reverb },
  *   seed:     the autopilot's seed ("" until the app draws one)
+ *   style:    the autopilot's style (autopilot.js STYLES)
+ *   changeBars: how often the autopilot swaps a sound inside a section
  *   rampBars: how many bars a BPM change takes
  *   order:    layer ids and SNAP_PANEL, top to bottom
  *   lists:    { layer: variant ids in tile order, factory + copies }
  *   names:    { variant: the name the user gave it }
  *   variants: { variant: edited data } (copies always have an entry)
- *   auto:     variants whose notes the autopilot wrote (it may rewrite them)
+ *   auto:     variants the autopilot wrote or dressed (it may rewrite them)
+ *   improv:   { variant: how much improvise varies it, 0-1 } (0.5 is left out)
  *   snapshots: [{ id, name, section, active, data }] in tile order (snapshots.js)
  *   active:   { lane key: variant } (presets only: a page load starts silent)
  * }
@@ -63,6 +66,10 @@ export function normalize(raw) {
   for (const id of known) if (isCopy(id) && !variants[id]) variants[id] = sanitize(id, null);
 
   const auto = unique((Array.isArray(src.auto) ? src.auto : []).filter((id) => id in variants));
+  const improv = {};
+  for (const [id, v] of Object.entries(src.improv ?? {})) {
+    if (known.has(id) && Number.isFinite(v)) improv[id] = Math.min(1, Math.max(0, v));
+  }
 
   const active = cleanActive(src.active, known);
   const snapshots = [];
@@ -87,11 +94,14 @@ export function normalize(raw) {
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },
     rampBars: RAMP_BARS.includes(src.rampBars) ? src.rampBars : RAMP_DEFAULT,
     seed: cleanSeed(src.seed),
+    style: src.style in STYLES ? src.style : STYLE_DEFAULT,
+    changeBars: CHANGE_BARS.includes(src.changeBars) ? src.changeBars : CHANGE_DEFAULT,
     order,
     lists,
     names,
     variants,
     auto,
+    improv,
     snapshots,
     active,
   };

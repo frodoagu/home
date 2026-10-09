@@ -1,31 +1,56 @@
 import { describe, expect, it } from "vitest";
-import { PHRASE, SECTIONS, advance, arrange, guessSection, joinPilot, startPilot } from "./autopilot.js";
+import {
+  CHANGE_BARS,
+  SECTIONS,
+  STYLES,
+  STYLE_IDS,
+  advance,
+  arrange,
+  dequeue,
+  enqueue,
+  fillMelodic,
+  guessSection,
+  isBare,
+  joinPilot,
+  poolOf,
+  rearrange,
+  skip,
+  startPilot,
+} from "./autopilot.js";
+import { baseOf } from "./audio/patterns.js";
 import { seeded } from "./editing.js";
 import { normalize, layerOfVariant } from "./workspace.js";
 
 const { lists } = normalize({ lists: { kick: ["kick.punchy~1"] } });
 const count = (active, layer) => Object.values(active).filter((id) => layerOfVariant(id) === layer).length;
+const melodic = (active) => count(active, "lead") + count(active, "pad");
 
 // Runs the pilot for `loops` loop boundaries and records every step.
-function run(seed, loops) {
+function run(seed, loops, opts = {}, steer = (pilot) => pilot) {
   const rng = seeded(seed);
-  let { pilot, active } = startPilot(lists, rng);
+  let { pilot, active } = startPilot(lists, rng, opts.style);
   const log = [{ pilot, active, fx: [], rewrite: [] }];
   for (let i = 0; i < loops; i++) {
-    const move = advance(pilot, active, lists, rng);
+    const move = advance(steer(pilot, i), active, lists, rng, opts);
     ({ pilot, active } = move);
-    log.push(move);
+    log.push({ ...move, prev: log.at(-1).active });
   }
   return log;
 }
 
 describe("autopilot", () => {
-  it("starts an intro: one kick and one percussion", () => {
+  it("starts an intro: one kick, one percussion and a pad", () => {
     const { pilot, active } = startPilot(lists, seeded(1));
-    expect(pilot).toEqual({ section: "intro", left: SECTIONS.intro.loops });
-    expect(count(active, "kick")).toBe(1);
-    expect(count(active, "perc")).toBe(1);
-    expect(Object.keys(active)).toHaveLength(2);
+    expect(pilot).toEqual({ section: "intro", left: 4, length: 4, queue: [] });
+    expect([count(active, "kick"), count(active, "perc"), count(active, "pad")]).toEqual([1, 1, 1]);
+    expect(Object.keys(active)).toHaveLength(3);
+  });
+
+  it("can start in any section", () => {
+    const { pilot, active } = startPilot(lists, seeded(1), "psytrance", "peak");
+    expect(pilot.section).toBe("peak");
+    expect(SECTIONS.peak.loops).toContain(pilot.length);
+    expect(count(active, "bass")).toBe(1);
   });
 
   it("joins a playing mix in the section it looks like, at its start", () => {
@@ -34,7 +59,13 @@ describe("autopilot", () => {
     expect(guessSection({ kick: "kick.punchy", "lead.acid": "lead.acid" })).toBe("build");
     expect(guessSection({ kick: "kick.punchy", "pad.air": "pad.air" })).toBe("peak");
     expect(guessSection({ "pad.air": "pad.air" })).toBe("breakdown");
-    expect(joinPilot({ kick: "kick.punchy", bass: "bass.rolling" })).toEqual({ section: "groove", left: SECTIONS.groove.loops });
+    expect(joinPilot({ kick: "kick.punchy", bass: "bass.rolling" })).toEqual({
+      section: "groove",
+      left: 4,
+      length: 4,
+      queue: [],
+    });
+    expect(joinPilot({ kick: "kick.punchy" }, "peak")).toMatchObject({ section: "peak", rearrange: true });
   });
 
   it("a seed replays the same track, whatever the tile order", () => {
@@ -53,24 +84,30 @@ describe("autopilot", () => {
     expect(play(shuffled)).toEqual(play(lists));
   });
 
-  it("walks the sections in order and holds each for its length", () => {
+  it("walks the sections in order and holds each for one of its lengths", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const log = run(seed, 200);
       for (let i = 1; i < log.length; i++) {
         const [prev, cur] = [log[i - 1].pilot, log[i].pilot];
-        if (prev.left > 1) expect(cur).toEqual({ section: prev.section, left: prev.left - 1 });
-        else {
+        if (prev.left > 1) {
+          expect(cur).toMatchObject({ section: prev.section, left: prev.left - 1, length: prev.length });
+        } else {
           expect(SECTIONS[prev.section].next).toContain(cur.section);
-          expect(cur.left).toBe(SECTIONS[cur.section].loops);
+          expect(SECTIONS[cur.section].loops).toContain(cur.length);
+          expect(cur.left).toBe(cur.length);
         }
       }
       expect(new Set(log.map((m) => m.pilot.section))).toEqual(new Set(Object.keys(SECTIONS)));
     }
   });
 
+  it("no section is longer than 24 bars", () => {
+    for (const { loops } of Object.values(SECTIONS)) expect(Math.max(...loops) * 2).toBeLessThanOrEqual(24);
+  });
+
   it("every section change matches the section's shape", () => {
     for (const seed of [7, 8, 9]) {
-      for (const { pilot, active } of run(seed, 200).filter((m) => m.pilot.left === SECTIONS[m.pilot.section].loops)) {
+      for (const { pilot, active } of run(seed, 200).filter((m) => m.pilot.left === m.pilot.length)) {
         const shape = SECTIONS[pilot.section].shape;
         for (const [layer, spec] of Object.entries(shape)) {
           const [lo, hi] = Array.isArray(spec) ? spec : [spec, spec];
@@ -81,11 +118,22 @@ describe("autopilot", () => {
     }
   });
 
-  it("the build's last loop fires a riser; a breakdown enters with a downlifter and no kick", () => {
+  it("never plays kick, bass and percussion alone: every loop has a lead or a pad", () => {
+    for (const style of STYLE_IDS) {
+      for (const seed of [1, 2, 3]) {
+        for (const { active } of run(seed, 150, { style, changeBars: 2 })) {
+          expect(melodic(active), style).toBeGreaterThanOrEqual(1);
+          expect(isBare(active)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("the loop before a peak fires a riser; a breakdown enters with a downlifter and no kick", () => {
     const log = run(11, 200);
     for (const m of log) {
-      if (m.pilot.section === "build" && m.pilot.left === 1) expect(m.fx[0]).toMatch(/^fx\.riser/);
-      if (m.pilot.section === "breakdown" && m.pilot.left === SECTIONS.breakdown.loops) {
+      if (m.pilot.left === 1 && m.pilot.next === "peak") expect(m.fx[0]).toMatch(/^fx\.(riser|reverse)/);
+      if (m.pilot.section === "breakdown" && m.pilot.left === m.pilot.length) {
         expect(m.fx).toEqual(["fx.down"]);
         expect(m.active.kick).toBeUndefined();
         expect(m.active.bass).toBeUndefined();
@@ -93,29 +141,86 @@ describe("autopilot", () => {
     }
   });
 
-  it("sections are whole phrases, and inside one the mix only changes on a phrase line", () => {
-    for (const { loops } of Object.values(SECTIONS)) expect(loops % PHRASE).toBe(0);
-    let swaps = 0;
-    for (const seed of [1, 2, 3, 4, 5]) {
-      const log = run(seed, 200);
-      for (let i = 1; i < log.length; i++) {
-        const [prev, cur] = [log[i - 1], log[i]];
-        if (cur.pilot.section !== prev.pilot.section || cur.pilot.left !== prev.pilot.left - 1) continue;
-        if (cur.active === prev.active) continue;
-        swaps++;
-        expect((SECTIONS[cur.pilot.section].loops - cur.pilot.left) % PHRASE).toBe(0);
+  it("inside a section one sound changes every `changeBars` bars, and only then", () => {
+    for (const changeBars of CHANGE_BARS) {
+      let swaps = 0;
+      for (const seed of [1, 2, 3]) {
+        const log = run(seed, 200, { changeBars });
+        for (let i = 1; i < log.length; i++) {
+          const [prev, cur] = [log[i - 1], log[i]];
+          if (cur.pilot.section !== prev.pilot.section || cur.pilot.left !== prev.pilot.left - 1) continue;
+          const line = ((cur.pilot.length - cur.pilot.left) * 2) % changeBars === 0;
+          if (cur.active !== prev.active) {
+            swaps++;
+            expect(line).toBe(true);
+            expect(Object.keys(cur.active)).toHaveLength(Object.keys(prev.active).length);
+          }
+        }
       }
+      if (changeBars <= 16) expect(swaps, `every ${changeBars}`).toBeGreaterThan(0);
     }
-    expect(swaps).toBeGreaterThan(0);
   });
 
-  it("only asks to rewrite parts that play, and lanes follow the layer rules", () => {
+  it("queued sections play next, in order, and can be dropped before they play", () => {
+    const steer = (pilot, i) => (i === 0 ? enqueue(enqueue(enqueue(pilot, "peak"), "breakdown"), "intro") : pilot);
+    const sections = [];
+    for (const m of run(3, 60, {}, (p, i) => (i === 0 ? dequeue(steer(p, i), 2) : p))) {
+      if (sections.at(-1) !== m.pilot.section) sections.push(m.pilot.section);
+    }
+    expect(sections.slice(0, 4)).toEqual(["intro", "peak", "breakdown", "build"]);
+  });
+
+  it("skip ends the section on the next loop, with the queue's head if any", () => {
+    const rng = seeded(5);
+    const { pilot, active } = startPilot(lists, rng);
+    const move = advance(skip(enqueue(pilot, "breakdown")), active, lists, rng);
+    expect(move.pilot).toMatchObject({ section: "breakdown", queue: [] });
+    expect(advance(skip(move.pilot), move.active, lists, rng).pilot.section).toBe("build");
+  });
+
+  it("each style plays its own pool; a new style rearranges the section on the next loop", () => {
+    for (const style of STYLE_IDS.filter((s) => STYLES[s].pool)) {
+      for (const { active } of run(4, 80, { style })) {
+        for (const id of Object.values(active)) {
+          expect(STYLES[style].pool[layerOfVariant(id)], `${style} ${id}`).toContain(baseOf(id));
+        }
+      }
+    }
+    expect(poolOf(lists, "kick", "all")).toEqual([...lists.kick].sort());
+    const rng = seeded(8);
+    const { pilot, active } = startPilot(lists, rng, "psytrance");
+    const move = advance(rearrange(pilot), active, lists, rng, { style: "techno" });
+    for (const id of Object.values(move.active)) expect(STYLES.techno.pool[layerOfVariant(id)]).toContain(baseOf(id));
+    expect(move.pilot.rearrange).toBeUndefined();
+  });
+
+  it("every lead that comes in gets a new melody; only playing parts are rewritten", () => {
     for (const m of run(5, 200)) {
       for (const id of m.rewrite) expect(Object.values(m.active)).toContain(id);
+      if (!m.prev) continue;
+      const was = Object.values(m.prev);
+      for (const id of Object.values(m.active)) {
+        if (layerOfVariant(id) === "lead" && !was.includes(id)) expect(m.rewrite).toContain(id);
+      }
       for (const [key, id] of Object.entries(m.active)) {
         const layer = layerOfVariant(id);
         expect(key).toBe(layer === "kick" || layer === "bass" ? layer : id);
       }
+    }
+    expect(startPilot(lists, seeded(1), "psytrance", "build").rewrite).toHaveLength(1);
+  });
+
+  it("a bare mix gets a lead or a pad from the style", () => {
+    const bare = { kick: "kick.punchy", bass: "bass.rolling", "perc.hat": "perc.hat" };
+    expect(isBare(bare)).toBe(true);
+    expect(isBare({})).toBe(false);
+    expect(isBare({ "pad.air": "pad.air" })).toBe(false);
+    for (let seed = 1; seed < 20; seed++) {
+      const full = fillMelodic(bare, lists, seeded(seed), "darkpsy");
+      expect(isBare(full)).toBe(false);
+      const added = Object.values(full).filter((id) => !Object.values(bare).includes(id));
+      expect(added).toHaveLength(1);
+      expect(STYLES.darkpsy.pool[layerOfVariant(added[0])]).toContain(added[0]);
     }
   });
 

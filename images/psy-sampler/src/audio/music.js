@@ -7,7 +7,11 @@ export const centsToRatio = (cents) => 2 ** (cents / 1200);
 // MIDI numbers for the notes the default patterns use. A1 = 55 Hz.
 export const NOTE = {
   A1: 33,
+  Bb1: 34,
+  E2: 40,
+  G2: 43,
   A2: 45,
+  Bb2: 46,
   C3: 48,
   D3: 50,
   E3: 52,
@@ -15,6 +19,7 @@ export const NOTE = {
   G3: 55,
   A3: 57,
   Bb3: 58,
+  B3: 59,
   C4: 60,
   D4: 62,
   E4: 64,
@@ -22,6 +27,7 @@ export const NOTE = {
   G4: 67,
   A4: 69,
   C5: 72,
+  D5: 74,
   E5: 76,
   A5: 81,
 };

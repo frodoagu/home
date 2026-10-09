@@ -182,6 +182,20 @@ export function ride(ctx, out, t, { tone = 9000, decay = 0.45, accent }) {
   play(squares, t, end);
 }
 
+export function rim(ctx, out, t, { tone = 1700, decay = 0.04, accent }) {
+  // A short ringing triangle under a tick of noise: the stick on the rim.
+  const body = osc(ctx, "triangle", tone);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.7 : 0.5, 0.0005, decay);
+  body.connect(filter(ctx, "bandpass", tone, 2)).connect(amp).connect(out);
+  body.start(t);
+  body.stop(end);
+  const src = noise(ctx, t, 0.03);
+  const g = ctx.createGain();
+  percEnv(g.gain, t, accent ? 0.5 : 0.35, 0.0005, 0.008);
+  src.connect(filter(ctx, "highpass", 4000)).connect(g).connect(out);
+}
+
 /* --------------------------------------------------------- instruments -- */
 // Melodic voices: { freq, steps, accent, bright }. Any of them can play any
 // melodic variant (the editor's "Sinte" select).
@@ -425,7 +439,7 @@ export const INSTRUMENTS = {
   tom,
 };
 
-export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, ...INSTRUMENTS };
+export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, ...INSTRUMENTS };
 
 /* ------------------------------------------------------------------ FX -- */
 
@@ -546,6 +560,19 @@ export function siren(ctx, out, t, stepDur, { bars = 1, rate = 7 } = {}) {
   return end;
 }
 
+// Reverse cymbal: high-passed noise swelling until it cuts on the bar line.
+export function reverse(ctx, out, t, stepDur, { bars = 2, tone = 5000 } = {}) {
+  const dur = barsDur(bars, stepDur);
+  const src = noise(ctx, t, dur + 0.05);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.004, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.8, t + dur - 0.01);
+  g.gain.linearRampToValueAtTime(0, t + dur);
+  src.connect(filter(ctx, "highpass", tone)).connect(g).connect(out);
+  return t + dur;
+}
+
 export const FX = {
   "fx.riser": riser,
   "fx.riserImpact": riserImpact,
@@ -555,4 +582,5 @@ export const FX = {
   "fx.zap": laser,
   "fx.crash": crash,
   "fx.siren": siren,
+  "fx.reverse": reverse,
 };

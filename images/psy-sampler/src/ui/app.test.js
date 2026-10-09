@@ -402,6 +402,24 @@ describe("editors", () => {
     expect(saved().variants["lead.acid"].notes.length).toBeGreaterThan(0);
   });
 
+  it("Nueva parte waits for the next loop while it plays; a second click cancels it", () => {
+    click("lead.acid");
+    advanceSeconds(BAR / 2);
+    openEditor("lead.acid");
+    const btn = () => editor("lead.acid").querySelector('[data-action="new-part"]');
+    btn().click();
+    expect(btn().getAttribute("aria-pressed")).toBe("true");
+    expect(saved()?.variants?.["lead.acid"]).toBeUndefined();
+    btn().click();
+    expect(btn().getAttribute("aria-pressed")).toBe("false");
+    btn().click();
+    advanceSeconds(BAR);
+    expect(saved()?.variants?.["lead.acid"]).toBeUndefined(); // a bar line, not the loop's start
+    advanceSeconds(BAR);
+    expect(saved().variants["lead.acid"].notes.length).toBeGreaterThan(0);
+    expect(btn().getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("the open editor follows the playhead", () => {
     openEditor("kick.punchy");
     click("kick.punchy");
@@ -462,6 +480,43 @@ describe("improvise toggle", () => {
     editor("perc.clap").querySelector('[data-action="reset"]').click();
     expect(editor("perc.clap").querySelector('[data-action="vary"]').getAttribute("aria-pressed")).toBe("false");
     expect(button("perc.clap").parentElement.classList.contains("is-varying")).toBe(false);
+  });
+
+  it("each tile has its own 🔀: it shows and switches improvise without the editor", () => {
+    const toggle = () => $('[data-vary="perc.clap"]');
+    expect(toggle().getAttribute("aria-pressed")).toBe("false");
+    toggle().click();
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    expect(button("perc.clap").parentElement.classList.contains("is-varying")).toBe(true);
+    openEditor("perc.clap");
+    const inEditor = editor("perc.clap").querySelector('[data-action="vary"]');
+    expect(inEditor.getAttribute("aria-pressed")).toBe("true");
+    toggle().click();
+    expect(inEditor.getAttribute("aria-pressed")).toBe("false");
+    inEditor.click();
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+    expect($('[data-vary="fx.riser"]')).toBeNull(); // one-shots do not loop
+  });
+
+  it("is a slider too: ← → or a drag set how much it varies, and a drag does not toggle", () => {
+    openEditor("perc.clap");
+    const vary = editor("perc.clap").querySelector('[data-action="vary"]');
+    expect(vary.style.getPropertyValue("--amount")).toBe("50%");
+    vary.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    vary.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(vary.style.getPropertyValue("--amount")).toBe("60%");
+    expect(vary.textContent).toContain("60 %");
+    expect(saved().improv).toEqual({ "perc.clap": 0.6 });
+    expect($('[data-vary="perc.clap"]').style.getPropertyValue("--amount")).toBe("60%");
+    vary.dispatchEvent(new MouseEvent("pointerdown", { clientX: 0, bubbles: true }));
+    vary.dispatchEvent(new MouseEvent("pointermove", { clientX: 30, bubbles: true }));
+    vary.dispatchEvent(new MouseEvent("pointerup", { clientX: 30, bubbles: true }));
+    vary.click();
+    expect(vary.getAttribute("aria-pressed")).toBe("false");
+    vary.click();
+    expect(vary.getAttribute("aria-pressed")).toBe("true");
+    editor("perc.clap").querySelector('[data-action="reset"]').click();
+    expect(saved().improv).toEqual({});
   });
 
   it("keeps going with the editor closed, and shows its state when reopened", () => {
@@ -895,6 +950,89 @@ describe("autopilot", () => {
     expect(autoBtn().getAttribute("aria-pressed")).toBe("false");
     expect($(".section-badge").hidden).toBe(true);
   });
+
+  const layers = () => pressed().map((v) => v.split(".")[0]);
+
+  it("never leaves kick, bass and percussion alone for more than a bar", () => {
+    autoBtn().click();
+    for (let i = 0; i < 60; i++) {
+      advanceSeconds(BAR);
+      expect(layers().some((l) => l === "lead" || l === "pad")).toBe(true);
+    }
+    $("#combine").click();
+    for (const id of pressed().filter((v) => /^(lead|pad)\./.test(v))) click(id);
+    advanceSeconds(BAR);
+    expect(layers().some((l) => l === "lead" || l === "pad")).toBe(false); // the user's own bare bar
+    expect(layers()).toContain("kick");
+    let bareBars = 0;
+    for (let i = 0; i < 4; i++) {
+      advanceSeconds(BAR);
+      if (!layers().some((l) => l === "lead" || l === "pad")) bareBars++;
+    }
+    expect(bareBars).toBeLessThanOrEqual(1);
+  });
+
+  it("the seed dresses every sound it brings in, the same way every time", () => {
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    autoBtn().click();
+    advanceSeconds(8 * BAR);
+    const kick = pressed().find((v) => v.startsWith("kick."));
+    const ws = saved();
+    expect(ws.auto).toContain(kick);
+    expect(button(kick).parentElement.classList.contains("is-auto")).toBe(true);
+    expect(button(kick).parentElement.classList.contains("is-edited")).toBe(false);
+    $("button.stop").click();
+    autoBtn().click(); // from silence again: same seed, same sounds
+    advanceSeconds(8 * BAR);
+    expect(saved().variants[kick]).toEqual(ws.variants[kick]);
+  });
+
+  it("a style picks its sounds and takes the BPM to its own", () => {
+    const style = $('[data-control="style"]');
+    style.value = "techno";
+    style.dispatchEvent(new Event("change"));
+    expect($("#bpm").value).toBe("132");
+    expect(saved().style).toBe("techno");
+    autoBtn().click();
+    const techno = {
+      kick: ["kick.techno", "kick.rumble"],
+      bass: ["bass.techno", "bass.offbeat"],
+      perc: ["perc.hat", "perc.hat16", "perc.clap", "perc.rim", "perc.ride"],
+      lead: ["lead.techno", "lead.stabs", "lead.acid"],
+      pad: ["pad.drone", "pad.fifths", "pad.air"],
+    };
+    for (let i = 0; i < 20; i++) {
+      for (const v of pressed()) expect(techno[v.split(".")[0]]).toContain(v);
+      advanceSeconds(2 * BAR);
+    }
+  });
+
+  it("phases: a click starts there, later ones queue up and ✕ drops one before it plays", () => {
+    $('[data-section="peak"]').click();
+    expect(autoBtn().getAttribute("aria-pressed")).toBe("true");
+    expect($(".section-badge").textContent).toBe("Pico");
+    $('[data-section="breakdown"]').click();
+    $('[data-section="groove"]').click();
+    const queue = () => [...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.dataset.queued);
+    expect(queue()).toEqual(["breakdown", "groove"]);
+    root.querySelector('.section-queue [data-queued="breakdown"] .unqueue').click();
+    expect(queue()).toEqual(["groove"]);
+    $('[data-action="next-section"]').click();
+    expect($('[data-action="next-section"]').disabled).toBe(true);
+    expect(root.querySelector(".section-queue .is-next").dataset.queued).toBe("groove");
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Groove");
+    expect(queue()).toEqual([]);
+  });
+
+  it("the changes slider sets how often a section swaps a sound, and is remembered", () => {
+    const changes = $("#changes");
+    changes.value = "0";
+    changes.dispatchEvent(new Event("input"));
+    expect($('output[for="changes"]').textContent).toBe("cada 2 compases");
+    expect(saved().changeBars).toBe(2);
+  });
 });
 
 describe("language", () => {
@@ -981,23 +1119,24 @@ describe("export, import, reset", () => {
 });
 
 describe("share links", () => {
-  it("Compartir copies a link with the seed and the BPM", async () => {
+  it("Compartir copies a link with the seed, the style and the BPM", async () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     $("#seed").value = "trance";
     $("#seed").dispatchEvent(new Event("change"));
     $('[data-action="share"]').click();
     await flushPromises();
-    expect(writeText).toHaveBeenCalledWith(`${location.origin}/#seed=trance&bpm=145`);
+    expect(writeText).toHaveBeenCalledWith(`${location.origin}/#seed=trance&style=psytrance&bpm=145`);
     expect($(".status").textContent).toMatch(/Link copiado/);
   });
 
-  it("opening a link loads its seed and BPM, then clears the fragment", async () => {
-    history.replaceState(null, "", "/#seed=goa42&bpm=160");
+  it("opening a link loads its seed, style and BPM, then clears the fragment", async () => {
+    history.replaceState(null, "", "/#seed=goa42&style=goa&bpm=160");
     const node = document.createElement("div");
     mount(node, newEngine());
     await flushPromises();
     expect(node.querySelector("#seed").value).toBe("goa42");
+    expect(node.querySelector('[data-control="style"]').value).toBe("goa");
     expect(node.querySelector("#bpm").value).toBe("160");
     expect(node.querySelector(".status").textContent).toMatch(/goa42/);
     expect(location.hash).toBe("");

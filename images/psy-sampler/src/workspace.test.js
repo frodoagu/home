@@ -22,7 +22,17 @@ describe("normalize", () => {
     });
     expect(ws.order.slice(0, 2)).toEqual(["pad", "kick"]);
     expect(ws.order).toHaveLength(7);
-    expect(ws.lists.kick).toEqual(["kick.tok", "kick.punchy~2", "kick.punchy", "kick.long", "kick.fullon"]);
+    expect(ws.lists.kick).toEqual([
+      "kick.tok", "kick.punchy~2", ...LAYERS[0].variants.filter((id) => id !== "kick.tok"),
+    ]);
+  });
+
+  it("keeps the autopilot's style and change rate, and the improvise amounts, within bounds", () => {
+    expect(normalize({})).toMatchObject({ style: "psytrance", changeBars: 8, improv: {} });
+    expect(normalize({ style: "goa", changeBars: 4 })).toMatchObject({ style: "goa", changeBars: 4 });
+    expect(normalize({ style: "polka", changeBars: 5 })).toMatchObject({ style: "psytrance", changeBars: 8 });
+    const { improv } = normalize({ improv: { "lead.acid": 0.9, "perc.hat": 7, "lead.nope": 0.2, "pad.air": "x" } });
+    expect(improv).toEqual({ "lead.acid": 0.9, "perc.hat": 1 });
   });
 
   it("gives every copy data and drops data, names and selections of unknown variants", () => {
