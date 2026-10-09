@@ -59,7 +59,7 @@ testeada aparte.
 encolar el primer paso de cada compás (pasos 0 y 16), con su tiempo. Si devuelve
 un mapa de lanes, esos lanes entran **exactamente en ese paso**: sin backfill,
 el lane viejo hace su fade ahí mismo. Un mapa vacío hace el fade de todo en el
-compás y deja que el timer se apague solo. Por ahí pasan las tres cosas que
+compás y deja que el timer se apague solo. Por ahí pasan las cosas que
 tienen que caer en la grilla:
 
 - **Entrar a tiempo** (switch, prendido por defecto): con el loop andando, un
@@ -67,8 +67,13 @@ tienen que caer en la grilla:
   que late en lo que entra, fill que late en lo que sale) y se aplica en el
   próximo compás. Volver a clickear antes del compás cancela la cola. Con el
   loop parado, o con el switch apagado, el clic aplica ya, como antes.
+  **Doble clic** en un cuadradito se saltea la espera: el segundo clic (el
+  `detail` 2 del evento) aplica ya lo que pedía el primero y vacía la cola; sin
+  espera de por medio no hace nada, así no prende-apaga-prende.
 - **Piloto automático** (ver abajo), en cada inicio de loop.
 - **🔀 Improvisar** de los editores, en cada inicio de loop.
+- **⏫ Build-up** de los kicks: toma el compás siguiente y lo devuelve en el
+  otro (ver abajo).
 
 `triggerFx(id, at)` acepta un tiempo, así el piloto dispara FX sobre la misma
 línea de compás.
@@ -152,7 +157,17 @@ mostrar.
   variación sale de **lo que escribiste**, no de la variación anterior, así
   respira alrededor de la parte sin irse a la deriva; las variaciones van sólo al
   motor, nunca al storage, y al apagarlo vuelve tu parte. Sigue andando con el
-  editor cerrado (el cuadradito muestra 🔀).
+  editor cerrado (el cuadradito muestra 🔀). **Restaurar** también lo apaga.
+- **×2 golpes** (batería) agrega un golpe a mitad de camino entre cada golpe y
+  el siguiente (dando la vuelta al loop): negras → corcheas → semicorcheas.
+  Un hueco de un paso no tiene mitad y queda igual. Es una edición: se guarda.
+- **⏫ Build-up** (sólo kicks) arma un redoble para el próximo compás que va
+  duplicando la densidad: medio compás de negras, un cuarto de corcheas y
+  cuatro semicorcheas con acento (`BUILD_UP` en `editing.js`). Se arma con el
+  toggle (prende el kick si no sonaba, como cualquier edición), entra en la
+  línea de compás y en la siguiente vuelve solo; volver a tocarlo lo cancela.
+  Es una capa encima de lo que suena (`feed()` en `app.js`): tus ediciones y las
+  variaciones de Improvisar siguen por debajo, y nunca va al storage.
 - **🎲 Nueva parte** escribe una parte nueva en la escala elegida, con hábitos del
   género por capa ([`editing.js`](../images/psy-sampler/src/editing.js)): bajo
   rolling entre kicks mayormente en la tónica, lead con un motivo de 8 pasos en
@@ -400,8 +415,8 @@ npm run build
   envolvente llegue a 0. Corre para cada variante, cada sinte con notas de 1 a
   32 pasos, y cada voz de batería y FX con sus perillas en el mínimo y el máximo.
 - `app.test.js` (jsdom) cubre modo solo / combinar / apilar, la cola al compás,
-  Parar, kick de fondo, FX, los editores (clic, playhead, perillas, Restaurar,
-  Improvisar, persistencia, storage roto), duplicar / renombrar / borrar,
+  doble clic, Parar, kick de fondo, FX, los editores (clic, playhead, perillas,
+  Restaurar, Improvisar, ×2, build-up, persistencia, storage roto), duplicar / renombrar / borrar,
   reordenar, piloto (misma semilla = mismo tema), idiomas, exportar / importar,
   WAV, Restaurar todo y los links compartidos.
 - Las devDependencies (Vite 8, Vitest 5, jsdom 29) son más nuevas que las de

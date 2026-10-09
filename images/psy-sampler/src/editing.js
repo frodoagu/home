@@ -11,6 +11,38 @@ export function cycleStep(steps, i) {
   return next;
 }
 
+/**
+ * ×2: a new hit halfway between each marked hit and the next one (wrapping
+ * around the loop), so quarters become 8ths and 8ths become 16ths. A gap of
+ * one step has no middle and stays as it is.
+ */
+export function doubleSteps(steps) {
+  const hits = steps.flatMap((v, s) => (v === OFF ? [] : [s]));
+  const out = steps.slice();
+  hits.forEach((s, i) => {
+    const next = hits[i + 1] ?? hits[0] + steps.length;
+    const half = Math.floor((next - s) / 2);
+    if (half) out[(s + half) % steps.length] = HIT;
+  });
+  return out;
+}
+
+// One bar whose rate doubles as it goes: half a bar of quarters, a quarter
+// of 8ths, then a run of accented 16ths into the next bar.
+export const BUILD_UP = [
+  HIT, OFF, OFF, OFF, HIT, OFF, OFF, OFF,
+  HIT, OFF, HIT, OFF, ACCENT, ACCENT, ACCENT, ACCENT,
+];
+
+// `steps` with the bar starting at `from` replaced by the build-up.
+export function withBuildUp(steps, from) {
+  const out = steps.slice();
+  BUILD_UP.forEach((v, i) => {
+    out[(from + i) % out.length] = v;
+  });
+  return out;
+}
+
 export const noteAt = (notes, step, midi) =>
   notes.find((n) => n.midi === midi && n.step <= step && n.step + n.len > step);
 
