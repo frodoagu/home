@@ -65,10 +65,16 @@ spec:
     # the Traefik *chart* key (logs.access); the bare top-level `accessLog`
     # static-config key is not a chart value and is silently ignored. With no
     # filePath set, Traefik writes access logs to stdout (kubectl logs).
+    # klipper SNATs every client to 10.42.0.1, so the real IP is only in
+    # Cloudflare's header (trustworthy while origin-firewall drops non-CF hits).
     logs:
       access:
         enabled: true
         format: json
+        fields:
+          headers:
+            names:
+              Cf-Connecting-IP: keep
     # Cloudflare API token for the lego DNS-01 provider. Sourced from a Secret
     # in the Traefik namespace (see values.yaml) so it never lives in git.
     env:
