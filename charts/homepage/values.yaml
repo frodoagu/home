@@ -126,6 +126,10 @@ config:
             href: https://agu.com.ar
             description: Landing SPA
             icon: si-react
+        - psy.agu.com.ar:
+            href: https://psy.agu.com.ar
+            description: Psytrance layer sampler (ear training)
+            icon: si-vite
         - yaskia.com:
             href: https://yaskia.com
             description: Landing SPA

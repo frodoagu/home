@@ -1,0 +1,15 @@
+apiVersion: v2
+name: psy-sampler
+description: nginx serving the psy.agu.com.ar psytrance layer sampler (static SPA) on k3s with Traefik ingress
+type: application
+version: 0.1.0
+appVersion: "1.31-alpine"
+keywords:
+  - nginx
+  - spa
+  - static-site
+  - web-audio
+sources:
+  - https://github.com/frodoagu/home/tree/main/images/psy-sampler
+maintainers:
+  - name: frodoagu

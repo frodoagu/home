@@ -4,13 +4,18 @@ import { apps, privateLinks, CATEGORIES, getApp } from "./registry";
 const isSubset = (cats) => cats.every((c) => CATEGORIES.includes(c));
 
 describe("registry · apps públicas", () => {
-  it("cada app tiene los campos requeridos y un Component", () => {
+  it("cada app tiene los campos requeridos y un Component o un href https (no ambos)", () => {
     for (const a of apps) {
       expect(typeof a.slug).toBe("string");
       expect(a.slug).toMatch(/^[a-z0-9-]+$/); // kebab-case
       expect(a.title).toMatchObject({ es: expect.any(String), en: expect.any(String) });
       expect(a.description).toMatchObject({ es: expect.any(String), en: expect.any(String) });
-      expect(typeof a.Component).toBe("function");
+      if (a.href) {
+        expect(a.href).toMatch(/^https:\/\//);
+        expect(a.Component).toBeUndefined();
+      } else {
+        expect(typeof a.Component).toBe("function");
+      }
       expect(a.icon).toBeTruthy();
     }
   });
@@ -49,5 +54,9 @@ describe("getApp", () => {
 
   it("devuelve undefined para slugs inexistentes", () => {
     expect(getApp("no-existe")).toBeUndefined();
+  });
+
+  it("no resuelve las apps externas (no tienen ruta /app/<slug>)", () => {
+    for (const a of apps.filter((x) => x.href)) expect(getApp(a.slug)).toBeUndefined();
   });
 });

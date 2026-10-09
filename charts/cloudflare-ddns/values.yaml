@@ -42,6 +42,7 @@ domains:
   - dash.agu.com.ar
   - shelly.agu.com.ar
   - alertmanager.agu.com.ar
+  - psy.agu.com.ar
   - www.yaskia.com
   - yaskia.com
 

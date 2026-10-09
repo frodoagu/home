@@ -1,0 +1,311 @@
+/* Light by default, dark via prefers-color-scheme. Per-layer accents are set
+   on [data-layer] so every row reuses the same button styles. */
+:root {
+  color-scheme: light dark;
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface-2: #ecebe5;
+  --text: #1c1b18;
+  --muted: #625e55;
+  --border: #d8d4ca;
+  --focus: #4c1d95;
+  --cell: #e3e0d8;
+  --cell-beat: #cfcabd;
+  --current: #4c1d95;
+  --on-current: #ffffff;
+  --stop: #b91c1c;
+}
+
+[data-layer="kick"] { --layer: #b91c1c; --on-layer: #ffffff; }
+[data-layer="bass"] { --layer: #c2410c; --on-layer: #ffffff; }
+[data-layer="perc"] { --layer: #a16207; --on-layer: #ffffff; }
+[data-layer="lead"] { --layer: #0e7490; --on-layer: #ffffff; }
+[data-layer="pad"]  { --layer: #6d28d9; --on-layer: #ffffff; }
+[data-layer="fx"]   { --layer: #be185d; --on-layer: #ffffff; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0e13;
+    --surface: #18171e;
+    --surface-2: #222029;
+    --text: #ece9f2;
+    --muted: #9c97a8;
+    --border: #302d3a;
+    --focus: #c4b5fd;
+    --cell: #26242e;
+    --cell-beat: #3a3746;
+    --current: #a78bfa;
+    --on-current: #15121c;
+    --stop: #f87171;
+  }
+  [data-layer="kick"] { --layer: #f87171; --on-layer: #1a0b0b; }
+  [data-layer="bass"] { --layer: #fb923c; --on-layer: #1c0f05; }
+  [data-layer="perc"] { --layer: #facc15; --on-layer: #1a1503; }
+  [data-layer="lead"] { --layer: #22d3ee; --on-layer: #04161a; }
+  [data-layer="pad"]  { --layer: #a78bfa; --on-layer: #15121c; }
+  [data-layer="fx"]   { --layer: #f472b6; --on-layer: #1c0712; }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+}
+
+.lede {
+  margin: 4px 0 20px;
+  color: var(--muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- transport ---- */
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.bpm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.bpm input {
+  width: min(220px, 50vw);
+  accent-color: var(--current);
+}
+
+.bpm-value {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.check input {
+  accent-color: var(--current);
+  width: 16px;
+  height: 16px;
+}
+
+.stop {
+  margin-left: auto;
+  padding: 8px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--stop);
+  background: transparent;
+  border: 1.5px solid var(--stop);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.stop:hover {
+  background: var(--stop);
+  color: var(--surface);
+}
+
+/* ---- step bar ---- */
+.stepbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.cells {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 4px;
+}
+
+.cell {
+  height: 28px;
+  border-radius: 4px;
+  background: var(--cell);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+}
+
+/* Beats: taller marker on the left edge plus the beat number. */
+.cell.beat {
+  background: var(--cell-beat);
+  box-shadow: inset 3px 0 0 var(--muted);
+}
+
+.cell.is-current {
+  background: var(--current);
+  color: var(--on-current);
+  box-shadow: none;
+}
+
+.bar-label {
+  min-width: 8.5ch;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---- layers ---- */
+.layers {
+  display: grid;
+  gap: 10px;
+}
+
+.layer {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  gap: 12px 18px;
+  align-items: center;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--layer);
+  border-radius: 10px;
+}
+
+.layer h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.hint {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.variants {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.variant {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 12px 8px 26px;
+  position: relative;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 80ms, border-color 80ms;
+}
+
+/* Status dot: hollow when off, filled when on — readable without colour too. */
+.variant::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+}
+
+.variant:hover {
+  border-color: var(--layer);
+}
+
+.variant-label {
+  font-weight: 600;
+}
+
+.variant-detail {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.variant.is-active {
+  background: var(--layer);
+  border-color: var(--layer);
+  color: var(--on-layer);
+}
+
+.variant.is-active .variant-detail {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.variant.is-active::before {
+  background: currentColor;
+  border-color: currentColor;
+}
+
+/* The background kick is sounding under another layer: same variant, but
+   not selected, so a dashed outline instead of a fill. */
+.variant.is-background {
+  border-style: dashed;
+  border-color: var(--layer);
+}
+
+@media (max-width: 640px) {
+  .layer {
+    grid-template-columns: 1fr;
+  }
+  .variants {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .stop {
+    margin-left: 0;
+  }
+  .cell {
+    height: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .variant {
+    transition: none;
+  }
+}

@@ -18,8 +18,9 @@ services running on a Raspberry Pi with k3s.
 | [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `images/home-site/` into a GHCR image) | `charts/agu-spa/` |
+| [nginx](https://nginx.org/) | Serves `psy.agu.com.ar`, a psytrance layer sampler for ear training (Web Audio, built from `images/psy-sampler/` into a GHCR image) | `charts/psy-sampler/` |
 | [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
-| [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
+| [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the CI-built images (SPA, sampler, firewall) — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
 | [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, Pi-hole stats, blackbox uptime, Telegram alerts | `charts/monitoring/` |
 | [Pi-hole](https://pi-hole.net/) | Network-wide DNS ad-blocker + LAN DHCP server (hostNetwork) | `charts/pihole/` |
@@ -51,6 +52,7 @@ flowchart TD
         SS[sealed-secrets<br/>controller · decrypts git secrets]
         HA[Home Assistant<br/>hostNetwork · Bluetooth]
         SPA[agu-spa<br/>React SPA]
+        PSY[psy-sampler<br/>Web Audio SPA]
         YASKIA[yaskia-spa<br/>React SPA · ext. repo]
         DDNS[cloudflare-ddns]
         PIHOLE[Pi-hole<br/>hostNetwork · DNS/DHCP]
@@ -64,6 +66,7 @@ flowchart TD
     Traefik -->|home.agu.com.ar| HA
     Traefik -->|agu.com.ar| SPA
     Traefik -->|www.agu.com.ar 301| SPA
+    Traefik -->|psy.agu.com.ar| PSY
     Traefik -->|yaskia.com| YASKIA
     Traefik -->|traefik.agu.com.ar<br/>dashboard| Traefik
     Traefik -->|auth.agu.com.ar| OA2
@@ -77,6 +80,7 @@ flowchart TD
     Argo -.->|App of Apps sync| Traefik
     Argo -.-> HA
     Argo -.-> SPA
+    Argo -.-> PSY
     Argo -.-> YASKIA
     Argo -.-> DDNS
     Argo -.-> IU
@@ -147,6 +151,7 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
   creates/updates these A records to track the home public IP:
   - `agu.com.ar` → agu-spa (apex static site)
   - `www.agu.com.ar` → 301 redirect to `agu.com.ar`
+  - `psy.agu.com.ar` → psy-sampler (public static site)
   - `home.agu.com.ar` → Home Assistant
   - `argocd.agu.com.ar` → Argo CD
   - `traefik.agu.com.ar` → Traefik dashboard
@@ -284,7 +289,7 @@ kubectl apply -f apps/root.yaml
 
 ArgoCD applies the Traefik `HelmChartConfig` (k3s redeploys Traefik with
 Let's Encrypt + the dashboard) and deploys the rest: `sealed-secrets`,
-`oauth2-proxy`, Home Assistant, `agu-spa`, `yaskia-spa`, `argocd-image-updater`,
+`oauth2-proxy`, Home Assistant, `agu-spa`, `psy-sampler`, `yaskia-spa`, `argocd-image-updater`,
 `cloudflare-ddns`, `monitoring`, `victoria-logs`, `homepage`, and `pihole`.
 Workloads whose secrets aren't decrypted yet stay `Synced`/crash-loop until the
 next step provides the Sealed Secrets key.
@@ -354,6 +359,7 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname`, `configs.cm.url`/`dex.config`, `configs.rbac.policy.csv` (admin emails) |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant`; device config (ACs/TVs) is versioned under `charts/home-assistant/packages/` |
 | `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
+| `charts/psy-sampler/values.yaml` | `ingress.host`, `imagePullSecrets` (`[]` while the GHCR package is public) |
 | `charts/cloudflare-ddns/values.yaml` | `domains`, `proxied` |
 | `charts/monitoring/values.yaml` | `ingress.host` (Grafana), `blackboxTargets`, Alertmanager `chat_id`, retention/resources |
 | `charts/victoria-logs/values.yaml` | `ingress.host`, `victoria-logs-single.server.retentionPeriod`/`retentionDiskSpaceUsage`, PVC `size` |
@@ -392,6 +398,7 @@ webhook config (`-f config[secret]=...`).
 │   ├── sealed-secrets.yaml
 │   ├── home-assistant.yaml
 │   ├── agu-spa.yaml
+│   ├── psy-sampler.yaml
 │   ├── yaskia-spa.yaml      # 2nd SPA — chart lives in the external frodoagu/yaskia repo
 │   ├── cloudflare-ddns.yaml
 │   ├── monitoring.yaml
@@ -401,6 +408,7 @@ webhook config (`-f config[secret]=...`).
 │   └── origin-firewall.yaml
 ├── images/                  # CI-built container images (one dir per image = its build context)
 │   ├── home-site/           # agu.com.ar SPA (Vite + React) + Dockerfile → GHCR image
+│   ├── psy-sampler/         # psy.agu.com.ar layer sampler (Vite + vanilla JS, Web Audio) → GHCR image
 │   └── origin-firewall/     # Debian + nftables/curl base for the firewall DaemonSet → GHCR
 └── charts/
     ├── traefik-config/      # HelmChartConfig for the k3s-bundled Traefik (ACME, dashboard, auth)
@@ -410,6 +418,7 @@ webhook config (`-f config[secret]=...`).
     ├── sealed-secrets/      # Sealed Secrets controller (vendored) — decrypts committed SealedSecrets
     ├── home-assistant/      # Home Assistant Helm chart
     ├── agu-spa/           # nginx serving a static single-page app (apex agu.com.ar)
+    ├── psy-sampler/        # nginx serving the psytrance layer sampler (psy.agu.com.ar)
     ├── cloudflare-ddns/     # Cloudflare dynamic-DNS updater
     ├── monitoring/         # VictoriaMetrics + Grafana + blackbox (metrics, RPi temp/throttle, Telegram alerts)
     ├── victoria-logs/      # VictoriaLogs single-node + Vector collector (cluster-wide logs)
@@ -461,6 +470,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/lavarropas-candy.md](docs/lavarropas-candy.md) — Candy simply-Fi washer-dryer over its **local** HTTP API (no cloud, no vendor app): finding it via the UDP heartbeat, recovering the XOR key from the device's own traffic, and the `RemTime` unit bug
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `images/home-site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
+- [docs/psy-sampler.md](docs/psy-sampler.md) — psytrance layer sampler at psy.agu.com.ar: lookahead scheduler, click-free lane fades, layer/variant table, measured mix levels, first-deploy GHCR visibility step
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
 - [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
