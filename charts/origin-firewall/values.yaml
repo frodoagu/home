@@ -5,7 +5,6 @@
 # See docs/origin-firewall.md for how it works and the router-SNAT caveat.
 
 revisionHistoryLimit: 1
-
 image:
   # Prebuilt by CI (images/origin-firewall/Dockerfile → GHCR) with nftables/curl
   # baked in, so nothing is installed on pod (re)start. Debian base, NOT Alpine:
@@ -13,7 +12,7 @@ image:
   # Updater pins `latest`'s digest into image.tag (like agu-spa), so what runs is
   # an immutable digest — do not hand-edit image.tag.
   repository: ghcr.io/frodoagu/origin-firewall
-  tag: "latest@sha256:6c16ca1a39530339a7018a0cfbe33c4af19eca2abb27b4cf516950c025061a1c"
+  tag: "latest@sha256:6271286cc8594718320eb1b95358e9a2724c436cc63a37cee010b53f3386b9b3"
   pullPolicy: IfNotPresent
 # Pull secret(s) for the private GHCR image. Create out-of-band in kube-system
 # (never commit), same token as agu-spa's ghcr-creds:
