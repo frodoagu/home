@@ -3,7 +3,6 @@
 
 replicaCount: 1
 revisionHistoryLimit: 1
-
 image:
   # The agu.com.ar SPA, built from images/home-site/ and baked into an nginx image by the
   # build-site GitHub Action (.github/workflows/site.yml). CI pushes the mutable
@@ -14,7 +13,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile.
-  tag: "latest@sha256:df73c4946c87a003092d912a65d51114d986ba2db629042f75864ec0e9a1d8a4"
+  tag: "latest@sha256:16f843290b2221e9fcbe042c87d9a41f903434f09272d62aff96a552c929bfb8"
 # Pull secret(s) for the private GHCR image. Create out-of-band (never commit):
 #   kubectl -n agu-spa create secret docker-registry ghcr-creds \
 #     --docker-server=ghcr.io \
