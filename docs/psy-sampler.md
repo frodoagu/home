@@ -1,34 +1,34 @@
 # psy-sampler
 
-Máquina de música electrónica en vivo, en `https://psy.agu.com.ar`. Cada botón
-pone en loop una capa (kick, bajo, percusión, lead, pad; 9 sonidos por capa)
-sobre una grilla de 32 semicorcheas (2 compases); los FX son one-shots fuera del
-loop. **Todo es editable**: cada botón tiene un ▾ que abre su editor (pasos,
-notas, sinte, perillas), y cualquier sonido se puede duplicar y renombrar. Un
-piloto automático arma un tema solo, en el estilo elegido (techno, psytrance
-progresivo, psytrance, psytech, hi-tech, goa, dark psy), a partir de una semilla
-compartible que define también cómo suena cada sonido; las fases se pueden
-forzar y encolar. Lo que suena se exporta a WAV. Interfaz en español, inglés y portugués. Todo el audio se
-sintetiza en el browser con Web Audio: el pod sólo sirve ~80 kB de estáticos.
+A live electronic music machine at `https://psy.agu.com.ar`. Each button loops a
+layer (kick, bass, percussion, lead, pad; 9 sounds per layer) over a grid of 32
+sixteenths (2 bars); FX are one-shots outside the loop. **Everything is
+editable**: every button has a ▾ that opens its editor (steps, notes, synth,
+knobs), and any sound can be duplicated and renamed. An autopilot builds a track
+on its own in the chosen style (techno, progressive psytrance, psytrance,
+psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
+sound sounds; its sections can be forced and queued. What plays exports to WAV.
+The UI is in Spanish, English and Portuguese. All audio is synthesized in the
+browser with Web Audio: the pod only serves ~80 kB of static files.
 
-| Pieza | Dónde |
+| Piece | Where |
 |---|---|
-| Código (Vite + JS vanilla, sin dependencias de runtime) | [`images/psy-sampler/`](../images/psy-sampler) |
-| Guardado en la nube (Bun + SQLite) | [`images/psy-sync/`](../images/psy-sync) |
+| Code (Vite + vanilla JS, no runtime dependencies) | [`images/psy-sampler/`](../images/psy-sampler) |
+| Cloud save (Bun + SQLite) | [`images/psy-sync/`](../images/psy-sync) |
 | Chart (nginx) | [`charts/psy-sampler/`](../charts/psy-sampler) |
 | Argo CD Application | [`apps/psy-sampler.yaml`](../apps/psy-sampler.yaml) |
-| Auto-update de la imagen | [`psy-sampler-imageupdater.yaml`](../charts/argocd-image-updater/templates/psy-sampler-imageupdater.yaml) |
-| CI | [`psy-sampler-test.yml`](../.github/workflows/psy-sampler-test.yml) (lint + tests + build), [`psy-sampler-image.yml`](../.github/workflows/psy-sampler-image.yml) (imagen arm64 → GHCR), [`psy-sync-test.yml`](../.github/workflows/psy-sync-test.yml) y [`psy-sync-image.yml`](../.github/workflows/psy-sync-image.yml) (lo mismo para la API) |
+| Image auto-update | [`psy-sampler-imageupdater.yaml`](../charts/argocd-image-updater/templates/psy-sampler-imageupdater.yaml) |
+| CI | [`psy-sampler-test.yml`](../.github/workflows/psy-sampler-test.yml) (lint + tests + build), [`psy-sampler-image.yml`](../.github/workflows/psy-sampler-image.yml) (arm64 image → GHCR), [`psy-sync-test.yml`](../.github/workflows/psy-sync-test.yml) and [`psy-sync-image.yml`](../.github/workflows/psy-sync-image.yml) (the same for the API) |
 
-## Motor de audio
+## Audio engine
 
 ```mermaid
 flowchart LR
-  subgraph lanes["un GainNode por variante sonando"]
-    K[kick] & BK[kick de fondo] & B[bajo] & P[percusión ×n] & L[lead ×n] & PD[pad ×n]
+  subgraph lanes["one GainNode per playing variant"]
+    K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n]
   end
-  FX[un GainNode por FX sonando]
-  lanes --> M[master 0.7] --> C[compresor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
+  FX[one GainNode per playing FX]
+  lanes --> M[master 0.7] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
   FX --> M
   lanes -. send .-> DL[delay 3/16] -.-> C
   lanes -. send .-> RV[reverb] -.-> C
@@ -37,633 +37,644 @@ flowchart LR
 
 ### Scheduler (lookahead)
 
-| Parámetro | Valor | Para qué |
+| Parameter | Value | What for |
 |---|---|---|
-| `TICK_MS` | 25 ms | período del `setInterval` |
-| `LOOKAHEAD` | 120 ms | cuánto se agenda por delante de `ctx.currentTime` |
-| `SAFETY` | 15 ms | nada se agenda más cerca que esto (ver gotchas) |
-| `FADE` | 30 ms | fade lineal de un lane al cambiar variante (en el próximo paso) o al parar (ya) |
-| `START_DELAY` | 60 ms | dónde cae el paso 0 al arrancar |
+| `TICK_MS` | 25 ms | `setInterval` period |
+| `LOOKAHEAD` | 120 ms | how far ahead of `ctx.currentTime` it schedules |
+| `SAFETY` | 15 ms | nothing is scheduled closer than this (see Gotchas) |
+| `FADE` | 30 ms | linear fade of a lane on a variant change (on the next step) or on Stop (right away) |
+| `START_DELAY` | 60 ms | where step 0 lands on start |
 
-Cada tick lee `stepDuration(bpm) = 60 / BPM / 4`, así el slider aplica en vivo.
-El tiempo del próximo paso siempre es el del anterior + la duración vigente
-cuando se agendó, así que un cambio de BPM sólo estira los pasos desde el cursor:
-lo ya agendado no se mueve y la grilla no deriva. Medido en Chromium (145 → 175
-BPM): intervalos de kick de ~413 ms, **un** beat de transición intermedio (p. ej.
-378 ms = dos semicorcheas ya agendadas a 145 + dos a 175) y después ~343 ms.
+Every tick reads `stepDuration(bpm) = 60 / BPM / 4`, so the slider applies live.
+The next step's time is always the previous one + the duration in force when it
+was scheduled, so a BPM change only stretches the steps from the cursor on:
+what's already scheduled doesn't move and the grid doesn't drift. Measured in
+Chromium (145 → 175 BPM): ~413 ms kick intervals, **one** in-between transition
+beat (e.g. 378 ms = two sixteenths already scheduled at 145 + two at 175), then
+~343 ms.
 
-La lógica pura (`collectSteps`, `nextBeatTime`) vive en
-[`timing.js`](../images/psy-sampler/src/audio/timing.js), sin Web Audio, y está
-testeada aparte.
+The pure logic (`collectSteps`, `nextBeatTime`) lives in
+[`timing.js`](../images/psy-sampler/src/audio/timing.js), without Web Audio, and
+is tested on its own.
 
-### Cambios en la línea de compás
+### Changes on the bar line
 
-`engine.onBar(fn)` registra un callback que el scheduler llama justo antes de
-encolar el primer paso de cada compás (pasos 0 y 16), con su tiempo. Si devuelve
-un mapa de lanes, esos lanes entran **exactamente en ese paso**: sin backfill,
-el lane viejo hace su fade ahí mismo. Un mapa vacío hace el fade de todo en el
-compás y deja que el timer se apague solo. Por ahí pasan las cosas que
-tienen que caer en la grilla:
+`engine.onBar(fn)` registers a callback the scheduler calls right before queuing
+the first step of each bar (steps 0 and 16), with its time. If it returns a map
+of lanes, those lanes come in **exactly on that step**: no backfill, the old
+lane fades out right there. An empty map fades everything out on the bar and
+lets the timer wind down on its own. Everything that has to land on the grid
+goes through it:
 
-- **Entrar a tiempo** (switch, prendido por defecto): con el loop andando, un
-  clic no cambia nada todavía; la selección nueva queda en cola (borde punteado
-  que late en lo que entra, fill que late en lo que sale) y se aplica en el
-  próximo compás. Volver a clickear antes del compás cancela la cola. Con el
-  loop parado, o con el switch apagado, el clic aplica ya, como antes.
-  **Doble clic** en un cuadradito se saltea la espera: el segundo clic (el
-  `detail` 2 del evento) aplica ya lo que pedía el primero y vacía la cola; sin
-  espera de por medio no hace nada, así no prende-apaga-prende.
-- **Piloto automático** (ver abajo), en cada inicio de loop.
-- **🔀 Improvisar** de los editores, en cada inicio de loop.
-- **🎲 Nueva parte** de los editores, en el próximo inicio de loop.
-- **⏫ Build-up** de los kicks: toma el compás siguiente y lo devuelve en el
-  otro (ver abajo).
-- **Snapshots** (ver abajo): un clic pone a sonar el momento guardado en el
-  próximo compás, siempre, aunque «Entrar a tiempo» esté apagado.
-- **Cambio de BPM**: «Cambio de BPM [N] en [1-32 compases] ▶ Ir» avanza un
-  tramo lineal en cada línea de compás (`rampAt` en `tempo.js`) y cae exacto en
-  N en la última. El BPM intermedio va con decimales al motor y redondeado al
-  slider y al storage. El scheduler lee el BPM por tick, así que cada tramo
-  entra a lo sumo un paso después de la línea. Con el loop parado no hay
-  compases: cambia ya. Mover el slider, Parar o el mismo botón la cortan.
+- **On the beat** (switch, on by default): while the loop runs, a click changes
+  nothing yet; the new selection is queued (a pulsing dashed outline on what
+  comes in, a pulsing fill on what goes out) and applies on the next bar.
+  Clicking again before the bar cancels the queue. With the loop stopped, or
+  the switch off, a click applies right away. **Double-clicking** a tile skips
+  the wait: the second click (the event's `detail` 2) applies what the first
+  one asked for right away and empties the queue; with nothing waiting it does
+  nothing, so it never goes on-off-on.
+- **Autopilot** (see below), at every loop start.
+- The editors' **🔀 Improvise**, at every loop start.
+- The editors' **🎲 New part**, at the next loop start.
+- The kicks' **⏫ Build-up**: takes over the next bar and hands it back on the
+  one after (see below).
+- **Snapshots** (see below): a click plays the saved moment from the next bar,
+  always, even with "On the beat" off.
+- **BPM change**: "BPM change [N] over [1-32 bars] ▶ Go" moves one linear stretch
+  on each bar line (`rampAt` in `tempo.js`) and lands exactly on N on the last
+  one. The in-between BPM goes to the engine with decimals, and rounded to the
+  slider and to storage. The scheduler reads the BPM every tick, so each stretch
+  comes in at most one step after the line. With the loop stopped there are no
+  bars: it changes right away. Moving the slider, Stop or the same button cut
+  it short.
 
-`triggerFx(id, at)` acepta un tiempo, así el piloto dispara FX sobre la misma
-línea de compás.
+`triggerFx(id, at)` takes a time, so the autopilot fires FX on the same bar
+line.
 
-### Por qué lanes y no cancelar notas
+### Why lanes instead of cancelling notes
 
-Las notas de la variante vieja que ya están agendadas (hasta 120 ms adelante) y
-las colas largas (pad, lead) no se tocan una por una: al cambiar de variante el
-**lane entero** hace un fade de 30 ms y se abre uno nuevo. Las notas viejas suenan
-dentro del fade y mueren solas.
+The old variant's notes that are already scheduled (up to 120 ms ahead) and the
+long tails (pad, lead) aren't touched one by one: on a variant change the
+**whole lane** fades out over 30 ms and a new one opens. The old notes play
+inside the fade and die on their own.
 
-- El lane nuevo hace **backfill** de los pasos que ya estaban en la ventana de
-  lookahead (respetando `SAFETY`), así la variante nueva entra en el paso
-  siguiente en vez de dejar un hueco de hasta 120 ms.
-- El fade del lane viejo arranca **en ese mismo paso**, no en el clic: el cambio
-  es un crossfade cuantizado a la grilla, sin hueco de silencio entre variantes.
-  `Parar` sí corta ya (fade inmediato).
-- Las notas largas (pad, lead melódico, drone) al entrar a mitad de frase
-  arrancan con lo que les queda (`eventsAt(…, entering)`), en vez de esperar
-  hasta 2 compases en silencio. Vale para cualquier nota de más de un paso,
-  también las que escribís en el editor.
+- The new lane **backfills** the steps already inside the lookahead window
+  (respecting `SAFETY`), so the new variant comes in on the next step instead of
+  leaving a gap of up to 120 ms.
+- The old lane's fade starts **on that same step**, not on the click: the change
+  is a grid-quantized crossfade, with no silent gap between variants. `Stop`
+  does cut right away (immediate fade).
+- Long notes (pad, melodic lead, drone) entering mid-phrase start with what's
+  left of them (`eventsAt(…, entering)`) instead of waiting up to 2 bars in
+  silence. That holds for any note longer than one step, including the ones you
+  write in the editor.
 
-Selección → lanes es un reconcile puro
+Selection → lanes is a pure reconcile
 ([`selection.js`](../images/psy-sampler/src/selection.js)): `desiredLanes()`
-calcula el estado deseado y `engine.setLanes()` cierra/abre la diferencia.
-**Kick y bajo son exclusivos** (un lane por capa: una segunda variante reemplaza
-a la primera, dos kicks o dos bajos sólo embarran); **percusión, lead y pad se
-apilan** (un lane por variante, `laneKey()`). El kick de fondo es un lane
-derivado: suena sólo si hay otra capa activa y ninguna variante de kick elegida.
+computes the desired state and `engine.setLanes()` closes/opens the difference.
+**Kick and bass are exclusive** (one lane per layer: a second variant replaces
+the first; two kicks or two basses only muddy things); **percussion, lead and
+pad stack** (one lane per variant, `laneKey()`). The background kick is a
+derived lane: it only plays when another layer is on and no kick variant is
+picked.
 
-### Delay y reverb
+### Delay and reverb
 
-Envíos post-lane (siguen los fades del lane) a dos buses compartidos, con switch
-global en el transporte (el return hace un glide de 30 ms):
+Post-lane sends (they follow the lane's fades) to two shared buses, with a
+global switch in the transport (the return glides over 30 ms):
 
 | | delay | reverb |
 |---|---|---|
-| percusión | — | 0,12 |
-| lead | 0,3 | 0,25 |
-| pad | — | 0,4 |
-| FX | 0,2 | 0,35 |
+| percussion | — | 0.12 |
+| lead | 0.3 | 0.25 |
+| pad | — | 0.4 |
+| FX | 0.2 | 0.35 |
 
-Kick y bajo van secos: una cola debajo sólo embarra el grave. El delay es de
-**3/16** (corchea con puntillo, el eco clásico del psy), feedback 0,38 a través
-de un LP 2,5 kHz (cada repetición más oscura), y sigue al BPM con un glide de
-50 ms (un salto de `delayTime` hace clic). El reverb es un `ConvolverNode` con un
-impulso sintético: 2,4 s de ruido estéreo con caída cúbica.
+Kick and bass stay dry: a tail under them only muddies the low end. The delay is
+**3/16** (a dotted eighth, the classic psy echo), feedback 0.38 through a
+2.5 kHz LP (each repeat darker), and it follows the BPM with a 50 ms glide (a
+jump in `delayTime` clicks). The reverb is a `ConvolverNode` with a synthetic
+impulse: 2.4 s of stereo noise with a cubic decay.
 
-## Datos editables
+## Editable data
 
-Lo que toca cada variante es **dato**, no código
+What each variant plays is **data**, not code
 ([`patterns.js`](../images/psy-sampler/src/audio/patterns.js), `DEFAULTS`):
 
-| Tipo | Dato | Editor |
+| Type | Data | Editor |
 |---|---|---|
-| `drum` (kick, percusión) | `steps`: 32 × apagado / golpe / acento + params de la voz | una fila de 32 pasos + perillas |
-| `notes` (bajo, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + sinte + brillo + escala + octava + largo de nota nueva |
-| `fx` | `params` (largo en compases, rango, decay…) | perillas + ▶ Disparar |
+| `drum` (kick, percussion) | `steps`: 32 × off / hit / accent + the voice's params | one row of 32 steps + knobs |
+| `notes` (bass, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + synth + brightness + scale + octave + new-note length |
+| `fx` | `params` (length in bars, range, decay…) | knobs + ▶ Fire |
 
-Todas tienen además **Volumen** (`level`, 0-150 % del nivel de su capa) y
-**Restaurar**. `eventsAt(id, step, entering, data)` convierte el dato en eventos
-en cada paso; `engine.setData(id, data)` lo reemplaza y el scheduler lo lee en el
-siguiente paso agendado (≤ 120 ms), sin reabrir el lane. Un cambio de volumen
-hace un glide de 20 ms en los lanes que tocan esa variante. Las perillas
-(`params.js`) guardan unidades de la voz (Hz, s, compases) y sólo formatean al
-mostrar.
+All of them also have **Volume** (`level`, 0-150 % of their layer's level) and
+**Reset**. `eventsAt(id, step, entering, data)` turns the data into events on
+each step; `engine.setData(id, data)` replaces it and the scheduler reads it on
+the next scheduled step (≤ 120 ms), without reopening the lane. A volume change
+glides over 20 ms in the lanes playing that variant. Knobs (`params.js`) store
+the voice's units (Hz, s, bars) and only format them for display.
 
-- **Clic** en un paso o celda: vacío → golpe/nota → acento → vacío. Las notas
-  nuevas miden lo que diga «Nota nueva» (se acortan para no pisar la siguiente
-  de la fila ni pasar el final del loop). **Arrastrar** con el mouse a lo largo de
-  una fila pinta una nota larga; en touch el arrastre es scroll del piano roll, y
-  un tap agrega una nota.
-- **Editar algo que no suena lo prende** (según el modo solo/combinar): lo que
-  editás es lo que escuchás. Al agregar una nota se previsualiza al toque
-  (`engine.audition`), salvo golpes de batería con el loop andando (un golpe
-  fuera de la grilla sólo suena a error).
-- **🔀 Improvisar** es un toggle y un slider en el mismo botón. Clic: mientras
-  está prendido, en cada inicio de loop la parte cambia (`varyNotes` /
-  `varySteps` en `editing.js`: mover una nota a una fila cercana, dar vuelta un
-  acento, un eco unos pasos después o sacar una; en batería sólo golpes fuera
-  del beat, el pulso no se mueve). Arrastrar a lo ancho del botón (o ← →) elige
-  **cuánto** cambia, y el relleno de color lo muestra: 0 % no cambia nada, 50 %
-  (por defecto) hace 1-2 cambios por loop, 100 % hace 6-7 y mueve notas hasta 3
-  filas (`changesFor`). Un arrastre no prende ni apaga. La intensidad se guarda
-  por sonido (`ws.improv`); el prendido no. Cada variación sale de **lo que
-  escribiste**, no de la variación anterior, así respira alrededor de la parte
-  sin irse a la deriva; las variaciones van sólo al motor, nunca al storage, y
-  al apagarlo vuelve tu parte. Cada cuadradito de loop tiene su propio 🔀 (arriba
-  del ▾) que muestra el estado, lo prende o lo apaga sin abrir el editor y se
-  llena según la intensidad. **Restaurar** apaga Improvisar y vuelve la
-  intensidad al 50 %.
-- **×2 golpes** (batería) agrega un golpe a mitad de camino entre cada golpe y
-  el siguiente (dando la vuelta al loop): negras → corcheas → semicorcheas.
-  Un hueco de un paso no tiene mitad y queda igual. Es una edición: se guarda.
-- **⏫ Build-up** (sólo kicks) arma un redoble para el próximo compás que va
-  duplicando la densidad: medio compás de negras, un cuarto de corcheas y
-  cuatro semicorcheas con acento (`BUILD_UP` en `editing.js`). Se arma con el
-  toggle (prende el kick si no sonaba, como cualquier edición), entra en la
-  línea de compás y en la siguiente vuelve solo; volver a tocarlo lo cancela.
-  Es una capa encima de lo que suena (`feed()` en `app.js`): tus ediciones y las
-  variaciones de Improvisar siguen por debajo, y nunca va al storage.
-- **🎲 Nueva parte** escribe una parte nueva en la escala elegida. Con el loop
-  andando queda en cola (el botón late) y entra en el próximo inicio de loop;
-  otro clic antes la cancela; con el loop parado entra ya. Sigue hábitos del
-  género por capa ([`editing.js`](../images/psy-sampler/src/editing.js)): bajo
-  rolling entre kicks mayormente en la tónica, lead con un motivo de 8 pasos en
-  forma A A' A B, pad con una tríada por compás, toms ralos con fill al final.
-- Escalas en La: menor, **frigio** (Si♭, la tensión típica del psy), menor
-  armónica y cromática. Las notas fuera de la escala elegida siguen visibles (en
-  itálica) para poder borrarlas.
-- **Un editor abierto a la vez**: abrir uno pliega el que estuviera abierto, en
-  cualquier capa. Las grillas tienen encabezado de compás (1, 2) y de tiempo
-  (1-4), los tiempos 2 y 4 sombreados y una regla entre los dos compases.
+- **Click** on a step or cell: empty → hit/note → accent → empty. New notes are
+  as long as "New note" says (shortened so they don't overlap the next one in
+  the row or run past the end of the loop). **Dragging** with the mouse along a
+  row paints a long note; on touch, dragging scrolls the piano roll and a tap
+  adds a note.
+- **Editing something that isn't playing switches it on** (following the
+  solo/combine mode): what you edit is what you hear. Adding a note previews it
+  right away (`engine.audition`), except drum hits while the loop runs (an
+  off-grid hit only sounds like a mistake).
+- **🔀 Improvise** is a toggle and a slider on the same button. Click: while it's
+  on, the part changes at every loop start (`varyNotes` / `varySteps` in
+  `editing.js`: move a note to a nearby row, flip an accent, an echo a few steps
+  later, or drop one; on drums only off-beat hits, the pulse never moves).
+  Dragging across the button (or ← →) picks **how much** it changes, and the
+  colour fill shows it: 0 % changes nothing, 50 % (the default) makes 1-2
+  changes per loop, 100 % makes 6-7 and moves notes up to 3 rows
+  (`changesFor`). A drag doesn't switch it on or off. The amount is saved per
+  sound (`ws.improv`); the on/off state isn't. Every variation starts from
+  **what you wrote**, not from the previous variation, so it breathes around
+  the part without drifting away; variations only go to the engine, never to
+  storage, and switching it off brings your part back. Each loop tile has its
+  own 🔀 (above the ▾) that shows the state, switches it on or off without
+  opening the editor, and fills up with the amount. **Reset** switches Improvise
+  off and puts the amount back to 50 %.
+- **×2 hits** (drums) adds a hit halfway between each hit and the next (wrapping
+  around the loop): quarters → eighths → sixteenths. A one-step gap has no
+  middle and stays as it is. It's an edit: it gets saved.
+- **⏫ Build-up** (kicks only) sets up a roll for the next bar that keeps
+  doubling the density: half a bar of quarters, a quarter of eighths and four
+  accented sixteenths (`BUILD_UP` in `editing.js`). The toggle arms it (it
+  switches the kick on if it wasn't playing, like any edit), it comes in on the
+  bar line and on the next one it goes back by itself; pressing it again
+  cancels it. It's a layer on top of what plays (`feed()` in `app.js`): your
+  edits and Improvise's variations carry on underneath, and it never goes to
+  storage.
+- **🎲 New part** writes a new part in the chosen scale. While the loop runs it's
+  queued (the button pulses) and comes in at the next loop start; another click
+  before then cancels it; with the loop stopped it comes in right away. It
+  follows the genre's habits per layer
+  ([`editing.js`](../images/psy-sampler/src/editing.js)): a rolling bass between
+  kicks, mostly on the root; a lead with an 8-step motif in A A' A B form; a pad
+  with one triad per bar; sparse toms with a fill at the end.
+- Scales in A: minor, **Phrygian** (B♭, the typical psy tension), harmonic minor
+  and chromatic. Notes outside the chosen scale stay visible (in italics) so
+  they can be deleted.
+- **One editor open at a time**: opening one folds whichever was open, in any
+  layer. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
+  4 shaded, and a rule between the two bars.
 
-### Sonidos propios: duplicar y renombrar
+### Custom sounds: duplicate and rename
 
-**Duplicar** (en el editor) crea una copia justo al lado del original, la abre
-y deja el nombre seleccionado para escribir el nuevo. Una copia tiene id
-`<base>~n` (`kick.punchy~2`): `baseOf()` / `defOf()` en `patterns.js` resuelven
-tipo, voz, rango y FX a través de la base, así el motor, el editor y el
-`sanitize` no distinguen copias de originales. La copia arranca con los datos
-actuales del original y después es independiente. El **Nombre** se edita en
-vivo en cualquier sonido (también los de fábrica); vacío vuelve al nombre por
-defecto. Sólo las copias se pueden borrar (**Borrar sonido**).
+**Duplicate** (in the editor) creates a copy right next to the original, opens
+it and leaves the name selected to type a new one. A copy has id `<base>~n`
+(`kick.punchy~2`): `baseOf()` / `defOf()` in `patterns.js` resolve type, voice,
+range and FX through the base, so the engine, the editor and `sanitize` can't
+tell copies from originals. The copy starts with the original's current data and
+is independent from then on. The **Name** can be edited live on any sound
+(factory ones too); empty goes back to the default name. Only copies can be
+deleted (**Delete sound**).
 
-### Ordenar
+### Ordering
 
-Cada capa tiene una manija ⠿: arrastrar mueve la capa entera (o flechas ↑ ↓ con
-la manija enfocada). Los cuadraditos se arrastran dentro de su capa: con mouse
-apenas se mueven 6 px, en touch con un toque largo (350 ms), para que un swipe
-siga scrolleando y un tap siga siendo un clic; con teclado, Alt + flechas.
-Soltar nunca dispara el clic del sonido. Genérico en `ui/sortable.js`.
+Each layer has a ⠿ handle: dragging it moves the whole layer (or ↑ ↓ with the
+handle focused). Tiles drag within their layer: with a mouse after moving 6 px,
+on touch after a long press (350 ms), so a swipe still scrolls and a tap is still
+a click; with the keyboard, Alt + arrows. Dropping never fires the sound's click.
+Generic, in `ui/sortable.js`.
 
 ### Snapshots
 
-**📸 Snapshot** (en el transporte, al lado de Parar) guarda lo que suena como un
-momento del tema, en el panel **Snapshots**. Ese panel es una capa más: se
-reordena con su manija y arranca al final. Un snapshot (`snapshots.js`) guarda:
+**📸 Snapshot** (in the transport, next to Stop) saves what plays as a moment of
+the track, in the **Snapshots** panel. That panel is one more layer: it reorders
+with its handle and starts at the end. A snapshot (`snapshots.js`) saves:
 
-- **qué suena**: los lanes del motor. El kick de fondo pasa a ser el kick que
-  es, así suena igual aunque después apagues «Kick de fondo».
-- **cómo sonaba**: los datos de cada uno de esos sonidos, tal como sonaban en
-  ese loop (con la variación de Improvisar, sin el build-up). Si después
-  editás el bajo, el snapshot trae el bajo de entonces.
-- **el momento del tema** (intro, groove, subida, pico, break). Con el piloto
-  andando es la sección donde está. Si no, `guessSection()` lo adivina por el
-  mix: sin kick y con lead o pad → break; kick + pad → pico; kick + lead →
-  subida; con bajo → groove; si no, intro. El nombre por defecto es esa
-  sección («Pico», «Pico 2»…).
+- **what plays**: the engine's lanes. The background kick becomes the kick it
+  is, so it sounds the same even if "Background kick" is switched off later.
+- **how it sounded**: the data of each of those sounds, as it sounded in that
+  loop (with Improvise's variation, without the build-up). If you edit the bass
+  afterwards, the snapshot brings back the bass from then.
+- **the moment of the track** (intro, groove, build-up, peak, breakdown). With
+  the autopilot running it's the section it's in. Otherwise `guessSection()`
+  guesses it from the mix: no kick and a lead or pad → breakdown; kick + pad →
+  peak; kick + lead → build-up; with bass → groove; otherwise intro. The default
+  name is that section ("Peak", "Peak 2"…).
 
-Al sacarlo se abre su editor con el nombre seleccionado. **Clic** en el
-snapshot lo pone en cola (borde punteado) y entra en el próximo compás: la
-selección pasa a ser la suya y sus datos vuelven a sus sonidos (es una edición
-de esos sonidos: se guarda, y si coinciden con fábrica quedan sin ✎). Otro
-clic antes del compás cancela; doble clic entra ya; con el loop parado entra
-ya. Con el **piloto** andando, además lo lleva a la sección del snapshot y
-sigue desde ahí.
+Taking one opens its editor with the name selected. **Clicking** the snapshot
+queues it (dashed outline) and it comes in on the next bar: the selection
+becomes its own and its data goes back into its sounds (that's an edit of those
+sounds: it gets saved, and if it matches the factory data they show no ✎).
+Another click before the bar cancels; a double click comes in right away; with
+the loop stopped it comes in right away. With the **autopilot** running, it also
+takes it to the snapshot's section and carries on from there.
 
-El **editor** (▾) trabaja sobre un **borrador**: nombre (Enter guarda),
-momento, sacar un sonido (✕), agregar uno (toma cómo suena ahora; en kick o
-bajo reemplaza al que había) o **📸 Capturar lo que suena** para reemplazarlos
-todos. Nada cambia hasta **Guardar**, y **Descartar cambios** vuelve a lo
-guardado. El borrador sobrevive a cerrar el panel y al cambio de idioma (el
-cuadradito muestra «•»), pero no a recargar la página. **▶ Probar** pone a
-sonar el borrador en el próximo compás sin guardarlo. Borrar una copia de
-sonido la saca de los snapshots, y uno que queda sin sonidos desaparece.
+The **editor** (▾) works on a **draft**: name (Enter saves), moment, remove a
+sound (✕), add one (takes how it sounds now; on kick or bass it replaces the one
+there was) or **📸 Capture what plays** to replace them all. Nothing changes
+until **Save**, and **Discard changes** goes back to what's saved. The draft
+survives closing the panel and a language change (the tile shows "•"), but not
+a page reload. **▶ Try** plays the draft from the next bar without saving it.
+Deleting a sound copy removes it from the snapshots, and a snapshot left with no
+sounds disappears.
 
-### Qué se guarda
+### What gets saved
 
-Todo vive en un objeto, el **workspace** (`workspace.js`), en `localStorage`
-(`psy-sampler:v2`, por browser): BPM, los switches, el orden de capas y de
-cuadraditos, las copias, los nombres, los datos editados, los snapshots, el
-largo del cambio de BPM, la semilla, el estilo y los cambios del piloto, la
-intensidad de Improvisar de cada sonido y el idioma. Lo único que no se guarda es qué está sonando (una carga de página
-arranca en silencio: sin un clic no hay audio). `normalize()` es la única
-puerta de entrada, para el storage y para un preset importado: revisa cada
-campo y lo que no cierra vuelve al valor de fábrica, así que un dato viejo,
-tocado a mano o ajeno nunca rompe el loop. Si el storage no está (modo privado),
-funciona igual sin recordar.
+Everything lives in one object, the **workspace** (`workspace.js`), in
+`localStorage` (`psy-sampler:v2`, per browser): BPM, the switches, the order of
+layers and tiles, the copies, the names, the edited data, the snapshots, the
+length of the BPM change, the seed, the autopilot's style and changes, each
+sound's Improvise amount, and the language. The only thing not saved is what's
+playing (a page load starts silent: no audio without a click). `normalize()` is
+the only way in, for storage and for an imported preset: it checks every field
+and whatever doesn't add up goes back to the factory value, so old, hand-edited
+or foreign data never breaks the loop. Without storage (private mode) it works
+the same, without remembering.
 
-**Restaurar todo** (con confirmación) vuelve todo a fábrica salvo el idioma.
+**Reset everything** (with a confirmation) puts everything back to factory
+except the language.
 
-### Exportar
+### Export
 
-- **⬇ Audio del mix**: WAV de 2 compases de lo que suena. **⬇ WAV** en cada
-  editor: ese sonido solo (los FX, el one-shot con su cola). `engine.render()`
-  arma la misma cadena de salida en un `OfflineAudioContext` a 48 kHz; un loop
-  se renderiza **dos veces y se queda con la segunda pasada**, así las colas del
-  final ya están envueltas en el principio y el archivo loopea sin costura en
-  cualquier DAW. Un FX se renderiza 12 s y se recorta al silencio (-80 dBFS).
-  24-bit estéreo (`audio/wav.js`).
-- **Exportar / Importar preset**: el workspace (snapshots incluidos) + lo que
-  suena, en JSON (`app: "psy-sampler"`). Importar lo reemplaza entero y pone a
-  sonar su mix. Los links compartidos llevan sólo los sonidos, no los snapshots.
+- **⬇ Mix audio**: a 2-bar WAV of what plays. **⬇ WAV** in each editor: that
+  sound alone (for FX, the one-shot with its tail). `engine.render()` builds the
+  same output chain in an `OfflineAudioContext` at 48 kHz; a loop is rendered
+  **twice, keeping the second pass**, so the tails from the end are already
+  wrapped into the start and the file loops seamlessly in any DAW. An FX renders
+  12 s and is trimmed at silence (-80 dBFS). 24-bit stereo (`audio/wav.js`).
+- **Export / Import preset**: the workspace (snapshots included) + what plays,
+  as JSON (`app: "psy-sampler"`). Importing replaces it entirely and plays its
+  mix. Shared links carry only the sounds, not the snapshots.
 
-## Guardado en la nube
+## Cloud save
 
-Cualquiera con cuenta de Google puede guardar su workspace en el servidor y
-usarlo en otro dispositivo. El estado está **siempre a la vista** en la barra
-superior (`ui/account.js`), junto al link de vuelta a agu.com.ar y el idioma:
+Anyone with a Google account can save their workspace on the server and use it
+on another device. The state is **always visible** in the top bar
+(`ui/account.js`), next to the link back to agu.com.ar and the language:
 
-| Pastilla | Cuándo |
+| Pill | When |
 |---|---|
-| ☁ Nube… | todavía preguntando a la API |
-| ☁ Nube no disponible (gris) | la API no responde; se reintenta cada 30 s y todo queda en el browser |
-| ☁ Sólo en este browser (gris) + botón de Google | sin sesión |
-| ☁ Cambios sin subir… / Guardando… (ámbar) | con sesión, subiendo |
-| ☁ Guardado ✓ hh:mm (verde) | con sesión, la nube coincide con lo de acá |
-| ☁ Sin conexión / Error / Cambios de otro dispositivo (rojo) | con sesión, algo falló |
+| ☁ Cloud… | still asking the API |
+| ☁ Cloud unavailable (grey) | the API doesn't answer; retried every 30 s, everything stays in the browser |
+| ☁ This browser only (grey) + Google button | signed out |
+| ☁ Unsaved changes… / Saving… (amber) | signed in, uploading |
+| ☁ Saved ✓ hh:mm (green) | signed in, the cloud matches this browser |
+| ☁ Offline / Could not save / changes from another device (red) | signed in, something failed |
 
-Con sesión, el avatar abre un menú con el mail, **Salir** y **Borrar mis
-datos**. Si el script de Google no carga (bloqueador, sin red) queda escrito
-«Login no disponible» en vez de un hueco. En el celular la barra ocupa dos filas
-y no queda fija.
+Signed in, the avatar opens a menu with the email, **Sign out** and **Delete my
+data**. If Google's script doesn't load (blocker, no network) it reads
+"Sign-in unavailable" instead of leaving a gap. On a phone the bar takes two rows
+and isn't sticky.
 
-El botón de Google es un iframe con un documento claro adentro: si el
-`color-scheme` del iframe no coincide con el de ese documento, el browser le
-pinta un fondo opaco blanco. Por eso `.gsi-slot` fuerza `color-scheme: light`,
-y en modo oscuro el botón (`filled_black`) queda sin la caja blanca.
+The Google button is an iframe with a light document inside: if the iframe's
+`color-scheme` doesn't match that document's, the browser paints it an opaque
+white background. That's why `.gsi-slot` forces `color-scheme: light`, and in
+dark mode the button (`filled_black`) shows without the white box.
 
 ```mermaid
 sequenceDiagram
-  participant P as página
+  participant P as page
   participant G as Google (GIS)
   participant A as psy-sync /api
   P->>A: GET /api/health, /api/session
-  P->>G: botón «Acceder con Google»
+  P->>G: "Sign in with Google" button
   G-->>P: ID token (JWT)
   P->>A: POST /api/session {credential}
-  A->>A: verifica RS256 contra las claves de Google, aud, iss, exp, email_verified
-  A-->>P: cookie psy_session (HttpOnly, Secure, SameSite=Lax, Path=/api, 30 días)
-  P->>A: GET /api/state → reconcile → pull / push / preguntar
-  P->>A: PUT /api/state {state, base} (2,5 s después del último cambio)
+  A->>A: verifies RS256 against Google's keys, aud, iss, exp, email_verified
+  A-->>P: psy_session cookie (HttpOnly, Secure, SameSite=Lax, Path=/api, 30 days)
+  P->>A: GET /api/state → reconcile → pull / push / ask
+  P->>A: PUT /api/state {state, base} (2.5 s after the last change)
 ```
 
-**Por qué no oauth2-proxy**: el `google-auth` del cluster es un allowlist que
-abre los dashboards (Traefik, Grafana, Pi-hole, Shelly, logs); abrirlo a
-cualquier mail no es opción, y un segundo oauth2-proxy significa otro
-deployment, otra cookie y redirects que un `fetch` no sigue. En cambio la página
-usa *Sign in with Google* (el mismo client OAuth que agu.com.ar) y la API
-verifica el token ella misma y emite su propia cookie de sesión.
+**Why not oauth2-proxy**: the cluster's `google-auth` is an allowlist that opens
+the dashboards (Traefik, Grafana, Pi-hole, Shelly, logs); opening it to any
+email isn't an option, and a second oauth2-proxy means another deployment,
+another cookie, and redirects a `fetch` doesn't follow. Instead the page uses
+*Sign in with Google* (the same OAuth client as agu.com.ar), and the API verifies
+the token itself and issues its own session cookie.
 
-**API** ([`images/psy-sync`](../images/psy-sync), Bun sin dependencias:
+**API** ([`images/psy-sync`](../images/psy-sync), Bun with no dependencies:
 `bun:sqlite` + WebCrypto):
 
-| Ruta | |
+| Route | |
 |---|---|
-| `GET /api/health` | `{ ok, clientId }`: la página decide si muestra la fila |
+| `GET /api/health` | `{ ok, clientId }`: the page decides whether to show the cloud row |
 | `POST /api/session` | `{ credential }` → cookie |
-| `GET /api/session` | `{ email }` (`null` sin sesión: no es un error en cada visita); registra el header `X-Psy-Visitor` |
-| `DELETE /api/session` | salir |
-| `GET /api/state` | `{ state, updatedAt }` o 404 |
-| `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, o **409** con la copia guardada si `base` quedó viejo |
-| `DELETE /api/account` | borra el usuario y su workspace |
+| `GET /api/session` | `{ email }` (`null` when signed out: not an error on every visit); records the `X-Psy-Visitor` header |
+| `DELETE /api/session` | sign out |
+| `GET /api/state` | `{ state, updatedAt }` or 404 |
+| `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, or **409** with the stored copy when `base` is stale |
+| `DELETE /api/account` | deletes the user and their workspace |
 
-- El server **no interpreta** el workspace: guarda un objeto JSON opaco (tope
-  256 KB) y la página lo pasa por `normalize()` al traerlo, como a un preset.
-- Escrituras: además de `SameSite=Lax`, el header `Origin` tiene que ser
+- The server **doesn't interpret** the workspace: it stores an opaque JSON
+  object (capped at 256 KB) and the page runs it through `normalize()` when
+  fetching it, like a preset.
+- Writes: on top of `SameSite=Lax`, the `Origin` header must be
   `https://psy.agu.com.ar`.
-- La sesión es un HMAC sin estado (`sub.vencimiento.firma`); la clave se genera
-  en el primer arranque en el volumen, al lado de la base: **no hay Secret que
-  crear**. Borrar la cuenta borra la fila del usuario, y una cookie de un
-  usuario que no existe no abre nada.
-- Topes: `sync.maxUsers` (5000 cuentas; las existentes siguen entrando) y un
-  `rateLimit` de Traefik por IP real (`Cf-Connecting-IP`, como Home Assistant)
-  en la ruta `/api/`.
+- The session is a stateless HMAC (`sub.expiry.signature`); the key is generated
+  on first boot on the volume, next to the database: **no Secret to create**.
+  Deleting the account deletes the user's row, and a cookie for a user that no
+  longer exists opens nothing.
+- Caps: `sync.maxUsers` (5000 accounts; existing ones keep signing in) and a
+  Traefik `rateLimit` per real IP (`Cf-Connecting-IP`, like Home Assistant) on
+  the `/api/` route.
 
-**Sincronización** ([`cloud.js`](../images/psy-sampler/src/cloud.js)): cada
-browser recuerda, por cuenta, el `updatedAt` y un hash del contenido de la
-última sincronización (`psy-sampler:cloud`). Al entrar:
+**Sync** ([`cloud.js`](../images/psy-sampler/src/cloud.js)): each browser
+remembers, per account, the `updatedAt` and a content hash of the last sync
+(`psy-sampler:cloud`). On load:
 
-| Nube | Acá | Qué hace |
+| Cloud | Here | What it does |
 |---|---|---|
-| vacía | | sube lo de acá |
-| igual contenido | | nada |
-| donde la dejé | sin cambios / con cambios | nada / sube |
-| más nueva | sin cambios (o de fábrica) | la baja |
-| más nueva | con cambios | **pregunta** (Aceptar = la de la nube, Cancelar = pisarla con la de acá) |
+| empty | | uploads what's here |
+| same content | | nothing |
+| where I left it | no changes / changes | nothing / uploads |
+| newer | no changes (or factory) | downloads it |
+| newer | changes | **asks** (OK = the cloud's, Cancel = overwrite it with this one) |
 
-Cada guardado local sube 2,5 s después del último cambio, con `base` = la
-versión sobre la que se construyó; un 409 (otro dispositivo guardó en el medio)
-hace la misma pregunta. Al ocultar la pestaña lo pendiente sube con
-`keepalive`. Sin conexión queda local y sube con el próximo cambio.
+Each local save uploads 2.5 s after the last change, with `base` = the version it
+was built on; a 409 (another device saved in between) asks the same question.
+Hiding the tab uploads anything pending with `keepalive`. Offline, it stays local
+and uploads with the next change.
 
-**Infra** (en el chart `psy-sampler`, `sync.*` en `values.yaml`): un Deployment
-aparte (si la API está caída, o su imagen todavía no es pública, el sitio
-estático sigue andando y la página esconde la fila), `strategy: Recreate`
-(SQLite en un volumen RWO), PVC de 2 Gi en `local-path` con
-`helm.sh/resource-policy: keep` y `Prune=false`, contenedor sin root, root
-filesystem de sólo lectura y sin capabilities.
+**Infra** (in the `psy-sampler` chart, `sync.*` in `values.yaml`): a separate
+Deployment (if the API is down, or its image isn't public yet, the static site
+keeps working and the page hides the cloud row), `strategy: Recreate` (SQLite on
+an RWO volume), a 2 Gi PVC on `local-path` with `helm.sh/resource-policy: keep`
+and `Prune=false`, a non-root container with a read-only root filesystem and no
+capabilities.
 
-Metrics, dashboard and alerts (accounts, anonymous browsers, disk per
-account): [monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
+Metrics, dashboard and alerts (accounts, anonymous browsers, disk per account,
+visitor countries):
+[monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
 
-### Puesta en marcha (una vez)
+### One-time setup
 
-1. Google Cloud → APIs & Services → Credentials → el client OAuth de
-   agu.com.ar → **Authorized JavaScript origins**: agregar
-   `https://psy.agu.com.ar` (y `http://localhost:5173` para desarrollo). Sin eso
-   el botón de Google no carga ("origin is not allowed for the given client ID").
-2. Mergear; esperar `psy-sync-image.yml`; GitHub → Packages → `psy-sync` →
-   **Public** (igual que `psy-sampler`). Hasta entonces el pod de la API queda
-   en `ImagePullBackOff` y sólo la fila de la nube no aparece.
+1. Google Cloud → APIs & Services → Credentials → the agu.com.ar OAuth client →
+   **Authorized JavaScript origins**: add `https://psy.agu.com.ar` (and
+   `http://localhost:5173` for development). Without it the Google button
+   doesn't load ("origin is not allowed for the given client ID").
+2. Merge; wait for `psy-sync-image.yml`; GitHub → Packages → `psy-sync` →
+   **Public** (same as `psy-sampler`). Until then the API pod sits in
+   `ImagePullBackOff` and only the cloud row is missing.
 
-### Datos y backups
+### Data and backups
 
-La base (`psy-sync.db`) y la clave de sesión viven en el PVC, en la SD del Pi.
-**No hay backup automático**: perder la SD pierde las cuentas y lo guardado en
-la nube (cada browser conserva su copia local, que se vuelve a subir al
-entrar). Para copiar a mano:
+The database (`psy-sync.db`) and the session key live on the PVC, on the Pi's
+SD card. **There's no automatic backup**: losing the card loses the accounts and
+what's saved in the cloud (each browser keeps its local copy, which uploads
+again on the next visit). To copy it by hand:
 `kubectl -n psy-sampler exec deploy/psy-sampler-sync -- cat /data/psy-sync.db > psy-sync.db`
-(con WAL, mejor `sqlite3 .backup` si hace falta una copia consistente bajo
-carga).
+(with WAL, prefer `sqlite3 .backup` if a consistent copy under load is needed).
 
-### Desarrollo
+### Development
 
 ```bash
 cd images/psy-sync && bun test
 DATA_DIR=/tmp/psd GOOGLE_CLIENT_ID=<client> ALLOWED_ORIGINS=http://localhost:5173 bun src/server.js
-cd images/psy-sampler && npm run dev   # Vite proxya /api a :8787
+cd images/psy-sampler && npm run dev   # Vite proxies /api to :8787
 ```
 
-## Piloto automático y semillas
+## Autopilot and seeds
 
-**🤖 Piloto automático** (`autopilot.js`) recorre las secciones de un tema y en
-cada inicio de loop decide qué suena:
+**🤖 Autopilot** (`autopilot.js`) walks through the sections of a track and
+decides at every loop start what plays:
 
-| Sección | Compases | Kick | Bajo | Perc | Lead | Pad | Al entrar |
+| Section | Bars | Kick | Bass | Perc | Lead | Pad | On entry |
 |---|---|---|---|---|---|---|---|
 | Intro | 8 | 1 | – | 1 | – | 1 | |
-| Groove | 8 o 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | a veces láser o sirena; 25 % bajo nuevo |
-| Subida | 8 | 1 | 1 | 2 | 1 | 0-1 | 50 % lead nuevo |
-| Pico | 16 o 24 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
-| Break | 8 o 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
+| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | sometimes a laser or siren; 25 % new bass |
+| Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 50 % new lead |
+| Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | crash or impact |
+| Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % new lead |
 
-Después del Pico va al Break o al Groove; del Break a la Subida. El largo de
-cada sección se sortea entre sus opciones (siempre frases enteras de 8
-compases); ninguna pasa de 24 compases. El último loop antes de un Pico dispara
-un riser, riser + impacto o platillo invertido de 2 compases que cae justo en
-él, venga de una Subida o de una fase encolada.
+After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
+Build-up. Each section's length is drawn from its options (always whole 8-bar
+phrases); none is longer than 24 bars. The last loop before a Peak fires a
+2-bar riser, riser + impact or reverse cymbal that lands right on it, whether it
+comes from a Build-up or from a queued section.
 
-- **Nunca sólo kick, bajo y percusión.** Toda sección toca al menos un lead o
-  un pad (si la forma sortea cero de los dos, se agrega uno, preferentemente de
-  la capa que ya sonaba): sin eso suena a principio o final de tema. Si igual
-  se llega a ese estado (porque sacaste el lead a mano), dura **un compás**: en
-  la línea de compás siguiente el piloto agrega un lead o un pad del estilo
-  (`isBare` / `fillMelodic`).
-- **Cambios**: dentro de una sección se cambia un sonido por otro de la misma
-  capa (nunca el kick) cada N compases, contados desde el inicio de la sección.
-  N se elige con el slider **Cambios** (2, 4, 8, 16 o 32 compases; por defecto
-  8). Una variante que suena sobrevive al cambio de sección con 75 %.
-- **Fases a mano**: los botones Intro / Groove / Subida / Pico / Break con el
-  piloto andando **encolan** esa fase: entra cuando termina la que suena, en
-  orden, en vez de la que tocaba. La fila del piloto muestra la sección actual,
-  los compases que le quedan y la cola (`→ Pico ✕ → Break ✕`); ✕ saca una fase
-  que todavía no suena, y en el último loop la que entra late (si no hay cola,
-  aparece en gris la que eligió el piloto). **⏭ Siguiente** termina la sección
-  en el próximo loop. Con el piloto apagado, un botón de fase lo prende
-  arrancando en esa fase (desde silencio la arma de cero; sobre un mix, lo
-  reacomoda a esa forma en el próximo loop).
-- **Estilo**: cada estilo (`STYLES`) restringe cada capa a los sonidos que le
-  quedan (las copias siguen a su sonido base), fija el BPM y la escala de las
-  melodías nuevas, y cambia algunos FX de entrada. Elegirlo lleva el BPM al del
-  estilo (con la rampa de «Cambio de BPM» si el loop anda) y, con el piloto
-  andando, reacomoda la sección con los sonidos nuevos en el próximo loop.
+- **Never just kick, bass and percussion.** Every section plays at least one
+  lead or pad (if the form draws zero of both, one is added, preferably from the
+  layer that was already playing): without one it sounds like the start or end
+  of a track. If that state happens anyway (because you removed the lead by
+  hand), it lasts **one bar**: on the next bar line the autopilot adds a lead or
+  pad from the style (`isBare` / `fillMelodic`).
+- **Changes**: inside a section one sound is swapped for another of the same
+  layer (never the kick) every N bars, counted from the start of the section. N
+  is picked with the **Changes** slider (2, 4, 8, 16 or 32 bars; 8 by default).
+  A playing variant survives a section change with 75 %.
+- **Sections by hand**: the Intro / Groove / Build-up / Peak / Breakdown buttons,
+  with the autopilot running, **queue** that section: it comes in when the
+  playing one ends, in order, instead of the one that was due. The autopilot row
+  shows the current section, the bars it has left and the queue
+  (`→ Peak ✕ → Breakdown ✕`); ✕ removes a section that isn't playing yet, and on
+  the last loop the incoming one pulses (with no queue, the autopilot's own pick
+  shows in grey). **⏭ Next** ends the section on the next loop. With the
+  autopilot off, a section button switches it on starting in that section (from
+  silence it builds it from scratch; over a mix, it reshapes it to that form on
+  the next loop).
+- **Style**: each style (`STYLES`) restricts every layer to the sounds that suit
+  it (copies follow their base sound), sets the BPM and the scale of new
+  melodies, and swaps some entry FX. Picking one takes the BPM to the style's
+  (with the "BPM change" ramp if the loop is running) and, with the autopilot
+  running, reshapes the section with the new sounds on the next loop.
 
-| Estilo | BPM | Escala de las melodías | Sonidos |
+| Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
-| Techno | 132 | la de cada sonido | kick 909 y rumble, reese, hats 16avos, rim, stab Am7, drones y quintas |
-| Psytrance progresivo | 138 | la de cada sonido | kick progresivo, offbeat largo, campana, arpegio 3/16, Am → F → G, sus4 |
-| Psytrance | 145 | la de cada sonido | punchy y full-on, rolling, ácido, arpegios, stabs, pads menores y frigio |
-| Psytech | 142 | frigio | kick seco, rolling FM, rim, ácido frigio, zapper, pad oscuro |
-| Hi-tech | 180 | frigio | tok, rolling saltarín, hats 16avos, zapper, ácido frigio |
-| Goa | 145 | menor armónica | cuerpo largo, rolling, toms, ácido, melódico, sirenas |
-| Dark psy | 155 | frigio | dark tok, rolling frigio, rim, toms, zapper, pad oscuro |
-| Todo vale | — | la de cada sonido | todos (no toca el BPM) |
+| Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths |
+| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4 |
+| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads |
+| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, dark pad |
+| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid |
+| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens |
+| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, dark pad |
+| Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
-Usa también las copias. Mientras corre, el kick de fondo no suena (el Break es
-sin kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
+It uses copies too. While it runs the background kick doesn't play (the
+Breakdown has no kick). Clicking during the autopilot is fine: it carries on from
+what you picked.
 
-**Semilla**: todas las decisiones salen de un PRNG (`seeded(hashSeed(semilla))`),
-así **la misma semilla y el mismo estilo generan el mismo tema en cualquier
-browser**. La semilla además define cómo suena el tema:
+**Seed**: every decision comes from a PRNG (`seeded(hashSeed(seed))`), so **the
+same seed and the same style make the same track in any browser**. The seed also
+decides how the track sounds:
 
-- **Melodías**: cada lead que entra recibe una melodía nueva del PRNG
-  (`newPart` en `editing.js`), en la escala del estilo. Si el lead es de
-  acordes o de notas largas (stabs, melódico, campana, stab techno) conserva su
-  ritmo y la forma de sus acordes y los lleva a otros grados de la escala; si
-  es de notas sueltas (ácido, arpegios, zapper) se escribe un motivo nuevo.
-- **Sonidos** (`dress.js`): cada sonido que el piloto trae (también los FX que
-  dispara) mueve sus perillas hasta ±20 % del rango alrededor del valor de
-  fábrica (Hz, decay, click, brillo…) y una parte melódica puede pasar a otro
-  sinte de su grupo (un bajo a otro bajo, un lead a otro lead). Esto sale de
-  `semilla/id` y no del PRNG del tema, así un sonido es siempre el mismo dentro
-  de un tema aunque entre y salga. El largo de los FX no se toca: marca las
-  transiciones. El cuadradito muestra 🎲 en lo que escribió o vistió el piloto.
+- **Melodies**: each lead that comes in gets a new melody from the PRNG
+  (`newPart` in `editing.js`), in the style's scale. A chord or long-note lead
+  (stabs, melodic, bell, techno stab) keeps its rhythm and the shape of its
+  chords and moves them to other scale degrees; a single-note lead (acid,
+  arpeggios, zapper) gets a new motif.
+- **Sounds** (`dress.js`): every sound the autopilot brings in (including the FX
+  it fires) moves its knobs up to ±20 % of the range around the factory value
+  (Hz, decay, click, brightness…), and a melodic part can switch to another
+  synth of its group (a bass to another bass, a lead to another lead). This
+  comes from `seed/id`, not from the track's PRNG, so a sound is always the same
+  within a track even as it comes and goes. FX length isn't touched: it marks
+  the transitions. The tile shows 🎲 on what the autopilot wrote or dressed.
 
-Para que la repetición sea cierta:
+For the replay to hold:
 
-- Prender el piloto en silencio arranca de la Intro. Con algo sonando no
-  empieza de nuevo: toma el mix tal cual, adivina en qué sección está
-  (`guessSection`, la misma que nombra los snapshots) y sigue desde ahí con la
-  semilla; el kick de fondo pasa a ser un kick real para que no se corte. Ese
-  tema depende de la semilla *y* del mix de partida: para compartir uno
-  reproducible, arrancá de silencio.
-- Las partes que el piloto escribió o vistió (`ws.auto`) vuelven a fábrica al
-  prenderlo desde silencio (sobre un mix sonando se quedan, para no cambiar lo
-  que suena). Si editás una a mano pasa a ser tuya y el piloto no la toca más.
-- Los pools se leen ordenados por id, nunca en el orden de los cuadraditos.
-- Una parte nueva se calcula (y consume el PRNG) desde la parte de fábrica,
-  aunque no se aplique porque la editaste: tus ediciones cambian cómo suena, no
-  la secuencia.
-- El lead o pad que agrega el guard de «un compás pelado» sale de
-  `Math.random`: sólo pasa si tocaste el mix, y no corre la secuencia.
+- Switching the autopilot on in silence starts from the Intro. With something
+  playing it doesn't start over: it takes the mix as is, guesses which section
+  it's in (`guessSection`, the same one that names snapshots) and carries on
+  from there with the seed; the background kick becomes a real kick so it
+  doesn't drop out. That track depends on the seed *and* the starting mix: to
+  share a reproducible one, start from silence.
+- The parts the autopilot wrote or dressed (`ws.auto`) go back to factory when
+  it's switched on from silence (over a playing mix they stay, so what plays
+  doesn't change). Editing one by hand makes it yours and the autopilot leaves
+  it alone.
+- Pools are read sorted by id, never in tile order.
+- A new part is computed (and consumes the PRNG) from the factory part, even
+  when it isn't applied because you edited it: your edits change how it sounds,
+  not the sequence.
+- The lead or pad that the "one bare bar" guard adds comes from `Math.random`:
+  it only happens if you touched the mix, and it doesn't shift the sequence.
 
-**🔗 Compartir** copia un link `#seed=…&style=…&bpm=…` y, si tenés sonidos
-editados o duplicados, `&s=…`: esos sonidos como preset JSON, `deflate-raw` y
-base64url (`share.js`), porque el tema sólo es el mismo con los mismos sonidos.
-Lo que escribió o vistió el piloto no viaja: la semilla lo vuelve a generar.
-Abrir el link carga semilla, estilo y BPM (los sonidos, con confirmación si ya tenías los
-tuyos), limpia el fragmento y avisa que se toque el piloto: el audio necesita
-ese clic. 🎲 sortea una semilla nueva (6 caracteres sin 0/o/1/l/i).
+**🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited or
+duplicated sounds, `&s=…`: those sounds as a JSON preset, `deflate-raw` and
+base64url (`share.js`), because the track is only the same with the same sounds.
+What the autopilot wrote or dressed doesn't travel: the seed regenerates it.
+Opening the link loads seed, style and BPM (the sounds too, with a confirmation
+if you already had your own), clears the fragment and says to press the
+autopilot: audio needs that click. 🎲 draws a new seed (6 characters without
+0/o/1/l/i).
 
-## Idiomas
+## Languages
 
-`i18n/{es,en,pt}.js` tienen todos los textos (capas, variantes, sintes,
-perillas, escalas, nombres de nota: La/A/Lá) y `i18n.test.js` exige que los tres
-tengan exactamente la misma forma. Por defecto, el idioma guardado; si no, el
-del browser; si no, español. Cambiar de idioma reconstruye la app sin cortar lo
-que suena (ni el piloto, ni la cola, ni el editor abierto).
+`i18n/{es,en,pt}.js` hold every string (layers, variants, synths, knobs, scales,
+note names: La/A/Lá) and `i18n.test.js` requires all three to have exactly the
+same shape. The default is the saved language; otherwise the browser's;
+otherwise Spanish. Changing the language rebuilds the app without stopping what
+plays (not the autopilot, not the queue, not the open editor).
 
-## Pantalla
+## Screen
 
-Vertical: una columna. Horizontal desde 1000 px: las capas en dos columnas
-(tres desde 1800 px), cada una con el título arriba de sus cuadraditos. Celular
-acostado (alto ≤ 500 px): dos columnas y sin la bajada del título. Nunca hay
-scroll horizontal de página: las grillas de 32 pasos scrollean en su caja.
+Portrait: one column. Landscape from 1000 px: layers in two columns (three from
+1800 px), each with its title above its tiles. A phone on its side (height ≤
+500 px): two columns and no subtitle. There's never horizontal page scroll: the
+32-step grids scroll inside their box.
 
-## Capas
+## Layers
 
-| Capa | Variante | Qué es |
+| Layer | Variant | What it is |
 |---|---|---|
-| Kick (exclusiva) | Punchy corto | seno 170→50 Hz en 70 ms, decay 200 ms + click de ruido HP 3 kHz |
-| | Cuerpo largo | 120→42 Hz en 160 ms, decay 340 ms, sin click |
-| | Tok hi-tech | 230→58 Hz en 35 ms, decay 120 ms |
-| | Full-on gordo | 150→46 Hz en 100 ms, decay 260 ms, click al 60 % |
-| | Techno 909 | 200→52 Hz en 50 ms, decay 320 ms, click al 80 % |
-| | Rumble | 110→38 Hz en 200 ms, decay 600 ms (la cola pisa el beat siguiente) |
-| | Progresivo | 140→48 Hz en 90 ms, decay 240 ms, click al 40 % |
-| | Psytech seco | 190→55 Hz en 45 ms, decay 160 ms |
-| | Dark tok | 250→62 Hz en 25 ms, decay 90 ms |
-| Bajo (exclusiva, La1 = 55 Hz) | Offbeat | paso % 4 == 2 |
-| | Rolling | paso % 4 != 0 (3 notas entre kicks) |
-| | Rolling con octava | igual, la del paso % 4 == 2 una octava arriba |
-| | Galope | pasos % 4 ∈ {2, 3}: K-BB |
-| | Rolling FM | rolling en FM bass, acento en el paso después del kick |
-| | Offbeat largo | sub, corcheas en el contratiempo y un Sol al final |
-| | Reese techno | reese en los pasos 2 y 7 de cada medio compás |
-| | Rolling saltarín | FM, La1-La2-Mi2 entre kicks |
-| | Rolling frigio | rolling con Si♭ en los últimos 3 pasos de cada compás |
-| Percusión (se apilan) | Hi-hat abierto | contratiempo, HP 7 kHz, 140 ms |
-| | Hi-hat cerrado | semicorcheas impares, HP 9 kHz, 35 ms |
-| | Shaker | cada paso, acento en las corcheas |
-| | Clap | beats 2 y 4, BP 1,8 kHz, doble ráfaga a 12 ms |
-| | Snare | beats 2 y 4 con acento + redoble en los pasos 29-31 |
-| | Ride | metal 808 (6 squares inharmónicas, BP 9 kHz), acento en el contratiempo |
-| | Toms tribales | sinte `tom` en el piano roll, con fill al final |
-| | Hats 16avos | cerrado en cada paso, HP 10 kHz, acento en el contratiempo |
-| | Rim | voz `rim` (triángulo 1,7 kHz + tick de ruido), sincopado |
-| Lead (se apilan) | Ácido | 303: línea de 16 pasos en La menor con silencios y acentos; cutoff base que deriva 300 Hz ↔ 1,5 kHz cada 16 s (reloj de audio, no del loop) |
-| | Arpegio | square, La-Do-Mi-La por semicorchea |
-| | Arpegio 3/16 | pluck, ciclo de 3 notas contra la grilla de 4 |
-| | Melódico | saw con vibrato retardado, una nota cada 8 pasos (La-Do-Sol-Mi) |
-| | Stabs | supersaw, La-Do-Mi sincopado |
-| | Zapper | zapper en corcheas, La3 / Mi4 |
-| | Campana | FM bell, figura con puntillo |
-| | Ácido frigio | 303 con Si♭ (escala frigia) |
-| | Stab techno | analog, Am7 en los pasos 3, 11, 19 y 27 |
-| Pad (se apilan) | La menor | La3-Do4-Mi4, re-dispara cada 16 pasos con release solapado |
-| | Am → Si♭ | i → ♭II, el giro frigio |
-| | Drone | La2 + Mi3, LP resonante con LFO de 0,12 Hz, 2 compases |
-| | Viento | ruido BP afinado a 4× la nota, LFO lento |
-| | Sus4 → menor | La-Re-Mi que resuelve en La menor |
-| | Oscuro | drone La2 + Si♭2 + Mi3 (frigio) |
-| | Am → F → G | i-VI-VII, la subida del progresivo |
-| | Supersaw | La menor con La4 arriba, 2 compases |
-| | Quintas | La2-Mi3-La3, sin tercera |
-| FX | Riser | ruido BP 300 Hz → «Hasta» (9 kHz) en «Largo» (2 compases) |
-| | Riser + impacto | el impacto cae justo al final del riser |
-| | Downlifter | ruido BP «Desde» (8 kHz) → 150 Hz + seno 400→40 Hz |
-| | Sweep de ruido | BP angosto que sube a «Pico» y baja |
-| | Impacto | seno «Tono» (90 Hz) → ×0,31 + ruido LP, decay 1,5 s |
-| | Láser | saw 4 kHz → 60 Hz |
-| | Crash | ruido HP 6 kHz, 2 s |
-| | Sirena goa | saw 300 → 1200 Hz con vibrato |
-| | Platillo invertido | ruido HP «Corte» (5 kHz) que crece en «Largo» (2 compases) y corta en la línea de compás |
+| Kick (exclusive) | Short punchy | sine 170→50 Hz in 70 ms, decay 200 ms + HP 3 kHz noise click |
+| | Long body | 120→42 Hz in 160 ms, decay 340 ms, no click |
+| | Hi-tech tok | 230→58 Hz in 35 ms, decay 120 ms |
+| | Fat full-on | 150→46 Hz in 100 ms, decay 260 ms, click at 60 % |
+| | Techno 909 | 200→52 Hz in 50 ms, decay 320 ms, click at 80 % |
+| | Rumble | 110→38 Hz in 200 ms, decay 600 ms (the tail runs into the next beat) |
+| | Progressive | 140→48 Hz in 90 ms, decay 240 ms, click at 40 % |
+| | Dry psytech | 190→55 Hz in 45 ms, decay 160 ms |
+| | Dark tok | 250→62 Hz in 25 ms, decay 90 ms |
+| Bass (exclusive, A1 = 55 Hz) | Offbeat | step % 4 == 2 |
+| | Rolling | step % 4 != 0 (3 notes between kicks) |
+| | Rolling octave | the same, with the step % 4 == 2 note an octave up |
+| | Gallop | steps % 4 ∈ {2, 3}: K-BB |
+| | FM rolling | rolling on the FM bass, accent on the step after the kick |
+| | Long offbeat | sub, eighths on the offbeat and a G at the end |
+| | Techno reese | reese on steps 2 and 7 of every half bar |
+| | Jumping rolling | FM, A1-A2-E2 between kicks |
+| | Phrygian rolling | rolling with B♭ on the last 3 steps of every bar |
+| Percussion (stack) | Open hi-hat | offbeat, HP 7 kHz, 140 ms |
+| | Closed hi-hat | odd sixteenths, HP 9 kHz, 35 ms |
+| | Shaker | every step, accent on the eighths |
+| | Clap | beats 2 and 4, BP 1.8 kHz, double burst 12 ms apart |
+| | Snare | beats 2 and 4 accented + a roll on steps 29-31 |
+| | Ride | 808 metal (6 inharmonic squares, BP 9 kHz), accent on the offbeat |
+| | Tribal toms | `tom` synth on the piano roll, with a fill at the end |
+| | 16th hats | closed on every step, HP 10 kHz, accent on the offbeat |
+| | Rim | `rim` voice (1.7 kHz triangle + noise tick), syncopated |
+| Lead (stack) | Acid | 303: a 16-step line in A minor with rests and accents; base cutoff drifting 300 Hz ↔ 1.5 kHz every 16 s (audio clock, not the loop) |
+| | Arpeggio | square, A-C-E-A in sixteenths |
+| | 3/16 arpeggio | pluck, a 3-note cycle against the grid of 4 |
+| | Melodic | saw with delayed vibrato, one note every 8 steps (A-C-G-E) |
+| | Stabs | supersaw, syncopated A-C-E |
+| | Zapper | zapper in eighths, A3 / E4 |
+| | Bell | FM bell, dotted figure |
+| | Phrygian acid | 303 with B♭ (Phrygian scale) |
+| | Techno stab | analog, Am7 on steps 3, 11, 19 and 27 |
+| Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
+| | Am → B♭ | i → ♭II, the Phrygian move |
+| | Drone | A2 + E3, resonant LP with a 0.12 Hz LFO, 2 bars |
+| | Wind | BP noise tuned to 4× the note, slow LFO |
+| | Sus4 → minor | A-D-E resolving to A minor |
+| | Dark | A2 + B♭2 + E3 drone (Phrygian) |
+| | Am → F → G | i-VI-VII, the progressive lift |
+| | Supersaw | A minor with A4 on top, 2 bars |
+| | Fifths | A2-E3-A3, no third |
+| FX | Riser | BP noise 300 Hz → "To" (9 kHz) over "Length" (2 bars) |
+| | Riser + impact | the impact lands right at the end of the riser |
+| | Downlifter | BP noise "From" (8 kHz) → 150 Hz + sine 400→40 Hz |
+| | Noise sweep | narrow BP rising to "Peak" and back down |
+| | Impact | sine "Tone" (90 Hz) → ×0.31 + LP noise, decay 1.5 s |
+| | Laser | saw 4 kHz → 60 Hz |
+| | Crash | HP noise 6 kHz, 2 s |
+| | Goa siren | saw 300 → 1200 Hz with vibrato |
+| | Reverse cymbal | HP noise ("HP cutoff", 5 kHz) swelling over "Length" (2 bars) and cutting on the bar line |
 
-Los FX duran según el BPM al momento del disparo. Con el loop andando entran en
-el próximo beat; con el loop parado, ya.
+FX length follows the BPM at the moment they fire. While the loop runs they come
+in on the next beat; with the loop stopped, right away.
 
-### Sintes
+### Synths
 
-Cualquier variante melódica puede tocar con cualquiera de estos
-([`voices.js`](../images/psy-sampler/src/audio/voices.js) `INSTRUMENTS`). Todos
-aceptan notas de cualquier largo, acento (+30 %) y «Brillo» (multiplica el
-cutoff, tope 18 kHz):
+Any melodic variant can play with any of these
+([`voices.js`](../images/psy-sampler/src/audio/voices.js) `INSTRUMENTS`). All of
+them take notes of any length, accent (+30 %) and "Brightness" (multiplies the
+cutoff, capped at 18 kHz):
 
-| Grupo | Sinte | Patch |
+| Group | Synth | Patch |
 |---|---|---|
-| Bajos | Saw pluck | saw + LP que se cierra dentro del primer paso |
-| | Sub | seno + triángulo una octava arriba |
-| | FM bass | 2 operadores relación 1, índice 5 → 0,3 en 120 ms (estilo Operator) |
+| Basses | Saw pluck | saw + an LP that closes within the first step |
+| | Sub | sine + a triangle an octave up |
+| | FM bass | 2 operators at ratio 1, index 5 → 0.3 over 120 ms (Operator style) |
 | | Reese | 2 saws ±12 cents + sub, LP 700 Hz |
-| Leads | Acid 303 | saw + LP Q 14 con envolvente sobre el cutoff que deriva |
-| | Supersaw | 5 saws a ±9/±18 cents (estilo Wavetable) |
-| | Analog | 2 squares ±6 cents, LP con envolvente (estilo Analog) |
-| | Pluck | saw + square, LP 6 kHz → 300 Hz (estilo Drift) |
-| | Square | square percusiva |
-| | Saw lead | saw sostenida con vibrato retardado |
-| | FM bell | relación 3,5, índice que cae con la nota (estilo Operator) |
-| | Zapper | cada nota cae 2 octavas en 40 ms |
-| Pads | Saw pad / Drone / Viento | ver la tabla de capas |
-| Percusión | Tom | seno que cae a 0,6× en 250 ms |
+| Leads | Acid 303 | saw + LP Q 14 with an envelope on the drifting cutoff |
+| | Supersaw | 5 saws at ±9/±18 cents (Wavetable style) |
+| | Analog | 2 squares ±6 cents, enveloped LP (Analog style) |
+| | Pluck | saw + square, LP 6 kHz → 300 Hz (Drift style) |
+| | Square | percussive square |
+| | Saw lead | sustained saw with delayed vibrato |
+| | FM bell | ratio 3.5, index falling over the note (Operator style) |
+| | Zapper | every note falls 2 octaves in 40 ms |
+| Pads | Saw pad / Drone / Wind | see the layers table |
+| Percussion | Tom | sine falling to 0.6× over 250 ms |
 
-### Mezcla
+### Mix
 
-Medido en Chrome (`OfflineAudioContext`, 2 vueltas a 145 BPM, lane → master):
-los 16 sintes tocando la misma línea quedan entre **-19 y -28 dBFS RMS**;
-Viento, FM bell, Zapper y Pluck se subieron 4-10 dB para que cambiar de sinte no
-parezca que se apagó.
+Measured in Chrome (`OfflineAudioContext`, 2 passes at 145 BPM, lane → master):
+the 16 synths playing the same line sit between **-19 and -28 dBFS RMS**; Wind,
+FM bell, Zapper and Pluck were raised 4-10 dB so switching synths doesn't sound
+like it went silent.
 
-A la salida real (todos los nodos, tomado del destination):
+At the real output (every node, taken from the destination):
 
-| | pico dBFS |
+| | peak dBFS |
 |---|---|
-| una capa sola (kick / bajo / ácido / pad) | -3,4 / -3,6 / -3,1 / -3,7 |
-| **todo apilado**: 18 loops + riser+impacto + crash + impacto + sirena, con delay y reverb | -1,8 (0 muestras sobre 1,0) |
+| one layer alone (kick / bass / acid / pad) | -3.4 / -3.6 / -3.1 / -3.7 |
+| **everything stacked**: 18 loops + riser+impact + crash + impact + siren, with delay and reverb | -1.8 (0 samples over 1.0) |
 
-Sin limiter, el todo-apilado pasaba a +1,5 dBFS. El compresor está suave a
-propósito (-10 dB, 4:1, knee 6, 3 ms / 150 ms: los defaults de Web Audio,
--24 dB 12:1, aplastarían la dinámica que una capa sola tiene que dejar oír);
-atrás va un limiter (-1,5 dB, 20:1, knee 0, 1 ms / 80 ms) y un trim de 0,8.
+Without the limiter, everything stacked went to +1.5 dBFS. The compressor is
+gentle on purpose (-10 dB, 4:1, knee 6, 3 ms / 150 ms: Web Audio's defaults,
+-24 dB 12:1, would flatten the dynamics a single layer has to let through);
+after it comes a limiter (-1.5 dB, 20:1, knee 0, 1 ms / 80 ms) and a 0.8 trim.
 
 ## Deploy
 
-Mismo pipeline que `agu-spa`: push a `main` que toque `images/psy-sampler/` →
-`psy-sampler-image.yml` publica `ghcr.io/frodoagu/psy-sampler:latest` (+
-`sha-<commit>`) → Image Updater pinea `latest@sha256:…` en
-`charts/psy-sampler/values.yaml` → Argo CD sincroniza.
+Same pipeline as `agu-spa`: a push to `main` touching `images/psy-sampler/` →
+`psy-sampler-image.yml` publishes `ghcr.io/frodoagu/psy-sampler:latest` (+
+`sha-<commit>`) → Image Updater pins `latest@sha256:…` into
+`charts/psy-sampler/values.yaml` → Argo CD syncs.
 
-### Primer deploy: el paquete de GHCR tiene que ser público
+### First deploy: the GHCR package must be public
 
-`imagePullSecrets: []`: la imagen sólo contiene lo que cualquiera baja de
-`psy.agu.com.ar`, así que no hay nada que proteger. GHCR crea el paquete
-**privado** en el primer push; hasta cambiarlo el pod queda en `ImagePullBackOff`:
+`imagePullSecrets: []`: the image only holds what anyone downloads from
+`psy.agu.com.ar`, so there's nothing to protect. GHCR creates the package
+**private** on the first push; until it's changed the pod sits in
+`ImagePullBackOff`:
 
-1. Mergear; esperar el run de `psy-sampler-image.yml`.
+1. Merge; wait for the `psy-sampler-image.yml` run.
 2. GitHub → Packages → `psy-sampler` → Package settings → Change visibility →
    **Public**.
-3. El kubelet reintenta solo (backoff ≤ 5 min), o
+3. The kubelet retries on its own (backoff ≤ 5 min), or
    `kubectl -n psy-sampler rollout restart deploy/psy-sampler`.
 
-Para dejarlo privado: sellar un `ghcr-creds` docker-registry en el namespace
-`psy-sampler` (ver [secrets.md](secrets.md)) y listarlo en `imagePullSecrets`.
+To keep it private: seal a `ghcr-creds` docker-registry Secret into the
+`psy-sampler` namespace (see [secrets.md](secrets.md)) and list it in
+`imagePullSecrets`.
 
 ### DNS
 
-- `psy.agu.com.ar` está en `cloudflare-ddns` (registro A, proxied).
-- **No** está en los `localRecords` de Pi-hole, a propósito: esos registros se
-  renderizan como env del Deployment de Pi-hole (`strategy: Recreate`), así que
-  agregar un host reinicia Pi-hole y corta DNS + DHCP de la LAN durante el rollout.
-  Para 20 kB de estáticos el atajo no aporta nada; desde la LAN resuelve a
-  Cloudflare, igual que `shelly` y `yaskia.com`.
-- Probe de blackbox (`blackboxTargets.public`) para uptime + vencimiento de TLS.
-- Tarjeta en la grilla pública de `agu.com.ar` (entrada con `href` en `apps` de
+- `psy.agu.com.ar` is in `cloudflare-ddns` (A record, proxied).
+- It's **not** in Pi-hole's `localRecords`, on purpose: those records render into
+  the Pi-hole Deployment's env (`strategy: Recreate`), so adding a host restarts
+  Pi-hole and cuts LAN DNS + DHCP during the rollout. For 20 kB of static files
+  the shortcut buys nothing; from the LAN it resolves to Cloudflare, like
+  `shelly` and `yaskia.com`.
+- Blackbox probe (`blackboxTargets.public`) for uptime + TLS expiry.
+- A card in the public grid of `agu.com.ar` (an entry with `href` in `apps` of
   [`registry.jsx`](../images/home-site/src/apps/registry.jsx)).
 
-## Desarrollo y tests
+## Development and tests
 
 ```bash
 cd images/psy-sampler
@@ -674,50 +685,50 @@ npm test         # Vitest
 npm run build
 ```
 
-- Lógica pura en `.js` con su `*.test.js` al lado: `timing`, `patterns`, `music`,
-  `selection`, `editing` (ciclos de clic, arrastre, improvisación, intensidad,
-  variaciones y melodías nuevas con PRNG con semilla), `workspace` (normalize,
-  presets), `autopilot` (secciones, formas, nunca sin lead/pad, cambios cada N
-  compases, cola de fases, estilos, determinismo por semilla), `dress` (sonidos
-  por semilla), `snapshots` (captura,
-  partes), `tempo` (rampa de BPM), `share`, `wav`, `i18n`.
-- `voices.test.js` / `engine.test.js` corren contra un `AudioContext` falso
-  ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) que
-  registra nodos y automatizaciones. Incluye un invariante anti-clic: toda fuente
-  audible tiene que arrancar y terminar en ganancia 0 y no frenar antes de que su
-  envolvente llegue a 0. Corre para cada variante, cada sinte con notas de 1 a
-  32 pasos, y cada voz de batería y FX con sus perillas en el mínimo y el máximo.
-- `app.test.js` (jsdom) cubre modo solo / combinar / apilar, la cola al compás,
-  doble clic, Parar, kick de fondo, FX, los editores (clic, playhead, perillas,
-  Restaurar, Improvisar con su intensidad y el 🔀 del cuadradito, Nueva parte
-  en cola, ×2, build-up, persistencia, storage roto), duplicar / renombrar /
-  borrar, reordenar, piloto (misma semilla = mismo tema y mismos sonidos,
-  nunca más de un compás sin lead/pad, estilos, fases encoladas y Siguiente,
-  slider de cambios), snapshots (captura, cola al
-  compás, borrador / guardar / descartar, probar, sección del piloto), cambio
-  de BPM compás a compás, idiomas, exportar / importar,
-  WAV, Restaurar todo y los links compartidos.
-- Las devDependencies (Vite 8, Vitest 5, jsdom 29) son más nuevas que las de
-  `home-site`: las de allá arrastran advisories críticos en el toolchain de test.
+- Pure logic in `.js` with its `*.test.js` next to it: `timing`, `patterns`,
+  `music`, `selection`, `editing` (click cycles, dragging, improvisation, amount,
+  variations and new melodies with a seeded PRNG), `workspace` (normalize,
+  presets), `autopilot` (sections, forms, never without lead/pad, changes every
+  N bars, section queue, styles, per-seed determinism), `dress` (per-seed
+  sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
+  `i18n`.
+- `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
+  ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
+  records nodes and automation. It includes an anti-click invariant: every
+  audible source must start and end at gain 0 and not stop before its envelope
+  reaches 0. It runs for every variant, every synth with notes from 1 to 32
+  steps, and every drum and FX voice with its knobs at minimum and maximum.
+- `app.test.js` (jsdom) covers solo / combine / stack mode, the bar queue,
+  double click, Stop, background kick, FX, the editors (click, playhead, knobs,
+  Reset, Improvise with its amount and the tile's 🔀, queued New part, ×2,
+  build-up, persistence, broken storage), duplicate / rename / delete,
+  reordering, autopilot (same seed = same track and same sounds, never more than
+  one bar without lead/pad, styles, queued sections and Next, the changes
+  slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
+  section), bar-by-bar BPM change, languages, export / import, WAV, Reset
+  everything and shared links.
+- The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
+  those drag critical advisories into the test toolchain.
 
 ## Gotchas
 
-- **Nada se agenda en el pasado.** Una nota cuyo `start` ya pasó cuando la ve el
-  audio thread arranca a mitad de la envolvente (ganancia ≠ 0): clic. Por eso
-  `SAFETY` aplica al backfill y al catch-up.
-- **Pestaña en segundo plano.** Chrome lleva los timers a ≥ 1 s por tick; el
-  scheduler salta los pasos perdidos manteniendo la fase de la grilla (no dispara
-  el backlog de golpe), pero el loop suena entrecortado. Es una limitación del
-  `setInterval` en el main thread; moverlo a un Worker la resolvería.
-- **`AudioContext` recién en el primer clic** (autoplay policy). `ensureContext()`
-  se llama sincrónico dentro del handler y hace `resume()` si está `suspended`.
-- **Makeup gain automático.** El `DynamicsCompressor` de Chrome sube la salida
-  según threshold/ratio; con dos en serie la ganancia neta subía ~2 dB y una capa
-  sola llegaba a -1,3 dBFS. El trim de 0,8 después del limiter lo compensa.
-  Medir a la salida real antes de tocar threshold o ratio.
-- **Una voz nueva** necesita: la función en `voices.js` (en `INSTRUMENTS` si es
-  melódica, con entrada en `SYNTHS` de `params.js`; si es de batería, su spec en
-  `PARAMS`), y pasar el invariante anti-clic. Los tests fallan si un sinte de la
-  lista no tiene voz o al revés.
-- **`listen [::]:80`** en la config de nginx (como `agu-spa`) falla en un host sin
-  IPv6 (p. ej. un Docker de prueba); en el Pi anda.
+- **Nothing is scheduled in the past.** A note whose `start` has already passed
+  when the audio thread sees it starts mid-envelope (gain ≠ 0): a click. That's
+  why `SAFETY` applies to backfill and catch-up.
+- **Background tab.** Chrome throttles timers to ≥ 1 s per tick; the scheduler
+  skips the missed steps keeping the grid's phase (it doesn't fire the backlog at
+  once), but the loop stutters. It's a limitation of `setInterval` on the main
+  thread; moving it to a Worker would fix it.
+- **`AudioContext` only on the first click** (autoplay policy). `ensureContext()`
+  is called synchronously inside the handler and calls `resume()` if it's
+  `suspended`.
+- **Automatic makeup gain.** Chrome's `DynamicsCompressor` raises the output
+  according to threshold/ratio; with two in series the net gain went up ~2 dB and
+  a single layer reached -1.3 dBFS. The 0.8 trim after the limiter compensates.
+  Measure at the real output before touching threshold or ratio.
+- **A new voice** needs: the function in `voices.js` (in `INSTRUMENTS` if it's
+  melodic, with an entry in `SYNTHS` in `params.js`; if it's a drum, its spec in
+  `PARAMS`), and to pass the anti-click invariant. The tests fail if a synth in
+  the list has no voice or the other way round.
+- **`listen [::]:80`** in the nginx config (like `agu-spa`) fails on a host
+  without IPv6 (e.g. a test Docker); on the Pi it works.
