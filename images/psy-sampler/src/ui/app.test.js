@@ -954,6 +954,8 @@ describe("autopilot", () => {
   const layers = () => pressed().map((v) => v.split(".")[0]);
 
   it("never leaves kick, bass and percussion alone for more than a bar", () => {
+    $("#seed").value = "goa"; // a seed whose bar 60 has a kick
+    $("#seed").dispatchEvent(new Event("change"));
     autoBtn().click();
     for (let i = 0; i < 60; i++) {
       advanceSeconds(BAR);
