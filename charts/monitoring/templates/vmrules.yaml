@@ -146,3 +146,91 @@ spec:
           annotations:
             summary: {{ `TLS cert for {{ $labels.instance }} expires in {{ $value | printf "%.0f" }} days` | quote }}
             description: {{ `Certificate for {{ $labels.instance }} expires in under 3 days — renewal is failing.` | quote }}
+
+    # psy.agu.com.ar cloud save (images/psy-sync, scraped by the VMPodScrape in
+    # charts/psy-sampler). Only the API: the static sampler is covered by the
+    # blackbox probe. See docs/monitoring.md#psy-sampler-cloud-save.
+    - name: psy-sampler.sync
+      rules:
+        - alert: PsySyncDown
+          expr: up{job="psy-sampler/psy-sampler-sync"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "psy-sync is down"
+            description: "The psy.agu.com.ar cloud-save API has failed its scrape for 5m: the page falls back to browser-only saves."
+        - alert: PsySyncNotScraped
+          expr: absent(up{job="psy-sampler/psy-sampler-sync"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "psy-sync has no scrape target"
+            description: "No psy-sync pod has been scraped for 15m (pod gone, metrics port renamed, or the VMPodScrape is missing)."
+        - alert: PsySyncServerErrors
+          expr: sum(increase(psy_sync_http_requests_total{job="psy-sampler/psy-sampler-sync", status="500"}[15m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `psy-sync answered {{ $value | printf "%.0f" }} internal errors in 15m` | quote }}
+            description: "Unhandled exceptions in the cloud-save API; the pod log has the route and message."
+        - alert: PsySyncSignInFailures
+          expr: sum(increase(psy_sync_http_requests_total{job="psy-sampler/psy-sampler-sync", route="POST /api/session", status="401"}[1h])) > 20
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `{{ $value | printf "%.0f" }} rejected Google sign-ins in the last hour` | quote }}
+            description: "Many ID tokens failed verification: forged tokens, or a client id / clock problem that locks everyone out."
+        - alert: PsySyncUsersNearCap
+          expr: psy_sync_users / psy_sync_users_max > 0.8
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `psy-sync accounts at {{ $value | humanizePercentage }} of the cap` | quote }}
+            description: "New sign-ups stop at sync.maxUsers (charts/psy-sampler); raise it or prune accounts."
+        - alert: PsySyncSignupsClosed
+          expr: psy_sync_users >= psy_sync_users_max
+          labels:
+            severity: critical
+          annotations:
+            summary: "psy-sync is full: new sign-ups get 503"
+            description: "The account cap (sync.maxUsers) is reached; existing accounts still work."
+        - alert: PsySyncSignupBurst
+          expr: delta(psy_sync_users[1h]) > 25
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `{{ $value | printf "%.0f" }} new psy-sync accounts in an hour` | quote }}
+            description: "Unusual sign-up rate for psy.agu.com.ar: a mention somewhere, or scripted accounts filling the cap."
+        - alert: PsySyncAnonymousBurst
+          expr: delta(psy_sync_visitors_stored[1h]) > 500
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `{{ $value | printf "%.0f" }} new anonymous browsers in an hour` | quote }}
+            description: "Visitor ids are client-made: a burst this size is most likely a script inflating the anonymous count."
+        - alert: PsySyncVisitorsCapReached
+          expr: psy_sync_visitors_stored >= psy_sync_visitors_max
+          labels:
+            severity: warning
+          annotations:
+            summary: "psy-sync stopped recording new browsers"
+            description: "The visitor table is at its cap, so anonymous-visitor counts are frozen until old rows are pruned (90 days)."
+        - alert: PsySyncWorkspaceNearLimit
+          expr: psy_sync_user_workspace_bytes / ignoring(email) group_left psy_sync_workspace_bytes_limit > 0.9
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `{{ $labels.email }}'s workspace is at {{ $value | humanizePercentage }} of the size limit` | quote }}
+            description: {{ `Saves from {{ $labels.email }} get 413 once the workspace passes the API limit (MAX_BYTES in images/psy-sync).` | quote }}
+        - alert: PsySyncDataVolumeHigh
+          expr: sum without(file) (psy_sync_db_bytes) / psy_sync_volume_request_bytes > 0.8 and psy_sync_volume_request_bytes > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `psy-sync database at {{ $value | humanizePercentage }} of its PVC request` | quote }}
+            description: "The SQLite files outgrow sync.persistence.size. local-path does not enforce it, so this eats the SD card's free space."

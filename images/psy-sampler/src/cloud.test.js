@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { contentHash, createCloud, reconcile } from "./cloud.js";
+import { contentHash, createCloud, reconcile, visitorId } from "./cloud.js";
 
 describe("reconcile", () => {
   const a = { bpm: 150 };
@@ -37,8 +37,9 @@ describe("createCloud", () => {
   let calls;
 
   // A tiny in-memory psy-sync.
-  function fakeFetch(url, { method = "GET", body } = {}) {
+  function fakeFetch(url, { method = "GET", body, headers = {} } = {}) {
     calls.push(`${method} ${url}`);
+    if (headers["x-psy-visitor"]) server.visitors.add(headers["x-psy-visitor"]);
     const reply = (status, data) =>
       Promise.resolve({
         status,
@@ -69,7 +70,7 @@ describe("createCloud", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    server = { user: null, state: null, down: false };
+    server = { user: null, state: null, down: false, visitors: new Set() };
     storage = new Map();
     storage.getItem = (k) => storage.get(k) ?? null;
     storage.setItem = (k, v) => storage.set(k, v);
@@ -84,6 +85,20 @@ describe("createCloud", () => {
     expect(await cloud.init()).toMatchObject({ available: true, clientId: "cid", user: null });
     server.user = { email: "ana@example.com" };
     expect((await make().init()).user).toEqual({ email: "ana@example.com" });
+  });
+
+  it("the session check carries one stable random id per browser", async () => {
+    await make().init();
+    await make().init();
+    expect(server.visitors.size).toBe(1);
+    expect([...server.visitors][0]).toBe(storage.get("psy-sampler:visitor"));
+    expect([...server.visitors][0]).toMatch(/^[\w-]{16,64}$/);
+  });
+
+  it("without storage there is no visitor id", () => {
+    expect(visitorId(null)).toBeNull();
+    const broken = { getItem: () => null, setItem: () => { throw new Error("blocked"); } };
+    expect(visitorId(broken)).toBeNull();
   });
 
   it("an API that is not there (HTML fallback, network error) reads as unavailable", async () => {

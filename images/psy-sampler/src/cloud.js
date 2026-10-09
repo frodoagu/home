@@ -9,9 +9,13 @@
 //
 // What was last synced is remembered per browser (META_KEY) as the server's
 // updatedAt plus a hash of the content, so "dirty" survives a reload.
+//
+// The session check also carries a random id for this browser (VISITOR_KEY),
+// which is how psy-sync counts visitors that never sign in.
 import { hashSeed } from "./share.js";
 
 const META_KEY = "psy-sampler:cloud";
+const VISITOR_KEY = "psy-sampler:visitor";
 const DEBOUNCE_MS = 2500;
 
 export const contentHash = (state) => hashSeed(JSON.stringify(state ?? null));
@@ -31,6 +35,20 @@ export function reconcile({ remote, meta, local, pristine = false }) {
   if (contentHash(remote.state) === contentHash(local)) return "adopt";
   if (meta && remote.updatedAt === meta.at) return dirty ? "push" : "none";
   return dirty ? "conflict" : "pull";
+}
+
+/** This browser's random id, created on first use; null without storage (or crypto). */
+export function visitorId(storage) {
+  try {
+    let id = storage?.getItem(VISITOR_KEY);
+    if (!id) {
+      id = globalThis.crypto.randomUUID();
+      storage.setItem(VISITOR_KEY, id);
+    }
+    return id;
+  } catch {
+    return null;
+  }
 }
 
 export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storage, base = "/api", debounceMs = DEBOUNCE_MS } = {}) {
@@ -65,11 +83,11 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     }
   }
 
-  async function call(method, path, body, extra = {}) {
+  async function call(method, path, body, { headers = {}, ...extra } = {}) {
     const res = await fetch(`${base}${path}`, {
       method,
       credentials: "same-origin",
-      headers: body === undefined ? {} : { "content-type": "application/json" },
+      headers: body === undefined ? headers : { "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
       ...extra,
     });
@@ -134,7 +152,8 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
         info.available = Boolean(health.data?.ok);
         if (info.available) {
           info.clientId = health.data.clientId;
-          const me = await call("GET", "/session");
+          const visitor = visitorId(storage);
+          const me = await call("GET", "/session", undefined, visitor ? { headers: { "x-psy-visitor": visitor } } : {});
           info.user = me.data?.email ? me.data : null;
         }
       } catch {

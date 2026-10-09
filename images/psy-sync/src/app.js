@@ -3,7 +3,9 @@
 //
 //   GET    /api/health    { ok, clientId }: lets the page decide to show the cloud UI
 //   POST   /api/session   { credential } (a Google ID token) -> session cookie
-//   GET    /api/session   { email } ({ email: null } when signed out)
+//   GET    /api/session   { email } ({ email: null } when signed out); an
+//                         X-Psy-Visitor header (the page's random browser id)
+//                         is recorded for the anonymous-visitor metrics
 //   DELETE /api/session   sign out
 //   GET    /api/state     { state, updatedAt } or 404
 //   PUT    /api/state     { state, base, force? } -> { updatedAt }, or 409 with
@@ -13,9 +15,21 @@
 // The server never interprets a workspace: it stores an opaque JSON object
 // (size-capped) and the page runs it through normalize() on the way back in.
 import { verifyIdToken } from "./google.js";
+import { requestCounter } from "./metrics.js";
 import { SESSION_MS, cookieValue, readSession, setCookie, signSession } from "./session.js";
 
 const MAX_BYTES = 256 * 1024;
+const MAX_VISITORS = 100_000;
+const VISITOR_ID = /^[\w-]{16,64}$/;
+const ROUTES = new Set([
+  "GET /api/health",
+  "POST /api/session",
+  "GET /api/session",
+  "DELETE /api/session",
+  "GET /api/state",
+  "PUT /api/state",
+  "DELETE /api/account",
+]);
 
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body), {
@@ -24,10 +38,24 @@ const json = (body, status = 200, headers = {}) =>
   });
 const empty = (status, headers = {}) => new Response(null, { status, headers: { "cache-control": "no-store", ...headers } });
 
-export function createApp({ db, clientId, key, origins, getKey, now = Date.now, maxBytes = MAX_BYTES, maxUsers = 5000 }) {
+export function createApp({
+  db,
+  clientId,
+  key,
+  origins,
+  getKey,
+  now = Date.now,
+  maxBytes = MAX_BYTES,
+  maxUsers = 5000,
+  maxVisitors = MAX_VISITORS,
+}) {
+  const requests = requestCounter();
+
   async function currentUser(req) {
     const sub = await readSession(key, cookieValue(req), now());
-    return sub ? db.user(sub) : null;
+    const user = sub ? db.user(sub) : null;
+    if (user) db.touchUser(user.sub, now());
+    return user;
   }
 
   async function readBody(req) {
@@ -86,7 +114,11 @@ export function createApp({ db, clientId, key, origins, getKey, now = Date.now, 
 
     const user = await currentUser(req);
     // Asked on every page load: a signed-out visitor is not an error.
-    if (route === "GET /api/session") return json({ email: user?.email ?? null });
+    if (route === "GET /api/session") {
+      const visitor = req.headers.get("x-psy-visitor");
+      if (VISITOR_ID.test(visitor ?? "")) db.visit(visitor, user?.sub ?? null, now(), maxVisitors);
+      return json({ email: user?.email ?? null });
+    }
     if (!user) {
       return ["GET /api/state", "PUT /api/state", "DELETE /api/account"].includes(route)
         ? json({ error: "signed out" }, 401)
@@ -105,13 +137,19 @@ export function createApp({ db, clientId, key, origins, getKey, now = Date.now, 
   }
 
   return {
+    requests,
+    limits: { maxBytes, maxUsers, maxVisitors },
     async fetch(req) {
+      const route = `${req.method} ${new URL(req.url).pathname}`;
+      let res;
       try {
-        return await handle(req);
+        res = await handle(req);
       } catch (err) {
-        console.error(`${req.method} ${new URL(req.url).pathname}: ${err.message}`);
-        return json({ error: "internal" }, 500);
+        console.error(`${route}: ${err.message}`);
+        res = json({ error: "internal" }, 500);
       }
+      requests.add(ROUTES.has(route) ? route : "other", res.status);
+      return res;
     },
   };
 }

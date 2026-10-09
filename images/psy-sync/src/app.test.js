@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { createApp } from "./app.js";
 import { openDb } from "./db.js";
 import { verifyIdToken } from "./google.js";
+import { parseQuantity, renderMetrics } from "./metrics.js";
 import { hmacKey, readSession, signSession } from "./session.js";
 
 const CLIENT = "client-123.apps.googleusercontent.com";
@@ -53,7 +54,7 @@ beforeEach(async () => {
   app = createApp({ db, clientId: CLIENT, key, origins: [ORIGIN], getKey, now: () => clock, maxBytes: 2048, maxUsers: 2 });
 });
 
-const call = (method, path, { body, cookie, origin = ORIGIN } = {}) =>
+const call = (method, path, { body, cookie, origin = ORIGIN, visitor } = {}) =>
   app.fetch(
     new Request(`https://psy.agu.com.ar${path}`, {
       method,
@@ -61,6 +62,7 @@ const call = (method, path, { body, cookie, origin = ORIGIN } = {}) =>
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
         ...(cookie ? { cookie } : {}),
         ...(origin ? { origin } : {}),
+        ...(visitor ? { "x-psy-visitor": visitor } : {}),
       },
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
     }),
@@ -204,5 +206,105 @@ describe("API", () => {
     const nope = await call("GET", "/api/nope", { cookie });
     expect(nope.status).toBe(404);
     expect(nope.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+describe("visitors and metrics", () => {
+  const HOUR = 3600 * 1000;
+  const DAY = 24 * HOUR;
+  const A = "aaaaaaaaaaaaaaaa";
+  const B = "bbbbbbbbbbbbbbbb";
+  const stats = () => db.stats(clock, 10);
+
+  it("records anonymous browsers from the session check, and ignores malformed ids", async () => {
+    await call("GET", "/api/session", { visitor: A });
+    await call("GET", "/api/session", { visitor: A });
+    await call("GET", "/api/session", { visitor: "short" });
+    await call("GET", "/api/session", { visitor: `${B}/../x` });
+    await call("GET", "/api/health", { visitor: B });
+    expect(stats()).toMatchObject({ visitors: 1, anonymous: 1, anonymousActive: { "1d": 1 } });
+  });
+
+  it("a signed-in check links the browser to the account; deleting the account makes it anonymous again", async () => {
+    await call("GET", "/api/session", { visitor: A });
+    const cookie = await signIn();
+    await call("GET", "/api/session", { cookie, visitor: A });
+    expect(stats()).toMatchObject({ visitors: 1, anonymous: 0 });
+    await call("DELETE", "/api/account", { cookie });
+    expect(stats()).toMatchObject({ visitors: 1, anonymous: 1 });
+  });
+
+  it("stops storing new browsers at the cap, and prunes stale anonymous ones", async () => {
+    app = createApp({ db, clientId: CLIENT, key, origins: [ORIGIN], getKey, now: () => clock, maxVisitors: 1 });
+    await call("GET", "/api/session", { visitor: A });
+    await call("GET", "/api/session", { visitor: B });
+    expect(stats().visitors).toBe(1);
+    clock += 100 * DAY;
+    expect(db.pruneVisitors(clock - 90 * DAY)).toBe(1);
+    expect(stats().visitors).toBe(0);
+  });
+
+  it("counts accounts created and seen per window; seen_at moves at most hourly", async () => {
+    const cookie = await signIn();
+    clock += 2 * DAY;
+    await signIn({ sub: "2002", email: "bo@example.com" });
+    expect(stats()).toMatchObject({ users: 2, usersCreated: { "1d": 1, "7d": 2 }, usersActive: { "1d": 1, "7d": 2 } });
+    await call("GET", "/api/session", { cookie });
+    expect(stats().usersActive["1d"]).toBe(2);
+    // A check 30 min later writes nothing, so a day after the first one Ana is no longer active.
+    clock += 30 * 60 * 1000;
+    await call("GET", "/api/session", { cookie });
+    clock += DAY - 15 * 60 * 1000;
+    expect(stats().usersActive["1d"]).toBe(0);
+  });
+
+  it("reports each workspace's size in bytes, largest first", async () => {
+    const ana = await signIn();
+    const bo = await signIn({ sub: "2002", email: "bo@example.com" });
+    await call("PUT", "/api/state", { cookie: ana, body: { state: { n: "ñ".repeat(100) }, base: null } });
+    await call("PUT", "/api/state", { cookie: bo, body: { state: { n: 1 }, base: null } });
+    const { sizes, top } = stats();
+    expect(sizes.length).toBe(2);
+    expect(top.map((t) => t.email)).toEqual(["ana@example.com", "bo@example.com"]);
+    expect(top[0].bytes).toBe(JSON.stringify({ n: "ñ".repeat(100) }).length + 100);
+  });
+
+  it("counts requests by known route and status, folding the rest into `other`", async () => {
+    await call("GET", "/api/health");
+    await call("GET", "/api/state");
+    await call("GET", "/api/whatever-123");
+    expect(app.requests.entries()).toEqual([
+      ["GET /api/health", "200", 1],
+      ["GET /api/state", "401", 1],
+      ["other", "404", 1],
+    ]);
+  });
+
+  it("renders the Prometheus text format", async () => {
+    const cookie = await signIn({ email: 'we"ird@example.com' });
+    await call("PUT", "/api/state", { cookie, body: { state: { v: 1 }, base: null } });
+    const text = renderMetrics({
+      stats: stats(),
+      requests: app.requests,
+      limits: { ...app.limits, volumeRequest: parseQuantity("2Gi") },
+      files: { db: 4096, wal: 0 },
+      volume: { size: 100, avail: 40 },
+    });
+    expect(text).toContain("psy_sync_users 1\n");
+    expect(text).toContain('psy_sync_users_created{window="7d"} 1\n');
+    expect(text).toContain('psy_sync_user_workspace_bytes{email="we\\"ird@example.com"} 7\n');
+    expect(text).toContain('psy_sync_workspaces_by_size{le="4096"} 1\n');
+    expect(text).toContain('psy_sync_workspaces_by_size{le="+Inf"} 1\n');
+    expect(text).toContain("psy_sync_volume_request_bytes 2147483648\n");
+    expect(text).toContain('psy_sync_http_requests_total{route="POST /api/session",status="200"} 1\n');
+    expect(text).toContain("# TYPE psy_sync_http_requests_total counter\n");
+  });
+
+  it("parses Kubernetes quantities", () => {
+    expect(parseQuantity("2Gi")).toBe(2 * 2 ** 30);
+    expect(parseQuantity("500M")).toBe(5e8);
+    expect(parseQuantity("1024")).toBe(1024);
+    expect(parseQuantity("lots")).toBe(0);
+    expect(parseQuantity(undefined)).toBe(0);
   });
 });
