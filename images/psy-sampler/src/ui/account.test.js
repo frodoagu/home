@@ -84,18 +84,41 @@ afterEach(() => {
 });
 
 describe("cloud save row", () => {
-  it("stays hidden when the API is not there", async () => {
+  it("says so when the API is not there, and asks again later", async () => {
     server.up = false;
     await mount();
-    expect($(".account").hidden).toBe(true);
+    expect($(".topbar .sync-pill").textContent).toBe("☁ Nube no disponible");
+    expect($(".sync-pill").dataset.state).toBe("off");
+    expect($(".gsi-slot")).toBeNull();
+    server.up = true;
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settle();
+    expect($(".sync-pill").textContent).toBe("☁ Sólo en este browser");
   });
 
-  it("offers Google sign-in when signed out", async () => {
+  it("signed out: 'this browser only' and the Google button", async () => {
     await mount();
-    expect($(".account").hidden).toBe(false);
-    expect($(".account-pitch").textContent).toMatch(/nube/);
+    expect($(".sync-pill").textContent).toBe("☁ Sólo en este browser");
+    expect($(".sync-pill").title).toMatch(/Iniciá sesión/);
     expect(loadButton).toHaveBeenCalledWith("cid", expect.any(Function));
-    expect($(".gsi-slot .gsi")).not.toBeNull();
+    expect($(".topbar .gsi-slot .gsi")).not.toBeNull();
+  });
+
+  it("a blocked Google script leaves a visible note instead of a hole", async () => {
+    const blocked = () => Promise.reject(new Error("gsi"));
+    const cloud = createCloud({ fetch: fakeFetch, storage: localStorage });
+    root = document.createElement("div");
+    document.body.replaceChildren(root);
+    mountApp(root, engine, { languages: ["es"], cloud, loadButton: blocked });
+    await settle();
+    expect($(".login-off").textContent).toBe("Login no disponible");
+  });
+
+  it("the top bar links back to agu.com.ar", async () => {
+    await mount();
+    const back = $(".topbar a.back");
+    expect(back.getAttribute("href")).toBe("https://agu.com.ar/");
+    expect(back.textContent).toBe("← agu.com.ar");
   });
 
   it("signing in on a fresh browser pulls the saved setup", async () => {
@@ -105,7 +128,8 @@ describe("cloud save row", () => {
     await settle();
     expect($("#bpm").value).toBe("166");
     expect($('[data-variant="perc.hat"] .variant-label').textContent).toBe("Mi hat");
-    expect($(".account-email").textContent).toBe("☁ ana@example.com");
+    expect($(".account-email").textContent).toBe("ana@example.com");
+    expect($(".avatar").textContent).toBe("A");
     expect($(".status").textContent).toMatch(/Cargué/);
   });
 
@@ -126,10 +150,13 @@ describe("cloud save row", () => {
     bpm.dispatchEvent(new Event("input"));
     bpm.value = "152";
     bpm.dispatchEvent(new Event("input"));
-    expect($(".account-phase").textContent).toMatch(/sin subir/);
+    expect($(".sync-pill").textContent).toBe("☁ Cambios sin subir…");
+    expect($(".sync-pill").dataset.state).toBe("pending");
     await vi.advanceTimersByTimeAsync(150);
     expect(server.state.state.bpm).toBe(152);
-    expect($(".account-phase").textContent).toMatch(/guardado/);
+    expect($(".sync-pill").textContent).toMatch(/^☁ Guardado ✓ \d\d:\d\d/);
+    expect($(".sync-pill").dataset.state).toBe("saved");
+    expect($(".sync-pill").title).toBe("Sesión iniciada como ana@example.com");
   });
 
   it("a newer copy from another device, with changes here too, asks; Cancel keeps and uploads local", async () => {
@@ -157,7 +184,7 @@ describe("cloud save row", () => {
     $('[data-action="delete-account"]').click();
     await settle();
     expect(server.state).toBeNull();
-    expect($(".account-pitch")).not.toBeNull();
+    expect($(".sync-pill").textContent).toBe("☁ Sólo en este browser");
     expect($(".status").textContent).toMatch(/se borraron/);
   });
 
@@ -168,7 +195,7 @@ describe("cloud save row", () => {
     $('[data-action="sign-out"]').click();
     await settle();
     expect(server.user).toBeNull();
-    expect($(".account-pitch")).not.toBeNull();
+    expect($(".gsi-slot")).not.toBeNull();
     expect($("#bpm").value).toBe("145");
   });
 });

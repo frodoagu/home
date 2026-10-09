@@ -1,8 +1,9 @@
-// The cloud-save row in the tools panel: a "Sign in with Google" button when
-// signed out; the account, the sync state, Sign out and Delete my data when
-// signed in. Talks to cloud.js; the app hands it the workspace (snapshot),
-// a way to replace it (apply) and whether it is still factory (pristine).
-// Hidden while the API is not reachable.
+// The cloud-save corner of the top bar. Always visible, so the state is never
+// a guess: checking, cloud unavailable, signed out ("this browser only" + the
+// Google button), or the account with its sync state and a menu (sign out,
+// delete my data). Talks to cloud.js; the app hands it the workspace
+// (snapshot), a way to replace it (apply) and whether it is still factory
+// (pristine).
 import { el } from "./dom.js";
 
 const GIS_SRC = "https://accounts.google.com/gsi/client";
@@ -31,10 +32,12 @@ function loadGis(clientId) {
 }
 
 let checked = false; // reconcile once per page load, not on every remount
+let retry = null; // the API was down: ask again later, once per page
+const RETRY_MS = 30_000;
 
 export function mountAccount({ cloud, tx, lang, snapshot, pristine, apply, confirm, status, loadButton = loadGis }) {
-  const node = el("div", { class: "tools-row account", hidden: "" });
-  const phase = el("span", { class: "account-phase", role: "status" });
+  const node = el("div", { class: "account" });
+  const pill = el("span", { class: "sync-pill", role: "status" });
 
   async function reconcile() {
     const local = snapshot();
@@ -58,37 +61,92 @@ export function mountAccount({ cloud, tx, lang, snapshot, pristine, apply, confi
     } else await cloud.push(snapshot(), { force: true });
   }
 
+  const time = (ms) => new Date(ms).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+
+  // The pill: one word on where the setup lives right now.
+  function paintPill() {
+    const { checking, available, user, phase, savedAt } = cloud.info;
+    let state;
+    let text;
+    let title = "";
+    if (checking) [state, text] = ["checking", tx.cloud.checking];
+    else if (!available) [state, text, title] = ["off", tx.cloud.unavailable, tx.cloud.unavailableTitle];
+    else if (!user) [state, text, title] = ["local", tx.cloud.localOnly, tx.cloud.pitch];
+    else {
+      state = phase;
+      text = phase === "saved" && savedAt ? tx.cloud.savedAt(time(savedAt)) : tx.cloud.phases[phase];
+      title = tx.cloud.signedInAs(user.email);
+    }
+    pill.dataset.state = state;
+    pill.textContent = `☁ ${text}`;
+    pill.title = title;
+  }
+
+  function accountMenu(user) {
+    const out = el("button", { type: "button", class: "menu-item", "data-action": "sign-out", text: tx.cloud.signOut });
+    out.addEventListener("click", () => cloud.signOut());
+    const del = el("button", {
+      type: "button",
+      class: "menu-item danger",
+      "data-action": "delete-account",
+      text: tx.cloud.deleteAccount,
+    });
+    del.addEventListener("click", async () => {
+      if (!confirm(tx.cloud.confirmDelete)) return;
+      await cloud.deleteAccount().then(
+        () => status(tx.cloud.deleted),
+        () => status(tx.cloud.phases.error),
+      );
+    });
+    const initial = (user.name || user.email).trim()[0]?.toUpperCase() ?? "?";
+    const menu = el(
+      "details",
+      { class: "account-menu" },
+      el(
+        "summary",
+        { "aria-label": tx.cloud.account },
+        el("span", { class: "avatar", "aria-hidden": "true", text: initial }),
+        el("span", { class: "account-email", text: user.email }),
+      ),
+      el("div", { class: "menu" }, el("p", { class: "menu-note", text: tx.cloud.signedInAs(user.email) }), out, del),
+    );
+    // Close on an outside click, like any menu.
+    const close = (e) => {
+      if (!menu.contains(e.target)) menu.open = false;
+    };
+    document.addEventListener("click", close);
+    cleanups.push(() => document.removeEventListener("click", close));
+    return menu;
+  }
+
+  const cleanups = [];
   function render() {
+    cleanups.splice(0).forEach((fn) => fn());
+    paintPill();
     const { available, user } = cloud.info;
-    node.hidden = !available;
-    if (!available) return;
+    if (!available) {
+      node.replaceChildren(pill);
+      return;
+    }
     if (user) {
-      const out = el("button", { type: "button", class: "ghost", "data-action": "sign-out", text: tx.cloud.signOut });
-      out.addEventListener("click", () => cloud.signOut());
-      const del = el("button", {
-        type: "button",
-        class: "ghost danger",
-        "data-action": "delete-account",
-        text: tx.cloud.deleteAccount,
-      });
-      del.addEventListener("click", async () => {
-        if (!confirm(tx.cloud.confirmDelete)) return;
-        await cloud.deleteAccount().then(() => status(tx.cloud.deleted), () => status(tx.cloud.phases.error));
-      });
-      phase.textContent = tx.cloud.phases[cloud.info.phase] ?? "";
-      node.replaceChildren(el("span", { class: "account-email", text: tx.cloud.signedIn(user.email) }), phase, out, del);
+      node.replaceChildren(pill, accountMenu(user));
       return;
     }
     const slot = el("div", { class: "gsi-slot" });
-    node.replaceChildren(el("span", { class: "account-pitch", text: tx.cloud.pitch }), slot);
-    node.title = tx.cloud.privacy;
+    node.replaceChildren(pill, slot);
     loadButton(cloud.info.clientId, (credential) => onCredential(credential)).then(
       (id) => {
         const dark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-        id.renderButton(slot, { theme: dark ? "filled_black" : "outline", size: "medium", shape: "pill", locale: lang });
+        id.renderButton(slot, {
+          theme: dark ? "filled_black" : "outline",
+          size: "medium",
+          shape: "pill",
+          text: "signin",
+          locale: lang,
+        });
       },
       () => {
-        node.hidden = true; // blocked by an extension or offline: no cloud this time
+        slot.replaceWith(el("span", { class: "login-off", text: tx.cloud.loginUnavailable }));
       },
     );
   }
@@ -103,27 +161,35 @@ export function mountAccount({ cloud, tx, lang, snapshot, pristine, apply, confi
   };
 
   const off = cloud.on((event, data) => {
-    if (event === "phase") phase.textContent = tx.cloud.phases[data] ?? "";
+    if (event === "phase") paintPill();
     else if (event === "user") render();
     else if (event === "conflict") resolveConflict(data);
-  });
-
-  if (cloud.info.available) render();
-  else {
-    cloud.init().then(async () => {
+    else if (event === "info") {
       render();
       if (cloud.info.user && !checked) {
         checked = true;
-        await reconcile();
+        reconcile();
       }
-    });
-  }
+      if (!cloud.info.available) retry ??= setTimeout(() => cloud.init().finally(() => (retry = null)), RETRY_MS);
+    }
+  });
 
-  return { node, destroy: off };
+  render();
+  if (cloud.info.checking) cloud.init();
+
+  return {
+    node,
+    destroy: () => {
+      off();
+      cleanups.forEach((fn) => fn());
+    },
+  };
 }
 
 // Tests start every page fresh.
 export const resetAccountForTests = () => {
   checked = false;
   gis = null;
+  clearTimeout(retry);
+  retry = null;
 };

@@ -34,7 +34,9 @@ export function reconcile({ remote, meta, local, pristine = false }) {
 }
 
 export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storage, base = "/api", debounceMs = DEBOUNCE_MS } = {}) {
-  const info = { available: false, clientId: null, user: null, phase: "idle" };
+  // checking: the first init() has not answered yet. savedAt: last time the
+  // cloud copy matched this browser (ms), for the top bar.
+  const info = { checking: true, available: false, clientId: null, user: null, phase: "idle", savedAt: null };
   const listeners = new Set();
   let timer = null;
   let pending = null; // the snapshot waiting for the debounce
@@ -87,6 +89,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
       );
       if (status === 200) {
         writeMeta({ at: data.updatedAt, hash: contentHash(snapshot) });
+        info.savedAt = Date.now();
         setPhase("saved");
         return { ok: true };
       }
@@ -128,14 +131,18 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     async init() {
       try {
         const health = await call("GET", "/health");
-        if (!health.data?.ok) return info;
-        info.available = true;
-        info.clientId = health.data.clientId;
-        const me = await call("GET", "/session");
-        info.user = me.data?.email ? me.data : null;
+        info.available = Boolean(health.data?.ok);
+        if (info.available) {
+          info.clientId = health.data.clientId;
+          const me = await call("GET", "/session");
+          info.user = me.data?.email ? me.data : null;
+        }
       } catch {
         info.available = false;
+      } finally {
+        info.checking = false;
       }
+      emit("info", info);
       return info;
     },
 
@@ -178,6 +185,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     /** The local copy now matches `remote` (pulled or identical). */
     adopt(remote, local) {
       writeMeta({ at: remote.updatedAt, hash: contentHash(local) });
+      info.savedAt = Date.now();
       setPhase("saved");
     },
 
