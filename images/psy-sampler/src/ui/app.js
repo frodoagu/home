@@ -2,6 +2,8 @@
 // the live selection, renders them, and forwards changes to the engine; all
 // timing lives in the engine. Changes that must land on the grid (queued
 // clicks, the autopilot, improvise variations) run in the engine's bar hook.
+// Snapshots recall a saved mix (and the data it played) on the next bar line;
+// a BPM change ramps there too, one slice per bar.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 import { layerById } from "../catalog.js";
@@ -9,20 +11,27 @@ import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, isCopy } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
 import { encodeWav } from "../audio/wav.js";
-import { advance, joinPilot, startPilot } from "../autopilot.js";
+import { SECTIONS, advance, guessSection, joinPilot, startPilot } from "../autopilot.js";
 import { improvise, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
+import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
-import { cleanSeed, copyId, normalize, parsePreset, toPreset } from "../workspace.js";
+import { RAMP_BARS, clampBpm, rampAt } from "../tempo.js";
+import { SNAP_PANEL, cleanSeed, copyId, normalize, parsePreset, toPreset } from "../workspace.js";
 import { checkbox, download, el, select, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
+import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
 
 const sameLanes = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+const sameData = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Everything tied to the old workspace, dropped when another one replaces it.
+const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null });
 
 export function mountApp(root, engine, opts = {}) {
   const {
@@ -49,6 +58,11 @@ export function mountApp(root, engine, opts = {}) {
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
+    queuedSnap: resume?.queuedSnap ?? null, // a snapshot entering with `pending` on the next bar line
+    applied: resume?.applied ?? null, // the snapshot last recalled: lit while its mix plays
+    drafts: resume?.drafts ?? new Map(), // snapshot id -> its unsaved edits
+    tempo: resume?.tempo ?? ws.bpm, // the exact BPM (a ramp passes fractions); ws.bpm keeps it rounded
+    ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
   };
   let open = null; // the one open editor: { layer, id, editor }
   const snapshot = () => ({ lang: lang(), ...ws });
@@ -64,6 +78,7 @@ export function mountApp(root, engine, opts = {}) {
   const labelOf = (id) => ws.names[id] ?? (isCopy(id) ? tx.tile.copyName(factoryLabel(id)) : factoryLabel(id));
   const detailOf = (id) => (isCopy(id) ? tx.tile.copyDetail(factoryLabel(id)) : tx.variants[id][1]);
   const layerOf = (id) => layerById(id.split(".")[0]);
+  const snapById = (id) => ws.snapshots.find((s) => s.id === id);
 
   // What each variant plays apart from a build-up, which feed() lays on top.
   const fed = new Map();
@@ -73,11 +88,12 @@ export function mountApp(root, engine, opts = {}) {
     const live = b?.id === id && b.from !== null ? { ...data, steps: withBuildUp(data.steps, b.from) } : data;
     engine.setData(id, live);
   }
+  const dataNow = (id) => fed.get(id) ?? dataOf(id);
 
   for (const id of allIds()) feed(id, dataOf(id));
   for (const [id, anchor] of state.varying) feed(id, varied(id, anchor));
   engine.setEffects(ws.effects);
-  engine.setBpm(ws.bpm);
+  engine.setBpm(state.tempo);
 
   /* ---- header + transport ---- */
   const language = select(
@@ -108,6 +124,39 @@ export function mountApp(root, engine, opts = {}) {
   const delay = checkbox("delay", tx.transport.delay, ws.effects.delay);
   const reverb = checkbox("reverb", tx.transport.reverb, ws.effects.reverb);
   const stopBtn = el("button", { type: "button", class: "stop", text: tx.transport.stop });
+  const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
+  snapBtn.title = tx.transport.snapshotTitle;
+
+  /* ---- BPM change: a ramp, bar by bar ---- */
+  const rampTo = el("input", {
+    type: "number",
+    id: "ramp-to",
+    class: "ramp-input",
+    min: String(BPM_MIN),
+    max: String(BPM_MAX),
+    step: "1",
+    inputmode: "numeric",
+  });
+  rampTo.value = String(state.ramp?.to ?? ws.bpm);
+  const rampBars = select(
+    tx.tempo.over,
+    RAMP_BARS.map((n) => ({ value: n, label: tx.bars(n) })),
+    ws.rampBars,
+    (value) => {
+      ws.rampBars = Number(value);
+      persist();
+    },
+    "ramp-bars",
+  );
+  const rampBtn = el("button", { type: "button", class: "ghost", "data-action": "ramp" });
+  rampBtn.title = tx.tempo.title;
+  const rampBox = el(
+    "div",
+    { class: "ramp" },
+    el("label", { class: "pick", for: "ramp-to" }, el("span", { text: tx.tempo.label }), rampTo),
+    rampBars,
+    rampBtn,
+  );
 
   /* ---- autopilot + seed ---- */
   const autoBtn = el("button", {
@@ -188,9 +237,8 @@ export function mountApp(root, engine, opts = {}) {
     sections.get(layer.id).group.replaceChildren(...ws.lists[layer.id].map((id) => makeTile(layer, id)));
   }
 
-  for (const layerId of ws.order) {
-    const layer = layerById(layerId);
-    const text = tx.layers[layer.id];
+  // One row of the layer list: a layer's tiles, or the snapshots'.
+  function makeSection(id, text, onDrop) {
     const group = el("div", { class: "variants", role: "group", "aria-label": text.name });
     const slot = el("div", { class: "editor-slot" });
     const grip = el("button", {
@@ -202,7 +250,7 @@ export function mountApp(root, engine, opts = {}) {
     });
     const node = el(
       "section",
-      { class: "layer", "data-layer": layer.id },
+      { class: id === SNAP_PANEL ? "layer snapshots" : "layer", "data-layer": id },
       el(
         "div",
         { class: "layer-meta" },
@@ -212,18 +260,59 @@ export function mountApp(root, engine, opts = {}) {
       group,
       slot,
     );
-    sections.set(layer.id, { node, group, slot });
-    renderTiles(layer);
-    sorters.push(
-      sortable(group, {
-        item: ".tile",
-        key: "key",
-        onDrop: (ids) => {
-          ws.lists[layer.id] = ids;
-          persist();
-        },
-      }),
+    sections.set(id, { node, group, slot });
+    sorters.push(sortable(group, { item: ".tile", key: "key", onDrop }));
+  }
+
+  /* ---- snapshot tiles ---- */
+  const snapTiles = new Map(); // snapshot id -> { node, tile, edit, labelEl, detailEl }
+  const snapDetail = (snap) => `${tx.sections[snap.section]} · ${tx.snap.count(partsOf(snap).length)}`;
+
+  function makeSnapTile(snap) {
+    const labelEl = el("span", { class: "variant-label", text: snap.name });
+    const detailEl = el("span", { class: "variant-detail", text: snapDetail(snap) });
+    const node = el(
+      "button",
+      { type: "button", class: "variant", "data-snap": snap.id, "aria-pressed": "false" },
+      labelEl,
+      detailEl,
     );
+    node.addEventListener("click", (e) => recall(snapById(snap.id), { clicks: e.detail, toggle: true }));
+    const edit = el("button", {
+      type: "button",
+      class: "edit",
+      "data-edit-snap": snap.id,
+      "aria-expanded": String(open?.id === snap.id),
+      "aria-label": tx.tile.edit(snap.name),
+      title: tx.tile.editTitle,
+      text: "▾",
+    });
+    edit.addEventListener("click", () => (open?.id === snap.id ? closeEditor() : openSnapEditor(snap.id)));
+    const tile = el("div", { class: "tile", "data-key": snap.id }, node, edit);
+    snapTiles.set(snap.id, { node, tile, edit, labelEl, detailEl });
+    return tile;
+  }
+
+  function renderSnaps() {
+    snapTiles.clear();
+    sections.get(SNAP_PANEL).group.replaceChildren(...ws.snapshots.map(makeSnapTile));
+  }
+
+  for (const id of ws.order) {
+    if (id === SNAP_PANEL) {
+      makeSection(id, tx.snap, (ids) => {
+        ws.snapshots = ids.map(snapById);
+        persist();
+      });
+      renderSnaps();
+      continue;
+    }
+    const layer = layerById(id);
+    makeSection(id, tx.layers[id], (ids) => {
+      ws.lists[id] = ids;
+      persist();
+    });
+    renderTiles(layer);
   }
   const layersMain = el("main", { class: "layers" }, ...ws.order.map((id) => sections.get(id).node));
   sorters.push(
@@ -282,12 +371,13 @@ export function mountApp(root, engine, opts = {}) {
       "div",
       { class: "transport panel" },
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
+      rampBox,
       combine.node,
       bgKick.node,
       quantize.node,
       delay.node,
       reverb.node,
-      stopBtn,
+      el("div", { class: "transport-end" }, snapBtn, stopBtn),
     ),
     el(
       "div",
@@ -318,6 +408,13 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-varying", state.varying.has(id));
       tile.classList.toggle("is-building", state.buildUp?.id === id);
       if (!layer.oneShot) node.setAttribute("aria-pressed", String(on));
+    }
+    for (const [id, { node, tile }] of snapTiles) {
+      const on = state.applied === id && sameLanes(state.active, snapById(id).active);
+      node.classList.toggle("is-active", on);
+      node.classList.toggle("is-queued", state.queuedSnap?.id === id);
+      node.setAttribute("aria-pressed", String(on));
+      tile.classList.toggle("is-dirty", state.drafts.has(id));
     }
   }
 
@@ -375,10 +472,12 @@ export function mountApp(root, engine, opts = {}) {
   function commit(next) {
     if (ws.quantize && engine.isRunning()) {
       state.pending = sameLanes(next, state.active) ? null : next;
+      if (!state.pending) state.queuedSnap = null;
       renderButtons();
       return;
     }
     state.pending = null;
+    state.queuedSnap = null;
     state.active = next;
     sync();
   }
@@ -409,8 +508,11 @@ export function mountApp(root, engine, opts = {}) {
     const loopStart = step === 0 && bar > 0;
     if (loopStart) varyAll();
     rollBuildUp(step);
+    stepRamp();
     let changed = false;
     if (state.pending) {
+      if (state.queuedSnap) load(state.queuedSnap);
+      state.queuedSnap = null;
       state.active = state.pending;
       state.pending = null;
       changed = true;
@@ -500,12 +602,168 @@ export function mountApp(root, engine, opts = {}) {
     setBuildUp(b.id, false);
   }
 
+  /* ---- BPM change: one slice per bar line ---- */
+  function setTempo(value) {
+    state.tempo = value;
+    ws.bpm = Math.round(value);
+    bpm.value = String(ws.bpm);
+    engine.setBpm(value);
+    persist();
+  }
+
+  function showRamp() {
+    const r = state.ramp;
+    rampBtn.textContent = r ? tx.tempo.cancel : tx.tempo.go;
+    rampBtn.setAttribute("aria-pressed", String(Boolean(r)));
+    bpmOut.textContent = r ? tx.tempo.ramping(ws.bpm, r.to) : String(ws.bpm);
+  }
+
+  // With the loop stopped there are no bar lines: the BPM just changes.
+  function startRamp() {
+    const to = clampBpm(Number(rampTo.value));
+    rampTo.value = String(to);
+    if (!engine.isRunning()) setTempo(to);
+    else if (to !== state.tempo) state.ramp = { from: state.tempo, to, bars: ws.rampBars, done: 0 };
+    showRamp();
+  }
+
+  function stepRamp() {
+    const r = state.ramp;
+    if (!r) return;
+    r.done++;
+    setTempo(rampAt(r, r.done));
+    if (r.done >= r.bars) state.ramp = null;
+    showRamp();
+  }
+
+  /* ---- snapshots ---- */
+  function takeSnapshot() {
+    if (!Object.keys(lanes).length) {
+      status(tx.snap.nothing);
+      return;
+    }
+    if (ws.snapshots.length >= SNAP_MAX) {
+      status(tx.snap.full);
+      return;
+    }
+    const parts = capture(lanes, dataNow);
+    const section = state.auto && state.pilot ? state.pilot.section : guessSection(parts.active);
+    const name = freshName(tx.sections[section], ws.snapshots.map((s) => s.name));
+    const snap = { id: nextSnapId(ws.snapshots), name, section, ...parts };
+    ws.snapshots = [...ws.snapshots, snap];
+    state.applied = snap.id;
+    persist();
+    renderSnaps();
+    renderButtons();
+    openSnapEditor(snap.id, { focusName: true });
+    status(tx.snap.saved(name));
+  }
+
+  // On the next bar line while the loop runs (clicking the queued one again
+  // cancels it, a double click enters now), at once when it is stopped.
+  function recall(snap, { clicks = 1, toggle = false } = {}) {
+    const queued = state.queuedSnap?.id === snap.id;
+    if (clicks === 2 && queued) snap = state.queuedSnap;
+    else if (engine.isRunning()) {
+      if (toggle && queued) {
+        state.queuedSnap = null;
+        state.pending = null;
+      } else {
+        state.queuedSnap = snap;
+        state.pending = { ...snap.active };
+      }
+      renderButtons();
+      return;
+    }
+    load(snap);
+    state.queuedSnap = null;
+    state.pending = null;
+    state.active = { ...snap.active };
+    sync();
+  }
+
+  // A recalled snapshot's sounds go back to the data they played then, and
+  // a running autopilot jumps to its section.
+  function load(snap) {
+    for (const [id, data] of Object.entries(snap.data)) {
+      if (!tiles.has(id) || sameData(dataOf(id), data)) continue;
+      setVariant(id, structuredClone(data));
+      if (!isCopy(id) && sameData(data, defOf(id).data)) {
+        delete ws.variants[id];
+        persist();
+      }
+      if (open?.id === id) openEditor(open.layer, id);
+    }
+    state.applied = snap.id;
+    if (state.auto) {
+      state.pilot = { section: snap.section, left: SECTIONS[snap.section].loops };
+      showSection();
+    }
+  }
+
+  function openSnapEditor(id, { focusName = false } = {}) {
+    closeEditor();
+    const saved = snapById(id);
+    const editor = createSnapshotEditor({
+      saved,
+      draft: state.drafts.get(id) ?? saved,
+      labelOf,
+      pool: ws.lists,
+      dataNow,
+      capture: () => {
+        if (Object.keys(lanes).length) return capture(lanes, dataNow);
+        status(tx.snap.nothing);
+        return null;
+      },
+      onDraft: (draft) => {
+        if (draft) state.drafts.set(id, draft);
+        else state.drafts.delete(id);
+        renderButtons();
+      },
+      onSave: (draft) => {
+        const snap = { ...draft, name: draft.name.trim().slice(0, 40) || tx.sections[draft.section] };
+        ws.snapshots = ws.snapshots.map((s) => (s.id === id ? snap : s));
+        state.drafts.delete(id);
+        persist();
+        const tile = snapTiles.get(id);
+        tile.labelEl.textContent = snap.name;
+        tile.detailEl.textContent = snapDetail(snap);
+        tile.edit.setAttribute("aria-label", tx.tile.edit(snap.name));
+        renderButtons();
+        return snap;
+      },
+      onTry: (draft) => recall(draft),
+      onRemove: () => removeSnapshot(id),
+      onClose: closeEditor,
+    });
+    open = { layer: { id: SNAP_PANEL }, id, editor };
+    sections.get(SNAP_PANEL).slot.replaceChildren(editor.node);
+    snapTiles.get(id).edit.setAttribute("aria-expanded", "true");
+    editor.node.scrollIntoView?.({ block: "nearest" });
+    if (focusName) editor.focusName();
+  }
+
+  function removeSnapshot(id) {
+    if (!confirm(tx.snap.confirmRemove(snapById(id).name))) return;
+    closeEditor();
+    ws.snapshots = ws.snapshots.filter((s) => s.id !== id);
+    state.drafts.delete(id);
+    if (state.applied === id) state.applied = null;
+    if (state.queuedSnap?.id === id) {
+      state.queuedSnap = null;
+      state.pending = null;
+    }
+    persist();
+    renderSnaps();
+    renderButtons();
+  }
+
   /* ---- editors: one open at a time ---- */
   function closeEditor() {
     if (!open) return;
     open.editor.destroy();
     sections.get(open.layer.id).slot.replaceChildren();
-    tiles.get(open.id)?.edit.setAttribute("aria-expanded", "false");
+    (tiles.get(open.id) ?? snapTiles.get(open.id))?.edit.setAttribute("aria-expanded", "false");
     open = null;
   }
 
@@ -606,8 +864,17 @@ export function mountApp(root, engine, opts = {}) {
     if (state.pending) state.pending = without(state.pending);
     state.active = without(state.active);
     if (state.pending && sameLanes(state.pending, state.active)) state.pending = null;
+    // Snapshots lose the sound too; one left with nothing goes.
+    const strip = (snap) => (id in snap.data ? removePart(snap, id) : snap);
+    ws.snapshots = ws.snapshots.map(strip).filter((snap) => partsOf(snap).length);
+    for (const [key, draft] of state.drafts) {
+      if (snapById(key)) state.drafts.set(key, strip(draft));
+      else state.drafts.delete(key);
+    }
+    if (state.queuedSnap) state.queuedSnap = state.pending ? strip(state.queuedSnap) : null;
     persist();
     renderTiles(layer);
+    renderSnaps();
     sync();
   }
 
@@ -649,8 +916,9 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, active, auto, pilot, rng, varying } = state;
-    const next = { ws, pending, active, auto, pilot, rng, varying, open: open?.id, ...changes };
+    const { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp } = state;
+    const carried = { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp };
+    const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, resume: next });
   }
@@ -669,7 +937,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.auto = false;
     state.varying = new Map();
-    remount({ ws: normalize(next), status: tx.share.loaded(seed), open: null });
+    remount({ ws: normalize(next), ...fresh(), pending: null, status: tx.share.loaded(seed), open: null });
   }
 
   const onHash = () => {
@@ -701,6 +969,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.auto = [];
     persist();
     state.auto = true;
+    state.queuedSnap = null;
     state.rng = seeded(hashSeed(ws.seed));
     const start = startPilot(ws.lists, state.rng);
     state.pilot = start.pilot;
@@ -717,11 +986,21 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- controls ---- */
   bpm.addEventListener("input", () => {
-    ws.bpm = Number(bpm.value);
-    bpmOut.textContent = String(ws.bpm);
-    engine.setBpm(ws.bpm);
-    persist();
+    state.ramp = null; // the hand on the slider wins
+    setTempo(Number(bpm.value));
+    showRamp();
   });
+  rampBtn.addEventListener("click", () => {
+    if (!state.ramp) startRamp();
+    else {
+      state.ramp = null;
+      showRamp();
+    }
+  });
+  rampTo.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") startRamp();
+  });
+  snapBtn.addEventListener("click", takeSnapshot);
   for (const [key, box] of [
     ["combine", combine],
     ["bgKick", bgKick],
@@ -748,6 +1027,9 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = null;
     state.auto = false;
     state.pilot = null;
+    state.queuedSnap = null;
+    state.ramp = null;
+    showRamp();
     if (state.buildUp) setBuildUp(state.buildUp.id, false);
     lanes = {};
     engine.stop();
@@ -801,13 +1083,14 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.auto = false;
     state.varying = new Map();
-    remount({ ws: preset, active: preset.active, pending: null, open: null, status: tx.tools.imported });
+    remount({ ws: preset, ...fresh(), active: preset.active, pending: null, open: null, status: tx.tools.imported });
   });
   resetBtn.addEventListener("click", () => {
     if (!confirm(tx.tools.confirmReset)) return;
     engine.stop();
     remount({
       ws: normalize({}),
+      ...fresh(),
       active: {},
       pending: null,
       auto: false,
@@ -820,10 +1103,12 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- first paint ---- */
   showSection();
+  showRamp();
   if (resume) {
     persist();
     sync();
     if (resume.open && tiles.has(resume.open)) openEditor(layerOf(resume.open), resume.open);
+    else if (resume.open && snapTiles.has(resume.open)) openSnapEditor(resume.open);
     if (resume.status) status(resume.status);
   } else {
     if (!stored.seed) persist();

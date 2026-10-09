@@ -14,9 +14,8 @@
 // Every choice comes from `rng`, so a seeded rng replays the same track:
 // pools are read in id order (never in the user's tile order). A run from
 // silence starts an intro; over a playing mix it carries on from that mix.
-import { LAYERS } from "./catalog.js";
+import { LAYERS, layerOfVariant } from "./catalog.js";
 import { laneKey } from "./selection.js";
-import { layerOfVariant } from "./workspace.js";
 
 export const SECTIONS = {
   intro: { loops: 4, next: ["groove"], shape: { kick: 1, bass: 0, perc: [1, 1], lead: 0, pad: 0 } },

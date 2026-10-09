@@ -75,6 +75,14 @@ tienen que caer en la grilla:
 - **🔀 Improvisar** de los editores, en cada inicio de loop.
 - **⏫ Build-up** de los kicks: toma el compás siguiente y lo devuelve en el
   otro (ver abajo).
+- **Snapshots** (ver abajo): un clic pone a sonar el momento guardado en el
+  próximo compás, siempre, aunque «Entrar a tiempo» esté apagado.
+- **Cambio de BPM**: «Cambio de BPM [N] en [1-32 compases] ▶ Ir» avanza un
+  tramo lineal en cada línea de compás (`rampAt` en `tempo.js`) y cae exacto en
+  N en la última. El BPM intermedio va con decimales al motor y redondeado al
+  slider y al storage. El scheduler lee el BPM por tick, así que cada tramo
+  entra a lo sumo un paso después de la línea. Con el loop parado no hay
+  compases: cambia ya. Mover el slider, Parar o el mismo botón la cortan.
 
 `triggerFx(id, at)` acepta un tiempo, así el piloto dispara FX sobre la misma
 línea de compás.
@@ -199,12 +207,46 @@ apenas se mueven 6 px, en touch con un toque largo (350 ms), para que un swipe
 siga scrolleando y un tap siga siendo un clic; con teclado, Alt + flechas.
 Soltar nunca dispara el clic del sonido. Genérico en `ui/sortable.js`.
 
+### Snapshots
+
+**📸 Snapshot** (en el transporte, al lado de Parar) guarda lo que suena como un
+momento del tema, en el panel **Snapshots**. Ese panel es una capa más: se
+reordena con su manija y arranca al final. Un snapshot (`snapshots.js`) guarda:
+
+- **qué suena**: los lanes del motor. El kick de fondo pasa a ser el kick que
+  es, así suena igual aunque después apagues «Kick de fondo».
+- **cómo sonaba**: los datos de cada uno de esos sonidos, tal como sonaban en
+  ese loop (con la variación de Improvisar, sin el build-up). Si después
+  editás el bajo, el snapshot trae el bajo de entonces.
+- **el momento del tema** (intro, groove, subida, pico, break). Con el piloto
+  andando es la sección donde está. Si no, `guessSection()` lo adivina por el
+  mix: sin kick y con lead o pad → break; kick + pad → pico; kick + lead →
+  subida; con bajo → groove; si no, intro. El nombre por defecto es esa
+  sección («Pico», «Pico 2»…).
+
+Al sacarlo se abre su editor con el nombre seleccionado. **Clic** en el
+snapshot lo pone en cola (borde punteado) y entra en el próximo compás: la
+selección pasa a ser la suya y sus datos vuelven a sus sonidos (es una edición
+de esos sonidos: se guarda, y si coinciden con fábrica quedan sin ✎). Otro
+clic antes del compás cancela; doble clic entra ya; con el loop parado entra
+ya. Con el **piloto** andando, además lo lleva a la sección del snapshot y
+sigue desde ahí.
+
+El **editor** (▾) trabaja sobre un **borrador**: nombre (Enter guarda),
+momento, sacar un sonido (✕), agregar uno (toma cómo suena ahora; en kick o
+bajo reemplaza al que había) o **📸 Capturar lo que suena** para reemplazarlos
+todos. Nada cambia hasta **Guardar**, y **Descartar cambios** vuelve a lo
+guardado. El borrador sobrevive a cerrar el panel y al cambio de idioma (el
+cuadradito muestra «•»), pero no a recargar la página. **▶ Probar** pone a
+sonar el borrador en el próximo compás sin guardarlo. Borrar una copia de
+sonido la saca de los snapshots, y uno que queda sin sonidos desaparece.
+
 ### Qué se guarda
 
 Todo vive en un objeto, el **workspace** (`workspace.js`), en `localStorage`
 (`psy-sampler:v2`, por browser): BPM, los switches, el orden de capas y de
-cuadraditos, las copias, los nombres, los datos editados, la semilla y el
-idioma. Lo único que no se guarda es qué está sonando (una carga de página
+cuadraditos, las copias, los nombres, los datos editados, los snapshots, el
+largo del cambio de BPM, la semilla y el idioma. Lo único que no se guarda es qué está sonando (una carga de página
 arranca en silencio: sin un clic no hay audio). `normalize()` es la única
 puerta de entrada, para el storage y para un preset importado: revisa cada
 campo y lo que no cierra vuelve al valor de fábrica, así que un dato viejo,
@@ -222,8 +264,9 @@ funciona igual sin recordar.
   final ya están envueltas en el principio y el archivo loopea sin costura en
   cualquier DAW. Un FX se renderiza 12 s y se recorta al silencio (-80 dBFS).
   24-bit estéreo (`audio/wav.js`).
-- **Exportar / Importar preset**: el workspace + lo que suena, en JSON
-  (`app: "psy-sampler"`). Importar lo reemplaza entero y pone a sonar su mix.
+- **Exportar / Importar preset**: el workspace (snapshots incluidos) + lo que
+  suena, en JSON (`app: "psy-sampler"`). Importar lo reemplaza entero y pone a
+  sonar su mix. Los links compartidos llevan sólo los sonidos, no los snapshots.
 
 ## Guardado en la nube
 
@@ -377,9 +420,9 @@ sea cierto:
 
 - Prender el piloto en silencio arranca de la Intro. Con algo sonando no
   empieza de nuevo: toma el mix tal cual, adivina en qué sección está
-  (`guessSection`, por las capas que suenan) y sigue desde ahí con la semilla;
-  el kick de fondo pasa a ser un kick real para que no se corte. Ese tema
-  depende de la semilla *y* del mix de partida: para compartir uno
+  (`guessSection`, la misma que nombra los snapshots) y sigue desde ahí con la
+  semilla; el kick de fondo pasa a ser un kick real para que no se corte. Ese
+  tema depende de la semilla *y* del mix de partida: para compartir uno
   reproducible, arrancá de silencio.
 - Las partes que el piloto escribió (`ws.auto`) vuelven a fábrica al prenderlo
   desde silencio (sobre un mix sonando se quedan, para no cambiar lo que suena).
@@ -541,7 +584,8 @@ npm run build
 - Lógica pura en `.js` con su `*.test.js` al lado: `timing`, `patterns`, `music`,
   `selection`, `editing` (ciclos de clic, arrastre, improvisación y variaciones
   con PRNG con semilla), `workspace` (normalize, presets), `autopilot`
-  (secciones, formas, determinismo por semilla), `share`, `wav`, `i18n`.
+  (secciones, formas, determinismo por semilla), `snapshots` (captura,
+  partes), `tempo` (rampa de BPM), `share`, `wav`, `i18n`.
 - `voices.test.js` / `engine.test.js` corren contra un `AudioContext` falso
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) que
   registra nodos y automatizaciones. Incluye un invariante anti-clic: toda fuente
@@ -551,7 +595,9 @@ npm run build
 - `app.test.js` (jsdom) cubre modo solo / combinar / apilar, la cola al compás,
   doble clic, Parar, kick de fondo, FX, los editores (clic, playhead, perillas,
   Restaurar, Improvisar, ×2, build-up, persistencia, storage roto), duplicar / renombrar / borrar,
-  reordenar, piloto (misma semilla = mismo tema), idiomas, exportar / importar,
+  reordenar, piloto (misma semilla = mismo tema), snapshots (captura, cola al
+  compás, borrador / guardar / descartar, probar, sección del piloto), cambio
+  de BPM compás a compás, idiomas, exportar / importar,
   WAV, Restaurar todo y los links compartidos.
 - Las devDependencies (Vite 8, Vitest 5, jsdom 29) son más nuevas que las de
   `home-site`: las de allá arrastran advisories críticos en el toolchain de test.

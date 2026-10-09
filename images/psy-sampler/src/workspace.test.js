@@ -8,7 +8,9 @@ describe("normalize", () => {
     const ws = normalize(undefined);
     expect(ws).toMatchObject({ bpm: 145, combine: false, bgKick: true, quantize: true, names: {}, variants: {} });
     expect(ws.effects).toEqual({ delay: true, reverb: true });
-    expect(ws.order).toEqual(LAYERS.map((l) => l.id));
+    expect(ws.order).toEqual([...LAYERS.map((l) => l.id), "snap"]);
+    expect(ws.snapshots).toEqual([]);
+    expect(ws.rampBars).toBe(8);
     expect(ws.lists.kick).toEqual(LAYERS[0].variants);
     expect(ws.active).toEqual({});
   });
@@ -19,7 +21,7 @@ describe("normalize", () => {
       lists: { kick: ["kick.tok", "kick.punchy~2", "bass.offbeat", "kick.punchy~x"] },
     });
     expect(ws.order.slice(0, 2)).toEqual(["pad", "kick"]);
-    expect(ws.order).toHaveLength(6);
+    expect(ws.order).toHaveLength(7);
     expect(ws.lists.kick).toEqual(["kick.tok", "kick.punchy~2", "kick.punchy", "kick.long", "kick.fullon"]);
   });
 
@@ -37,6 +39,38 @@ describe("normalize", () => {
     expect(ws.names).toEqual({ "lead.acid~1": "Mi ácido" });
     expect(ws.auto).toEqual(["lead.acid~1"]);
     expect(ws.active).toEqual({ "lead.acid~1": "lead.acid~1", kick: "kick.long" });
+  });
+
+  it("keeps snapshots that still play something, with sanitized data", () => {
+    const ws = normalize({
+      lists: { lead: ["lead.acid~1"] },
+      snapshots: [
+        {
+          id: "snap-2",
+          name: "  Pico fuerte ",
+          section: "peak",
+          active: { kick: "kick.long", "lead.acid~9": "lead.acid~9", bass: "kick.tok" },
+          data: { "kick.long": { level: 9 } },
+        },
+        { id: "snap-2", active: { kick: "kick.tok" } }, // duplicate id
+        { id: "snap-3", section: "nope", active: { "lead.acid~1": "lead.acid~1" } },
+        { id: "snap-4", active: { "fx.riser": "fx.riser" } }, // nothing left
+        { id: "mine", active: { kick: "kick.tok" } },
+      ],
+    });
+    expect(ws.snapshots.map((s) => [s.id, s.name, s.section])).toEqual([
+      ["snap-2", "Pico fuerte", "peak"],
+      ["snap-3", "snap-3", "groove"],
+    ]);
+    expect(ws.snapshots[0].active).toEqual({ kick: "kick.long" });
+    expect(ws.snapshots[0].data["kick.long"]).toEqual({ ...defaultData("kick.long"), level: 1.5 });
+    expect(ws.snapshots[1].data).toEqual({ "lead.acid~1": defaultData("lead.acid") });
+  });
+
+  it("puts the snapshots panel last unless it was moved, and checks the ramp length", () => {
+    expect(normalize({ order: ["snap", "pad"] }).order.slice(0, 2)).toEqual(["snap", "pad"]);
+    expect(normalize({ rampBars: 16 }).rampBars).toBe(16);
+    expect(normalize({ rampBars: 7 }).rampBars).toBe(8);
   });
 
   it("clamps the BPM and ignores non-booleans", () => {

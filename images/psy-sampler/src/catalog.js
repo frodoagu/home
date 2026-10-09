@@ -21,3 +21,5 @@ export const LAYERS = [
 export const LAYER_IDS = LAYERS.map((l) => l.id);
 
 export const layerById = (id) => LAYERS.find((l) => l.id === id);
+
+export const layerOfVariant = (id) => id.split(".")[0];
