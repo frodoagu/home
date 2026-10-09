@@ -21,7 +21,7 @@ services running on a Raspberry Pi with k3s.
 | [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the SPA image — pins new digests into git | `charts/argocd-image-updater/` |
 | [cloudflare-ddns](https://github.com/favonia/cloudflare-ddns) | Dynamic DNS – keeps Cloudflare records on the home public IP | `charts/cloudflare-ddns/` |
-| [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, blackbox uptime, Telegram alerts | `charts/monitoring/` |
+| [VictoriaMetrics + Grafana](https://docs.victoriametrics.com/) | Lightweight monitoring — metrics, dashboards, RPi temp/throttling, Pi-hole stats, blackbox uptime, Telegram alerts | `charts/monitoring/` |
 | [Pi-hole](https://pi-hole.net/) | Network-wide DNS ad-blocker + LAN DHCP server (hostNetwork) | `charts/pihole/` |
 | [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
 | [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
@@ -454,7 +454,7 @@ Versioning started from a `v0.0.0` genesis tag; the first release is `v1.0.0`.
 
 Per-topic guides live in [docs/](docs/):
 
-- [docs/monitoring.md](docs/monitoring.md) — VictoriaMetrics + Grafana stack: dashboards, Telegram alerts, blackbox probing, Traefik metrics, operating notes
+- [docs/monitoring.md](docs/monitoring.md) — VictoriaMetrics + Grafana stack: dashboards, Telegram alerts, blackbox probing, Traefik + Pi-hole metrics, operating notes
 - [docs/secrets.md](docs/secrets.md) — every secret as a committed `SealedSecret`: the controller-key bootstrap, minting/rotation/adoption, and the off-repo key backup
 - [docs/tls.md](docs/tls.md) — Let's Encrypt via the DNS-01 Cloudflare challenge
 - [docs/home-assistant.md](docs/home-assistant.md) — config bootstrap, versioned device config (HA packages: split-AC climate via SmartIR/Broadlink, unified webOS+IR TVs + WoL), device discovery (host networking), Bluetooth

@@ -27,6 +27,7 @@ it generates resolve.
 | **kube-state-metrics** | pod/deployment/workload state |
 | **rpi-throttle-exporter** | Raspberry Pi throttling/under-voltage via `vcgencmd` (textfile collector) |
 | **blackbox-exporter** | external HTTP/TLS probes of the public hostnames |
+| **pihole-exporter** | Pi-hole stats from its v6 REST API ([eko/pihole-exporter](https://github.com/eko/pihole-exporter)) |
 | **VM operator** | reconciles the `VM*` CRDs (VMSingle, VMAgent, VMRule, VMProbe, VMPodScrape, …) |
 
 Tuned small for the Pi and biased toward **few SD-card writes** (long scrape
@@ -58,6 +59,7 @@ keep Grafana focused on these:
 | Workloads — Per-service | `workloads` | per-namespace drilldown: CPU/RAM/network/restarts per pod (+ pod table) |
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
+| Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
 the `home` tag — see *Playlist* below) and commit — no template changes needed.
@@ -143,6 +145,43 @@ container port (9100) — it's just not published on the Service. So
 [templates/vmpodscrape-traefik.yaml](../charts/monitoring/templates/vmpodscrape-traefik.yaml)
 scrapes the **pod** directly with a `VMPodScrape` (entrypoint/service/cert
 metrics). No change to `charts/traefik-config` or the ingress is needed.
+
+## Pi-hole metrics
+
+Pi-hole has no Prometheus endpoint, so
+[templates/pihole-exporter.yaml](../charts/monitoring/templates/pihole-exporter.yaml)
+runs [eko/pihole-exporter](https://github.com/eko/pihole-exporter) (`piholeExporter`
+in `values.yaml`) plus a `VMPodScrape`. On every scrape it reads Pi-hole's v6 REST
+API (`/api/stats/*`, `/api/dns/blocking`) through the in-cluster Service
+`pihole.pihole.svc.cluster.local:8080`. It can't use `pihole.agu.com.ar`: that route
+sits behind google-auth, so the exporter would only get a sign-in redirect.
+
+- **Its own Deployment, not a sidecar.** Pi-hole runs `hostNetwork`, so a sidecar's
+  `:9617` would listen on the node and expose top domains and client names to the
+  whole LAN.
+- **No password needed** while charts/pihole keeps `admin.disablePassword: true`.
+  FTL answers the exporter's `POST /api/auth` with `valid: true`, no sid and
+  `validity: -1`, so no session slot is used. If the Pi-hole password is ever
+  turned on, create the same password as a Secret in **this** namespace and set
+  `piholeExporter.passwordSecret.name` (see [pihole.md](pihole.md#admin-password-optional)).
+- **The dashboard** is grafana.com
+  [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/)
+  (`grafana/dashboard.json` from the exporter's v1.2.0 tag), adapted to this repo:
+  `DS_PROM` datasource variable, uid `pihole`, `home` tag, `1m` refresh and a 24h
+  default range. It also fixes upstream bugs: four queries ignored the
+  `$node` variable, and the *DNS Query types* and *Forward destinations* panels
+  showed query counts with a `percent` unit.
+
+Limitations (in the exporter, not fixable here):
+
+- **A dead Pi-hole looks alive.** When the API is unreachable the exporter logs a
+  warning and keeps serving the **last** values with a 200 (reproduced against a
+  mock). `up` stays 1 and `pihole_status` stays 1, so don't build a "Pi-hole down"
+  alert on these series.
+- **`top_*` series go stale.** These gauges are never reset, so a domain or client
+  that drops out of the top 10 keeps its last count until the exporter restarts.
+- **"today" means the last 24h.** `*_today` comes from FTL's in-memory window
+  (`/api/stats/summary`), not from the calendar day.
 
 ## Operating notes
 

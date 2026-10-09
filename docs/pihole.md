@@ -377,7 +377,23 @@ To use a password instead, set `admin.disablePassword: false` and point
 kubectl create secret generic pihole-admin -n pihole --from-literal=password='...'
 ```
 
-See [secrets.md](secrets.md).
+The Grafana exporter (charts/monitoring) also calls this API, so it needs the same
+password, in a Secret in the `monitoring` namespace:
+
+```bash
+kubectl create secret generic pihole-admin -n monitoring --from-literal=password='...'
+# then set piholeExporter.passwordSecret.name: pihole-admin in charts/monitoring/values.yaml
+```
+
+Without it the exporter's login fails and the dashboard stops updating. See
+[secrets.md](secrets.md).
+
+## Metrics
+
+The *Pi-hole — DNS* Grafana dashboard (`grafana.agu.com.ar`, uid `pihole`) is
+fed by `pihole-exporter` in the monitoring namespace, which reads this chart's
+`pihole` Service on :8080. Nothing in this chart changes for it. Details and
+limitations are in [monitoring.md](monitoring.md#pi-hole-metrics).
 
 ## DNS record
 

@@ -1,0 +1,122 @@
+{{- if .Values.piholeExporter.enabled }}
+{{- $component := "pihole-exporter" }}
+# pihole-exporter
+#
+# Pi-hole (charts/pihole) exposes no Prometheus endpoint, so eko/pihole-exporter
+# translates its v6 REST API (/api/stats/summary, top_domains, top_clients,
+# upstreams, /api/dns/blocking) into pihole_* gauges. It calls the API on each
+# scrape — no polling loop of its own — so its load on FTL follows the 60s
+# scrape interval: 7 GETs, each preceded by a POST /api/auth. Without a
+# password FTL answers that POST with `validity: -1` and no sid, so the exporter
+# re-"logs in" every call but never takes one of FTL's session slots.
+#
+# A separate Deployment rather than a sidecar: Pi-hole runs hostNetwork, so a
+# sidecar's :9617 would be bound on the node and reachable from the whole LAN,
+# top-domains and client names included.
+#
+# Gotchas (exporter behaviour, not fixable from here):
+#   - When Pi-hole is unreachable it logs a warning and still serves the LAST
+#     values with a 200, so `up` stays 1 and pihole_status stays 1. Don't build
+#     a "Pi-hole down" alert on these series.
+#   - The top_* gauges are never reset: a domain/client that drops out of the
+#     top 10 keeps its last count until the exporter restarts.
+#   - The *_today series are FTL's in-memory window (last 24h), not the
+#     calendar day.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "monitoring.fullname" . }}-{{ $component }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ .Values.piholeExporter.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: {{ $component }}
+  template:
+    metadata:
+      labels:
+        {{- include "monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+    spec:
+      automountServiceAccountToken: false
+      # FROM-scratch image with no USER (runs as root by default); the static
+      # binary at /root/pihole-exporter is 0755 under a 0755 /root, so UID
+      # 65534 can still exec it. Nothing is written to disk.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $component }}
+          image: "{{ .Values.piholeExporter.image.repository }}:{{ .Values.piholeExporter.image.tag }}"
+          env:
+            - name: PIHOLE_PROTOCOL
+              value: {{ .Values.piholeExporter.pihole.protocol | quote }}
+            - name: PIHOLE_HOSTNAME
+              value: {{ .Values.piholeExporter.pihole.host | quote }}
+            - name: PIHOLE_PORT
+              value: {{ .Values.piholeExporter.pihole.port | quote }}
+            - name: PORT
+              value: "9617"
+            {{- with .Values.piholeExporter.passwordSecret.name }}
+            - name: PIHOLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.piholeExporter.passwordSecret.key }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9617
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Both endpoints only report the exporter's own HTTP server, not
+          # whether Pi-hole answers.
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: metrics
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: metrics
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.piholeExporter.resources | nindent 12 }}
+---
+# No namespaceSelector: a VMPodScrape selects pods in its own namespace.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "monitoring.fullname" . }}-{{ $component }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "monitoring.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: {{ $component }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      # The exporter labels every series with PIHOLE_HOSTNAME, i.e. the Service
+      # FQDN; rewrite it to a short name for the dashboard's $node selector.
+      metricRelabelConfigs:
+        - action: replace
+          target_label: hostname
+          replacement: {{ .Values.piholeExporter.pihole.label | quote }}
+{{- end }}

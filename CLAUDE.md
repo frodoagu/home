@@ -28,7 +28,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   agu-spa/         nginx serving the agu.com.ar SPA from the GHCR image (digest pinned by Image Updater).
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + the ImageUpdater CR that auto-updates the SPA image.
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
-                     (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes.
+                     (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes,
+                     Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard).
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.
@@ -164,6 +165,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   explicit `url`. Grafana plugins go under `grafana.plugins`; the VictoriaLogs
   datasource plugin `victoriametrics-logs-datasource` is signed and fetched from
   grafana.com at pod start (needs egress).
+- **monitoring — pihole-exporter can make a dead Pi-hole look alive.** When the API
+  is unreachable, eko/pihole-exporter serves the LAST values with a 200, so `up`
+  and `pihole_status` stay 1. Don't alert on them. It must read the in-cluster
+  `pihole.pihole.svc.cluster.local:8080`: the public host is behind google-auth.
+  It runs as its own Deployment rather than a sidecar because Pi-hole is
+  hostNetwork, so a sidecar's :9617 would be open to the whole LAN. It needs no
+  password while Pi-hole's login is off. If that login is turned on, the
+  exporter needs a copy of the Secret in `monitoring`
+  (`piholeExporter.passwordSecret`). See docs/monitoring.md#pi-hole-metrics.
 - **victoria-logs.** The upstream `victoria-logs-single` chart bundles a **Vector**
   agent (`vector.enabled: true`, DaemonSet) whose elasticsearch sink is
   auto-wired to the server when both are enabled — no manual endpoint needed.
