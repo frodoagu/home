@@ -101,8 +101,9 @@ describe("layout", () => {
     expect($("#seed").value).toMatch(/^[a-z2-9]{6}$/);
   });
 
-  it("has one row per layer and a 16-cell bar with the 4 beats marked", () => {
-    expect(root.querySelectorAll("section.layer")).toHaveLength(6);
+  it("has one row per layer plus the snapshots, and a 16-cell bar with the 4 beats marked", () => {
+    expect(root.querySelectorAll("section.layer")).toHaveLength(7);
+    expect(root.querySelector("section.layer:last-of-type").dataset.layer).toBe("snap");
     expect(root.querySelectorAll(".cell")).toHaveLength(16);
     expect([...root.querySelectorAll(".cell.beat")].map((c) => c.textContent)).toEqual(["1", "2", "3", "4"]);
   });
@@ -578,6 +579,241 @@ describe("duplicating and renaming", () => {
     expect(engine.isRunning()).toBe(false);
     expect(saved().lists.lead).not.toContain("lead.arp~1");
     expect(saved().variants["lead.arp~1"]).toBeUndefined();
+  });
+});
+
+describe("snapshots", () => {
+  const snapBtn = () => $('[data-action="snapshot"]');
+  const snapTile = (id = "snap-1") => $(`[data-snap="${id}"]`);
+  const snapEditor = (id = "snap-1") => $(`[data-editor="${id}"]`);
+  const act = (id, action) => snapEditor(id).querySelector(`[data-action="${action}"]`);
+  const setLevel = (variant, value) => {
+    openEditor(variant);
+    const input = editor(variant).querySelector('[data-param="level"]');
+    input.value = String(value);
+    input.dispatchEvent(new Event("input"));
+  };
+  const typeName = (text) => {
+    const name = act("snap-1", "name");
+    name.value = text;
+    name.dispatchEvent(new Event("input"));
+  };
+
+  it("needs something playing", () => {
+    snapBtn().click();
+    expect($(".status").textContent).toMatch(/No suena nada/);
+    expect(snapTile()).toBeNull();
+  });
+
+  it("captures the mix and how it sounded; a click brings it back on the next bar line", () => {
+    immediate();
+    $("#combine").click();
+    click("kick.long");
+    click("bass.gallop");
+    setLevel("bass.gallop", 0.5);
+    snapBtn().click();
+    expect(snapTile().querySelector(".variant-label").textContent).toBe("Groove");
+    expect(snapTile().querySelector(".variant-detail").textContent).toBe("Groove · 2 sonidos");
+    expect(snapTile().getAttribute("aria-pressed")).toBe("true");
+    expect(document.activeElement).toBe(act("snap-1", "name")); // ready to be named
+    expect(saved().snapshots[0]).toMatchObject({ id: "snap-1", section: "groove", active: { kick: "kick.long", bass: "bass.gallop" } });
+
+    setLevel("bass.gallop", 1);
+    click("lead.acid");
+    advance(10);
+    snapTile().click(); // waits for the bar even with "Entrar a tiempo" off
+    expect(snapTile().classList.contains("is-queued")).toBe(true);
+    expect(pressed()).toContain("lead.acid");
+    advanceSeconds(BAR);
+    expect(pressed()).toEqual(["kick.long", "bass.gallop"]);
+    expect(saved().variants["bass.gallop"].level).toBe(0.5);
+    expect(snapTile().getAttribute("aria-pressed")).toBe("true");
+    expect(snapTile().classList.contains("is-queued")).toBe(false);
+  });
+
+  it("the background kick is captured as the kick it is", () => {
+    immediate();
+    click("bass.offbeat");
+    snapBtn().click();
+    expect(saved().snapshots[0].active).toEqual({ bass: "bass.offbeat", kick: "kick.punchy" });
+  });
+
+  it("a second click cancels the queue, a double click enters now", () => {
+    click("kick.long");
+    snapBtn().click();
+    click("pad.air");
+    advanceSeconds(BAR);
+    snapTile().click();
+    snapTile().click();
+    expect(snapTile().classList.contains("is-queued")).toBe(false);
+    advanceSeconds(BAR);
+    expect(pressed()).toEqual(["pad.air"]);
+    for (const detail of [1, 2]) snapTile().dispatchEvent(new MouseEvent("click", { bubbles: true, detail }));
+    expect(pressed()).toEqual(["kick.long"]);
+  });
+
+  it("the editor works on a draft: Guardar keeps it, Descartar goes back", () => {
+    immediate();
+    click("kick.long");
+    snapBtn().click();
+    expect(act("snap-1", "save").disabled).toBe(true);
+    typeName("Mi pico");
+    expect(act("snap-1", "save").disabled).toBe(false);
+    expect(snapTile().parentElement.classList.contains("is-dirty")).toBe(true);
+    act("snap-1", "restore").click();
+    expect(act("snap-1", "name").value).toBe("Intro");
+    expect(snapTile().parentElement.classList.contains("is-dirty")).toBe(false);
+
+    typeName("Mi pico");
+    const section = snapEditor().querySelector('[data-control="section"]');
+    section.value = "peak";
+    section.dispatchEvent(new Event("change"));
+    const add = snapEditor().querySelector('[data-control="add-part"]');
+    add.value = "pad.air";
+    add.dispatchEvent(new Event("change"));
+    expect([...snapEditor().querySelectorAll("[data-part]")].map((b) => b.dataset.part)).toEqual(["kick.long", "pad.air"]);
+    expect(saved().snapshots[0].name).toBe("Intro"); // nothing saved yet
+
+    // Folding the panel keeps the draft.
+    act("snap-1", "close").click();
+    $('[data-edit-snap="snap-1"]').click();
+    expect(act("snap-1", "name").value).toBe("Mi pico");
+
+    act("snap-1", "save").click();
+    expect(saved().snapshots[0]).toMatchObject({ name: "Mi pico", section: "peak", active: { kick: "kick.long", "pad.air": "pad.air" } });
+    expect(snapTile().querySelector(".variant-label").textContent).toBe("Mi pico");
+    expect(snapTile().querySelector(".variant-detail").textContent).toBe("Pico · 2 sonidos");
+    expect(act("snap-1", "save").disabled).toBe(true);
+  });
+
+  it("parts can be dropped and recaptured; an empty name falls back to the section", () => {
+    immediate();
+    $("#combine").click();
+    click("kick.long");
+    click("lead.acid");
+    snapBtn().click();
+    snapEditor().querySelector('[data-part="kick.long"]').click();
+    expect(snapEditor().querySelectorAll("[data-part]")).toHaveLength(1);
+    snapEditor().querySelector('[data-part="lead.acid"]').click();
+    expect(act("snap-1", "save").disabled).toBe(true); // nothing to save without sounds
+    click("pad.drone");
+    act("snap-1", "recapture").click();
+    typeName("");
+    act("snap-1", "save").click();
+    expect(saved().snapshots[0].active).toEqual({ kick: "kick.long", "lead.acid": "lead.acid", "pad.drone": "pad.drone" });
+    expect(saved().snapshots[0].name).toBe("Subida");
+  });
+
+  it("Probar plays the unsaved draft; Borrar removes the snapshot", () => {
+    immediate();
+    click("kick.long");
+    snapBtn().click();
+    const add = snapEditor().querySelector('[data-control="add-part"]');
+    add.value = "perc.clap";
+    add.dispatchEvent(new Event("change"));
+    act("snap-1", "try").click();
+    advanceSeconds(BAR);
+    expect(pressed()).toEqual(["kick.long", "perc.clap"]);
+    expect(saved().snapshots[0].active).toEqual({ kick: "kick.long" });
+    act("snap-1", "remove").click();
+    expect(snapTile()).toBeNull();
+    expect(saved().snapshots).toEqual([]);
+  });
+
+  it("recalled under the autopilot, it moves the track to its section", () => {
+    $("button.auto").click();
+    snapBtn().click();
+    expect(snapTile().querySelector(".variant-label").textContent).toBe("Intro");
+    const section = snapEditor().querySelector('[data-control="section"]');
+    section.value = "breakdown";
+    section.dispatchEvent(new Event("change"));
+    act("snap-1", "save").click();
+    snapTile().click();
+    advanceSeconds(BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+  });
+
+  it("survive a reload, travel in presets and lose a deleted copy", async () => {
+    immediate();
+    $("#combine").click();
+    openEditor("lead.arp");
+    editor("lead.arp").querySelector('[data-action="duplicate"]').click();
+    click("kick.long");
+    click("lead.arp~1");
+    snapBtn().click();
+    click("pad.air");
+    snapBtn().click();
+
+    const again = document.createElement("div");
+    mount(again, newEngine());
+    expect([...again.querySelectorAll("[data-snap]")].map((b) => b.dataset.snap)).toEqual(["snap-1", "snap-2"]);
+
+    $('[data-action="export"]').click();
+    const preset = JSON.parse(await downloads.at(-1).text());
+    expect(preset.snapshots).toHaveLength(2);
+
+    openEditor("lead.arp~1");
+    editor("lead.arp~1").querySelector('[data-action="remove"]').click();
+    expect(saved().snapshots[0].active).toEqual({ kick: "kick.long" });
+    expect(saved().snapshots[1].active).toEqual({ kick: "kick.long", "pad.air": "pad.air" });
+  });
+});
+
+describe("BPM change", () => {
+  const rampTo = (bpm, bars) => {
+    $("#ramp-to").value = String(bpm);
+    if (bars) {
+      const sel = $('[data-control="ramp-bars"]');
+      sel.value = String(bars);
+      sel.dispatchEvent(new Event("change"));
+    }
+    $('[data-action="ramp"]').click();
+  };
+
+  it("with the loop stopped, it just sets the BPM", () => {
+    rampTo(160);
+    expect($("#bpm").value).toBe("160");
+    expect(saved().bpm).toBe(160);
+  });
+
+  it("while playing, it moves one slice per bar line and lands on the target", () => {
+    immediate();
+    click("kick.long");
+    advance(10);
+    rampTo(149, 4);
+    expect($("#bpm").value).toBe("145");
+    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("true");
+    advanceSeconds(BAR);
+    expect($("#bpm").value).toBe("146");
+    expect($(".bpm-value").textContent).toBe("146 → 149");
+    advanceSeconds(3 * BAR + 0.5);
+    expect($("#bpm").value).toBe("149");
+    expect($(".bpm-value").textContent).toBe("149");
+    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    expect(saved().bpm).toBe(149);
+    expect(saved().rampBars).toBe(4);
+    const kicks = ctx
+      .sources()
+      .filter((s) => s.kind === "oscillator" && s.frequency.events[0]?.[1] === 120)
+      .map((s) => s.startTime);
+    expect(kicks.at(-1) - kicks.at(-2)).toBeCloseTo(60 / 149, 6);
+  });
+
+  it("the slider, Parar or the button itself cut it", () => {
+    immediate();
+    click("kick.long");
+    rampTo(170, 8);
+    $('[data-action="ramp"]').click();
+    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    rampTo(170, 8);
+    const bpm = $("#bpm");
+    bpm.value = "150";
+    bpm.dispatchEvent(new Event("input"));
+    advanceSeconds(2 * BAR);
+    expect(bpm.value).toBe("150");
+    rampTo(170, 8);
+    $("button.stop").click();
+    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
   });
 });
 

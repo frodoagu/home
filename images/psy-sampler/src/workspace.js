@@ -2,29 +2,36 @@
 // keeps between visits and what an exported preset carries. normalize() is
 // the single gate both pass through, so a stale, hand-edited or foreign
 // object always comes out playable.
-import { LAYERS, LAYER_IDS } from "./catalog.js";
+import { LAYERS, LAYER_IDS, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
+import { SECTIONS } from "./autopilot.js";
 import { laneKey } from "./selection.js";
+import { SNAP_MAX } from "./snapshots.js";
+import { RAMP_BARS, RAMP_DEFAULT } from "./tempo.js";
 
 export const PRESET_APP = "psy-sampler";
 export const PRESET_VERSION = 1;
 const NAME_MAX = 40;
 export const SEED_MAX = 32;
+export const SNAP_PANEL = "snap"; // the snapshots panel, sorted among the layers
+const PANELS = [...LAYER_IDS, SNAP_PANEL];
 
 export const cleanSeed = (s) => (typeof s === "string" ? s.trim().slice(0, SEED_MAX) : "");
 
-export const layerOfVariant = (id) => id.split(".")[0];
+export { layerOfVariant };
 
 /**
  * {
  *   bpm, combine, bgKick, quantize, effects: { delay, reverb },
  *   seed:     the autopilot's seed ("" until the app draws one)
- *   order:    layer ids, top to bottom
+ *   rampBars: how many bars a BPM change takes
+ *   order:    layer ids and SNAP_PANEL, top to bottom
  *   lists:    { layer: variant ids in tile order, factory + copies }
  *   names:    { variant: the name the user gave it }
  *   variants: { variant: edited data } (copies always have an entry)
  *   auto:     variants whose notes the autopilot wrote (it may rewrite them)
+ *   snapshots: [{ id, name, section, active, data }] in tile order (snapshots.js)
  *   active:   { lane key: variant } (presets only: a page load starts silent)
  * }
  */
@@ -32,8 +39,8 @@ export function normalize(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const bool = (v, def) => (typeof v === "boolean" ? v : def);
 
-  const order = unique((Array.isArray(src.order) ? src.order : []).filter((id) => LAYER_IDS.includes(id)));
-  for (const id of LAYER_IDS) if (!order.includes(id)) order.push(id);
+  const order = unique((Array.isArray(src.order) ? src.order : []).filter((id) => PANELS.includes(id)));
+  for (const id of PANELS) if (!order.includes(id)) order.push(id);
 
   const lists = {};
   for (const layer of LAYERS) {
@@ -57,10 +64,18 @@ export function normalize(raw) {
 
   const auto = unique((Array.isArray(src.auto) ? src.auto : []).filter((id) => id in variants));
 
-  const active = {};
-  for (const [key, id] of Object.entries(src.active ?? {})) {
-    const layer = LAYERS.find((l) => l.id === (typeof id === "string" && layerOfVariant(id)));
-    if (layer && !layer.oneShot && known.has(id) && laneKey(layer, id) === key) active[key] = id;
+  const active = cleanActive(src.active, known);
+  const snapshots = [];
+  for (const snap of Array.isArray(src.snapshots) ? src.snapshots : []) {
+    const id = typeof snap?.id === "string" && /^snap-[1-9]\d{0,5}$/.test(snap.id) ? snap.id : null;
+    const parts = cleanActive(snap?.active, known);
+    if (!id || snapshots.some((s) => s.id === id) || !Object.keys(parts).length) continue;
+    const name = typeof snap.name === "string" ? snap.name.trim().slice(0, NAME_MAX) : "";
+    const data = {};
+    for (const v of Object.values(parts)) data[v] = sanitize(v, snap.data?.[v]);
+    const section = snap.section in SECTIONS ? snap.section : "groove";
+    snapshots.push({ id, name: name || id, section, active: parts, data });
+    if (snapshots.length === SNAP_MAX) break;
   }
 
   const bpm = Number.isFinite(src.bpm) ? Math.round(Math.min(BPM_MAX, Math.max(BPM_MIN, src.bpm))) : BPM_DEFAULT;
@@ -70,14 +85,26 @@ export function normalize(raw) {
     bgKick: bool(src.bgKick, true),
     quantize: bool(src.quantize, true),
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },
+    rampBars: RAMP_BARS.includes(src.rampBars) ? src.rampBars : RAMP_DEFAULT,
     seed: cleanSeed(src.seed),
     order,
     lists,
     names,
     variants,
     auto,
+    snapshots,
     active,
   };
+}
+
+// { lane key: variant } keeping only known loop variants on their own lane.
+function cleanActive(raw, known) {
+  const active = {};
+  for (const [key, id] of Object.entries(raw && typeof raw === "object" ? raw : {})) {
+    const layer = LAYERS.find((l) => l.id === (typeof id === "string" && layerOfVariant(id)));
+    if (layer && !layer.oneShot && known.has(id) && laneKey(layer, id) === key) active[key] = id;
+  }
+  return active;
 }
 
 export const toPreset = (ws) => ({ app: PRESET_APP, version: PRESET_VERSION, ...ws });
