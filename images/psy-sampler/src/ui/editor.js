@@ -3,19 +3,36 @@
 //   notes  piano roll + synth, brightness, scale, octave, note length
 //   fx     just the sliders
 // Every change goes out through onChange(next) as fresh data; the editor
-// never talks to the engine itself.
+// never talks to the engine itself. The header names the variant (editable)
+// and carries the per-sound actions: duplicate, WAV, reset, delete (copies).
 import { LEVEL, SYNTHS } from "../audio/params.js";
-import { DEFAULTS, NOTE_LENGTHS, TRANSPOSE, paramSpecs } from "../audio/patterns.js";
+import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleStep, improvise, placeNote } from "../editing.js";
+import { cycleNote, cycleStep, improvise, placeNote, styleOf } from "../editing.js";
+import { t } from "../i18n/index.js";
 import { el, select, slider } from "./dom.js";
 
-const LENGTH_LABELS = { 1: "1/16", 2: "1/8", 4: "1/4", 8: "1/2", 16: "1 compás", 32: "2 compases" };
-const STATE_NAMES = ["vacío", "golpe", "acento"];
+const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
-export function createEditor({ id, label, data, onChange, onAudition, onReset, onClose, onTrigger }) {
-  const def = DEFAULTS[id];
+export function createEditor({
+  id,
+  label,
+  data,
+  onChange,
+  onAudition,
+  onReset,
+  onClose,
+  onTrigger,
+  onRename,
+  onDuplicate,
+  onRemove,
+  onWav,
+  varying = false,
+  onVary,
+}) {
+  const def = defOf(id);
+  const tx = t().editor;
   let current = data;
   let paintGrid = () => {};
   let refreshGrid = () => {};
@@ -26,28 +43,67 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
     onChange(current);
   }
 
-  /* ---- header ---- */
+  // The improvise toggle: the app varies the part on every loop while it is on.
+  function varyToggle() {
+    const b = el("button", {
+      type: "button",
+      class: "action toggle",
+      "data-action": "vary",
+      "aria-pressed": String(varying),
+      text: tx.improvise,
+    });
+    b.title = tx.improviseTitle;
+    b.addEventListener("click", () => {
+      varying = !varying;
+      b.setAttribute("aria-pressed", String(varying));
+      onVary(varying);
+    });
+    return b;
+  }
+
+  /* ---- header: name + actions ---- */
+  const name = el("input", { type: "text", class: "name-input", "data-action": "name", maxlength: "40", value: label });
+  name.value = label;
+  name.addEventListener("input", () => onRename(name.value));
+  name.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") name.blur();
+  });
+  name.addEventListener("blur", () => {
+    if (!name.value.trim()) name.value = onRename("");
+  });
+  const button = (action, text, title) => {
+    const b = el("button", { type: "button", class: "ghost", "data-action": action, text });
+    if (title) b.title = title;
+    return b;
+  };
+  const actions = [
+    [button("duplicate", tx.duplicate), onDuplicate],
+    [button("wav", tx.wav, tx.wavTitle), onWav],
+    [button("reset", tx.reset), onReset],
+    ...(isCopy(id) ? [[button("remove", tx.remove), onRemove]] : []),
+    [button("close", tx.close), onClose],
+  ];
+  for (const [b, fn] of actions) b.addEventListener("click", () => fn());
   const head = el(
     "div",
     { class: "editor-head" },
-    el("h3", { text: `Editar: ${label}` }),
-    el("button", { type: "button", class: "ghost", "data-action": "reset", text: "Restaurar" }),
-    el("button", { type: "button", class: "ghost", "data-action": "close", text: "Cerrar ▴" }),
+    el("label", { class: "name-field" }, el("span", { text: tx.name }), name),
+    el("div", { class: "editor-tools" }, ...actions.map(([b]) => b)),
   );
-  head.querySelector('[data-action="reset"]').addEventListener("click", onReset);
-  head.querySelector('[data-action="close"]').addEventListener("click", onClose);
 
   /* ---- sliders: the voice's params + volume ---- */
   const knobs = el("div", { class: "knobs" });
   for (const spec of paramSpecs(id)) {
-    knobs.append(slider(spec, current.params[spec.key], (v) => set({ params: { ...current.params, [spec.key]: v } })));
+    knobs.append(
+      slider(localized(spec), current.params[spec.key], (v) => set({ params: { ...current.params, [spec.key]: v } })),
+    );
   }
-  knobs.append(slider(LEVEL, current.level, (v) => set({ level: v })));
+  knobs.append(slider(localized(LEVEL), current.level, (v) => set({ level: v })));
 
-  const node = el("div", { class: "editor", role: "region", "aria-label": `Editor de ${label}`, "data-editor": id }, head);
+  const node = el("div", { class: "editor", role: "region", "aria-label": tx.region(label), "data-editor": id }, head);
 
   if (def.kind === "fx") {
-    const fire = el("button", { type: "button", class: "action", text: "▶ Disparar" });
+    const fire = el("button", { type: "button", class: "action", text: tx.fire });
     fire.addEventListener("click", onTrigger);
     node.append(knobs, el("div", { class: "editor-actions" }, fire));
   } else if (def.kind === "drum") {
@@ -59,7 +115,12 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
   /* ---- drums: one row ---- */
   function drumGrid() {
     const cells = [];
-    const grid = el("div", { class: "grid", role: "group", "aria-label": "Pasos" }, el("span", { class: "row-label", text: "Golpes" }));
+    const grid = el(
+      "div",
+      { class: "grid", role: "group", "aria-label": tx.steps },
+      ...gridHeader(tx),
+      el("span", { class: "row-label", text: tx.hits }),
+    );
     for (let s = 0; s < LOOP_STEPS; s++) {
       const cell = el("button", { type: "button", class: cellClass(s), "data-step": String(s) });
       cells.push(cell);
@@ -78,29 +139,29 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       cells.forEach((cell, s) => {
         const v = current.steps[s];
         cell.dataset.state = ["", "hit", "accent"][v];
-        cell.setAttribute("aria-label", `Paso ${s + 1}: ${STATE_NAMES[v]}`);
+        cell.setAttribute("aria-label", tx.step(s + 1, tx.states[v]));
       });
     };
     paintGrid = paintColumns(cells.map((c) => [c]));
     refreshGrid();
-    const clear = el("button", { type: "button", class: "ghost", text: "Borrar todo" });
+    const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
       set({ steps: current.steps.map(() => 0) });
       refreshGrid();
     });
-    return [legend("Clic: golpe → acento → vacío."), wrap(grid), el("div", { class: "editor-actions" }, clear)];
+    return [legend(tx.drumLegend), wrap(grid), el("div", { class: "editor-actions" }, varyToggle(), clear)];
   }
 
   /* ---- notes: synth + view controls ---- */
   function noteControls() {
     const synthDetail = el("p", { class: "synth-detail" });
     const showDetail = () => {
-      synthDetail.textContent = SYNTHS.find((s) => s.id === current.synth)?.detail ?? "";
+      synthDetail.textContent = t().synths[current.synth]?.[1] ?? "";
     };
     showDetail();
     const synth = select(
-      "Sinte",
-      SYNTHS.map((s) => ({ value: s.id, label: s.label, group: s.group })),
+      tx.synth,
+      SYNTHS.map((s) => ({ value: s.id, label: t().synths[s.id][0], group: t().synthGroups[s.group] })),
       current.synth,
       (v) => {
         set({ synth: v });
@@ -109,8 +170,8 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       "synth",
     );
     const scale = select(
-      "Escala",
-      Object.entries(SCALES).map(([value, s]) => ({ value, label: s.label })),
+      tx.scale,
+      Object.keys(SCALES).map((value) => ({ value, label: t().scales[value] })),
       current.scale,
       (v) => {
         set({ scale: v });
@@ -119,7 +180,7 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       "scale",
     );
     const octave = select(
-      "Octava",
+      tx.octave,
       TRANSPOSE.map((t) => ({ value: t, label: t === 0 ? "0" : `${t > 0 ? "+" : "−"}${Math.abs(t) / 12}` })),
       current.transpose,
       (v) => {
@@ -129,8 +190,8 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       "octave",
     );
     const len = select(
-      "Nota nueva",
-      NOTE_LENGTHS.map((n) => ({ value: n, label: LENGTH_LABELS[n] })),
+      tx.newNote,
+      NOTE_LENGTHS.map((n) => ({ value: n, label: tx.lengths[n] })),
       current.len,
       (v) => set({ len: Number(v) }),
       "len",
@@ -140,7 +201,7 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
 
   /* ---- notes: piano roll ---- */
   function pianoRoll() {
-    const grid = el("div", { class: "grid roll", role: "group", "aria-label": "Piano roll" });
+    const grid = el("div", { class: "grid roll", role: "group", "aria-label": tx.pianoRoll });
     let rowsKey = "";
     let cellsByKey = new Map(); // "midi:step" -> cell
     let columns = [];
@@ -153,9 +214,9 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       rowsKey = `${list.join()}|${current.transpose}`;
       cellsByKey = new Map();
       columns = Array.from({ length: LOOP_STEPS }, () => []);
-      grid.replaceChildren();
+      grid.replaceChildren(...gridHeader(tx));
       for (const midi of list) {
-        const name = noteName(midi + current.transpose);
+        const name = noteName(midi + current.transpose, t().noteNames);
         const rowClass = ["row-label", isRoot(midi) && "root", !inScale(midi, current.scale) && "outside"].filter(Boolean);
         grid.append(el("span", { class: rowClass.join(" "), text: name }));
         for (let s = 0; s < LOOP_STEPS; s++) {
@@ -186,8 +247,8 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
         cell.dataset.state = n ? (n.accent ? "accent" : "hit") : "";
         cell.classList.toggle("head", Boolean(n) && n.step === s);
         cell.classList.toggle("tail", Boolean(n) && n.step + n.len - 1 === s);
-        const what = n ? (n.accent ? "nota con acento" : "nota") : "vacío";
-        cell.setAttribute("aria-label", `${cell.dataset.name}, paso ${s + 1}: ${what}`);
+        const what = n ? (n.accent ? tx.accentNote : tx.note) : tx.empty;
+        cell.setAttribute("aria-label", tx.cell(cell.dataset.name, s + 1, what));
       }
     };
 
@@ -237,34 +298,62 @@ export function createEditor({ id, label, data, onChange, onAudition, onReset, o
       drag = null;
     });
 
-    const improv = el("button", { type: "button", class: "action", text: "🎲 Improvisar" });
+    const improv = el("button", { type: "button", class: "ghost", "data-action": "new-part", text: tx.newPart });
+    improv.title = tx.newPartTitle;
     improv.addEventListener("click", () => {
-      const style = id.startsWith("perc.") ? "perc" : id.split(".")[0];
-      set({ notes: improvise(style, scaleRows(current.scale, def.low, def.high)) });
+      set({ notes: improvise(styleOf(id), scaleRows(current.scale, def.low, def.high)) });
       refreshGrid();
     });
-    const clear = el("button", { type: "button", class: "ghost", text: "Borrar todo" });
+    const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
       set({ notes: [] });
       refreshGrid();
     });
     refreshGrid();
     return [
-      legend("Clic: nota → acento → borrar. Arrastrá a lo largo de una fila para una nota larga."),
+      legend(tx.rollLegend),
       wrap(grid),
-      el("div", { class: "editor-actions" }, improv, clear),
+      el("div", { class: "editor-actions" }, varyToggle(), improv, clear),
     ];
   }
 
   return {
     node,
     id,
+    focusName: () => {
+      name.focus();
+      name.select();
+    },
     paint: (step) => paintGrid(step),
+    // New data from outside (a variation): redraw without reporting a change.
+    show: (data) => {
+      current = data;
+      refreshGrid();
+    },
     destroy: () => cleanups.forEach((fn) => fn()),
   };
 }
 
-const cellClass = (s) => `step${s % 4 === 0 ? " beat" : ""}${s === 16 ? " bar" : ""}`;
+// beat: first 16th of a beat; alt: beats 2 and 4 of each bar, shaded so the
+// beats read as blocks; bar: the line between the two bars.
+const cellClass = (s) =>
+  `step${s % 4 === 0 ? " beat" : ""}${Math.floor(s / 4) % 2 ? " alt" : ""}${s === 16 ? " bar" : ""}`;
+
+// Two header rows over the 32 columns: the bars, then the beats in each.
+function gridHeader(tx) {
+  const corner = () => el("span", { class: "row-label head-label" });
+  const bars = [0, 1].map((b) =>
+    el("span", { class: `bar-head${b ? " bar" : ""}`, style: "grid-column: span 16", text: tx.barN(b + 1) }),
+  );
+  const beats = Array.from({ length: 8 }, (_, i) =>
+    el("span", {
+      class: `beat-head${i % 2 ? " alt" : ""}${i === 4 ? " bar" : ""}`,
+      style: "grid-column: span 4",
+      text: String((i % 4) + 1),
+    }),
+  );
+  return [corner(), ...bars, corner(), ...beats];
+}
 
 const legend = (text) => el("p", { class: "legend", text });
 

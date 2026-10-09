@@ -8,6 +8,9 @@ import {
   HIT,
   LOOP_VARIANTS,
   auditionEvent,
+  baseOf,
+  defOf,
+  isVariant,
   defaultData,
   eventsAt,
   paramSpecs,
@@ -231,4 +234,22 @@ it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
   expect(LOOP_VARIANTS).toHaveLength(24);
+});
+
+describe("copies", () => {
+  it("resolve kind, params and events through their base variant", () => {
+    expect(baseOf("kick.punchy~3")).toBe("kick.punchy");
+    expect(defOf("bass.rolling~2")).toBe(DEFAULTS["bass.rolling"]);
+    expect(paramSpecs("fx.riser~1")).toBe(paramSpecs("fx.riser"));
+    expect(eventsAt("kick.punchy~1", 0)).toEqual(eventsAt("kick.punchy", 0));
+    expect(sanitize("lead.acid~4", { synth: "pluck" }).synth).toBe("pluck");
+  });
+
+  it("only well-formed ids of known bases are variants", () => {
+    expect(isVariant("kick.punchy")).toBe(true);
+    expect(isVariant("kick.punchy~12")).toBe(true);
+    for (const id of ["kick.nope", "kick.nope~1", "kick.punchy~", "kick.punchy~0", "kick.punchy~1~2", "kick.punchy~x", 3, null]) {
+      expect(isVariant(id)).toBe(false);
+    }
+  });
 });

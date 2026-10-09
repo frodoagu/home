@@ -159,6 +159,92 @@ describe("lanes", () => {
   });
 });
 
+describe("bar hook", () => {
+  const step = stepDuration(145);
+
+  it("is asked on every bar line, with its time, step and count", () => {
+    const calls = [];
+    engine.onBar((time, s, bar) => {
+      calls.push([time, s, bar]);
+    });
+    engine.setLanes({ kick: "kick.punchy" });
+    run(16 * 3 * step);
+    expect(calls.map(([, s, bar]) => [s, bar]).slice(0, 3)).toEqual([[0, 0], [16, 1], [0, 2]]);
+    calls.forEach(([time], i) => expect(time).toBeCloseTo(0.06 + i * 16 * step, 9));
+  });
+
+  it("the lanes it returns enter exactly on the bar line, without backfill", () => {
+    let next = null;
+    engine.onBar(() => next);
+    engine.setLanes({ lead: "lead.arp" });
+    run(0.3);
+    const [oldLane] = laneGains();
+    const before = ctx.sources().length;
+    next = { lead: "lead.acid" };
+    run(16 * step);
+    const bar = 0.06 + 16 * step;
+    const entered = ctx.sources().slice(before).filter((s) => s.startTime >= bar - 1e-9);
+    expect(Math.min(...entered.map((s) => s.startTime))).toBeCloseTo(bar, 9);
+    expect(oldLane.gain.events[0][0]).toBe("cancel");
+    expect(oldLane.gain.events[0][1]).toBeCloseTo(bar, 9);
+  });
+
+  it("an empty map fades everything on the bar line and then stops", () => {
+    let next = null;
+    engine.onBar(() => next);
+    engine.setLanes({ bass: "bass.rolling" });
+    run(0.3);
+    next = {};
+    run(16 * step);
+    expect(engine.isRunning()).toBe(false);
+    const count = ctx.sources().length;
+    run(1);
+    expect(ctx.sources()).toHaveLength(count);
+  });
+});
+
+describe("render", () => {
+  let offline;
+  const renderer = () => {
+    offline = new FakeAudioContext();
+    return createEngine({
+      createContext,
+      createOffline: (channels, length) => {
+        offline.length = length;
+        offline.startRendering = async () => {
+          const data = Array.from({ length: channels }, () => new Float32Array(length).fill(0.1));
+          data.forEach((d) => (d[length - 1] = 0.5));
+          return { numberOfChannels: channels, getChannelData: (c) => data[c] };
+        };
+        return offline;
+      },
+    });
+  };
+
+  it("a loop renders twice and keeps the second pass", async () => {
+    const r = renderer();
+    const out = await r.render({ lanes: { bass: "bass.offbeat" } });
+    const loop = Math.round(32 * stepDuration(145) * 48000);
+    expect(offline.length).toBe(2 * loop);
+    expect(out.sampleRate).toBe(48000);
+    expect(out.channels).toHaveLength(2);
+    expect(out.channels[0].length).toBe(loop);
+    expect(out.channels[0].at(-1)).toBe(0.5);
+    // 8 offbeat notes per pass, each a saw pluck oscillator.
+    const starts = offline.sources().filter((s) => s.kind === "oscillator").map((s) => s.startTime);
+    expect(starts.length).toBeGreaterThanOrEqual(16);
+    expect(Math.max(...starts)).toBeLessThan((2 * loop) / 48000);
+    expect(createContext).not.toHaveBeenCalled();
+  });
+
+  it("an FX renders from time 0 and is trimmed at its tail", async () => {
+    const r = renderer();
+    const out = await r.render({ fx: "fx.impact" });
+    expect(Math.min(...offline.sources().map((s) => s.startTime))).toBe(0);
+    expect(out.channels[0].length).toBe(offline.length);
+  });
+});
+
 describe("stop", () => {
   it("clears the scheduler, fades every lane and the step position", () => {
     engine.setLanes({ bass: "bass.rolling", pad: "pad.chord" });
@@ -194,6 +280,12 @@ describe("FX", () => {
     const beats = (start - 0.06) / (4 * stepDuration(145));
     expect(beats).toBeCloseTo(Math.round(beats), 9);
     expect(start).toBeGreaterThan(ctx.currentTime);
+  });
+
+  it("lands at the time it is given", () => {
+    engine.setLanes({ kick: "kick.punchy" });
+    run(0.2);
+    expect(engine.triggerFx("fx.crash", 0.9).start).toBe(0.9);
   });
 
   it("is reported active until its sound ends", () => {

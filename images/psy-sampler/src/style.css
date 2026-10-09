@@ -73,6 +73,14 @@ h1 {
   letter-spacing: -0.01em;
 }
 
+.title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
 .lede {
   margin: 4px 0 20px;
   color: var(--muted);
@@ -83,17 +91,108 @@ h1 {
   outline-offset: 2px;
 }
 
-/* ---- transport ---- */
-.transport {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
+/* ---- transport + tools ---- */
+.panel {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+
+.panel + .panel {
+  margin-top: 8px;
+}
+
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.tools {
+  display: grid;
+  gap: 10px;
+}
+
+.tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.auto {
+  padding: 7px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.auto[aria-pressed="true"] {
+  color: var(--on-current);
+  background: var(--current);
+}
+
+.section-badge {
+  min-width: 7ch;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--current);
+  border: 1px dashed var(--current);
+  border-radius: 999px;
+}
+
+.section-badge[hidden] {
+  display: none;
+}
+
+.seed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.seed-input,
+.name-input {
+  width: 10ch;
+  padding: 4px 8px;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ghost.icon {
+  padding: 4px 8px;
+}
+
+.ghost.danger {
+  color: var(--stop);
+  border-color: color-mix(in srgb, var(--stop) 45%, var(--border));
+}
+
+.status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.status:empty {
+  display: none;
+}
+
 
 .bpm {
   display: flex;
@@ -214,6 +313,51 @@ h1 {
   font-size: 1.05rem;
 }
 
+.layer-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- reordering ---- */
+.grip {
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.is-sorting {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.layer.is-dragging,
+.tile.is-dragging {
+  opacity: 0.85;
+  outline: 2px dashed var(--layer);
+  outline-offset: 2px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+/* A long press drags a tile on touch: no callout, no text selection. */
+.tile {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .hint {
   margin: 2px 0 0;
   font-size: 0.85rem;
@@ -284,6 +428,27 @@ h1 {
   border-color: currentColor;
 }
 
+/* Queued for the next bar line ("On the beat"): a pulsing outline coming in,
+   a fading fill going out. */
+.variant.is-queued {
+  border-style: dashed;
+  border-color: var(--layer);
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.variant.is-leaving {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
 /* The background kick is sounding under another layer: same variant, but
    not selected, so a dashed outline instead of a fill. */
 .variant.is-background {
@@ -327,11 +492,21 @@ h1 {
   border-color: var(--layer);
 }
 
-/* Edited away from the factory data: a pencil after the name. */
+/* Edited away from the factory data: a pencil after the name. A copy is
+   the user's own sound: a plus. Improvising: a shuffle. */
 .tile.is-edited .variant-label::after {
   content: " ✎";
   font-weight: 400;
   opacity: 0.75;
+}
+
+.tile.is-copy .variant-label::before {
+  content: "+ ";
+  opacity: 0.75;
+}
+
+.tile.is-varying .variant-detail::before {
+  content: "🔀 ";
 }
 
 /* ---- editor panel ---- */
@@ -359,9 +534,25 @@ h1 {
   gap: 8px;
 }
 
-.editor-head h3 {
-  margin: 0 auto 0 0;
-  font-size: 0.95rem;
+.name-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.name-input {
+  width: min(24ch, 60vw);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .ghost,
@@ -385,6 +576,16 @@ h1 {
   color: var(--on-layer);
   background: var(--layer);
   border-color: var(--layer);
+}
+
+.action.toggle {
+  color: var(--text);
+  background: transparent;
+}
+
+.action.toggle[aria-pressed="true"] {
+  color: var(--on-layer);
+  background: var(--layer);
 }
 
 .editor-actions {
@@ -500,6 +701,12 @@ h1 {
   touch-action: manipulation;
 }
 
+/* Beats 2 and 4 of each bar are shaded, so the 16ths read as blocks of
+   four; the first 16th of every beat is darker still. */
+.step.alt {
+  --fill: color-mix(in srgb, var(--cell) 70%, var(--cell-beat));
+}
+
 .step.beat {
   --fill: var(--cell-beat);
 }
@@ -508,8 +715,51 @@ h1 {
   --fill: color-mix(in srgb, var(--cell) 82%, var(--layer));
 }
 
-.step.bar {
-  margin-left: 4px;
+/* The line between the two bars: a gap and a rule. */
+.step.bar,
+.bar-head.bar,
+.beat-head.bar {
+  margin-left: 8px;
+  position: relative;
+}
+
+.step.bar::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--muted);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.bar-head,
+.beat-head {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.bar-head {
+  background: color-mix(in srgb, var(--layer) 16%, transparent);
+  color: var(--text);
+}
+
+.beat-head {
+  font-weight: 600;
+  background: var(--cell);
+}
+
+.beat-head.alt {
+  background: color-mix(in srgb, var(--cell) 70%, var(--cell-beat));
+}
+
+.head-label {
+  background: var(--surface);
 }
 
 .step[data-state="hit"] {
@@ -543,6 +793,50 @@ h1 {
   background-image: linear-gradient(var(--current-tint), var(--current-tint));
 }
 
+/* Landscape screens wide enough: the layers flow in columns, each one
+   stacking its title over its tiles. Portrait keeps one column. */
+@media (orientation: landscape) and (min-width: 1000px) {
+  .app {
+    max-width: 1500px;
+  }
+  .layers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .layer {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 1800px) {
+  .app {
+    max-width: 2100px;
+  }
+  .layers {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Phone on its side: little height, so a tighter header. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app {
+    padding-top: 10px;
+  }
+  .lede {
+    display: none;
+  }
+  .layers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .layer {
+    grid-template-columns: 1fr;
+  }
+  .variants {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .layer {
     grid-template-columns: 1fr;
@@ -565,5 +859,9 @@ h1 {
   .variant,
   .edit {
     transition: none;
+  }
+  .variant.is-queued,
+  .variant.is-leaving {
+    animation: none;
   }
 }

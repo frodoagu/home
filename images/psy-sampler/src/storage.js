@@ -1,4 +1,4 @@
-// Per-browser persistence of the edits (variant data + effect switches).
+// Per-browser persistence of the workspace (workspace.js) and the language.
 // Every access is guarded: storage can be missing or throw (private mode,
 // blocked site data), and the sampler must work the same without it.
 
