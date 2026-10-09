@@ -27,6 +27,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 🔤 Lint PR title
+        id: lint
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📦 Lint summary
+        if: always()
+        env:
+          # Through env, not inline: the title is user input.
+          TITLE: ${{ github.event.pull_request.title }}
+          ERROR: ${{ steps.lint.outputs.error_message }}
+        run: |
+          {
+            echo "## 🔤 PR title"
+            echo ""
+            echo "\`${TITLE}\`"
+            echo ""
+            if [ "${{ steps.lint.outcome }}" = "success" ]; then
+              echo "✅ Valid Conventional Commit (type \`${{ steps.lint.outputs.type }}\`)."
+            else
+              echo "❌ Not a Conventional Commit. Rename the PR, e.g. \`feat: …\`, \`fix: …\`, \`docs: …\`."
+              if [ -n "$ERROR" ]; then
+                echo ""
+                echo '```'
+                echo "$ERROR"
+                echo '```'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
