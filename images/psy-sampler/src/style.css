@@ -14,6 +14,8 @@
   --current: #4c1d95;
   --on-current: #ffffff;
   --stop: #b91c1c;
+  --ok: #15803d;
+  --warn: #b45309;
   --current-tint: rgba(76, 29, 149, 0.28);
 }
 
@@ -38,6 +40,8 @@
     --current: #a78bfa;
     --on-current: #15121c;
     --stop: #f87171;
+    --ok: #4ade80;
+    --warn: #fbbf24;
     --current-tint: rgba(196, 181, 253, 0.32);
   }
   [data-layer="kick"] { --layer: #f87171; --on-layer: #1a0b0b; }
@@ -73,12 +77,192 @@ h1 {
   letter-spacing: -0.01em;
 }
 
-.title-row {
+/* ---- top bar ---- */
+/* Sticky, with a background that reaches the viewport edges: a pseudo
+   element from the bar's centre out to ±50vw (the bar is centred like .app).
+   100vw counts a classic scrollbar, so html clips that sliver. Nothing on
+   the bar itself clips, so the account menu can drop below it. */
+html {
+  overflow-x: clip;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
+  margin: -24px 0 18px;
+  padding: 8px 0;
+}
+
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(50% - 50vw);
+  z-index: -1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.back {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 6px;
+}
+
+.back:hover {
+  background: var(--surface-2);
+}
+
+.topbar-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Where the setup lives right now: grey (this browser only / unavailable),
+   amber (uploading), green (saved), red (failing). */
+.sync-pill {
+  --tone: var(--muted);
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--tone);
+  border: 1px solid color-mix(in srgb, var(--tone) 55%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sync-pill[data-state="saved"],
+.sync-pill[data-state="idle"] {
+  --tone: var(--ok);
+}
+
+.sync-pill[data-state="pending"],
+.sync-pill[data-state="saving"] {
+  --tone: var(--warn);
+}
+
+.sync-pill[data-state="offline"],
+.sync-pill[data-state="error"],
+.sync-pill[data-state="conflict"] {
+  --tone: var(--stop);
+}
+
+/* The Google button is an iframe with a light document inside. When the
+   iframe's color-scheme differs from its document's, the browser paints an
+   opaque (white) backdrop behind it: keep the slot light, so the dark pill
+   button sits on the bar with no white box around it. */
+.gsi-slot {
+  color-scheme: light;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.login-off {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 2px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-menu[open] summary,
+.account-menu summary:hover {
+  background: var(--surface-2);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--on-current);
+  background: var(--current);
+  border-radius: 50%;
+}
+
+.account-email {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: grid;
+  min-width: 240px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.menu-note {
+  margin: 4px 8px 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.menu-item {
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--surface-2);
+}
+
+.menu-item.danger {
+  color: var(--stop);
 }
 
 .lede {
@@ -179,26 +363,6 @@ h1 {
 .ghost.danger {
   color: var(--stop);
   border-color: color-mix(in srgb, var(--stop) 45%, var(--border));
-}
-
-/* ---- cloud save ---- */
-.account[hidden] {
-  display: none;
-}
-
-.account-pitch,
-.account-phase {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.account-email {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.gsi-slot {
-  min-height: 32px;
 }
 
 .status {
@@ -847,6 +1011,9 @@ h1 {
   .app {
     padding-top: 10px;
   }
+  .topbar {
+    margin-top: -10px;
+  }
   .lede {
     display: none;
   }
@@ -863,6 +1030,29 @@ h1 {
 }
 
 @media (max-width: 640px) {
+  /* Two rows on a phone: let the bar scroll away instead of eating the
+     screen, and keep the language label for screen readers only. */
+  .topbar {
+    position: relative; /* not sticky, still the background's anchor */
+  }
+  /* Row 1: back + language. Row 2: where the setup lives + sign-in. */
+  .topbar-end {
+    display: contents;
+  }
+  .topbar .pick {
+    margin-left: auto;
+  }
+  .account {
+    order: 1;
+    flex-basis: 100%;
+  }
+  .topbar .pick > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
   .layer {
     grid-template-columns: 1fr;
   }

@@ -228,8 +228,27 @@ funciona igual sin recordar.
 ## Guardado en la nube
 
 Cualquiera con cuenta de Google puede guardar su workspace en el servidor y
-usarlo en otro dispositivo. La fila aparece en el panel de herramientas sólo si
-la API responde.
+usarlo en otro dispositivo. El estado está **siempre a la vista** en la barra
+superior (`ui/account.js`), junto al link de vuelta a agu.com.ar y el idioma:
+
+| Pastilla | Cuándo |
+|---|---|
+| ☁ Nube… | todavía preguntando a la API |
+| ☁ Nube no disponible (gris) | la API no responde; se reintenta cada 30 s y todo queda en el browser |
+| ☁ Sólo en este browser (gris) + botón de Google | sin sesión |
+| ☁ Cambios sin subir… / Guardando… (ámbar) | con sesión, subiendo |
+| ☁ Guardado ✓ hh:mm (verde) | con sesión, la nube coincide con lo de acá |
+| ☁ Sin conexión / Error / Cambios de otro dispositivo (rojo) | con sesión, algo falló |
+
+Con sesión, el avatar abre un menú con el mail, **Salir** y **Borrar mis
+datos**. Si el script de Google no carga (bloqueador, sin red) queda escrito
+«Login no disponible» en vez de un hueco. En el celular la barra ocupa dos filas
+y no queda fija.
+
+El botón de Google es un iframe con un documento claro adentro: si el
+`color-scheme` del iframe no coincide con el de ese documento, el browser le
+pinta un fondo opaco blanco. Por eso `.gsi-slot` fuerza `color-scheme: light`,
+y en modo oscuro el botón (`filled_black`) queda sin la caja blanca.
 
 ```mermaid
 sequenceDiagram

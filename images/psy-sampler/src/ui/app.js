@@ -259,11 +259,23 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
+  // Top bar: the way back to agu.com.ar, then where the setup is saved
+  // (account.js) and the language.
+  const back = el("a", { class: "back", href: "https://agu.com.ar/", text: `← ${tx.topbar.back}` });
+  back.title = tx.topbar.backTitle;
+  const topbar = el(
+    "nav",
+    { class: "topbar" },
+    back,
+    el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
+  );
+
   root.replaceChildren(
+    topbar,
     el(
       "header",
       { class: "top" },
-      el("div", { class: "title-row" }, el("h1", { text: "Psy Layers" }), language),
+      el("h1", { text: "Psy Layers" }),
       el("p", { class: "lede", text: tx.lede }),
     ),
     el(
@@ -282,7 +294,6 @@ export function mountApp(root, engine, opts = {}) {
       { class: "tools panel" },
       el("div", { class: "tools-row" }, autoBtn, sectionBadge, seedLabel, diceBtn, shareBtn),
       el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn),
-      ...(account ? [account.node] : []),
       statusLine,
     ),
     el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
