@@ -417,7 +417,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   through `sanitize()` on load. Kick and bass are exclusive lanes, perc/lead/pad
   stack. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
   compressors add makeup gain, so re-measure at the destination before touching
-  them. See docs/psy-sampler.md.
+  them. Anything that must land on the grid (queued clicks, autopilot, improvise
+  variations) goes through `engine.onBar()`, never a UI timer. Duplicated sounds
+  are ids `<base>~n` resolved through the base (`defOf`/`baseOf`), not new
+  DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
+  reads pools sorted by id and consumes its PRNG even when it skips a user-owned
+  part — keep both when touching it. All UI text lives in `src/i18n/{es,en,pt}.js`
+  (same shape, enforced by a test). See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

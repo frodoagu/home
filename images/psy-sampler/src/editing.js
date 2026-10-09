@@ -1,6 +1,6 @@
 // Pure edits behind the editors. Every function returns new data and never
 // mutates its input, so the UI can hand the result straight to the engine.
-import { ACCENT, OFF } from "./audio/patterns.js";
+import { ACCENT, HIT, OFF } from "./audio/patterns.js";
 import { isRoot } from "./audio/music.js";
 import { LOOP_STEPS } from "./audio/timing.js";
 
@@ -52,6 +52,9 @@ export function seeded(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+// Improvisation style of a variant: its layer, except pitched percussion.
+export const styleOf = (id) => (id.startsWith("perc.") ? "perc" : id.split(".")[0]);
 
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
 
@@ -136,4 +139,53 @@ function dedupe(notes) {
     seen.add(key);
     return true;
   });
+}
+
+/* ---------------------------------------------------------- variations -- */
+
+/**
+ * The improvise toggle: a light variation of `notes` (the part the user
+ * chose), never a rewrite. Each change does one of: move a note to a
+ * neighbouring row, flip an accent, echo a note a few steps later, or drop
+ * one. Callers always vary the original, not the last variation, so the part
+ * breathes around what was written instead of drifting away from it.
+ */
+export function varyNotes(notes, rows, rng = Math.random, changes = 1 + Math.floor(rng() * 2)) {
+  const asc = [...rows].sort((a, b) => a - b);
+  let out = notes.map((n) => ({ ...n }));
+  const fits = (list, n, skip) =>
+    list.every((o) => o === skip || o.midi !== n.midi || o.step + o.len <= n.step || o.step >= n.step + n.len);
+  for (let c = 0; c < changes && out.length; c++) {
+    const target = pick(out, rng);
+    const r = rng();
+    if (r < 0.5) {
+      const i = asc.indexOf(target.midi);
+      const midi = asc[Math.max(0, Math.min(asc.length - 1, (i < 0 ? 0 : i) + (rng() < 0.5 ? -1 : 1)))];
+      const moved = { ...target, midi };
+      if (fits(out, moved, target)) out = out.map((n) => (n === target ? moved : n));
+    } else if (r < 0.75) {
+      out = out.map((n) => (n === target ? { ...n, accent: !n.accent } : n));
+    } else if (r < 0.9 || out.length <= 2) {
+      const step = target.step + pick([2, 3, 4], rng);
+      const echo = { step, midi: target.midi, len: 1, accent: false };
+      if (step < LOOP_STEPS && fits(out, echo)) out = [...out, echo];
+    } else {
+      out = out.filter((n) => n !== target);
+    }
+  }
+  return out;
+}
+
+/**
+ * Same idea for a drum row: flip an accent or a ghost hit, only off the beat,
+ * so the pulse (and a kick's four-on-the-floor) never moves.
+ */
+export function varySteps(steps, rng = Math.random, changes = 1 + Math.floor(rng() * 2)) {
+  const out = steps.slice();
+  const offBeat = out.map((_, s) => s).filter((s) => s % 4 !== 0);
+  for (let c = 0; c < changes; c++) {
+    const s = pick(offBeat, rng);
+    out[s] = out[s] === OFF ? HIT : out[s] === HIT ? (rng() < 0.5 ? OFF : ACCENT) : HIT;
+  }
+  return out;
 }

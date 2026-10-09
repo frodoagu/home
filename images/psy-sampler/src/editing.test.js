@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inScale, isRoot, scaleRows } from "./audio/music.js";
 import { ACCENT, HIT, OFF } from "./audio/patterns.js";
-import { cycleNote, cycleStep, improvise, noteAt, placeNote, seeded } from "./editing.js";
+import { cycleNote, cycleStep, improvise, noteAt, placeNote, seeded, varyNotes, varySteps } from "./editing.js";
 
 const n = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
 
@@ -92,5 +92,54 @@ describe("improvise", () => {
     const pad = improvise("pad", rows, seeded(5));
     expect(pad.filter((x) => x.step === 0).length).toBeGreaterThanOrEqual(2);
     expect(pad.every((x) => x.len === 16 && (x.step === 0 || x.step === 16))).toBe(true);
+  });
+});
+
+describe("variations", () => {
+  const rows = [57, 60, 62, 64, 65, 67, 69];
+  const part = [
+    { step: 0, midi: 57, len: 2, accent: false },
+    { step: 4, midi: 60, len: 1, accent: true },
+    { step: 8, midi: 64, len: 4, accent: false },
+    { step: 16, midi: 69, len: 1, accent: false },
+  ];
+  const overlaps = (notes) =>
+    notes.some((a, i) => notes.some((b, j) => i < j && a.midi === b.midi && a.step < b.step + b.len && b.step < a.step + a.len));
+  const changed = (a, b) => {
+    const key = (n) => `${n.step}:${n.midi}:${n.len}:${n.accent}`;
+    const sa = new Set(a.map(key));
+    return b.filter((n) => !sa.has(key(n))).length + a.filter((n) => !new Set(b.map(key)).has(key(n))).length;
+  };
+
+  it("stay close to the part: a couple of notes, on the rows, without overlaps", () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const out = varyNotes(part, rows, seeded(seed));
+      expect(out).not.toBe(part);
+      expect(Math.abs(out.length - part.length)).toBeLessThanOrEqual(2);
+      expect(changed(part, out)).toBeLessThanOrEqual(4);
+      expect(overlaps(out)).toBe(false);
+      for (const n of out) {
+        expect(rows).toContain(n.midi);
+        expect(n.step + n.len).toBeLessThanOrEqual(32);
+      }
+    }
+    expect(part[0]).toEqual({ step: 0, midi: 57, len: 2, accent: false }); // input untouched
+  });
+
+  it("are reproducible with a seed and actually vary", () => {
+    expect(varyNotes(part, rows, seeded(9))).toEqual(varyNotes(part, rows, seeded(9)));
+    const outs = new Set(Array.from({ length: 20 }, (_, i) => JSON.stringify(varyNotes(part, rows, seeded(i)))));
+    expect(outs.size).toBeGreaterThan(5);
+  });
+
+  it("drum variations never touch the beat", () => {
+    const kick = Array.from({ length: 32 }, (_, s) => (s % 4 === 0 ? 1 : 0));
+    for (let seed = 1; seed < 100; seed++) {
+      const out = varySteps(kick, seeded(seed));
+      out.forEach((v, s) => {
+        if (s % 4 === 0) expect(v).toBe(1);
+      });
+      expect(out.filter((v, s) => v !== kick[s]).length).toBeLessThanOrEqual(2);
+    }
   });
 });

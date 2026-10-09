@@ -124,14 +124,26 @@ export const DEFAULTS = {
 
 export const LOOP_VARIANTS = Object.keys(DEFAULTS).filter((id) => DEFAULTS[id].kind !== "fx");
 
-export const defaultData = (id) => structuredClone(DEFAULTS[id].data);
+/*
+ * A duplicated variant ("kick.punchy~2") is its base variant with its own
+ * data: same kind, voice and range, so everything keyed on the variant
+ * resolves through the base.
+ */
+export const COPY_MARK = "~";
+export const baseOf = (id) => id.split(COPY_MARK)[0];
+export const defOf = (id) => DEFAULTS[baseOf(id)];
+export const isCopy = (id) => id.includes(COPY_MARK);
+export const isVariant = (id) =>
+  typeof id === "string" && Boolean(defOf(id)) && (!isCopy(id) || /^[^~]+~[1-9]\d{0,5}$/.test(id));
+
+export const defaultData = (id) => structuredClone(defOf(id).data);
 
 // Which PARAMS spec a variant's sliders come from.
 export function paramSpecs(id) {
-  const def = DEFAULTS[id];
+  const def = defOf(id);
   if (def.kind === "drum") return PARAMS[def.voice];
   if (def.kind === "notes") return PARAMS.synth;
-  return PARAMS[id] ?? [];
+  return PARAMS[baseOf(id)] ?? [];
 }
 
 /**
@@ -140,8 +152,8 @@ export function paramSpecs(id) {
  * with whatever is left of them, so a pad switched on mid-phrase sounds now
  * instead of up to 2 bars later.
  */
-export function eventsAt(id, step, entering = false, data = DEFAULTS[id]?.data) {
-  const def = DEFAULTS[id];
+export function eventsAt(id, step, entering = false, data = defOf(id)?.data) {
+  const def = defOf(id);
   if (!def || def.kind === "fx") return [];
   if (def.kind === "drum") {
     const v = data.steps[step];
@@ -166,7 +178,7 @@ export function eventsAt(id, step, entering = false, data = DEFAULTS[id]?.data) 
 
 // One note (or hit) to preview in the editor, outside the loop.
 export function auditionEvent(id, data, { midi, accent = false } = {}) {
-  const def = DEFAULTS[id];
+  const def = defOf(id);
   if (def.kind === "drum") return { voice: def.voice, ...data.params, accent };
   if (def.kind === "notes") {
     return { voice: data.synth, ...data.params, freq: midiToFreq(midi + data.transpose), steps: 2, accent };
@@ -190,7 +202,7 @@ export const TRANSPOSE = [-24, -12, 0, 12, 24];
 export function sanitize(id, saved) {
   const base = defaultData(id);
   if (!saved || typeof saved !== "object") return base;
-  const def = DEFAULTS[id];
+  const def = defOf(id);
   const out = { ...base };
 
   out.level = Number.isFinite(saved.level) ? clamp(saved.level, LEVEL.min, LEVEL.max) : base.level;

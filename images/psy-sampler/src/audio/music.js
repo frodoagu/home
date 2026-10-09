@@ -31,10 +31,10 @@ export const NOTE = {
 const ROOT = 9;
 
 export const SCALES = {
-  minor: { label: "La menor", steps: [0, 2, 3, 5, 7, 8, 10] },
-  phrygian: { label: "La frigio", steps: [0, 1, 3, 5, 7, 8, 10] },
-  harmonic: { label: "La menor armónica", steps: [0, 2, 3, 5, 7, 8, 11] },
-  chromatic: { label: "Cromática", steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+  minor: { steps: [0, 2, 3, 5, 7, 8, 10] },
+  phrygian: { steps: [0, 1, 3, 5, 7, 8, 10] },
+  harmonic: { steps: [0, 2, 3, 5, 7, 8, 11] },
+  chromatic: { steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
 };
 
 const pitchClass = (midi) => ((midi % 12) + 12) % 12;
@@ -47,8 +47,9 @@ export const isRoot = (midi) => pitchClass(midi) === ROOT;
 
 const NAMES = ["Do", "Do#", "Re", "Mi♭", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "Si♭", "Si"];
 
-// Spanish name with scientific octave: 69 -> "La4", 60 -> "Do4".
-export const noteName = (midi) => `${NAMES[pitchClass(midi)]}${Math.floor(midi / 12) - 1}`;
+// Name with scientific octave: 69 -> "La4", 60 -> "Do4" (Spanish unless
+// `names` gives the 12 pitch classes of another language).
+export const noteName = (midi, names = NAMES) => `${names[pitchClass(midi)]}${Math.floor(midi / 12) - 1}`;
 
 /**
  * Piano-roll rows, highest first: the scale's pitches in [low, high], plus

@@ -4,8 +4,10 @@ Sampler de capas de psytrance para entrenar el oído, en `https://psy.agu.com.ar
 Cada botón pone en loop una capa (kick, bajo, percusión, lead, pad) sobre una
 grilla de 32 semicorcheas (2 compases); los FX son one-shots fuera del loop.
 **Todo es editable**: cada botón tiene un ▾ que abre su editor (pasos, notas,
-sinte, perillas). Todo el audio se sintetiza en el browser con Web Audio: el pod
-sólo sirve ~50 kB de estáticos.
+sinte, perillas), y cualquier sonido se puede duplicar y renombrar. Un piloto
+automático arma un tema solo a partir de una semilla compartible, y lo que suena
+se exporta a WAV. Interfaz en español, inglés y portugués. Todo el audio se
+sintetiza en el browser con Web Audio: el pod sólo sirve ~80 kB de estáticos.
 
 | Pieza | Dónde |
 |---|---|
@@ -50,6 +52,26 @@ BPM): intervalos de kick de ~413 ms, **un** beat de transición intermedio (p. e
 La lógica pura (`collectSteps`, `nextBeatTime`) vive en
 [`timing.js`](../images/psy-sampler/src/audio/timing.js), sin Web Audio, y está
 testeada aparte.
+
+### Cambios en la línea de compás
+
+`engine.onBar(fn)` registra un callback que el scheduler llama justo antes de
+encolar el primer paso de cada compás (pasos 0 y 16), con su tiempo. Si devuelve
+un mapa de lanes, esos lanes entran **exactamente en ese paso**: sin backfill,
+el lane viejo hace su fade ahí mismo. Un mapa vacío hace el fade de todo en el
+compás y deja que el timer se apague solo. Por ahí pasan las tres cosas que
+tienen que caer en la grilla:
+
+- **Entrar a tiempo** (switch, prendido por defecto): con el loop andando, un
+  clic no cambia nada todavía; la selección nueva queda en cola (borde punteado
+  que late en lo que entra, fill que late en lo que sale) y se aplica en el
+  próximo compás. Volver a clickear antes del compás cancela la cola. Con el
+  loop parado, o con el switch apagado, el clic aplica ya, como antes.
+- **Piloto automático** (ver abajo), en cada inicio de loop.
+- **🔀 Improvisar** de los editores, en cada inicio de loop.
+
+`triggerFx(id, at)` acepta un tiempo, así el piloto dispara FX sobre la misma
+línea de compás.
 
 ### Por qué lanes y no cancelar notas
 
@@ -123,18 +145,121 @@ mostrar.
   editás es lo que escuchás. Al agregar una nota se previsualiza al toque
   (`engine.audition`), salvo golpes de batería con el loop andando (un golpe
   fuera de la grilla sólo suena a error).
-- **🎲 Improvisar** escribe una parte nueva en la escala elegida, con hábitos del
+- **🔀 Improvisar** es un toggle: mientras está prendido, en cada inicio de loop
+  la parte cambia un poco (`varyNotes` / `varySteps` en `editing.js`: mover una
+  nota a la fila vecina, dar vuelta un acento, un eco unos pasos después o sacar
+  una; en batería sólo golpes fuera del beat, el pulso no se mueve). Cada
+  variación sale de **lo que escribiste**, no de la variación anterior, así
+  respira alrededor de la parte sin irse a la deriva; las variaciones van sólo al
+  motor, nunca al storage, y al apagarlo vuelve tu parte. Sigue andando con el
+  editor cerrado (el cuadradito muestra 🔀).
+- **🎲 Nueva parte** escribe una parte nueva en la escala elegida, con hábitos del
   género por capa ([`editing.js`](../images/psy-sampler/src/editing.js)): bajo
   rolling entre kicks mayormente en la tónica, lead con un motivo de 8 pasos en
   forma A A' A B, pad con una tríada por compás, toms ralos con fill al final.
 - Escalas en La: menor, **frigio** (Si♭, la tensión típica del psy), menor
   armónica y cromática. Las notas fuera de la escala elegida siguen visibles (en
   itálica) para poder borrarlas.
-- Persistencia: sólo las variantes editadas + los switches de efectos, en
-  `localStorage` (`psy-sampler:v2`), por browser. Al cargar, `sanitize()` revisa
-  cada campo contra la forma del default y lo que no cierra vuelve al valor de
-  fábrica, así que un dato viejo o tocado a mano nunca rompe el loop. Si el
-  storage no está (modo privado), funciona igual sin recordar.
+- **Un editor abierto a la vez**: abrir uno pliega el que estuviera abierto, en
+  cualquier capa. Las grillas tienen encabezado de compás (1, 2) y de tiempo
+  (1-4), los tiempos 2 y 4 sombreados y una regla entre los dos compases.
+
+### Sonidos propios: duplicar y renombrar
+
+**Duplicar** (en el editor) crea una copia justo al lado del original, la abre
+y deja el nombre seleccionado para escribir el nuevo. Una copia tiene id
+`<base>~n` (`kick.punchy~2`): `baseOf()` / `defOf()` en `patterns.js` resuelven
+tipo, voz, rango y FX a través de la base, así el motor, el editor y el
+`sanitize` no distinguen copias de originales. La copia arranca con los datos
+actuales del original y después es independiente. El **Nombre** se edita en
+vivo en cualquier sonido (también los de fábrica); vacío vuelve al nombre por
+defecto. Sólo las copias se pueden borrar (**Borrar sonido**).
+
+### Ordenar
+
+Cada capa tiene una manija ⠿: arrastrar mueve la capa entera (o flechas ↑ ↓ con
+la manija enfocada). Los cuadraditos se arrastran dentro de su capa: con mouse
+apenas se mueven 6 px, en touch con un toque largo (350 ms), para que un swipe
+siga scrolleando y un tap siga siendo un clic; con teclado, Alt + flechas.
+Soltar nunca dispara el clic del sonido. Genérico en `ui/sortable.js`.
+
+### Qué se guarda
+
+Todo vive en un objeto, el **workspace** (`workspace.js`), en `localStorage`
+(`psy-sampler:v2`, por browser): BPM, los switches, el orden de capas y de
+cuadraditos, las copias, los nombres, los datos editados, la semilla y el
+idioma. Lo único que no se guarda es qué está sonando (una carga de página
+arranca en silencio: sin un clic no hay audio). `normalize()` es la única
+puerta de entrada, para el storage y para un preset importado: revisa cada
+campo y lo que no cierra vuelve al valor de fábrica, así que un dato viejo,
+tocado a mano o ajeno nunca rompe el loop. Si el storage no está (modo privado),
+funciona igual sin recordar.
+
+**Restaurar todo** (con confirmación) vuelve todo a fábrica salvo el idioma.
+
+### Exportar
+
+- **⬇ Audio del mix**: WAV de 2 compases de lo que suena. **⬇ WAV** en cada
+  editor: ese sonido solo (los FX, el one-shot con su cola). `engine.render()`
+  arma la misma cadena de salida en un `OfflineAudioContext` a 48 kHz; un loop
+  se renderiza **dos veces y se queda con la segunda pasada**, así las colas del
+  final ya están envueltas en el principio y el archivo loopea sin costura en
+  cualquier DAW. Un FX se renderiza 12 s y se recorta al silencio (-80 dBFS).
+  24-bit estéreo (`audio/wav.js`).
+- **Exportar / Importar preset**: el workspace + lo que suena, en JSON
+  (`app: "psy-sampler"`). Importar lo reemplaza entero y pone a sonar su mix.
+
+## Piloto automático y semillas
+
+**🤖 Piloto automático** (`autopilot.js`) recorre las secciones de un tema y en
+cada inicio de loop decide qué suena:
+
+| Sección | Loops | Kick | Bajo | Perc | Lead | Pad | Al entrar |
+|---|---|---|---|---|---|---|---|
+| Intro | 2 | 1 | – | 1 | – | – | |
+| Groove | 4 | 1 | 1 | 1-2 | – | – | a veces láser o sirena; 25 % bajo nuevo |
+| Subida | 2 | 1 | 1 | 2 | 1 | – | 50 % lead nuevo; el último loop dispara un riser de 2 compases que cae en el Pico |
+| Pico | 4 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
+| Break | 2 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
+
+Después del Pico va al Break o al Groove; del Break a la Subida. Una variante
+que suena sobrevive al cambio de sección con 75 %, y dentro de una sección hay
+un cambio chico (un sonido por otro de la misma capa) con 30 % por loop. Usa
+también las copias. Mientras corre, el kick de fondo no suena (el Break es sin
+kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
+
+**Semilla**: todas las decisiones salen de un PRNG (`seeded(hashSeed(semilla))`),
+así **la misma semilla genera el mismo tema en cualquier browser**. Para que eso
+sea cierto:
+
+- Prender el piloto arranca siempre de la Intro, en silencio.
+- Las partes que el piloto escribió (`ws.auto`) vuelven a fábrica al prenderlo.
+  Si editás una a mano pasa a ser tuya y el piloto no la toca más.
+- Los pools se leen ordenados por id, nunca en el orden de los cuadraditos.
+- Una parte nueva se calcula (y consume el PRNG) aunque no se aplique porque la
+  editaste: tus ediciones cambian cómo suena, no la secuencia.
+
+**🔗 Compartir** copia un link `#seed=…&bpm=…` y, si tenés sonidos editados o
+duplicados, `&s=…`: esos sonidos como preset JSON, `deflate-raw` y base64url
+(`share.js`), porque el tema sólo es el mismo con los mismos sonidos. Abrir el
+link carga semilla y BPM (los sonidos, con confirmación si ya tenías los
+tuyos), limpia el fragmento y avisa que se toque el piloto: el audio necesita
+ese clic. 🎲 sortea una semilla nueva (6 caracteres sin 0/o/1/l/i).
+
+## Idiomas
+
+`i18n/{es,en,pt}.js` tienen todos los textos (capas, variantes, sintes,
+perillas, escalas, nombres de nota: La/A/Lá) y `i18n.test.js` exige que los tres
+tengan exactamente la misma forma. Por defecto, el idioma guardado; si no, el
+del browser; si no, español. Cambiar de idioma reconstruye la app sin cortar lo
+que suena (ni el piloto, ni la cola, ni el editor abierto).
+
+## Pantalla
+
+Vertical: una columna. Horizontal desde 1000 px: las capas en dos columnas
+(tres desde 1800 px), cada una con el título arriba de sus cuadraditos. Celular
+acostado (alto ≤ 500 px): dos columnas y sin la bajada del título. Nunca hay
+scroll horizontal de página: las grillas de 32 pasos scrollean en su caja.
 
 ## Capas
 
@@ -265,17 +390,20 @@ npm run build
 ```
 
 - Lógica pura en `.js` con su `*.test.js` al lado: `timing`, `patterns`, `music`,
-  `selection`, `editing` (ciclos de clic, arrastre, improvisación con PRNG con
-  semilla).
+  `selection`, `editing` (ciclos de clic, arrastre, improvisación y variaciones
+  con PRNG con semilla), `workspace` (normalize, presets), `autopilot`
+  (secciones, formas, determinismo por semilla), `share`, `wav`, `i18n`.
 - `voices.test.js` / `engine.test.js` corren contra un `AudioContext` falso
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) que
   registra nodos y automatizaciones. Incluye un invariante anti-clic: toda fuente
   audible tiene que arrancar y terminar en ganancia 0 y no frenar antes de que su
   envolvente llegue a 0. Corre para cada variante, cada sinte con notas de 1 a
   32 pasos, y cada voz de batería y FX con sus perillas en el mínimo y el máximo.
-- `app.test.js` (jsdom) cubre modo solo / combinar / apilar, Parar, kick de
-  fondo, FX y los editores (clic, playhead, perillas, Restaurar, persistencia,
-  storage roto).
+- `app.test.js` (jsdom) cubre modo solo / combinar / apilar, la cola al compás,
+  Parar, kick de fondo, FX, los editores (clic, playhead, perillas, Restaurar,
+  Improvisar, persistencia, storage roto), duplicar / renombrar / borrar,
+  reordenar, piloto (misma semilla = mismo tema), idiomas, exportar / importar,
+  WAV, Restaurar todo y los links compartidos.
 - Las devDependencies (Vite 8, Vitest 5, jsdom 29) son más nuevas que las de
   `home-site`: las de allá arrastran advisories críticos en el toolchain de test.
 

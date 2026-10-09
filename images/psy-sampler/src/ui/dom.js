@@ -61,3 +61,22 @@ export function select(label, options, value, onChange, name) {
   input.addEventListener("change", () => onChange(input.value));
   return el("label", { class: "pick", for: id }, el("span", { text: label }), input);
 }
+
+// Hands the browser a file to save.
+export function download(name, data, type) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const a = el("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// "Punchy corto (copia)" -> "punchy-corto-copia", for file names.
+export const slug = (text) =>
+  text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "sound";
