@@ -9,7 +9,7 @@ import { LEVEL, SYNTHS } from "../audio/params.js";
 import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleStep, doubleSteps, improvise, placeNote, styleOf } from "../editing.js";
+import { cycleNote, cycleStep, doubleSteps, placeNote } from "../editing.js";
 import { t } from "../i18n/index.js";
 import { el, select, slider } from "./dom.js";
 
@@ -30,6 +30,10 @@ export function createEditor({
   onWav,
   varying = false,
   onVary,
+  newPart = false,
+  onNewPart,
+  amount = 0.5,
+  onAmount,
   buildUp = false,
   onBuildUp,
 }) {
@@ -39,6 +43,8 @@ export function createEditor({
   let paintGrid = () => {};
   let refreshGrid = () => {};
   let buildUpBtn = null;
+  let varyBtn = null;
+  let newPartBtn = null;
   const cleanups = [];
 
   function set(patch) {
@@ -46,21 +52,63 @@ export function createEditor({
     onChange(current);
   }
 
-  // The improvise toggle: the app varies the part on every loop while it is on.
+  // Improvise: a toggle and a slider in one. A click turns it on or off (the
+  // app varies the part on every loop while it is on); dragging across it,
+  // or ← →, sets how much each variation changes, and the fill shows it.
   function varyToggle() {
-    const b = el("button", {
-      type: "button",
-      class: "action toggle",
-      "data-action": "vary",
-      "aria-pressed": String(varying),
-      text: tx.improvise,
-    });
+    const text = el("span", { class: "vary-amount" });
+    varyBtn = el(
+      "button",
+      { type: "button", class: "action toggle vary", "data-action": "vary", "aria-pressed": String(varying) },
+      el("span", { text: tx.improvise }),
+      text,
+    );
+    const b = varyBtn;
     b.title = tx.improviseTitle;
+    const paint = () => {
+      const pct = Math.round(amount * 100);
+      b.style.setProperty("--amount", `${pct}%`);
+      text.textContent = tx.improviseAmount(pct);
+    };
+    const setAmount = (v) => {
+      amount = Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
+      paint();
+      onAmount(amount);
+    };
+    let drag = null; // { x, moved } while a pointer is down
+    let swallow = false;
+    b.addEventListener("pointerdown", (e) => {
+      drag = { x: e.clientX, moved: false };
+      b.setPointerCapture?.(e.pointerId);
+    });
+    b.addEventListener("pointermove", (e) => {
+      if (!drag || (!drag.moved && Math.abs(e.clientX - drag.x) < 6)) return;
+      drag.moved = true;
+      const r = b.getBoundingClientRect();
+      if (r.width) setAmount((e.clientX - r.left) / r.width);
+    });
+    const release = () => {
+      if (drag?.moved) swallow = true;
+      drag = null;
+    };
+    b.addEventListener("pointerup", release);
+    b.addEventListener("pointercancel", release);
     b.addEventListener("click", () => {
+      if (swallow) {
+        swallow = false;
+        return;
+      }
       varying = !varying;
       b.setAttribute("aria-pressed", String(varying));
       onVary(varying);
     });
+    b.addEventListener("keydown", (e) => {
+      const delta = { ArrowLeft: -0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowUp: 0.05 }[e.key];
+      if (delta === undefined) return;
+      e.preventDefault();
+      setAmount(amount + delta);
+    });
+    paint();
     return b;
   }
 
@@ -323,12 +371,16 @@ export function createEditor({
       drag = null;
     });
 
-    const improv = el("button", { type: "button", class: "ghost", "data-action": "new-part", text: tx.newPart });
-    improv.title = tx.newPartTitle;
-    improv.addEventListener("click", () => {
-      set({ notes: improvise(styleOf(id), scaleRows(current.scale, def.low, def.high)) });
-      refreshGrid();
+    // The app writes it on the next loop (pressed while it waits), or now.
+    newPartBtn = el("button", {
+      type: "button",
+      class: "ghost",
+      "data-action": "new-part",
+      "aria-pressed": String(newPart),
+      text: tx.newPart,
     });
+    newPartBtn.title = tx.newPartTitle;
+    newPartBtn.addEventListener("click", () => onNewPart());
     const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
       set({ notes: [] });
@@ -338,7 +390,7 @@ export function createEditor({
     return [
       legend(tx.rollLegend),
       wrap(grid),
-      el("div", { class: "editor-actions" }, varyToggle(), improv, clear),
+      el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, clear),
     ];
   }
 
@@ -356,6 +408,11 @@ export function createEditor({
       refreshGrid();
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
+    showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),
+    showVarying: (on) => {
+      varying = on;
+      varyBtn?.setAttribute("aria-pressed", String(on));
+    },
     destroy: () => cleanups.forEach((fn) => fn()),
   };
 }

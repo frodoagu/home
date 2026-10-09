@@ -1,12 +1,14 @@
 # psy-sampler
 
-Sampler de capas de psytrance para entrenar el oído, en `https://psy.agu.com.ar`.
-Cada botón pone en loop una capa (kick, bajo, percusión, lead, pad) sobre una
-grilla de 32 semicorcheas (2 compases); los FX son one-shots fuera del loop.
-**Todo es editable**: cada botón tiene un ▾ que abre su editor (pasos, notas,
-sinte, perillas), y cualquier sonido se puede duplicar y renombrar. Un piloto
-automático arma un tema solo a partir de una semilla compartible, y lo que suena
-se exporta a WAV. Interfaz en español, inglés y portugués. Todo el audio se
+Máquina de música electrónica en vivo, en `https://psy.agu.com.ar`. Cada botón
+pone en loop una capa (kick, bajo, percusión, lead, pad; 9 sonidos por capa)
+sobre una grilla de 32 semicorcheas (2 compases); los FX son one-shots fuera del
+loop. **Todo es editable**: cada botón tiene un ▾ que abre su editor (pasos,
+notas, sinte, perillas), y cualquier sonido se puede duplicar y renombrar. Un
+piloto automático arma un tema solo, en el estilo elegido (techno, psytrance
+progresivo, psytrance, psytech, hi-tech, goa, dark psy), a partir de una semilla
+compartible que define también cómo suena cada sonido; las fases se pueden
+forzar y encolar. Lo que suena se exporta a WAV. Interfaz en español, inglés y portugués. Todo el audio se
 sintetiza en el browser con Web Audio: el pod sólo sirve ~80 kB de estáticos.
 
 | Pieza | Dónde |
@@ -73,6 +75,7 @@ tienen que caer en la grilla:
   espera de por medio no hace nada, así no prende-apaga-prende.
 - **Piloto automático** (ver abajo), en cada inicio de loop.
 - **🔀 Improvisar** de los editores, en cada inicio de loop.
+- **🎲 Nueva parte** de los editores, en el próximo inicio de loop.
 - **⏫ Build-up** de los kicks: toma el compás siguiente y lo devuelve en el
   otro (ver abajo).
 - **Snapshots** (ver abajo): un clic pone a sonar el momento guardado en el
@@ -159,14 +162,21 @@ mostrar.
   editás es lo que escuchás. Al agregar una nota se previsualiza al toque
   (`engine.audition`), salvo golpes de batería con el loop andando (un golpe
   fuera de la grilla sólo suena a error).
-- **🔀 Improvisar** es un toggle: mientras está prendido, en cada inicio de loop
-  la parte cambia un poco (`varyNotes` / `varySteps` en `editing.js`: mover una
-  nota a la fila vecina, dar vuelta un acento, un eco unos pasos después o sacar
-  una; en batería sólo golpes fuera del beat, el pulso no se mueve). Cada
-  variación sale de **lo que escribiste**, no de la variación anterior, así
-  respira alrededor de la parte sin irse a la deriva; las variaciones van sólo al
-  motor, nunca al storage, y al apagarlo vuelve tu parte. Sigue andando con el
-  editor cerrado (el cuadradito muestra 🔀). **Restaurar** también lo apaga.
+- **🔀 Improvisar** es un toggle y un slider en el mismo botón. Clic: mientras
+  está prendido, en cada inicio de loop la parte cambia (`varyNotes` /
+  `varySteps` en `editing.js`: mover una nota a una fila cercana, dar vuelta un
+  acento, un eco unos pasos después o sacar una; en batería sólo golpes fuera
+  del beat, el pulso no se mueve). Arrastrar a lo ancho del botón (o ← →) elige
+  **cuánto** cambia, y el relleno de color lo muestra: 0 % no cambia nada, 50 %
+  (por defecto) hace 1-2 cambios por loop, 100 % hace 6-7 y mueve notas hasta 3
+  filas (`changesFor`). Un arrastre no prende ni apaga. La intensidad se guarda
+  por sonido (`ws.improv`); el prendido no. Cada variación sale de **lo que
+  escribiste**, no de la variación anterior, así respira alrededor de la parte
+  sin irse a la deriva; las variaciones van sólo al motor, nunca al storage, y
+  al apagarlo vuelve tu parte. Cada cuadradito de loop tiene su propio 🔀 (arriba
+  del ▾) que muestra el estado, lo prende o lo apaga sin abrir el editor y se
+  llena según la intensidad. **Restaurar** apaga Improvisar y vuelve la
+  intensidad al 50 %.
 - **×2 golpes** (batería) agrega un golpe a mitad de camino entre cada golpe y
   el siguiente (dando la vuelta al loop): negras → corcheas → semicorcheas.
   Un hueco de un paso no tiene mitad y queda igual. Es una edición: se guarda.
@@ -177,7 +187,9 @@ mostrar.
   línea de compás y en la siguiente vuelve solo; volver a tocarlo lo cancela.
   Es una capa encima de lo que suena (`feed()` en `app.js`): tus ediciones y las
   variaciones de Improvisar siguen por debajo, y nunca va al storage.
-- **🎲 Nueva parte** escribe una parte nueva en la escala elegida, con hábitos del
+- **🎲 Nueva parte** escribe una parte nueva en la escala elegida. Con el loop
+  andando queda en cola (el botón late) y entra en el próximo inicio de loop;
+  otro clic antes la cancela; con el loop parado entra ya. Sigue hábitos del
   género por capa ([`editing.js`](../images/psy-sampler/src/editing.js)): bajo
   rolling entre kicks mayormente en la tónica, lead con un motivo de 8 pasos en
   forma A A' A B, pad con una tríada por compás, toms ralos con fill al final.
@@ -246,7 +258,8 @@ sonido la saca de los snapshots, y uno que queda sin sonidos desaparece.
 Todo vive en un objeto, el **workspace** (`workspace.js`), en `localStorage`
 (`psy-sampler:v2`, por browser): BPM, los switches, el orden de capas y de
 cuadraditos, las copias, los nombres, los datos editados, los snapshots, el
-largo del cambio de BPM, la semilla y el idioma. Lo único que no se guarda es qué está sonando (una carga de página
+largo del cambio de BPM, la semilla, el estilo y los cambios del piloto, la
+intensidad de Improvisar de cada sonido y el idioma. Lo único que no se guarda es qué está sonando (una carga de página
 arranca en silencio: sin un clic no hay audio). `normalize()` es la única
 puerta de entrada, para el storage y para un preset importado: revisa cada
 campo y lo que no cierra vuelve al valor de fábrica, así que un dato viejo,
@@ -399,24 +412,75 @@ cada inicio de loop decide qué suena:
 
 | Sección | Compases | Kick | Bajo | Perc | Lead | Pad | Al entrar |
 |---|---|---|---|---|---|---|---|
-| Intro | 8 | 1 | – | 1 | – | – | |
-| Groove | 16 | 1 | 1 | 1-2 | – | – | a veces láser o sirena; 25 % bajo nuevo |
-| Subida | 8 | 1 | 1 | 2 | 1 | – | 50 % lead nuevo; el último loop dispara un riser de 2 compases que cae en el Pico |
-| Pico | 32 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
-| Break | 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
+| Intro | 8 | 1 | – | 1 | – | 1 | |
+| Groove | 8 o 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | a veces láser o sirena; 25 % bajo nuevo |
+| Subida | 8 | 1 | 1 | 2 | 1 | 0-1 | 50 % lead nuevo |
+| Pico | 16 o 24 | 1 | 1 | 2-3 | 1 | 1 | crash o impacto |
+| Break | 8 o 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % lead nuevo |
 
-Después del Pico va al Break o al Groove; del Break a la Subida. Una variante
-que suena sobrevive al cambio de sección con 75 %. Dentro de una sección, el
-mix sólo puede cambiar en una línea de frase (cada 8 compases, `PHRASE`): ahí
-hay un cambio chico (un sonido por otro de la misma capa) con 30 %. Así una
-Intro o una Subida no se tocan, y un Pico tiene 3 oportunidades en 32 compases.
-Toda sección dura frases enteras, como en un tema de verdad. Usa
-también las copias. Mientras corre, el kick de fondo no suena (el Break es sin
-kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
+Después del Pico va al Break o al Groove; del Break a la Subida. El largo de
+cada sección se sortea entre sus opciones (siempre frases enteras de 8
+compases); ninguna pasa de 24 compases. El último loop antes de un Pico dispara
+un riser, riser + impacto o platillo invertido de 2 compases que cae justo en
+él, venga de una Subida o de una fase encolada.
+
+- **Nunca sólo kick, bajo y percusión.** Toda sección toca al menos un lead o
+  un pad (si la forma sortea cero de los dos, se agrega uno, preferentemente de
+  la capa que ya sonaba): sin eso suena a principio o final de tema. Si igual
+  se llega a ese estado (porque sacaste el lead a mano), dura **un compás**: en
+  la línea de compás siguiente el piloto agrega un lead o un pad del estilo
+  (`isBare` / `fillMelodic`).
+- **Cambios**: dentro de una sección se cambia un sonido por otro de la misma
+  capa (nunca el kick) cada N compases, contados desde el inicio de la sección.
+  N se elige con el slider **Cambios** (2, 4, 8, 16 o 32 compases; por defecto
+  8). Una variante que suena sobrevive al cambio de sección con 75 %.
+- **Fases a mano**: los botones Intro / Groove / Subida / Pico / Break con el
+  piloto andando **encolan** esa fase: entra cuando termina la que suena, en
+  orden, en vez de la que tocaba. La fila del piloto muestra la sección actual,
+  los compases que le quedan y la cola (`→ Pico ✕ → Break ✕`); ✕ saca una fase
+  que todavía no suena, y en el último loop la que entra late (si no hay cola,
+  aparece en gris la que eligió el piloto). **⏭ Siguiente** termina la sección
+  en el próximo loop. Con el piloto apagado, un botón de fase lo prende
+  arrancando en esa fase (desde silencio la arma de cero; sobre un mix, lo
+  reacomoda a esa forma en el próximo loop).
+- **Estilo**: cada estilo (`STYLES`) restringe cada capa a los sonidos que le
+  quedan (las copias siguen a su sonido base), fija el BPM y la escala de las
+  melodías nuevas, y cambia algunos FX de entrada. Elegirlo lleva el BPM al del
+  estilo (con la rampa de «Cambio de BPM» si el loop anda) y, con el piloto
+  andando, reacomoda la sección con los sonidos nuevos en el próximo loop.
+
+| Estilo | BPM | Escala de las melodías | Sonidos |
+|---|---|---|---|
+| Techno | 132 | la de cada sonido | kick 909 y rumble, reese, hats 16avos, rim, stab Am7, drones y quintas |
+| Psytrance progresivo | 138 | la de cada sonido | kick progresivo, offbeat largo, campana, arpegio 3/16, Am → F → G, sus4 |
+| Psytrance | 145 | la de cada sonido | punchy y full-on, rolling, ácido, arpegios, stabs, pads menores y frigio |
+| Psytech | 142 | frigio | kick seco, rolling FM, rim, ácido frigio, zapper, pad oscuro |
+| Hi-tech | 180 | frigio | tok, rolling saltarín, hats 16avos, zapper, ácido frigio |
+| Goa | 145 | menor armónica | cuerpo largo, rolling, toms, ácido, melódico, sirenas |
+| Dark psy | 155 | frigio | dark tok, rolling frigio, rim, toms, zapper, pad oscuro |
+| Todo vale | — | la de cada sonido | todos (no toca el BPM) |
+
+Usa también las copias. Mientras corre, el kick de fondo no suena (el Break es
+sin kick). Clickear durante el piloto vale: sigue desde lo que elegiste.
 
 **Semilla**: todas las decisiones salen de un PRNG (`seeded(hashSeed(semilla))`),
-así **la misma semilla genera el mismo tema en cualquier browser**. Para que eso
-sea cierto:
+así **la misma semilla y el mismo estilo generan el mismo tema en cualquier
+browser**. La semilla además define cómo suena el tema:
+
+- **Melodías**: cada lead que entra recibe una melodía nueva del PRNG
+  (`newPart` en `editing.js`), en la escala del estilo. Si el lead es de
+  acordes o de notas largas (stabs, melódico, campana, stab techno) conserva su
+  ritmo y la forma de sus acordes y los lleva a otros grados de la escala; si
+  es de notas sueltas (ácido, arpegios, zapper) se escribe un motivo nuevo.
+- **Sonidos** (`dress.js`): cada sonido que el piloto trae (también los FX que
+  dispara) mueve sus perillas hasta ±20 % del rango alrededor del valor de
+  fábrica (Hz, decay, click, brillo…) y una parte melódica puede pasar a otro
+  sinte de su grupo (un bajo a otro bajo, un lead a otro lead). Esto sale de
+  `semilla/id` y no del PRNG del tema, así un sonido es siempre el mismo dentro
+  de un tema aunque entre y salga. El largo de los FX no se toca: marca las
+  transiciones. El cuadradito muestra 🎲 en lo que escribió o vistió el piloto.
+
+Para que la repetición sea cierta:
 
 - Prender el piloto en silencio arranca de la Intro. Con algo sonando no
   empieza de nuevo: toma el mix tal cual, adivina en qué sección está
@@ -424,17 +488,21 @@ sea cierto:
   semilla; el kick de fondo pasa a ser un kick real para que no se corte. Ese
   tema depende de la semilla *y* del mix de partida: para compartir uno
   reproducible, arrancá de silencio.
-- Las partes que el piloto escribió (`ws.auto`) vuelven a fábrica al prenderlo
-  desde silencio (sobre un mix sonando se quedan, para no cambiar lo que suena).
-  Si editás una a mano pasa a ser tuya y el piloto no la toca más.
+- Las partes que el piloto escribió o vistió (`ws.auto`) vuelven a fábrica al
+  prenderlo desde silencio (sobre un mix sonando se quedan, para no cambiar lo
+  que suena). Si editás una a mano pasa a ser tuya y el piloto no la toca más.
 - Los pools se leen ordenados por id, nunca en el orden de los cuadraditos.
-- Una parte nueva se calcula (y consume el PRNG) aunque no se aplique porque la
-  editaste: tus ediciones cambian cómo suena, no la secuencia.
+- Una parte nueva se calcula (y consume el PRNG) desde la parte de fábrica,
+  aunque no se aplique porque la editaste: tus ediciones cambian cómo suena, no
+  la secuencia.
+- El lead o pad que agrega el guard de «un compás pelado» sale de
+  `Math.random`: sólo pasa si tocaste el mix, y no corre la secuencia.
 
-**🔗 Compartir** copia un link `#seed=…&bpm=…` y, si tenés sonidos editados o
-duplicados, `&s=…`: esos sonidos como preset JSON, `deflate-raw` y base64url
-(`share.js`), porque el tema sólo es el mismo con los mismos sonidos. Abrir el
-link carga semilla y BPM (los sonidos, con confirmación si ya tenías los
+**🔗 Compartir** copia un link `#seed=…&style=…&bpm=…` y, si tenés sonidos
+editados o duplicados, `&s=…`: esos sonidos como preset JSON, `deflate-raw` y
+base64url (`share.js`), porque el tema sólo es el mismo con los mismos sonidos.
+Lo que escribió o vistió el piloto no viaja: la semilla lo vuelve a generar.
+Abrir el link carga semilla, estilo y BPM (los sonidos, con confirmación si ya tenías los
 tuyos), limpia el fragmento y avisa que se toque el piloto: el audio necesita
 ese clic. 🎲 sortea una semilla nueva (6 caracteres sin 0/o/1/l/i).
 
@@ -461,10 +529,20 @@ scroll horizontal de página: las grillas de 32 pasos scrollean en su caja.
 | | Cuerpo largo | 120→42 Hz en 160 ms, decay 340 ms, sin click |
 | | Tok hi-tech | 230→58 Hz en 35 ms, decay 120 ms |
 | | Full-on gordo | 150→46 Hz en 100 ms, decay 260 ms, click al 60 % |
+| | Techno 909 | 200→52 Hz en 50 ms, decay 320 ms, click al 80 % |
+| | Rumble | 110→38 Hz en 200 ms, decay 600 ms (la cola pisa el beat siguiente) |
+| | Progresivo | 140→48 Hz en 90 ms, decay 240 ms, click al 40 % |
+| | Psytech seco | 190→55 Hz en 45 ms, decay 160 ms |
+| | Dark tok | 250→62 Hz en 25 ms, decay 90 ms |
 | Bajo (exclusiva, La1 = 55 Hz) | Offbeat | paso % 4 == 2 |
 | | Rolling | paso % 4 != 0 (3 notas entre kicks) |
 | | Rolling con octava | igual, la del paso % 4 == 2 una octava arriba |
 | | Galope | pasos % 4 ∈ {2, 3}: K-BB |
+| | Rolling FM | rolling en FM bass, acento en el paso después del kick |
+| | Offbeat largo | sub, corcheas en el contratiempo y un Sol al final |
+| | Reese techno | reese en los pasos 2 y 7 de cada medio compás |
+| | Rolling saltarín | FM, La1-La2-Mi2 entre kicks |
+| | Rolling frigio | rolling con Si♭ en los últimos 3 pasos de cada compás |
 | Percusión (se apilan) | Hi-hat abierto | contratiempo, HP 7 kHz, 140 ms |
 | | Hi-hat cerrado | semicorcheas impares, HP 9 kHz, 35 ms |
 | | Shaker | cada paso, acento en las corcheas |
@@ -472,15 +550,26 @@ scroll horizontal de página: las grillas de 32 pasos scrollean en su caja.
 | | Snare | beats 2 y 4 con acento + redoble en los pasos 29-31 |
 | | Ride | metal 808 (6 squares inharmónicas, BP 9 kHz), acento en el contratiempo |
 | | Toms tribales | sinte `tom` en el piano roll, con fill al final |
+| | Hats 16avos | cerrado en cada paso, HP 10 kHz, acento en el contratiempo |
+| | Rim | voz `rim` (triángulo 1,7 kHz + tick de ruido), sincopado |
 | Lead (se apilan) | Ácido | 303: línea de 16 pasos en La menor con silencios y acentos; cutoff base que deriva 300 Hz ↔ 1,5 kHz cada 16 s (reloj de audio, no del loop) |
 | | Arpegio | square, La-Do-Mi-La por semicorchea |
 | | Arpegio 3/16 | pluck, ciclo de 3 notas contra la grilla de 4 |
 | | Melódico | saw con vibrato retardado, una nota cada 8 pasos (La-Do-Sol-Mi) |
 | | Stabs | supersaw, La-Do-Mi sincopado |
+| | Zapper | zapper en corcheas, La3 / Mi4 |
+| | Campana | FM bell, figura con puntillo |
+| | Ácido frigio | 303 con Si♭ (escala frigia) |
+| | Stab techno | analog, Am7 en los pasos 3, 11, 19 y 27 |
 | Pad (se apilan) | La menor | La3-Do4-Mi4, re-dispara cada 16 pasos con release solapado |
 | | Am → Si♭ | i → ♭II, el giro frigio |
 | | Drone | La2 + Mi3, LP resonante con LFO de 0,12 Hz, 2 compases |
 | | Viento | ruido BP afinado a 4× la nota, LFO lento |
+| | Sus4 → menor | La-Re-Mi que resuelve en La menor |
+| | Oscuro | drone La2 + Si♭2 + Mi3 (frigio) |
+| | Am → F → G | i-VI-VII, la subida del progresivo |
+| | Supersaw | La menor con La4 arriba, 2 compases |
+| | Quintas | La2-Mi3-La3, sin tercera |
 | FX | Riser | ruido BP 300 Hz → «Hasta» (9 kHz) en «Largo» (2 compases) |
 | | Riser + impacto | el impacto cae justo al final del riser |
 | | Downlifter | ruido BP «Desde» (8 kHz) → 150 Hz + seno 400→40 Hz |
@@ -489,6 +578,7 @@ scroll horizontal de página: las grillas de 32 pasos scrollean en su caja.
 | | Láser | saw 4 kHz → 60 Hz |
 | | Crash | ruido HP 6 kHz, 2 s |
 | | Sirena goa | saw 300 → 1200 Hz con vibrato |
+| | Platillo invertido | ruido HP «Corte» (5 kHz) que crece en «Largo» (2 compases) y corta en la línea de compás |
 
 Los FX duran según el BPM al momento del disparo. Con el loop andando entran en
 el próximo beat; con el loop parado, ya.
@@ -582,9 +672,11 @@ npm run build
 ```
 
 - Lógica pura en `.js` con su `*.test.js` al lado: `timing`, `patterns`, `music`,
-  `selection`, `editing` (ciclos de clic, arrastre, improvisación y variaciones
-  con PRNG con semilla), `workspace` (normalize, presets), `autopilot`
-  (secciones, formas, determinismo por semilla), `snapshots` (captura,
+  `selection`, `editing` (ciclos de clic, arrastre, improvisación, intensidad,
+  variaciones y melodías nuevas con PRNG con semilla), `workspace` (normalize,
+  presets), `autopilot` (secciones, formas, nunca sin lead/pad, cambios cada N
+  compases, cola de fases, estilos, determinismo por semilla), `dress` (sonidos
+  por semilla), `snapshots` (captura,
   partes), `tempo` (rampa de BPM), `share`, `wav`, `i18n`.
 - `voices.test.js` / `engine.test.js` corren contra un `AudioContext` falso
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) que
@@ -594,8 +686,11 @@ npm run build
   32 pasos, y cada voz de batería y FX con sus perillas en el mínimo y el máximo.
 - `app.test.js` (jsdom) cubre modo solo / combinar / apilar, la cola al compás,
   doble clic, Parar, kick de fondo, FX, los editores (clic, playhead, perillas,
-  Restaurar, Improvisar, ×2, build-up, persistencia, storage roto), duplicar / renombrar / borrar,
-  reordenar, piloto (misma semilla = mismo tema), snapshots (captura, cola al
+  Restaurar, Improvisar con su intensidad y el 🔀 del cuadradito, Nueva parte
+  en cola, ×2, build-up, persistencia, storage roto), duplicar / renombrar /
+  borrar, reordenar, piloto (misma semilla = mismo tema y mismos sonidos,
+  nunca más de un compás sin lead/pad, estilos, fases encoladas y Siguiente,
+  slider de cambios), snapshots (captura, cola al
   compás, borrador / guardar / descartar, probar, sección del piloto), cambio
   de BPM compás a compás, idiomas, exportar / importar,
   WAV, Restaurar todo y los links compartidos.

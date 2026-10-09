@@ -129,7 +129,7 @@ describe("every synth plays any note length click-free", () => {
 });
 
 describe("drum voices stay click-free across their sliders", () => {
-  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride"]) {
+  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride", "rim"]) {
     it(voice, () => {
       const spec = PARAMS[voice];
       const at = (pick) => Object.fromEntries(spec.map((p) => [p.key, p[pick]]));

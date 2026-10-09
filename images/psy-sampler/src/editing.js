@@ -176,14 +176,24 @@ function dedupe(notes) {
 /* ---------------------------------------------------------- variations -- */
 
 /**
- * The improvise toggle: a light variation of `notes` (the part the user
- * chose), never a rewrite. Each change does one of: move a note to a
- * neighbouring row, flip an accent, echo a note a few steps later, or drop
- * one. Callers always vary the original, not the last variation, so the part
- * breathes around what was written instead of drifting away from it.
+ * How many changes one variation makes at `amount` (0-1, the improvise
+ * slider): none at 0, 1-2 at the default 0.5, 6-7 at 1.
  */
-export function varyNotes(notes, rows, rng = Math.random, changes = 1 + Math.floor(rng() * 2)) {
+export const IMPROV_DEFAULT = 0.5;
+export const changesFor = (amount, rng) => Math.floor(6 * amount * amount + rng());
+
+/**
+ * The improvise toggle: a light variation of `notes` (the part the user
+ * chose), never a rewrite. Each change does one of: move a note to a nearby
+ * row (further at a higher `amount`), flip an accent, echo a note a few steps
+ * later, or drop one. Callers always vary the original, not the last
+ * variation, so the part breathes around what was written instead of
+ * drifting away from it.
+ */
+export function varyNotes(notes, rows, rng = Math.random, amount = IMPROV_DEFAULT) {
   const asc = [...rows].sort((a, b) => a - b);
+  const changes = changesFor(amount, rng);
+  const reach = 1 + Math.round(Math.max(0, amount - 0.5) * 4);
   let out = notes.map((n) => ({ ...n }));
   const fits = (list, n, skip) =>
     list.every((o) => o === skip || o.midi !== n.midi || o.step + o.len <= n.step || o.step >= n.step + n.len);
@@ -192,7 +202,8 @@ export function varyNotes(notes, rows, rng = Math.random, changes = 1 + Math.flo
     const r = rng();
     if (r < 0.5) {
       const i = asc.indexOf(target.midi);
-      const midi = asc[Math.max(0, Math.min(asc.length - 1, (i < 0 ? 0 : i) + (rng() < 0.5 ? -1 : 1)))];
+      const jump = (1 + Math.floor(rng() * reach)) * (rng() < 0.5 ? -1 : 1);
+      const midi = asc[Math.max(0, Math.min(asc.length - 1, (i < 0 ? 0 : i) + jump))];
       const moved = { ...target, midi };
       if (fits(out, moved, target)) out = out.map((n) => (n === target ? moved : n));
     } else if (r < 0.75) {
@@ -212,12 +223,42 @@ export function varyNotes(notes, rows, rng = Math.random, changes = 1 + Math.flo
  * Same idea for a drum row: flip an accent or a ghost hit, only off the beat,
  * so the pulse (and a kick's four-on-the-floor) never moves.
  */
-export function varySteps(steps, rng = Math.random, changes = 1 + Math.floor(rng() * 2)) {
+export function varySteps(steps, rng = Math.random, amount = IMPROV_DEFAULT) {
   const out = steps.slice();
   const offBeat = out.map((_, s) => s).filter((s) => s % 4 !== 0);
+  const changes = changesFor(amount, rng);
   for (let c = 0; c < changes; c++) {
     const s = pick(offBeat, rng);
     out[s] = out[s] === OFF ? HIT : out[s] === HIT ? (rng() < 0.5 ? OFF : ACCENT) : HIT;
   }
   return out;
+}
+
+/* -------------------------------------------------------- new melodies -- */
+
+/**
+ * The autopilot's new part for a variant, from its factory notes. A lead
+ * made of chords or long notes keeps that rhythm and those chord shapes and
+ * walks them to new scale degrees; any other lead, and every other style, gets
+ * a fresh improvise() part.
+ */
+export function newPart(style, factory, rows, rng = Math.random) {
+  if (style !== "lead") return improvise(style, rows, rng);
+  const byStep = new Map();
+  for (const n of factory) byStep.set(n.step, [...(byStep.get(n.step) ?? []), n]);
+  const shaped = [...byStep.values()].some((g) => g.length > 1) || factory.some((n) => n.len > 1);
+  if (!shaped) return improvise("lead", rows, rng);
+  const asc = [...rows].sort((a, b) => a - b);
+  const nearest = (midi) =>
+    asc.reduce((best, m, i) => (Math.abs(m - midi) < Math.abs(asc[best] - midi) ? i : best), 0);
+  const out = [];
+  let shift = pick([-2, -1, 0, 1, 2], rng);
+  for (const step of [...byStep.keys()].sort((a, b) => a - b)) {
+    shift = Math.max(-4, Math.min(4, shift + pick([-2, -1, 0, 0, 1, 2], rng)));
+    for (const n of byStep.get(step)) {
+      const i = Math.max(0, Math.min(asc.length - 1, nearest(n.midi) + shift));
+      out.push({ ...n, midi: asc[i] });
+    }
+  }
+  return dedupe(out);
 }

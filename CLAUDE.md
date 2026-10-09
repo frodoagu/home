@@ -68,7 +68,7 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.
-  psy-sampler/       The psy.agu.com.ar ear-training sampler (Vite + vanilla JS, Web Audio, no runtime
+  psy-sampler/       The psy.agu.com.ar live music machine (Vite + vanilla JS, Web Audio, no runtime
                      deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
@@ -428,7 +428,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   are ids `<base>~n` resolved through the base (`defOf`/`baseOf`), not new
   DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
   reads pools sorted by id and consumes its PRNG even when it skips a user-owned
-  part — keep both when touching it. All UI text lives in `src/i18n/{es,en,pt}.js`
+  part — keep both when touching it. A seed also dresses each sound (params,
+  synth) from `seed/id` (dress.js), NOT from that PRNG, so a sound stays the
+  same while it comes and goes; every autopilot section must play a lead or a
+  pad (a bare kick/bass/perc mix lives one bar at most). All UI text lives in `src/i18n/{es,en,pt}.js`
   (same shape, enforced by a test). Cloud save is deliberately NOT behind
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through

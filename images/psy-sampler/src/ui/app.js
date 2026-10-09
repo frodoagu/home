@@ -3,7 +3,8 @@
 // timing lives in the engine. Changes that must land on the grid (queued
 // clicks, the autopilot, improvise variations) run in the engine's bar hook.
 // Snapshots recall a saved mix (and the data it played) on the next bar line;
-// a BPM change ramps there too, one slice per bar.
+// a BPM change ramps there too, one slice per bar. The autopilot dresses each
+// sound it brings in from the seed (dress.js) and writes new melodies.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 import { layerById } from "../catalog.js";
@@ -11,8 +12,26 @@ import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, isCopy } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
 import { encodeWav } from "../audio/wav.js";
-import { SECTIONS, advance, guessSection, joinPilot, startPilot } from "../autopilot.js";
-import { improvise, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
+import {
+  CHANGE_BARS,
+  SECTION_IDS,
+  STYLES,
+  STYLE_IDS,
+  advance,
+  dequeue,
+  enqueue,
+  entering,
+  fillMelodic,
+  guessSection,
+  isBare,
+  joinPilot,
+  moveTo,
+  rearrange,
+  skip,
+  startPilot,
+} from "../autopilot.js";
+import { dress } from "../dress.js";
+import { IMPROV_DEFAULT, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
@@ -63,6 +82,8 @@ export function mountApp(root, engine, opts = {}) {
     drafts: resume?.drafts ?? new Map(), // snapshot id -> its unsaved edits
     tempo: resume?.tempo ?? ws.bpm, // the exact BPM (a ramp passes fractions); ws.bpm keeps it rounded
     ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
+    bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
+    newParts: new Set(), // variants whose 🎲 New part waits for the next loop
   };
   let open = null; // the one open editor: { layer, id, editor }
   const snapshot = () => ({ lang: lang(), ...ws });
@@ -79,6 +100,8 @@ export function mountApp(root, engine, opts = {}) {
   const detailOf = (id) => (isCopy(id) ? tx.tile.copyDetail(factoryLabel(id)) : tx.variants[id][1]);
   const layerOf = (id) => layerById(id.split(".")[0]);
   const snapById = (id) => ws.snapshots.find((s) => s.id === id);
+  const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
+  const owned = (id) => id in ws.variants && !ws.auto.includes(id);
 
   // What each variant plays apart from a build-up, which feed() lays on top.
   const fed = new Map();
@@ -167,6 +190,35 @@ export function mountApp(root, engine, opts = {}) {
   });
   autoBtn.title = tx.transport.autoTitle;
   const sectionBadge = el("span", { class: "section-badge", "aria-live": "polite" });
+  const sectionLeft = el("span", { class: "section-left" });
+  const queueList = el("ol", { class: "section-queue", "aria-label": tx.pilot.queue });
+  const nextBtn = el("button", { type: "button", class: "ghost", "data-action": "next-section", text: tx.pilot.next });
+  nextBtn.title = tx.pilot.nextTitle;
+  const phaseBtns = SECTION_IDS.map((id) => {
+    const b = el("button", { type: "button", class: "ghost phase", "data-section": id, text: tx.sections[id] });
+    b.title = tx.pilot.phasesTitle;
+    b.addEventListener("click", () => forceSection(id));
+    return b;
+  });
+  const style = select(
+    tx.pilot.style,
+    STYLE_IDS.map((id) => ({ value: id, label: tx.styles[id] })),
+    ws.style,
+    (value) => setStyle(value),
+    "style",
+  );
+  style.title = tx.pilot.styleTitle;
+  const changes = el("input", {
+    type: "range",
+    id: "changes",
+    min: "0",
+    max: String(CHANGE_BARS.length - 1),
+    step: "1",
+    value: String(CHANGE_BARS.indexOf(ws.changeBars)),
+  });
+  const changesOut = el("output", { for: "changes", text: tx.pilot.every(ws.changeBars) });
+  const changesBox = el("label", { class: "changes", for: "changes" }, el("span", { text: tx.pilot.changes }), changes, changesOut);
+  changesBox.title = tx.pilot.changesTitle;
   const seedInput = el("input", {
     type: "text",
     id: "seed",
@@ -227,8 +279,22 @@ export function mountApp(root, engine, opts = {}) {
       text: "▾",
     });
     edit.addEventListener("click", () => toggleEditor(layer, id));
-    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, edit);
-    tiles.set(id, { layer, node, tile, edit, labelEl });
+    let vary = null;
+    if (!layer.oneShot) {
+      vary = el("button", {
+        type: "button",
+        class: "vary-tile",
+        "data-vary": id,
+        "aria-pressed": String(state.varying.has(id)),
+        "aria-label": tx.tile.vary(labelOf(id)),
+        title: tx.tile.varyTitle,
+        text: "🔀",
+      });
+      vary.addEventListener("click", () => setVarying(id, !state.varying.has(id)));
+    }
+    const side = vary ? el("div", { class: "tile-side" }, vary, edit) : edit;
+    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, side);
+    tiles.set(id, { layer, node, tile, edit, vary, labelEl });
     return tile;
   }
 
@@ -382,7 +448,14 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row" }, autoBtn, sectionBadge, seedLabel, diceBtn, shareBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
+      el(
+        "div",
+        { class: "tools-row" },
+        el("div", { class: "phases", role: "group", "aria-label": tx.pilot.phases }, el("span", { text: tx.pilot.phases }), ...phaseBtns),
+        changesBox,
+      ),
       el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn),
       statusLine,
     ),
@@ -396,7 +469,7 @@ export function mountApp(root, engine, opts = {}) {
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
-    for (const [id, { layer, node, tile }] of tiles) {
+    for (const [id, { layer, node, tile, vary }] of tiles) {
       const key = laneKey(layer, id);
       const on = layer.oneShot ? playingFx.has(id) : state.active[key] === id;
       const next = !layer.oneShot && target[key] === id;
@@ -404,8 +477,13 @@ export function mountApp(root, engine, opts = {}) {
       node.classList.toggle("is-queued", Boolean(state.pending) && next && !on);
       node.classList.toggle("is-leaving", Boolean(state.pending) && on && !next);
       node.classList.toggle("is-background", lanes.bgKick === id);
-      tile.classList.toggle("is-edited", id in ws.variants && !isCopy(id));
+      tile.classList.toggle("is-edited", owned(id) && !isCopy(id));
+      tile.classList.toggle("is-auto", ws.auto.includes(id));
       tile.classList.toggle("is-varying", state.varying.has(id));
+      if (vary) {
+        vary.setAttribute("aria-pressed", String(state.varying.has(id)));
+        vary.style.setProperty("--amount", `${Math.round(improvOf(id) * 100)}%`);
+      }
       tile.classList.toggle("is-building", state.buildUp?.id === id);
       if (!layer.oneShot) node.setAttribute("aria-pressed", String(on));
     }
@@ -418,10 +496,29 @@ export function mountApp(root, engine, opts = {}) {
     }
   }
 
+  // Now: the section and the bars it has left, then the queue (✕ drops one
+  // before it plays). In its last loop the section coming next pulses.
   function showSection() {
+    const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
-    sectionBadge.textContent = state.auto && state.pilot ? tx.sections[state.pilot.section] : "";
-    sectionBadge.hidden = !state.auto;
+    sectionBadge.textContent = p ? tx.sections[p.section] : "";
+    sectionBadge.hidden = !p;
+    sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
+    const chips = (p?.queue ?? []).map((id, i) => {
+      const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
+      drop.addEventListener("click", () => {
+        state.pilot = dequeue(state.pilot, i);
+        showSection();
+      });
+      return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), drop);
+    });
+    if (p && !p.queue.length && p.left === 1 && p.next) {
+      chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
+    }
+    if (p?.left === 1) chips[0]?.classList.add("is-next");
+    queueList.replaceChildren(...chips);
+    queueList.hidden = !chips.length;
+    nextBtn.disabled = !p || p.left === 1;
   }
 
   let shownStep = null;
@@ -506,7 +603,11 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- the bar hook: everything that must land on the grid ---- */
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
-    if (loopStart) varyAll();
+    if (loopStart) {
+      for (const id of state.newParts) writeNewPart(id);
+      state.newParts.clear();
+      varyAll();
+    }
     rollBuildUp(step);
     stepRamp();
     let changed = false;
@@ -517,13 +618,28 @@ export function mountApp(root, engine, opts = {}) {
       state.pending = null;
       changed = true;
     } else if (state.auto && loopStart) {
-      const move = advance(state.pilot, state.active, ws.lists, state.rng);
+      const move = advance(state.pilot, state.active, ws.lists, state.rng, {
+        style: ws.style,
+        changeBars: ws.changeBars,
+      });
       state.pilot = move.pilot;
+      dressIn([...entering(state.active, move.active), ...move.fx]);
       for (const id of move.rewrite) rewrite(id);
       for (const id of move.fx) fire(id, time);
       state.active = move.active;
       showSection();
       changed = true;
+    }
+    // Under the autopilot a mix with no lead and no pad lasts one bar at most.
+    if (state.auto) {
+      if (!isBare(state.active)) state.bare = 0;
+      else if (state.bare++ >= 1) {
+        const full = fillMelodic(state.active, ws.lists, Math.random, ws.style);
+        dressIn(entering(state.active, full));
+        state.active = full;
+        state.bare = 0;
+        changed = true;
+      }
     }
     if (!changed) return undefined;
     lanes = laneMap();
@@ -542,23 +658,39 @@ export function mountApp(root, engine, opts = {}) {
     renderButtons();
   }
 
-  // The autopilot writes a new part, unless the user owns this one. The rng
-  // runs either way, so a seed plays the same whatever was edited locally.
+  // The autopilot writes a new part, in the style's scale, unless the user
+  // owns this one. The rng runs either way, from the factory part, so a seed
+  // plays the same whatever was edited locally.
   function rewrite(id) {
     const def = defOf(id);
     if (def.kind !== "notes") return;
-    const data = dataOf(id);
-    const notes = improvise(styleOf(id), scaleRows(data.scale, def.low, def.high), state.rng);
-    if (id in ws.variants && !ws.auto.includes(id)) return;
-    setVariant(id, { ...data, notes }, { generated: true });
-    if (open?.id === id) open.editor.show(dataOf(id));
+    const scale = STYLES[ws.style].scale ?? def.data.scale;
+    const notes = newPart(styleOf(id), def.data.notes, scaleRows(scale, def.low, def.high), state.rng);
+    if (owned(id)) return;
+    const was = dataOf(id);
+    setVariant(id, { ...was, notes, scale }, { generated: true });
+    if (open?.id !== id) return;
+    if (was.scale === scale) open.editor.show(dataOf(id));
+    else openEditor(open.layer, id);
+  }
+
+  // The seed's params and synth for each sound the autopilot brings in.
+  function dressIn(ids) {
+    for (const id of ids) {
+      if (!tiles.has(id) || owned(id)) continue;
+      const next = { ...dataOf(id), ...dress(id, ws.seed) };
+      if (sameData(next, dataOf(id))) continue;
+      setVariant(id, next, { generated: true });
+      if (open?.id === id) openEditor(open.layer, id);
+    }
   }
 
   // Improvise toggle: a fresh variation of the anchor on every loop.
   function varied(id, anchor) {
     const def = defOf(id);
-    if (def.kind === "drum") return { ...anchor, steps: varySteps(anchor.steps) };
-    return { ...anchor, notes: varyNotes(anchor.notes, scaleRows(anchor.scale, def.low, def.high)) };
+    const amount = improvOf(id);
+    if (def.kind === "drum") return { ...anchor, steps: varySteps(anchor.steps, Math.random, amount) };
+    return { ...anchor, notes: varyNotes(anchor.notes, scaleRows(anchor.scale, def.low, def.high), Math.random, amount) };
   }
 
   function varyAll() {
@@ -578,6 +710,37 @@ export function mountApp(root, engine, opts = {}) {
       feed(id, dataOf(id));
       if (open?.id === id) open.editor.show(dataOf(id));
     }
+    if (open?.id === id) open.editor.showVarying(on);
+    renderButtons();
+  }
+
+  // 🎲 New part: on the next loop while it runs (a second click cancels),
+  // at once when it is stopped.
+  function writeNewPart(id) {
+    const def = defOf(id);
+    const data = dataOf(id);
+    setVariant(id, { ...data, notes: improvise(styleOf(id), scaleRows(data.scale, def.low, def.high)) });
+    if (open?.id === id) {
+      open.editor.show(dataNow(id));
+      open.editor.showNewPart(false);
+    }
+  }
+
+  function askNewPart(layer, id) {
+    if (!engine.isRunning()) writeNewPart(id);
+    else if (state.newParts.delete(id)) open?.editor.showNewPart(false);
+    else {
+      state.newParts.add(id);
+      open?.editor.showNewPart(true);
+    }
+    const target = state.pending ?? state.active;
+    if (target[laneKey(layer, id)] !== id) press(layer, id);
+  }
+
+  function setImprov(id, amount) {
+    if (amount === IMPROV_DEFAULT) delete ws.improv[id];
+    else ws.improv[id] = amount;
+    persist();
     renderButtons();
   }
 
@@ -696,7 +859,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.applied = snap.id;
     if (state.auto) {
-      state.pilot = { section: snap.section, left: SECTIONS[snap.section].loops };
+      state.pilot = moveTo(state.pilot, snap.section);
       showSection();
     }
   }
@@ -774,6 +937,10 @@ export function mountApp(root, engine, opts = {}) {
       label: labelOf(id),
       data: dataOf(id),
       varying: state.varying.has(id),
+      amount: improvOf(id),
+      onAmount: (amount) => setImprov(id, amount),
+      newPart: state.newParts.has(id),
+      onNewPart: () => askNewPart(layer, id),
       onChange: (next) => {
         setVariant(id, next);
         // Editing something silent switches it on: what you edit is what you hear.
@@ -789,6 +956,8 @@ export function mountApp(root, engine, opts = {}) {
         if (isCopy(id)) ws.variants[id] = defaultData(id);
         else delete ws.variants[id];
         ws.auto = ws.auto.filter((x) => x !== id);
+        delete ws.improv[id];
+        state.newParts.delete(id);
         state.varying.delete(id); // back to the factory part, improvise off too
         feed(id, dataOf(id));
         persist();
@@ -832,6 +1001,7 @@ export function mountApp(root, engine, opts = {}) {
     const tile = tiles.get(id);
     tile.labelEl.textContent = label;
     tile.edit.setAttribute("aria-label", tx.tile.edit(label));
+    tile.vary?.setAttribute("aria-label", tx.tile.vary(label));
     persist();
     return label;
   }
@@ -843,6 +1013,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.lists[layer.id] = [...list.slice(0, at), copy, ...list.slice(at)];
     ws.variants[copy] = structuredClone(dataOf(id));
     ws.names[copy] = tx.tile.copyName(labelOf(id));
+    if (id in ws.improv) ws.improv[copy] = ws.improv[id];
     feed(copy, ws.variants[copy]);
     persist();
     closeEditor();
@@ -857,8 +1028,10 @@ export function mountApp(root, engine, opts = {}) {
     ws.lists[layer.id] = ws.lists[layer.id].filter((x) => x !== id);
     delete ws.variants[id];
     delete ws.names[id];
+    delete ws.improv[id];
     ws.auto = ws.auto.filter((x) => x !== id);
     state.varying.delete(id);
+    state.newParts.delete(id);
     if (state.buildUp?.id === id) state.buildUp = null;
     const without = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v !== id));
     if (state.pending) state.pending = without(state.pending);
@@ -923,9 +1096,9 @@ export function mountApp(root, engine, opts = {}) {
     return mountApp(root, engine, { ...opts, resume: next });
   }
 
-  async function loadShared({ seed, bpm: sharedBpm, sounds }) {
+  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds }) {
     history.replaceState(null, "", location.pathname + location.search);
-    let next = { ...ws, seed, bpm: sharedBpm ?? ws.bpm };
+    let next = { ...ws, seed, style: sharedStyle ?? ws.style, bpm: sharedBpm ?? ws.bpm };
     if (sounds) {
       try {
         const shared = await unpackSounds(sounds);
@@ -946,15 +1119,18 @@ export function mountApp(root, engine, opts = {}) {
   };
 
   // Over a playing mix the autopilot takes it as it is and carries on from
-  // there; the background kick becomes a real kick so it does not drop out.
-  // From silence it starts an intro.
-  function engageAuto() {
+  // there (in `section`, when one was asked for); the background kick becomes
+  // a real kick so it does not drop out. From silence it starts an intro, or
+  // `section`.
+  function engageAuto(section = null) {
     const playing = { ...(state.pending ?? state.active) };
+    state.auto = true;
+    state.bare = 0;
+    state.rng = seeded(hashSeed(ws.seed));
     if (Object.keys(playing).length) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
-      state.auto = true;
-      state.rng = seeded(hashSeed(ws.seed));
-      state.pilot = joinPilot(playing);
+      state.pilot = joinPilot(playing, section);
+      dressIn(Object.values(playing).sort());
       commit(playing);
       showSection();
       return;
@@ -968,13 +1144,34 @@ export function mountApp(root, engine, opts = {}) {
     }
     ws.auto = [];
     persist();
-    state.auto = true;
     state.queuedSnap = null;
-    state.rng = seeded(hashSeed(ws.seed));
-    const start = startPilot(ws.lists, state.rng);
+    const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
+    dressIn(Object.values(start.active).sort());
+    for (const id of start.rewrite) rewrite(id);
     commit(start.active);
     showSection();
+  }
+
+  // A phase button: queued while the autopilot runs, else it starts there.
+  function forceSection(id) {
+    if (!state.auto) engageAuto(id);
+    else {
+      state.pilot = enqueue(state.pilot, id);
+      showSection();
+    }
+  }
+
+  // A style narrows the autopilot's sounds and takes the BPM to its own.
+  function setStyle(value) {
+    ws.style = value;
+    persist();
+    const target = STYLES[value].bpm;
+    if (target) {
+      rampTo.value = String(target);
+      startRamp();
+    }
+    if (state.auto && state.pilot) state.pilot = rearrange(state.pilot);
   }
 
   function setSeed(value) {
@@ -1029,6 +1226,8 @@ export function mountApp(root, engine, opts = {}) {
     state.pilot = null;
     state.queuedSnap = null;
     state.ramp = null;
+    state.newParts.clear();
+    open?.editor.showNewPart(false);
     showRamp();
     if (state.buildUp) setBuildUp(state.buildUp.id, false);
     lanes = {};
@@ -1051,6 +1250,16 @@ export function mountApp(root, engine, opts = {}) {
     showSection();
   });
   seedInput.addEventListener("change", () => setSeed(seedInput.value));
+  nextBtn.addEventListener("click", () => {
+    if (!state.auto || !state.pilot) return;
+    state.pilot = skip(state.pilot);
+    showSection();
+  });
+  changes.addEventListener("input", () => {
+    ws.changeBars = CHANGE_BARS[Number(changes.value)];
+    changesOut.textContent = tx.pilot.every(ws.changeBars);
+    persist();
+  });
   diceBtn.addEventListener("click", () => setSeed(randomSeed()));
   shareBtn.addEventListener("click", async () => {
     const url = `${location.origin}${location.pathname}${await shareFragment(ws)}`;
