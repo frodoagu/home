@@ -1,4 +1,5 @@
-# Per-app image-update config for the psy-sampler SPA (psy.agu.com.ar). The
+# Per-app image-update config for the psy-sampler SPA (psy.agu.com.ar) and its
+# cloud-save API (psy-sync), both deployed by the psy-sampler chart. The
 # v1.x controller only reconciles ImageUpdater CRs (it ignores Application
 # annotations), so each app that wants auto-updates gets one of these.
 #
@@ -31,3 +32,11 @@ spec:
             helm:
               name: image.repository
               tag: image.tag
+        - alias: sync
+          imageName: ghcr.io/frodoagu/psy-sync:latest
+          commonUpdateSettings:
+            updateStrategy: digest
+          manifestTargets:
+            helm:
+              name: sync.image.repository
+              tag: sync.image.tag

@@ -1,0 +1,11 @@
+{
+  "name": "psy-sync",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "psy.agu.com.ar cloud save: Google sign-in + one JSON workspace per user, in SQLite",
+  "scripts": {
+    "start": "bun src/server.js",
+    "test": "bun test"
+  }
+}

@@ -17,6 +17,7 @@ import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unp
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { cleanSeed, copyId, normalize, parsePreset, toPreset } from "../workspace.js";
 import { checkbox, download, el, select, slug } from "./dom.js";
+import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
 import { sortable } from "./sortable.js";
 
@@ -29,6 +30,8 @@ export function mountApp(root, engine, opts = {}) {
     languages = globalThis.navigator?.languages ?? [],
     location = globalThis.location,
     confirm = (message) => window.confirm(message),
+    cloud = null, // cloud.js; survives remounts, like the engine
+    loadButton, // tests stand in for the Google sign-in script
     resume = null,
   } = opts;
   const stored = loadState(storage);
@@ -48,7 +51,12 @@ export function mountApp(root, engine, opts = {}) {
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
   };
   let open = null; // the one open editor: { layer, id, editor }
-  const persist = () => saveState(storage, { lang: lang(), ...ws });
+  const snapshot = () => ({ lang: lang(), ...ws });
+  const persist = () => {
+    const snap = snapshot();
+    saveState(storage, snap);
+    cloud?.changed(snap);
+  };
 
   const allIds = () => Object.values(ws.lists).flat();
   const dataOf = (id) => ws.variants[id] ?? defOf(id).data;
@@ -230,6 +238,27 @@ export function mountApp(root, engine, opts = {}) {
     }),
   );
 
+  // Cloud save: a newer copy from the server replaces the workspace like an
+  // imported preset does, keeping what plays.
+  const { active: _factoryActive, ...factory } = normalize({});
+  const account = cloud
+    ? mountAccount({
+        cloud,
+        tx,
+        lang: lang(),
+        snapshot,
+        pristine: () => JSON.stringify({ ...ws, seed: "" }) === JSON.stringify({ ...factory, seed: "" }),
+        apply: (remote) => {
+          if (remote?.lang in DICTS) setLang(remote.lang);
+          state.varying = new Map();
+          remount({ ws: normalize(remote), open: null, status: t().cloud.pulled });
+        },
+        confirm,
+        status,
+        ...(loadButton ? { loadButton } : {}),
+      })
+    : null;
+
   root.replaceChildren(
     el(
       "header",
@@ -253,6 +282,7 @@ export function mountApp(root, engine, opts = {}) {
       { class: "tools panel" },
       el("div", { class: "tools-row" }, autoBtn, sectionBadge, seedLabel, diceBtn, shareBtn),
       el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn),
+      ...(account ? [account.node] : []),
       statusLine,
     ),
     el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
@@ -603,6 +633,7 @@ export function mountApp(root, engine, opts = {}) {
     frame = 0;
     engine.onBar(null);
     sorters.forEach((s) => s.destroy());
+    account?.destroy();
     window.removeEventListener("hashchange", onHash);
   }
 

@@ -1,8 +1,8 @@
 apiVersion: v2
 name: psy-sampler
-description: nginx serving the psy.agu.com.ar psytrance layer sampler (static SPA) on k3s with Traefik ingress
+description: nginx serving the psy.agu.com.ar psytrance layer sampler (static SPA) plus its cloud-save API on k3s with Traefik ingress
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "1.31-alpine"
 keywords:
   - nginx

@@ -47,3 +47,23 @@ Selector labels.
 app.kubernetes.io/name: {{ include "psy-sampler.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Cloud-save backend (psy-sync). Its own name label, so the nginx Service's
+selector (name + instance) never picks its pods.
+*/}}
+{{- define "psy-sampler.syncName" -}}
+{{- printf "%s-sync" (include "psy-sampler.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "psy-sampler.syncSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "psy-sampler.name" . }}-sync
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "psy-sampler.syncLabels" -}}
+helm.sh/chart: {{ include "psy-sampler.chart" . }}
+{{ include "psy-sampler.syncSelectorLabels" . }}
+app.kubernetes.io/component: sync
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}

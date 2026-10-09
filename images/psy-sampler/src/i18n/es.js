@@ -48,6 +48,29 @@ export default {
     confirmSounds: "Este link trae sus propios sonidos y reemplaza tus ediciones. ¿Cargarlos?",
     badLink: "El link está roto: no se pudieron leer sus sonidos.",
   },
+  cloud: {
+    pitch: "☁ Guardá tu configuración en la nube y usala en cualquier dispositivo:",
+    signedIn: (email) => `☁ ${email}`,
+    phases: {
+      idle: "",
+      pending: "cambios sin subir…",
+      saving: "guardando…",
+      saved: "guardado en la nube ✓",
+      offline: "sin conexión: se guarda local y se sube después",
+      error: "no se pudo guardar en la nube",
+      conflict: "hay cambios de otro dispositivo",
+    },
+    signOut: "Salir",
+    deleteAccount: "Borrar mis datos",
+    confirmDelete: "¿Borrar tu cuenta y tu configuración de la nube? Lo de este browser queda.",
+    deleted: "Listo: tus datos de la nube se borraron.",
+    pulled: "Cargué tu configuración de la nube.",
+    conflict:
+      "Tu configuración en la nube cambió desde otro dispositivo y acá también hay cambios.\n\n" +
+      "Aceptar: usar la de la nube (se pierden los cambios de acá).\nCancelar: quedarte con la de acá y subirla.",
+    signInFailed: "No se pudo iniciar sesión.",
+    privacy: "Se guarda tu mail y tu configuración, nada más.",
+  },
   layers: {
     kick: { name: "Kick", hint: "Un golpe por negra. Compará el click del ataque contra el largo de la cola." },
     bass: {

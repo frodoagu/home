@@ -1,0 +1,142 @@
+{{- if .Values.sync.enabled }}
+# Cloud save (images/psy-sync): Google sign-in + one JSON workspace per user in
+# SQLite on a PVC. Its own Deployment, so if it is down (or its image is not
+# public yet) the static site keeps serving and the page just hides the cloud
+# UI. Recreate: SQLite on a RWO volume wants one writer at a time.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "psy-sampler.syncName" . }}-data
+  labels:
+    {{- include "psy-sampler.syncLabels" . | nindent 4 }}
+  annotations:
+    # The users' saves live here: never prune it with the app.
+    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.sync.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sync.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "psy-sampler.syncName" . }}
+  labels:
+    {{- include "psy-sampler.syncLabels" . | nindent 4 }}
+spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "psy-sampler.syncSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "psy-sampler.syncLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # `bun` in oven/bun images
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sync
+          image: "{{ .Values.sync.image.repository }}:{{ .Values.sync.image.tag }}"
+          imagePullPolicy: {{ .Values.sync.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: GOOGLE_CLIENT_ID
+              value: {{ .Values.sync.googleClientId | quote }}
+            - name: ALLOWED_ORIGINS
+              value: {{ printf "https://%s" .Values.ingress.host | quote }}
+            - name: MAX_USERS
+              value: {{ .Values.sync.maxUsers | quote }}
+          ports:
+            - name: http
+              containerPort: 8787
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.sync.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            # Bun writes its transpiler cache under /tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "psy-sampler.syncName" . }}-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "psy-sampler.syncName" . }}
+  labels:
+    {{- include "psy-sampler.syncLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "psy-sampler.syncSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8787
+      targetPort: http
+      protocol: TCP
+---
+# The API is open to any Google account, so it is rate limited per real
+# client IP (Cloudflare's header; sound only because origin-firewall keeps
+# the origin reachable through Cloudflare alone, see charts/home-assistant).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "psy-sampler.syncName" . }}-ratelimit
+  labels:
+    {{- include "psy-sampler.syncLabels" . | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ .Values.sync.rateLimit.average }}
+    burst: {{ .Values.sync.rateLimit.burst }}
+    period: {{ .Values.sync.rateLimit.period }}
+    sourceCriterion:
+      requestHeaderName: Cf-Connecting-IP
+{{- end }}

@@ -46,6 +46,29 @@ export default {
     confirmSounds: "This link brings its own sounds and replaces your edits. Load them?",
     badLink: "The link is broken: its sounds could not be read.",
   },
+  cloud: {
+    pitch: "☁ Save your setup to the cloud and use it on any device:",
+    signedIn: (email) => `☁ ${email}`,
+    phases: {
+      idle: "",
+      pending: "unsaved changes…",
+      saving: "saving…",
+      saved: "saved to the cloud ✓",
+      offline: "offline: saved locally, uploads later",
+      error: "could not save to the cloud",
+      conflict: "another device made changes",
+    },
+    signOut: "Sign out",
+    deleteAccount: "Delete my data",
+    confirmDelete: "Delete your account and your cloud setup? What is in this browser stays.",
+    deleted: "Done: your cloud data was deleted.",
+    pulled: "Loaded your setup from the cloud.",
+    conflict:
+      "Your cloud setup changed on another device and there are changes here too.\n\n" +
+      "OK: use the cloud one (changes here are lost).\nCancel: keep this one and upload it.",
+    signInFailed: "Could not sign in.",
+    privacy: "Only your email and your setup are stored.",
+  },
   layers: {
     kick: { name: "Kick", hint: "One hit per quarter note. Compare the attack click against the length of the tail." },
     bass: {
