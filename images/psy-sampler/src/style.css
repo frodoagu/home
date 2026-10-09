@@ -14,6 +14,7 @@
   --current: #4c1d95;
   --on-current: #ffffff;
   --stop: #b91c1c;
+  --current-tint: rgba(76, 29, 149, 0.28);
 }
 
 [data-layer="kick"] { --layer: #b91c1c; --on-layer: #ffffff; }
@@ -37,6 +38,7 @@
     --current: #a78bfa;
     --on-current: #15121c;
     --stop: #f87171;
+    --current-tint: rgba(196, 181, 253, 0.32);
   }
   [data-layer="kick"] { --layer: #f87171; --on-layer: #1a0b0b; }
   [data-layer="bass"] { --layer: #fb923c; --on-layer: #1c0f05; }
@@ -289,6 +291,258 @@ h1 {
   border-color: var(--layer);
 }
 
+/* ---- tiles: the variant button plus its editor toggle ---- */
+.tile {
+  display: flex;
+  min-width: 0;
+}
+
+.tile .variant {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.edit {
+  flex: 0 0 32px;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+}
+
+.edit:hover {
+  color: var(--text);
+  border-color: var(--layer);
+}
+
+.edit[aria-expanded="true"] {
+  color: var(--on-layer);
+  background: var(--layer);
+  border-color: var(--layer);
+}
+
+/* Edited away from the factory data: a pencil after the name. */
+.tile.is-edited .variant-label::after {
+  content: " ✎";
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* ---- editor panel ---- */
+.editor-slot {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.editor-slot:empty {
+  display: none;
+}
+
+.editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-head h3 {
+  margin: 0 auto 0 0;
+  font-size: 0.95rem;
+}
+
+.ghost,
+.action {
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  border-color: var(--layer);
+}
+
+.action {
+  font-weight: 600;
+  color: var(--on-layer);
+  background: var(--layer);
+  border-color: var(--layer);
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.knobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px 18px;
+}
+
+.knob {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.knob output {
+  grid-area: 1 / 2;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.knob input {
+  grid-area: 2 / 1 / 3 / 3;
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: var(--layer);
+}
+
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pick select {
+  max-width: 100%;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.synth-detail,
+.legend {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ---- step grid / piano roll ---- */
+/* Scrolls inside its own box: 32 columns never fit a phone, the page must
+   not scroll sideways. */
+.grid-wrap {
+  max-height: 380px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 3.4rem repeat(32, minmax(16px, 1fr));
+  gap: 2px;
+  min-width: 640px;
+}
+
+.row-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-label.root {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.row-label.outside {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.step {
+  --fill: var(--cell);
+  height: 18px;
+  padding: 0;
+  background: var(--fill);
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.step.beat {
+  --fill: var(--cell-beat);
+}
+
+.step.root {
+  --fill: color-mix(in srgb, var(--cell) 82%, var(--layer));
+}
+
+.step.bar {
+  margin-left: 4px;
+}
+
+.step[data-state="hit"] {
+  --fill: color-mix(in srgb, var(--layer) 62%, var(--surface));
+}
+
+.step[data-state="accent"] {
+  --fill: var(--layer);
+}
+
+/* A long note reads as one bar: fill the gap to the next cell. */
+.roll .step[data-state="hit"]:not(.tail),
+.roll .step[data-state="accent"]:not(.tail) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: 2px 0 0 var(--fill);
+}
+
+.roll .step[data-state="hit"]:not(.head),
+.roll .step[data-state="accent"]:not(.head) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.step.preview {
+  outline: 2px solid var(--layer);
+  outline-offset: -2px;
+}
+
+.step.is-current {
+  background-image: linear-gradient(var(--current-tint), var(--current-tint));
+}
+
 @media (max-width: 640px) {
   .layer {
     grid-template-columns: 1fr;
@@ -302,10 +556,14 @@ h1 {
   .cell {
     height: 22px;
   }
+  .step {
+    height: 22px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .variant {
+  .variant,
+  .edit {
     transition: none;
   }
 }

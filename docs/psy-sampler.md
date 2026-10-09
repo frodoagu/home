@@ -3,8 +3,9 @@
 Sampler de capas de psytrance para entrenar el oído, en `https://psy.agu.com.ar`.
 Cada botón pone en loop una capa (kick, bajo, percusión, lead, pad) sobre una
 grilla de 32 semicorcheas (2 compases); los FX son one-shots fuera del loop.
-Todo el audio se sintetiza en el browser con Web Audio: el pod sólo sirve ~20 kB
-de estáticos.
+**Todo es editable**: cada botón tiene un ▾ que abre su editor (pasos, notas,
+sinte, perillas). Todo el audio se sintetiza en el browser con Web Audio: el pod
+sólo sirve ~50 kB de estáticos.
 
 | Pieza | Dónde |
 |---|---|
@@ -18,12 +19,15 @@ de estáticos.
 
 ```mermaid
 flowchart LR
-  subgraph lanes["un GainNode por capa activa"]
-    K[kick] & BK[kick de fondo] & B[bajo] & P[percusión] & L[lead] & PD[pad]
+  subgraph lanes["un GainNode por variante sonando"]
+    K[kick] & BK[kick de fondo] & B[bajo] & P[percusión ×n] & L[lead ×n] & PD[pad ×n]
   end
   FX[un GainNode por FX sonando]
-  lanes --> M[master 0.7] --> C[DynamicsCompressor] --> D[destination]
+  lanes --> M[master 0.7] --> C[compresor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
   FX --> M
+  lanes -. send .-> DL[delay 3/16] -.-> C
+  lanes -. send .-> RV[reverb] -.-> C
+  FX -. send .-> DL & RV
 ```
 
 ### Scheduler (lookahead)
@@ -60,58 +64,160 @@ dentro del fade y mueren solas.
 - El fade del lane viejo arranca **en ese mismo paso**, no en el clic: el cambio
   es un crossfade cuantizado a la grilla, sin hueco de silencio entre variantes.
   `Parar` sí corta ya (fade inmediato).
-- Pad y lead melódico se re-disparan cada 16 / 8 pasos; al entrar a mitad de
-  frase arrancan la nota en curso con lo que le queda (`notesAt(…, entering)`), en
-  vez de esperar hasta ~1,6 s en silencio.
+- Las notas largas (pad, lead melódico, drone) al entrar a mitad de frase
+  arrancan con lo que les queda (`eventsAt(…, entering)`), en vez de esperar
+  hasta 2 compases en silencio. Vale para cualquier nota de más de un paso,
+  también las que escribís en el editor.
 
 Selección → lanes es un reconcile puro
 ([`selection.js`](../images/psy-sampler/src/selection.js)): `desiredLanes()`
-calcula el estado deseado y `engine.setLanes()` cierra/abre la diferencia. El
-kick de fondo es un lane derivado: suena sólo si hay otra capa activa y ninguna
-variante de kick elegida (nunca solo, nunca duplicado).
+calcula el estado deseado y `engine.setLanes()` cierra/abre la diferencia.
+**Kick y bajo son exclusivos** (un lane por capa: una segunda variante reemplaza
+a la primera, dos kicks o dos bajos sólo embarran); **percusión, lead y pad se
+apilan** (un lane por variante, `laneKey()`). El kick de fondo es un lane
+derivado: suena sólo si hay otra capa activa y ninguna variante de kick elegida.
+
+### Delay y reverb
+
+Envíos post-lane (siguen los fades del lane) a dos buses compartidos, con switch
+global en el transporte (el return hace un glide de 30 ms):
+
+| | delay | reverb |
+|---|---|---|
+| percusión | — | 0,12 |
+| lead | 0,3 | 0,25 |
+| pad | — | 0,4 |
+| FX | 0,2 | 0,35 |
+
+Kick y bajo van secos: una cola debajo sólo embarra el grave. El delay es de
+**3/16** (corchea con puntillo, el eco clásico del psy), feedback 0,38 a través
+de un LP 2,5 kHz (cada repetición más oscura), y sigue al BPM con un glide de
+50 ms (un salto de `delayTime` hace clic). El reverb es un `ConvolverNode` con un
+impulso sintético: 2,4 s de ruido estéreo con caída cúbica.
+
+## Datos editables
+
+Lo que toca cada variante es **dato**, no código
+([`patterns.js`](../images/psy-sampler/src/audio/patterns.js), `DEFAULTS`):
+
+| Tipo | Dato | Editor |
+|---|---|---|
+| `drum` (kick, percusión) | `steps`: 32 × apagado / golpe / acento + params de la voz | una fila de 32 pasos + perillas |
+| `notes` (bajo, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + sinte + brillo + escala + octava + largo de nota nueva |
+| `fx` | `params` (largo en compases, rango, decay…) | perillas + ▶ Disparar |
+
+Todas tienen además **Volumen** (`level`, 0-150 % del nivel de su capa) y
+**Restaurar**. `eventsAt(id, step, entering, data)` convierte el dato en eventos
+en cada paso; `engine.setData(id, data)` lo reemplaza y el scheduler lo lee en el
+siguiente paso agendado (≤ 120 ms), sin reabrir el lane. Un cambio de volumen
+hace un glide de 20 ms en los lanes que tocan esa variante. Las perillas
+(`params.js`) guardan unidades de la voz (Hz, s, compases) y sólo formatean al
+mostrar.
+
+- **Clic** en un paso o celda: vacío → golpe/nota → acento → vacío. Las notas
+  nuevas miden lo que diga «Nota nueva» (se acortan para no pisar la siguiente
+  de la fila ni pasar el final del loop). **Arrastrar** con el mouse a lo largo de
+  una fila pinta una nota larga; en touch el arrastre es scroll del piano roll, y
+  un tap agrega una nota.
+- **Editar algo que no suena lo prende** (según el modo solo/combinar): lo que
+  editás es lo que escuchás. Al agregar una nota se previsualiza al toque
+  (`engine.audition`), salvo golpes de batería con el loop andando (un golpe
+  fuera de la grilla sólo suena a error).
+- **🎲 Improvisar** escribe una parte nueva en la escala elegida, con hábitos del
+  género por capa ([`editing.js`](../images/psy-sampler/src/editing.js)): bajo
+  rolling entre kicks mayormente en la tónica, lead con un motivo de 8 pasos en
+  forma A A' A B, pad con una tríada por compás, toms ralos con fill al final.
+- Escalas en La: menor, **frigio** (Si♭, la tensión típica del psy), menor
+  armónica y cromática. Las notas fuera de la escala elegida siguen visibles (en
+  itálica) para poder borrarlas.
+- Persistencia: sólo las variantes editadas + los switches de efectos, en
+  `localStorage` (`psy-sampler:v2`), por browser. Al cargar, `sanitize()` revisa
+  cada campo contra la forma del default y lo que no cierra vuelve al valor de
+  fábrica, así que un dato viejo o tocado a mano nunca rompe el loop. Si el
+  storage no está (modo privado), funciona igual sin recordar.
 
 ## Capas
 
 | Capa | Variante | Qué es |
 |---|---|---|
-| Kick | Punchy corto | seno 170→50 Hz en 70 ms, decay 200 ms + click de ruido HP 3 kHz |
-| | Cuerpo largo | seno 120→42 Hz en 160 ms, decay 340 ms |
-| Bajo (saw + LP con envolvente, La1 = 55 Hz) | Offbeat | paso % 4 == 2 |
+| Kick (exclusiva) | Punchy corto | seno 170→50 Hz en 70 ms, decay 200 ms + click de ruido HP 3 kHz |
+| | Cuerpo largo | 120→42 Hz en 160 ms, decay 340 ms, sin click |
+| | Tok hi-tech | 230→58 Hz en 35 ms, decay 120 ms |
+| | Full-on gordo | 150→46 Hz en 100 ms, decay 260 ms, click al 60 % |
+| Bajo (exclusiva, La1 = 55 Hz) | Offbeat | paso % 4 == 2 |
 | | Rolling | paso % 4 != 0 (3 notas entre kicks) |
 | | Rolling con octava | igual, la del paso % 4 == 2 una octava arriba |
-| Percusión (ruido filtrado) | Hi-hat abierto | contratiempo, HP 7 kHz, 140 ms |
-| | Shaker | cada paso, acento en las corcheas (pasos pares) |
+| | Galope | pasos % 4 ∈ {2, 3}: K-BB |
+| Percusión (se apilan) | Hi-hat abierto | contratiempo, HP 7 kHz, 140 ms |
+| | Hi-hat cerrado | semicorcheas impares, HP 9 kHz, 35 ms |
+| | Shaker | cada paso, acento en las corcheas |
 | | Clap | beats 2 y 4, BP 1,8 kHz, doble ráfaga a 12 ms |
-| Lead | Ácido | saw, LP Q 14, cutoff base que deriva 300 Hz ↔ 1,5 kHz cada 16 s (reloj de audio, no del loop) + envolvente por nota; línea de 16 pasos en La menor con silencios y acentos |
+| | Snare | beats 2 y 4 con acento + redoble en los pasos 29-31 |
+| | Ride | metal 808 (6 squares inharmónicas, BP 9 kHz), acento en el contratiempo |
+| | Toms tribales | sinte `tom` en el piano roll, con fill al final |
+| Lead (se apilan) | Ácido | 303: línea de 16 pasos en La menor con silencios y acentos; cutoff base que deriva 300 Hz ↔ 1,5 kHz cada 16 s (reloj de audio, no del loop) |
 | | Arpegio | square, La-Do-Mi-La por semicorchea |
-| | Melódico | saw sostenida con vibrato retardado, una nota cada 8 pasos (La-Do-Sol-Mi) |
-| Pad | La menor | La3-Do4-Mi4 × 2 saws ±7 cents, LP 1,4 kHz, ataque lento, re-dispara cada 16 pasos con release solapado |
-| FX | Riser | ruido BP 300→9000 Hz en 2 compases, ganancia exponencial creciente |
+| | Arpegio 3/16 | pluck, ciclo de 3 notas contra la grilla de 4 |
+| | Melódico | saw con vibrato retardado, una nota cada 8 pasos (La-Do-Sol-Mi) |
+| | Stabs | supersaw, La-Do-Mi sincopado |
+| Pad (se apilan) | La menor | La3-Do4-Mi4, re-dispara cada 16 pasos con release solapado |
+| | Am → Si♭ | i → ♭II, el giro frigio |
+| | Drone | La2 + Mi3, LP resonante con LFO de 0,12 Hz, 2 compases |
+| | Viento | ruido BP afinado a 4× la nota, LFO lento |
+| FX | Riser | ruido BP 300 Hz → «Hasta» (9 kHz) en «Largo» (2 compases) |
 | | Riser + impacto | el impacto cae justo al final del riser |
-| | Downlifter | ruido BP 8 kHz→150 Hz + seno 400→40 Hz, 1 compás |
-| | Sweep de ruido | BP angosto que sube y baja en 1 compás |
-| | Impacto | seno 90→28 Hz + ruido LP |
+| | Downlifter | ruido BP «Desde» (8 kHz) → 150 Hz + seno 400→40 Hz |
+| | Sweep de ruido | BP angosto que sube a «Pico» y baja |
+| | Impacto | seno «Tono» (90 Hz) → ×0,31 + ruido LP, decay 1,5 s |
+| | Láser | saw 4 kHz → 60 Hz |
+| | Crash | ruido HP 6 kHz, 2 s |
+| | Sirena goa | saw 300 → 1200 Hz con vibrato |
 
 Los FX duran según el BPM al momento del disparo. Con el loop andando entran en
-el próximo beat (el impacto del riser cae en beat); con el loop parado, ya.
+el próximo beat; con el loop parado, ya.
+
+### Sintes
+
+Cualquier variante melódica puede tocar con cualquiera de estos
+([`voices.js`](../images/psy-sampler/src/audio/voices.js) `INSTRUMENTS`). Todos
+aceptan notas de cualquier largo, acento (+30 %) y «Brillo» (multiplica el
+cutoff, tope 18 kHz):
+
+| Grupo | Sinte | Patch |
+|---|---|---|
+| Bajos | Saw pluck | saw + LP que se cierra dentro del primer paso |
+| | Sub | seno + triángulo una octava arriba |
+| | FM bass | 2 operadores relación 1, índice 5 → 0,3 en 120 ms (estilo Operator) |
+| | Reese | 2 saws ±12 cents + sub, LP 700 Hz |
+| Leads | Acid 303 | saw + LP Q 14 con envolvente sobre el cutoff que deriva |
+| | Supersaw | 5 saws a ±9/±18 cents (estilo Wavetable) |
+| | Analog | 2 squares ±6 cents, LP con envolvente (estilo Analog) |
+| | Pluck | saw + square, LP 6 kHz → 300 Hz (estilo Drift) |
+| | Square | square percusiva |
+| | Saw lead | saw sostenida con vibrato retardado |
+| | FM bell | relación 3,5, índice que cae con la nota (estilo Operator) |
+| | Zapper | cada nota cae 2 octavas en 40 ms |
+| Pads | Saw pad / Drone / Viento | ver la tabla de capas |
+| Percusión | Tom | seno que cae a 0,6× en 250 ms |
 
 ### Mezcla
 
-Niveles medidos con un render offline por la misma cadena (lane → master →
-compresor), 2 vueltas del loop a 145 BPM:
+Medido en Chrome (`OfflineAudioContext`, 2 vueltas a 145 BPM, lane → master):
+los 16 sintes tocando la misma línea quedan entre **-19 y -28 dBFS RMS**;
+Viento, FM bell, Zapper y Pluck se subieron 4-10 dB para que cambiar de sinte no
+parezca que se apagó.
 
-| | pico dBFS | RMS dBFS |
-|---|---|---|
-| kick | -2 / -3 | -20 / -18 |
-| bajo | -3 | -22 / -17 |
-| percusión | -6 / -7 | -33 |
-| ácido / arpegio / melódico | -5 / -10 / -8 | -21 / -24 / -20 |
-| pad | -9 | -20 |
-| 5 capas + riser+impacto + impacto | -0,9 | -14 |
+A la salida real (todos los nodos, tomado del destination):
 
-El compresor está suave a propósito (-10 dB, 4:1, knee 6, 3 ms / 150 ms): los
-defaults de Web Audio (-24 dB, 12:1) aplastarían la dinámica que una capa en solo
-tiene que dejar oír.
+| | pico dBFS |
+|---|---|
+| una capa sola (kick / bajo / ácido / pad) | -3,4 / -3,6 / -3,1 / -3,7 |
+| **todo apilado**: 18 loops + riser+impacto + crash + impacto + sirena, con delay y reverb | -1,8 (0 muestras sobre 1,0) |
+
+Sin limiter, el todo-apilado pasaba a +1,5 dBFS. El compresor está suave a
+propósito (-10 dB, 4:1, knee 6, 3 ms / 150 ms: los defaults de Web Audio,
+-24 dB 12:1, aplastarían la dinámica que una capa sola tiene que dejar oír);
+atrás va un limiter (-1,5 dB, 20:1, knee 0, 1 ms / 80 ms) y un trim de 0,8.
 
 ## Deploy
 
@@ -159,13 +265,17 @@ npm run build
 ```
 
 - Lógica pura en `.js` con su `*.test.js` al lado: `timing`, `patterns`, `music`,
-  `selection`.
+  `selection`, `editing` (ciclos de clic, arrastre, improvisación con PRNG con
+  semilla).
 - `voices.test.js` / `engine.test.js` corren contra un `AudioContext` falso
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) que
   registra nodos y automatizaciones. Incluye un invariante anti-clic: toda fuente
   audible tiene que arrancar y terminar en ganancia 0 y no frenar antes de que su
-  envolvente llegue a 0.
-- `app.test.js` (jsdom) cubre modo solo / combinar, Parar, kick de fondo y FX.
+  envolvente llegue a 0. Corre para cada variante, cada sinte con notas de 1 a
+  32 pasos, y cada voz de batería y FX con sus perillas en el mínimo y el máximo.
+- `app.test.js` (jsdom) cubre modo solo / combinar / apilar, Parar, kick de
+  fondo, FX y los editores (clic, playhead, perillas, Restaurar, persistencia,
+  storage roto).
 - Las devDependencies (Vite 8, Vitest 5, jsdom 29) son más nuevas que las de
   `home-site`: las de allá arrastran advisories críticos en el toolchain de test.
 
@@ -180,5 +290,13 @@ npm run build
   `setInterval` en el main thread; moverlo a un Worker la resolvería.
 - **`AudioContext` recién en el primer clic** (autoplay policy). `ensureContext()`
   se llama sincrónico dentro del handler y hace `resume()` si está `suspended`.
+- **Makeup gain automático.** El `DynamicsCompressor` de Chrome sube la salida
+  según threshold/ratio; con dos en serie la ganancia neta subía ~2 dB y una capa
+  sola llegaba a -1,3 dBFS. El trim de 0,8 después del limiter lo compensa.
+  Medir a la salida real antes de tocar threshold o ratio.
+- **Una voz nueva** necesita: la función en `voices.js` (en `INSTRUMENTS` si es
+  melódica, con entrada en `SYNTHS` de `params.js`; si es de batería, su spec en
+  `PARAMS`), y pasar el invariante anti-clic. Los tests fallan si un sinte de la
+  lista no tiene voz o al revés.
 - **`listen [::]:80`** en la config de nginx (como `agu-spa`) falla en un host sin
   IPv6 (p. ej. un Docker de prueba); en el Pi anda.

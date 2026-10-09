@@ -1,21 +1,27 @@
-// Which loop variants are on. `active` maps layer id -> variant id, so a layer
-// can never have two variants at once. Pure: the UI owns the state, the
-// engine only receives the lanes derived from it.
+// Which loop variants are on. `active` maps lane key -> variant id. Pure: the
+// UI owns the state, the engine only receives the lanes derived from it.
+
+/**
+ * Lane a variant plays on. Exclusive layers (kick, bass) have one lane, so a
+ * second variant replaces the first: two kicks or two basses only muddy. The
+ * rest stack: each variant is its own lane (hat + clap + toms at once).
+ */
+export const laneKey = (layer, variantId) => (layer.exclusive ? layer.id : variantId);
 
 /**
  * Solo (default): a click replaces everything that was on; clicking the only
  * active variant turns it off. Combine: each click toggles that variant,
- * replacing a sibling of the same layer.
+ * replacing whatever shares its lane.
  */
-export function pressVariant(active, layerId, variantId, combine) {
-  const isOn = active[layerId] === variantId;
+export function pressVariant(active, key, variantId, combine) {
+  const isOn = active[key] === variantId;
   if (combine) {
     const next = { ...active };
-    if (isOn) delete next[layerId];
-    else next[layerId] = variantId;
+    if (isOn) delete next[key];
+    else next[key] = variantId;
     return next;
   }
-  return isOn && Object.keys(active).length === 1 ? {} : { [layerId]: variantId };
+  return isOn && Object.keys(active).length === 1 ? {} : { [key]: variantId };
 }
 
 export const BG_KICK_VARIANT = "kick.punchy";

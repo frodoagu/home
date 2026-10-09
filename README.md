@@ -470,7 +470,7 @@ Per-topic guides live in [docs/](docs/):
 - [docs/google-assistant.md](docs/google-assistant.md) — Google Home / `google_assistant` integration runbook
 - [docs/lavarropas-candy.md](docs/lavarropas-candy.md) — Candy simply-Fi washer-dryer over its **local** HTTP API (no cloud, no vendor app): finding it via the UDP heartbeat, recovering the XOR key from the device's own traffic, and the `RemTime` unit bug
 - [docs/agu-spa.md](docs/agu-spa.md) — static SPA chart + the `images/home-site/` app: dev/tests (Vitest), public vs. private (Google sign-in), image vs. placeholder content, SPA routing fallback
-- [docs/psy-sampler.md](docs/psy-sampler.md) — psytrance layer sampler at psy.agu.com.ar: lookahead scheduler, click-free lane fades, layer/variant table, measured mix levels, first-deploy GHCR visibility step
+- [docs/psy-sampler.md](docs/psy-sampler.md) — psytrance layer sampler at psy.agu.com.ar: lookahead scheduler, click-free lane fades, editable variants (step grid, piano roll, synths, knobs), delay/reverb, measured mix levels, first-deploy GHCR visibility step
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
 - [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
