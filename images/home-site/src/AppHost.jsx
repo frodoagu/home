@@ -10,17 +10,23 @@ export default function AppHost() {
   const { slug } = useParams();
   const app = getApp(slug);
 
-  const txt = language === "es"
-    ? {
-        notFound: "No encontre esa app.",
-        backHome: "Volver al inicio",
-        home: "Inicio",
-      }
-    : {
-        notFound: "I could not find that app.",
-        backHome: "Back to home",
-        home: "Home",
-      };
+  const txt = {
+    es: {
+      notFound: "No encontre esa app.",
+      backHome: "Volver al inicio",
+      home: "Inicio",
+    },
+    en: {
+      notFound: "I could not find that app.",
+      backHome: "Back to home",
+      home: "Home",
+    },
+    pt: {
+      notFound: "Não encontrei esse app.",
+      backHome: "Voltar ao início",
+      home: "Início",
+    },
+  }[language];
 
   if (!app) {
     return (

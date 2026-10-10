@@ -56,4 +56,13 @@ describe("Landing", () => {
     expect(screen.getByText("Mandelbrot")).toBeInTheDocument();
     expect(screen.queryByText("Corriente de Neutro")).not.toBeInTheDocument();
   });
+
+  it("cambia a portugués desde el selector de idioma", async () => {
+    const user = userEvent.setup();
+    renderLanding();
+    await user.click(screen.getByRole("button", { name: "PT" }));
+    expect(screen.getByText("Corrente de Neutro")).toBeInTheDocument();
+    expect(screen.getByText("Área privada")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("pt");
+  });
 });

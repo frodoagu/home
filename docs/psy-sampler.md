@@ -667,7 +667,9 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 note names: La/A/Lá) and `i18n.test.js` requires all three to have exactly the
 same shape. The default is the saved language; otherwise the browser's;
 otherwise Spanish. Changing the language rebuilds the app without stopping what
-plays (not the autopilot, not the queue, not the open editor).
+plays (not the autopilot, not the queue, not the open editor). The picker
+(`ui/langSwitch.js`) is the same ES/EN/PT pill as agu.com.ar's, with a select
+on phones.
 
 The **📖 Help** button in the top bar opens a page (`ui/help.js`, a
 modal `<dialog>`, full screen on a phone) built from each dictionary's `help`:

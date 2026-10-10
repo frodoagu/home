@@ -18,23 +18,23 @@ export const INTERIOR = [8, 10, 20]; // color del interior del conjunto
 
 // Paletas (a, b, c, d) del esquema coseno de IQ. Vibrantes a propósito.
 export const PALETTES = [
-  { name: "Arcoíris", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.33, 0.67] },
-  { name: "Fuego", a: [0.5, 0.45, 0.4], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.1, 0.2] },
-  { name: "Océano", a: [0.4, 0.5, 0.5], b: [0.45, 0.5, 0.5], c: [1, 1, 1], d: [0.6, 0.55, 0.4] },
-  { name: "Neón", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [2.0, 1.0, 0.0], d: [0.5, 0.2, 0.25] },
-  { name: "Áureo", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.3, 0.2, 0.2] },
+  { name: { es: "Arcoíris", en: "Rainbow", pt: "Arco-íris" }, a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.33, 0.67] },
+  { name: { es: "Fuego", en: "Fire", pt: "Fogo" }, a: [0.5, 0.45, 0.4], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.0, 0.1, 0.2] },
+  { name: { es: "Océano", en: "Ocean", pt: "Oceano" }, a: [0.4, 0.5, 0.5], b: [0.45, 0.5, 0.5], c: [1, 1, 1], d: [0.6, 0.55, 0.4] },
+  { name: { es: "Neón", en: "Neon", pt: "Neon" }, a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [2.0, 1.0, 0.0], d: [0.5, 0.2, 0.25] },
+  { name: { es: "Áureo", en: "Golden", pt: "Áureo" }, a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.3, 0.2, 0.2] },
 ];
 
 // Lugares emblemáticos del fractal. span chico = más zoom; iter sube en lo profundo.
 export const PRESETS = [
-  { label: "Vista completa", cx: -0.5, cy: 0, span: 3.2, iter: 200 },
-  { label: "Valle de caballitos", cx: -0.745428, cy: 0.113009, span: 0.016, iter: 600 },
-  { label: "Valle de elefantes", cx: 0.2925, cy: 0.0149, span: 0.05, iter: 500 },
-  { label: "Espiral triple", cx: -0.088, cy: 0.654, span: 0.028, iter: 600 },
-  { label: "Mini-Mandelbrot", cx: -1.768778, cy: 0.001738, span: 0.006, iter: 800 },
-  { label: "Tentáculos", cx: -0.748, cy: 0.1, span: 0.0017, iter: 900 },
-  { label: "Espiral satélite", cx: -0.722, cy: 0.246, span: 0.018, iter: 700 },
-  { label: "Misiurewicz", cx: -0.77568377, cy: 0.13646737, span: 0.012, iter: 800 },
+  { label: { es: "Vista completa", en: "Full view", pt: "Visão completa" }, cx: -0.5, cy: 0, span: 3.2, iter: 200 },
+  { label: { es: "Valle de caballitos", en: "Seahorse Valley", pt: "Vale dos cavalos-marinhos" }, cx: -0.745428, cy: 0.113009, span: 0.016, iter: 600 },
+  { label: { es: "Valle de elefantes", en: "Elephant Valley", pt: "Vale dos elefantes" }, cx: 0.2925, cy: 0.0149, span: 0.05, iter: 500 },
+  { label: { es: "Espiral triple", en: "Triple spiral", pt: "Espiral tripla" }, cx: -0.088, cy: 0.654, span: 0.028, iter: 600 },
+  { label: { es: "Mini-Mandelbrot", en: "Mini-Mandelbrot", pt: "Mini-Mandelbrot" }, cx: -1.768778, cy: 0.001738, span: 0.006, iter: 800 },
+  { label: { es: "Tentáculos", en: "Tentacles", pt: "Tentáculos" }, cx: -0.748, cy: 0.1, span: 0.0017, iter: 900 },
+  { label: { es: "Espiral satélite", en: "Satellite spiral", pt: "Espiral satélite" }, cx: -0.722, cy: 0.246, span: 0.018, iter: 700 },
+  { label: { es: "Misiurewicz", en: "Misiurewicz", pt: "Misiurewicz" }, cx: -0.77568377, cy: 0.13646737, span: 0.012, iter: 800 },
 ];
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

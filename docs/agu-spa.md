@@ -103,6 +103,17 @@ from casual visitors; the real authentication still lives on each linked service
    design**, so committing it is fine.
 3. List the allowed emails in `ALLOWED_EMAILS` in the same file.
 
+## Languages
+
+Every visible string comes in Spanish, English and Portuguese, picked with the
+ES/EN/PT pill (`src/components/LanguageToggle.jsx`). Data carries
+`{ es, en, pt }` objects read with `localizeText`; one-off strings in a
+component use `pick(language, es, en, pt)` (both in
+`src/i18n/LanguageProvider.jsx`). A missing translation falls back to Spanish.
+The choice is saved per browser; otherwise the browser's language wins, and
+anything that isn't es/pt gets English. `registry.test.js` requires all three on
+every card.
+
 ## SPA routing & caching
 
 The bundled nginx config (`templates/configmap.yaml`) is tuned for SPAs:

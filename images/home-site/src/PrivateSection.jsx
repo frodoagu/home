@@ -10,17 +10,23 @@ export default function PrivateSection({ active }) {
   const { language } = useLanguage();
   const { user, authorized, signOut } = useAuth();
 
-  const txt = language === "es"
-    ? {
-        title: "Privado",
-        signOut: "Salir",
-        empty: "Nada privado en",
-      }
-    : {
-        title: "Private",
-        signOut: "Sign out",
-        empty: "No private links in",
-      };
+  const txt = {
+    es: {
+      title: "Privado",
+      signOut: "Salir",
+      empty: "Nada privado en",
+    },
+    en: {
+      title: "Private",
+      signOut: "Sign out",
+      empty: "No private links in",
+    },
+    pt: {
+      title: "Privado",
+      signOut: "Sair",
+      empty: "Nada privado em",
+    },
+  }[language];
 
   const visible = active
     ? privateLinks.filter((link) => link.categories?.includes(active))
@@ -81,17 +87,23 @@ function SignInGate() {
   const { renderButton, ready } = useAuth();
   const btnRef = useRef(null);
 
-  const txt = language === "es"
-    ? {
-        title: "Zona privada",
-        body: "Accesos a los servicios self-hosted. Inicia sesion con Google para verlos.",
-        loading: "Cargando Google...",
-      }
-    : {
-        title: "Private zone",
-        body: "Access to self-hosted services. Sign in with Google to view them.",
-        loading: "Loading Google...",
-      };
+  const txt = {
+    es: {
+      title: "Zona privada",
+      body: "Accesos a los servicios self-hosted. Inicia sesion con Google para verlos.",
+      loading: "Cargando Google...",
+    },
+    en: {
+      title: "Private zone",
+      body: "Access to self-hosted services. Sign in with Google to view them.",
+      loading: "Loading Google...",
+    },
+    pt: {
+      title: "Área privada",
+      body: "Acesso aos serviços self-hosted. Entre com o Google para vê-los.",
+      loading: "Carregando Google...",
+    },
+  }[language];
 
   useEffect(() => {
     renderButton(btnRef.current);
@@ -119,17 +131,23 @@ function SignInGate() {
 function NotAuthorized() {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const txt = language === "es"
-    ? {
-        title: "Sin acceso",
-        bodyStart: "La cuenta",
-        bodyEnd: "no esta autorizada para esta seccion.",
-      }
-    : {
-        title: "No access",
-        bodyStart: "Account",
-        bodyEnd: "is not authorized for this section.",
-      };
+  const txt = {
+    es: {
+      title: "Sin acceso",
+      bodyStart: "La cuenta",
+      bodyEnd: "no esta autorizada para esta seccion.",
+    },
+    en: {
+      title: "No access",
+      bodyStart: "Account",
+      bodyEnd: "is not authorized for this section.",
+    },
+    pt: {
+      title: "Sem acesso",
+      bodyStart: "A conta",
+      bodyEnd: "não está autorizada para esta seção.",
+    },
+  }[language];
 
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 px-5 py-10 text-center">

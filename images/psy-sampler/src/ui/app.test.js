@@ -1200,6 +1200,15 @@ describe("language", () => {
     lang.dispatchEvent(new Event("change"));
     expect($('[data-layer="bass"] h2').textContent).toBe("Baixo");
   });
+
+  it("switches from the ES/EN/PT pill and marks the active one", () => {
+    expect([...document.querySelectorAll(".lang-buttons button")].map((b) => b.textContent)).toEqual(["ES", "EN", "PT"]);
+    $('[data-lang="en"]').click();
+    expect($("button.stop").textContent).toBe("Stop");
+    expect($('[data-lang="en"]').getAttribute("aria-pressed")).toBe("true");
+    expect($('[data-lang="es"]').getAttribute("aria-pressed")).toBe("false");
+    expect($('[data-control="lang"]').value).toBe("en");
+  });
 });
 
 describe("export, import, reset", () => {

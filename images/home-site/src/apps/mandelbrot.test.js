@@ -164,7 +164,7 @@ describe("PRESETS", () => {
   it("todos tienen cx, cy, span (>0) e iter dentro del rango del slider", () => {
     expect(PRESETS.length).toBeGreaterThan(0);
     for (const p of PRESETS) {
-      expect(typeof p.label).toBe("string");
+      expect(p.label).toMatchObject({ es: expect.any(String), en: expect.any(String), pt: expect.any(String) });
       expect(Number.isFinite(p.cx)).toBe(true);
       expect(Number.isFinite(p.cy)).toBe(true);
       expect(p.span).toBeGreaterThan(0);

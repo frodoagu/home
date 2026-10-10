@@ -8,8 +8,8 @@ describe("registry · apps públicas", () => {
     for (const a of apps) {
       expect(typeof a.slug).toBe("string");
       expect(a.slug).toMatch(/^[a-z0-9-]+$/); // kebab-case
-      expect(a.title).toMatchObject({ es: expect.any(String), en: expect.any(String) });
-      expect(a.description).toMatchObject({ es: expect.any(String), en: expect.any(String) });
+      expect(a.title).toMatchObject({ es: expect.any(String), en: expect.any(String), pt: expect.any(String) });
+      expect(a.description).toMatchObject({ es: expect.any(String), en: expect.any(String), pt: expect.any(String) });
       if (a.href) {
         expect(a.href).toMatch(/^https:\/\//);
         expect(a.Component).toBeUndefined();
@@ -34,7 +34,7 @@ describe("registry · enlaces privados", () => {
   it("cada enlace tiene href https y categorías válidas", () => {
     for (const l of privateLinks) {
       expect(l.href).toMatch(/^https:\/\//);
-      expect(l.title).toMatchObject({ es: expect.any(String), en: expect.any(String) });
+      expect(l.title).toMatchObject({ es: expect.any(String), en: expect.any(String), pt: expect.any(String) });
       expect(isSubset(l.categories ?? [])).toBe(true);
       expect(l.icon).toBeTruthy();
     }

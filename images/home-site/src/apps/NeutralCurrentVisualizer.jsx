@@ -12,7 +12,7 @@ import {
   cableResistance, solveVoltages, specRms, conductorTemp, resistanceAtTemp, AMPACITY, T_AMBIENT,
   phasePower, systemPower, kvarToCorrect, PF_TARGET, displacementAngle,
 } from "./neutralCurrent";
-import { localizeText, useLanguage } from "../i18n/LanguageProvider";
+import { localizeText, pick, useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Visualizador de corriente de neutro en sistema trifásico (3F + N)
@@ -28,9 +28,9 @@ import { localizeText, useLanguage } from "../i18n/LanguageProvider";
  * ---------------------------------------------------------------------- */
 
 const PHASES = [
-  { key: "a", label: { es: "Fase A", en: "Phase A" }, angle: 0, color: "#ef4444" },
-  { key: "b", label: { es: "Fase B", en: "Phase B" }, angle: 120, color: "#92400e" },
-  { key: "c", label: { es: "Fase C", en: "Phase C" }, angle: 240, color: "#eab308" },
+  { key: "a", label: { es: "Fase A", en: "Phase A", pt: "Fase A" }, angle: 0, color: "#ef4444" },
+  { key: "b", label: { es: "Fase B", en: "Phase B", pt: "Fase B" }, angle: 120, color: "#92400e" },
+  { key: "c", label: { es: "Fase C", en: "Phase C", pt: "Fase C" }, angle: 240, color: "#eab308" },
 ];
 
 const NEUTRAL = "#38bdf8";
@@ -55,11 +55,11 @@ const reactiveColor = (q, eps) => ({ ind: IND, cap: CAP, res: "#64748b" }[reacti
 const pfColor = (pf) => (pf >= 0.95 ? "#34d399" : pf >= 0.85 ? "#f59e0b" : DANGER);
 
 const PRESETS = [
-  { label: { es: "Sin carga base", en: "No base load" }, v: { a: 0, b: 0, c: 0 } },
-  { label: { es: "Balanceado", en: "Balanced" }, v: { a: 10, b: 10, c: 10 } },
-  { label: { es: "3 / 7 / 7", en: "3 / 7 / 7" }, v: { a: 3, b: 7, c: 7 } },
-  { label: { es: "Carga alta 60/60/60", en: "High load 60/60/60" }, v: { a: 60, b: 60, c: 60 } },
-  { label: { es: "Monofasico 100/0/0", en: "Single-phase 100/0/0" }, v: { a: 100, b: 0, c: 0 } },
+  { label: { es: "Sin carga base", en: "No base load", pt: "Sem carga base" }, v: { a: 0, b: 0, c: 0 } },
+  { label: { es: "Balanceado", en: "Balanced", pt: "Balanceado" }, v: { a: 10, b: 10, c: 10 } },
+  { label: { es: "3 / 7 / 7", en: "3 / 7 / 7", pt: "3 / 7 / 7" }, v: { a: 3, b: 7, c: 7 } },
+  { label: { es: "Carga alta 60/60/60", en: "High load 60/60/60", pt: "Carga alta 60/60/60" }, v: { a: 60, b: 60, c: 60 } },
+  { label: { es: "Monofasico 100/0/0", en: "Single-phase 100/0/0", pt: "Monofásico 100/0/0" }, v: { a: 100, b: 0, c: 0 } },
 ];
 
 const fmt = (n) => n.toFixed(1);
@@ -255,37 +255,53 @@ export default function NeutralCurrentVisualizer() {
   const rawAmpScaleMax = Math.max(10, Math.max(fund.a, fund.b, fund.c) * 1.05);
   const ampScaleMax = niceAmpScaleMax(rawAmpScaleMax);
 
-  const txt = language === "es"
-    ? {
-        title: "Corriente de Neutro · Sistema Trifasico",
-        order: "Orden",
-        orderTip: "Restablecer el orden de los paneles",
-        tabPhasors: "Fasores",
-        tabWaves: "Ondas",
-        tabHarm: "Armonicos",
-        tabPower: "Potencia",
-        tabVoltage: "Tension",
-        loadTitle: "Carga lineal base por fase",
-        faultsTitle: "Simular fallas",
-        cablesTitle: "Cableado por conductor",
-        appliancesTitle: "Artefactos (cos φ + armonicos)",
-        pfcTitle: "Banco de capacitores (correccion)",
-      }
-    : {
-        title: "Neutral Current · Three-Phase System",
-        order: "Order",
-        orderTip: "Reset panel order",
-        tabPhasors: "Phasors",
-        tabWaves: "Waves",
-        tabHarm: "Harmonics",
-        tabPower: "Power",
-        tabVoltage: "Voltage",
-        loadTitle: "Base linear load per phase",
-        faultsTitle: "Simulate faults",
-        cablesTitle: "Cabling by conductor",
-        appliancesTitle: "Appliances (cos φ + harmonics)",
-        pfcTitle: "Capacitor bank (power-factor correction)",
-      };
+  const txt = {
+    es: {
+      title: "Corriente de Neutro · Sistema Trifasico",
+      order: "Orden",
+      orderTip: "Restablecer el orden de los paneles",
+      tabPhasors: "Fasores",
+      tabWaves: "Ondas",
+      tabHarm: "Armonicos",
+      tabPower: "Potencia",
+      tabVoltage: "Tension",
+      loadTitle: "Carga lineal base por fase",
+      faultsTitle: "Simular fallas",
+      cablesTitle: "Cableado por conductor",
+      appliancesTitle: "Artefactos (cos φ + armonicos)",
+      pfcTitle: "Banco de capacitores (correccion)",
+    },
+    en: {
+      title: "Neutral Current · Three-Phase System",
+      order: "Order",
+      orderTip: "Reset panel order",
+      tabPhasors: "Phasors",
+      tabWaves: "Waves",
+      tabHarm: "Harmonics",
+      tabPower: "Power",
+      tabVoltage: "Voltage",
+      loadTitle: "Base linear load per phase",
+      faultsTitle: "Simulate faults",
+      cablesTitle: "Cabling by conductor",
+      appliancesTitle: "Appliances (cos φ + harmonics)",
+      pfcTitle: "Capacitor bank (power-factor correction)",
+    },
+    pt: {
+      title: "Corrente de Neutro · Sistema Trifásico",
+      order: "Ordem",
+      orderTip: "Restaurar a ordem dos painéis",
+      tabPhasors: "Fasores",
+      tabWaves: "Ondas",
+      tabHarm: "Harmônicos",
+      tabPower: "Potência",
+      tabVoltage: "Tensão",
+      loadTitle: "Carga linear base por fase",
+      faultsTitle: "Simular falhas",
+      cablesTitle: "Cabeamento por condutor",
+      appliancesTitle: "Aparelhos (cos φ + harmônicos)",
+      pfcTitle: "Banco de capacitores (correção)",
+    },
+  }[language];
 
   const renderPanel = (id) => {
     switch (id) {
@@ -371,9 +387,10 @@ export default function NeutralCurrentVisualizer() {
                 {txt.title}
               </h1>
               <p className="text-xs text-slate-500 font-mono">
-                {language === "es"
-                  ? `${F_HZ} Hz · T = ${T_MS} ms · fundamental + armonicos · ∠ fijos 0/120/240°`
-                  : `${F_HZ} Hz · T = ${T_MS} ms · fundamental + harmonics · fixed angles 0/120/240°`}
+                {`${F_HZ} Hz · T = ${T_MS} ms · ` + pick(language,
+                  "fundamental + armonicos · ∠ fijos 0/120/240°",
+                  "fundamental + harmonics · fixed angles 0/120/240°",
+                  "fundamental + harmônicos · ângulos fixos 0/120/240°")}
               </p>
             </div>
           </div>
@@ -413,16 +430,16 @@ function DraggablePanel({ id, dnd, first, last, children, language }) {
       <div className="absolute left-1/2 -translate-x-1/2 -top-3 z-20 flex items-center rounded-full
                       border border-slate-700 bg-slate-800 shadow opacity-0 group-hover:opacity-100
                       focus-within:opacity-100 transition-opacity">
-        <button onClick={() => dnd.move(id, -1)} disabled={first} title={language === "es" ? "Subir" : "Move up"}
+        <button onClick={() => dnd.move(id, -1)} disabled={first} title={pick(language, "Subir", "Move up", "Subir")}
           className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
           <ChevronUp size={12} />
         </button>
         <span draggable onDragStart={dnd.onDragStart(id)} onDragEnd={dnd.onDragEnd}
-          title={language === "es" ? "Arrastrar para reordenar" : "Drag to reorder"}
+          title={pick(language, "Arrastrar para reordenar", "Drag to reorder", "Arrastar para reordenar")}
           className="px-1 py-0.5 cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-200">
           <GripVertical size={12} />
         </span>
-        <button onClick={() => dnd.move(id, 1)} disabled={last} title={language === "es" ? "Bajar" : "Move down"}
+        <button onClick={() => dnd.move(id, 1)} disabled={last} title={pick(language, "Bajar", "Move down", "Descer")}
           className="px-1.5 py-0.5 text-slate-400 hover:text-slate-100 disabled:opacity-30">
           <ChevronDown size={12} />
         </button>
@@ -439,13 +456,13 @@ function faultSummary(faults, language) {
   const cut = ["a", "b", "c"].filter((k) => faults[k]).map((k) => k.toUpperCase());
   const parts = [];
   if (cut.length) {
-    if (language === "es") {
-      parts.push(`Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}`);
-    } else {
-      parts.push(`Phase${cut.length > 1 ? "s" : ""} ${cut.join("/")} open`);
-    }
+    const pl = cut.length > 1 ? "s" : "";
+    parts.push(pick(language,
+      `Fase${pl} ${cut.join("/")} cortada${pl}`,
+      `Phase${pl} ${cut.join("/")} open`,
+      `Fase${pl} ${cut.join("/")} aberta${pl}`));
   }
-  if (faults.n) parts.push(language === "es" ? "Neutro abierto" : "Neutral open");
+  if (faults.n) parts.push(pick(language, "Neutro abierto", "Neutral open", "Neutro aberto"));
   return parts.join(" + ");
 }
 
@@ -454,15 +471,15 @@ function StatusBadge({ severity, faults, color, language }) {
     return <Badge color={DANGER} Icon={Unplug} txt={faultSummary(faults, language)} />;
   const map = {
     ok: {
-      txt: language === "es" ? "Balanceado" : "Balanced",
+      txt: pick(language, "Balanceado", "Balanced", "Balanceado"),
       Icon: CheckCircle2,
     },
     warn: {
-      txt: language === "es" ? "Desbalanceado" : "Unbalanced",
+      txt: pick(language, "Desbalanceado", "Unbalanced", "Desbalanceado"),
       Icon: AlertTriangle,
     },
     high: {
-      txt: language === "es" ? "Neutro cargado" : "High neutral load",
+      txt: pick(language, "Neutro cargado", "High neutral load", "Neutro carregado"),
       Icon: AlertTriangle,
     },
   };
@@ -502,7 +519,7 @@ function NeutralMetric({ In, color, language, ampScaleMax }) {
       style={{ borderColor: color + "66", backgroundColor: color + "0d" }}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color }}>
-          {language === "es" ? "Corriente de Neutro" : "Neutral Current"}
+          {pick(language, "Corriente de Neutro", "Neutral Current", "Corrente de Neutro")}
         </span>
         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
       </div>
@@ -535,7 +552,7 @@ function LoadCard({ I, onChange, onPreset, language, title }) {
         </div>
         <div className="md:border-l md:border-slate-800 md:pl-6">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500 mb-2">
-            <RotateCcw size={11} /> Presets
+            <RotateCcw size={11} /> {pick(language, "Ajustes rapidos", "Presets", "Predefinições")}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {PRESETS.map((pr, idx) => (
@@ -560,7 +577,7 @@ function tempColor(t) {
 }
 
 function CableCard({ cables, conductors, onChange, language, title }) {
-  const rows = [...PHASES, { key: "n", label: { es: "Neutro", en: "Neutral" }, color: NEUTRAL }];
+  const rows = [...PHASES, { key: "n", label: { es: "Neutro", en: "Neutral", pt: "Neutro" }, color: NEUTRAL }];
   return (
     <Card title={title} icon={<Cable size={15} />}>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
@@ -576,21 +593,21 @@ function CableCard({ cables, conductors, onChange, language, title }) {
                 <div className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: r.color }} />
                   <span className="text-sm text-slate-300">
-                    {localizeText(r.label, language) || r.label}
+                    {localizeText(r.label, language)}
                   </span>
                 </div>
                 <span className="font-mono text-[10px] text-slate-500">{c.R.toFixed(3)} Ω</span>
               </div>
               <div className="mt-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span>Largo</span><span className="font-mono">{cables[r.key].L} m</span>
+                  <span>{pick(language, "Largo", "Length", "Comprimento")}</span><span className="font-mono">{cables[r.key].L} m</span>
                 </div>
                 <input type="range" min={1} max={100} step={1} value={cables[r.key].L}
                   onChange={(e) => onChange(r.key, "L", e.target.value)}
                   className="w-full cursor-pointer" style={{ accentColor: r.color }} />
               </div>
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-[10px] text-slate-500">Sección</span>
+                <span className="text-[10px] text-slate-500">{pick(language, "Sección", "Cross-section", "Seção")}</span>
                 <select value={A} onChange={(e) => onChange(r.key, "A", e.target.value)}
                   className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-mono text-slate-200">
                   {CABLE_SECTIONS.map((s) => <option key={s} value={s}>{s} mm²</option>)}
@@ -613,9 +630,10 @@ function CableCard({ cables, conductors, onChange, language, title }) {
         })}
       </div>
       <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
-        {language === "es"
-          ? `R = ρ·L/A (cobre). Mas A o menos seccion => mas temperatura; el cobre caliente sube su R (R(T)=R20·(1+alpha·dT)) y la caida de tension aumenta. El % es la carga sobre la ampacidad (100% ~= ${T_AMBIENT + 40} °C, limite del PVC). Mira la pestana Tension.`
-          : `R = rho·L/A (copper). More current or less section means more heat; hot copper increases R (R(T)=R20·(1+alpha·dT)) and voltage drop rises. The % is load versus ampacity (100% ~= ${T_AMBIENT + 40} °C, PVC limit). Check the Voltage tab.`}
+        {pick(language,
+          `R = ρ·L/A (cobre). Mas A o menos seccion => mas temperatura; el cobre caliente sube su R (R(T)=R20·(1+alpha·dT)) y la caida de tension aumenta. El % es la carga sobre la ampacidad (100% ~= ${T_AMBIENT + 40} °C, limite del PVC). Mira la pestana Tension.`,
+          `R = rho·L/A (copper). More current or less section means more heat; hot copper increases R (R(T)=R20·(1+alpha·dT)) and voltage drop rises. The % is load versus ampacity (100% ~= ${T_AMBIENT + 40} °C, PVC limit). Check the Voltage tab.`,
+          `R = ρ·L/A (cobre). Mais A ou menos seção => mais temperatura; o cobre quente aumenta sua R (R(T)=R20·(1+alpha·dT)) e a queda de tensão cresce. O % é a carga sobre a ampacidade (100% ~= ${T_AMBIENT + 40} °C, limite do PVC). Veja a aba Tensão.`)}
       </p>
     </Card>
   );
@@ -632,7 +650,7 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              {language === "es" ? "Agregar a la fase" : "Add to phase"}
+              {pick(language, "Agregar a la fase", "Add to phase", "Adicionar à fase")}
             </span>
             <div className="flex gap-1">
               {targets.map((t) => (
@@ -674,20 +692,21 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
         <div className="md:border-l md:border-slate-800 md:pl-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              {language === "es" ? "Conectados" : "Connected"} ({appliances.length})
+              {pick(language, "Conectados", "Connected", "Conectados")} ({appliances.length})
             </span>
             {appliances.length > 0 && (
               <button onClick={onClear}
                 className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 transition-colors">
-                <Trash2 size={11} /> {language === "es" ? "Limpiar" : "Clear"}
+                <Trash2 size={11} /> {pick(language, "Limpiar", "Clear", "Limpar")}
               </button>
             )}
           </div>
           {appliances.length === 0 ? (
             <p className="text-xs text-slate-600 leading-relaxed">
-              {language === "es"
-                ? "Sin artefactos. Elegi una fase (o 3f) y toca un artefacto para agregarlo. El numero de abajo es su cos φ: ind atrasa la corriente (motores), cap la adelanta."
-                : "No appliances yet. Pick a phase (or 3f) and add an appliance. The number below is its cos φ: ind lags the current (motors), cap leads it."}
+              {pick(language,
+                "Sin artefactos. Elegi una fase (o 3f) y toca un artefacto para agregarlo. El numero de abajo es su cos φ: ind atrasa la corriente (motores), cap la adelanta.",
+                "No appliances yet. Pick a phase (or 3f) and add an appliance. The number below is its cos φ: ind lags the current (motors), cap leads it.",
+                "Sem aparelhos. Escolha uma fase (ou 3f) e toque em um aparelho para adicioná-lo. O número abaixo é seu cos φ: ind atrasa a corrente (motores), cap a adianta.")}
             </p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1 max-h-44 overflow-y-auto pr-1">
@@ -726,7 +745,7 @@ function AppliancesCard({ appliances, target, setTarget, onAdd, onRemove, onClea
    el banco y el medidor deja de transportar esa reactiva. Sobrecompensar no es
    gratis — la corriente vuelve a subir, ahora adelantada. */
 function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, title }) {
-  const es = language === "es";
+  const t = (es, en, pt) => pick(language, es, en, pt);
   const q = power.total.Q;
   const iBefore = PHASES.reduce((sum, p) => sum + Math.hypot(loads[p.key].load.re, loads[p.key].load.im), 0);
   const iAfter = PHASES.reduce((sum, p) => sum + loads[p.key].fund, 0);
@@ -741,9 +760,9 @@ function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, 
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-sm text-slate-300">
-              {es ? "Capacitores" : "Capacitors"}
+              {t("Capacitores", "Capacitors", "Capacitores")}
               <span className="ml-2 text-[10px] text-slate-600 font-mono">
-                {es ? "3φ · en la carga" : "3-phase · at the load"}
+                {t("3φ · en la carga", "3-phase · at the load", "3φ · na carga")}
               </span>
             </span>
             <span className="font-mono text-sm font-semibold tabular-nums" style={{ color: CAP }}>
@@ -757,7 +776,7 @@ function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, 
             <button onClick={() => onChange(0)}
               className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
                          text-slate-300 hover:border-slate-600 hover:bg-slate-800 transition-colors">
-              {es ? "Sin banco" : "No bank"}
+              {t("Sin banco", "No bank", "Sem banco")}
             </button>
             <button onClick={() => onChange(Math.round(need * 10) / 10)} disabled={need <= 0}
               className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
@@ -769,19 +788,19 @@ function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, 
               className="rounded-md border border-slate-800 bg-slate-950/50 px-2 py-1.5 text-xs
                          text-slate-300 hover:border-teal-500/60 hover:bg-slate-800 transition-colors
                          disabled:opacity-40 disabled:hover:border-slate-800">
-              {es ? "cos φ 1 (total)" : "cos φ 1 (full)"}
+              {t("cos φ 1 (total)", "cos φ 1 (full)", "cos φ 1 (total)")}
             </button>
           </div>
         </div>
 
         <div className="md:border-l md:border-slate-800 md:pl-6 space-y-2">
-          <Row label={es ? "Reactiva de la carga" : "Load reactive"}
+          <Row label={t("Reactiva de la carga", "Load reactive", "Reativa da carga")}
             value={`${fmt2(qLoad / 1000)} kvar`} color={qLoad > 50 ? IND : "#94a3b8"} />
-          <Row label={es ? "Aporta el banco" : "Bank supplies"}
+          <Row label={t("Aporta el banco", "Bank supplies", "O banco fornece")}
             value={`−${fmt2(capKvar)} kvar`} color={CAP} />
-          <Row label={es ? "Queda en el cable" : "Left on the cable"}
+          <Row label={t("Queda en el cable", "Left on the cable", "Resta no cabo")}
             value={`${fmt2(q / 1000)} kvar`} color={reactiveColor(q, 50)} />
-          <Row label={es ? "Corriente de linea (3 fases)" : "Line current (3 phases)"}
+          <Row label={t("Corriente de linea (3 fases)", "Line current (3 phases)", "Corrente de linha (3 fases)")}
             value={capKvar > 0 ? `${fmt(iBefore)} → ${fmt(iAfter)} A` : `${fmt(iAfter)} A`}
             color={drop > 1 ? "#34d399" : "#94a3b8"}
             sub={drop > 1 ? `−${drop.toFixed(0)} %` : null} />
@@ -790,16 +809,16 @@ function PfcCard({ capKvar, onChange, max, need, qLoad, power, loads, language, 
 
       <p className="mt-3 text-[10px] text-slate-600 leading-relaxed">
         {over
-          ? (es
-            ? "Sobrecompensado: el banco pasó de largo y la corriente vuelve a subir, ahora adelantada. Un cos φ capacitivo tambien se paga, y en vacio puede sobretensionar."
-            : "Overcompensated: the bank overshot and current rises again, now leading. A leading power factor is also penalised and can raise voltage at light load.")
+          ? t("Sobrecompensado: el banco pasó de largo y la corriente vuelve a subir, ahora adelantada. Un cos φ capacitivo tambien se paga, y en vacio puede sobretensionar.",
+            "Overcompensated: the bank overshot and current rises again, now leading. A leading power factor is also penalised and can raise voltage at light load.",
+            "Sobrecompensado: o banco passou do ponto e a corrente volta a subir, agora adiantada. Um cos φ capacitivo também é cobrado e, em vazio, pode causar sobretensão.")
           : distorted
-            ? (es
-              ? "Ojo: la mayor parte de lo que sobra acá es DISTORSION, no reactiva. Los capacitores no la tocan (y en resonancia con la red la amplifican): eso se filtra."
-              : "Careful: most of the excess here is DISTORTION, not reactive power. Capacitors do not remove it (and can amplify it through resonance): that needs filters.")
-            : (es
-              ? "Los capacitores entregan la reactiva que piden los motores, asi que el cable ya no tiene que transportarla: misma potencia util, menos amperes y menos calentamiento (I²R). La caida de tension casi no cambia: con un cable resistivo la fija la componente activa."
-              : "Capacitors supply the reactive power motors demand, so the cable stops carrying it: same useful power, fewer amps, less heating (I²R). Voltage drop barely moves though — on a resistive cable it tracks the active component.")}
+            ? t("Ojo: la mayor parte de lo que sobra acá es DISTORSION, no reactiva. Los capacitores no la tocan (y en resonancia con la red la amplifican): eso se filtra.",
+              "Careful: most of the excess here is DISTORTION, not reactive power. Capacitors do not remove it (and can amplify it through resonance): that needs filters.",
+              "Atenção: a maior parte do excesso aqui é DISTORÇÃO, não reativa. Os capacitores não a removem (e em ressonância com a rede a amplificam): isso se resolve com filtros.")
+            : t("Los capacitores entregan la reactiva que piden los motores, asi que el cable ya no tiene que transportarla: misma potencia util, menos amperes y menos calentamiento (I²R). La caida de tension casi no cambia: con un cable resistivo la fija la componente activa.",
+              "Capacitors supply the reactive power motors demand, so the cable stops carrying it: same useful power, fewer amps, less heating (I²R). Voltage drop barely moves though — on a resistive cable it tracks the active component.",
+              "Os capacitores fornecem a reativa que os motores pedem, então o cabo não precisa mais transportá-la: mesma potência útil, menos ampères e menos aquecimento (I²R). A queda de tensão quase não muda: num cabo resistivo quem a define é a componente ativa.")}
       </p>
     </Card>
   );
@@ -823,12 +842,12 @@ function FaultCard({ faults, onToggle, onClear, language, title }) {
     <Card title={title} icon={<Unplug size={15} />}>
       <div className="flex items-center justify-between mb-2 pt-1">
         <span className="text-[10px] uppercase tracking-wide text-slate-500">
-          {language === "es" ? "Combinables" : "Combinable"}
+          {pick(language, "Combinables", "Combinable", "Combináveis")}
         </span>
         {any && (
           <button onClick={onClear}
             className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-emerald-400 transition-colors">
-            <CheckCircle2 size={11} /> {language === "es" ? "Sin fallas" : "No faults"}
+            <CheckCircle2 size={11} /> {pick(language, "Sin fallas", "No faults", "Sem falhas")}
           </button>
         )}
       </div>
@@ -849,9 +868,10 @@ function FaultCard({ faults, onToggle, onClear, language, title }) {
         })}
       </div>
       <p className="mt-2 text-[10px] text-slate-600 leading-relaxed">
-        {language === "es"
-          ? "Corte de fase: esa linea queda sin corriente y el neutro carga el desbalance. Corte de neutro: I_N = 0 pero las tensiones se desplazan (peligro). Se pueden activar varias a la vez."
-          : "Phase open: that line has no current and neutral carries the imbalance. Neutral open: I_N = 0 but voltages shift (danger). You can combine multiple faults."}
+        {pick(language,
+          "Corte de fase: esa linea queda sin corriente y el neutro carga el desbalance. Corte de neutro: I_N = 0 pero las tensiones se desplazan (peligro). Se pueden activar varias a la vez.",
+          "Phase open: that line has no current and neutral carries the imbalance. Neutral open: I_N = 0 but voltages shift (danger). You can combine multiple faults.",
+          "Fase aberta: essa linha fica sem corrente e o neutro carrega o desbalanceamento. Neutro aberto: I_N = 0 mas as tensões se deslocam (perigo). Dá para ativar várias ao mesmo tempo.")}
       </p>
     </Card>
   );
@@ -868,12 +888,13 @@ function VoltagePanel({ volt, faults, language }) {
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: DANGER + "55", backgroundColor: DANGER + "0d" }}>
       <div className="flex items-center gap-2 text-sm font-medium" style={{ color: DANGER }}>
-        <Unplug size={15} /> {faultSummary(faults, language)} · {language === "es" ? "tension de fase" : "phase voltage"}
+        <Unplug size={15} /> {faultSummary(faults, language)} · {pick(language, "tension de fase", "phase voltage", "tensão de fase")}
       </div>
       <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-        {language === "es"
-          ? "Sin retorno, I_N = 0; pero el punto estrella se desplaza y la tension sobre cada carga cambia. Las fases poco cargadas sobretensionan (peligro para equipos)."
-          : "With no return path, I_N = 0; but star point shifts and each load voltage changes. Lightly loaded phases can overvoltage (danger for equipment)."}
+        {pick(language,
+          "Sin retorno, I_N = 0; pero el punto estrella se desplaza y la tension sobre cada carga cambia. Las fases poco cargadas sobretensionan (peligro para equipos).",
+          "With no return path, I_N = 0; but star point shifts and each load voltage changes. Lightly loaded phases can overvoltage (danger for equipment).",
+          "Sem retorno, I_N = 0; mas o ponto estrela se desloca e a tensão sobre cada carga muda. As fases pouco carregadas sofrem sobretensão (perigo para os equipamentos).")}
       </p>
       <div className="mt-3 grid grid-cols-3 gap-2">
         {rows.map(({ p, cut, V, pct, over, under }) => {
@@ -887,7 +908,7 @@ function VoltagePanel({ volt, faults, language }) {
               </div>
               {cut ? (
                 <div className="mt-1 text-sm font-mono text-slate-500">
-                  {language === "es" ? "cortada" : "open"}
+                  {pick(language, "cortada", "open", "aberta")}
                 </div>
               ) : (
                 <>
@@ -908,7 +929,8 @@ function VoltagePanel({ volt, faults, language }) {
         })}
       </div>
       <p className="mt-2 text-[10px] text-slate-600 font-mono">
-        Referencia: V<sub>nominal</sub> = {V_NOM} V · carga modelada como resistiva.
+        {pick(language, "Referencia", "Reference", "Referência")}: V<sub>nom</sub> = {V_NOM} V · {pick(language,
+          "carga modelada como resistiva.", "load modelled as resistive.", "carga modelada como resistiva.")}
       </p>
     </div>
   );
@@ -924,33 +946,34 @@ function NeutralCard({ In, color, triplenIn, hasHarm, faults, language }) {
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-mono font-bold tabular-nums" style={{ color }}>{fmt(In)}</span>
           <span className="text-sm text-slate-500 font-mono">
-            {language === "es" ? "A en el neutro" : "A in neutral"}
+            {pick(language, "A en el neutro", "A in neutral", "A no neutro")}
           </span>
         </div>
         {hasHarm && (
           <div className="flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-mono"
             style={{ borderColor: color + "55", color, backgroundColor: color + "12" }}>
-            <BarChart3 size={13} /> {fmt(triplenIn)} {language === "es" ? "A de armonicos triples" : "A from triplen harmonics"}
+            <BarChart3 size={13} /> {fmt(triplenIn)} {pick(language, "A de armonicos triples", "A from triplen harmonics", "A de harmônicos triplos")}
           </div>
         )}
       </div>
       {phaseCut ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-          {language === "es"
-            ? `Fase${cut.length > 1 ? "s" : ""} ${cut.join("/")} cortada${cut.length > 1 ? "s" : ""}: el neutro conduce todo el desbalance restante.`
-            : `Phase${cut.length > 1 ? "s" : ""} ${cut.join("/")} open: neutral carries all remaining imbalance.`}
+          {`${faultSummary({ ...faults, n: false }, language)}: ` + pick(language,
+            "el neutro conduce todo el desbalance restante.",
+            "neutral carries all remaining imbalance.",
+            "o neutro conduz todo o desbalanceamento restante.")}
         </p>
       ) : hasHarm ? (
         <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-          {language === "es"
-            ? "I_N = sqrt(sum |I_N,h|^2). Los armonicos triples (3, 9...) estan en fase y se suman en el neutro incluso con fases balanceadas."
-            : "I_N = sqrt(sum |I_N,h|^2). Triplen harmonics (3rd, 9th...) are in phase and add up in neutral even with balanced phases."}
+          {"I_N = sqrt(sum |I_N,h|^2). " + pick(language,
+            "Los armonicos triples (3, 9...) estan en fase y se suman en el neutro incluso con fases balanceadas.",
+            "Triplen harmonics (3rd, 9th...) are in phase and add up in neutral even with balanced phases.",
+            "Os harmônicos triplos (3, 9...) estão em fase e se somam no neutro mesmo com fases balanceadas.")}
         </p>
       ) : (
         <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-          {language === "es"
-            ? "I_N = sqrt(Ia^2+Ib^2+Ic^2-Ia*Ib-Ib*Ic-Ic*Ia). Solo fundamental, sin armonicos."
-            : "I_N = sqrt(Ia^2+Ib^2+Ic^2-Ia*Ib-Ib*Ic-Ic*Ia). Fundamental only, no harmonics."}
+          {"I_N = sqrt(Ia^2+Ib^2+Ic^2-Ia*Ib-Ib*Ic-Ic*Ia). " + pick(language,
+            "Solo fundamental, sin armonicos.", "Fundamental only, no harmonics.", "Só a fundamental, sem harmônicos.")}
         </p>
       )}
     </div>
@@ -1051,20 +1074,22 @@ function PhasorView({ I, phi, comp, nColor, vis, onToggle, neutralOpen, language
 
       <Legend
         nColor={nColor}
-        note={neutralOpen ? (language === "es" ? "abierto · I_N = 0" : "open · I_N = 0") : `I_N fund. ≈ ${fmt(In)} A`}
+        note={neutralOpen ? pick(language, "abierto · I_N = 0", "open · I_N = 0", "aberto · I_N = 0") : `I_N fund. ≈ ${fmt(In)} A`}
         vis={vis}
         onToggle={onToggle}
         neutralOpen={neutralOpen}
         language={language}
       />
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center max-w-md leading-relaxed">
-        {language === "es"
-          ? shifted
-            ? "Las punteadas finas son la tension de cada fase: la corriente atrasa (inductivo) o adelanta (capacitivo) ese angulo φ. Solo se ve la fundamental."
-            : "El diagrama fasorial muestra solo la fundamental. Los armonicos se ven en otras pestanas."
-          : shifted
-            ? "Thin dashed lines are each phase voltage: current lags (inductive) or leads (capacitive) by φ. Fundamental only."
-            : "Phasor diagram shows only the fundamental. Harmonics are shown in the other tabs."}
+        {shifted
+          ? pick(language,
+            "Las punteadas finas son la tension de cada fase: la corriente atrasa (inductivo) o adelanta (capacitivo) ese angulo φ. Solo se ve la fundamental.",
+            "Thin dashed lines are each phase voltage: current lags (inductive) or leads (capacitive) by φ. Fundamental only.",
+            "As tracejadas finas são a tensão de cada fase: a corrente atrasa (indutivo) ou adianta (capacitivo) esse ângulo φ. Só se vê a fundamental.")
+          : pick(language,
+            "El diagrama fasorial muestra solo la fundamental. Los armonicos se ven en otras pestanas.",
+            "Phasor diagram shows only the fundamental. Harmonics are shown in the other tabs.",
+            "O diagrama fasorial mostra só a fundamental. Os harmônicos aparecem nas outras abas.")}
       </p>
     </div>
   );
@@ -1155,7 +1180,7 @@ function WaveView({ spectra, phi, In, nColor, vis, onToggle, neutralOpen, langua
 
       <Legend
         nColor={nColor}
-        note={neutralOpen ? (language === "es" ? "abierto · I_N = 0" : "open · I_N = 0") : `I_N rms ≈ ${fmt(In)} A`}
+        note={neutralOpen ? pick(language, "abierto · I_N = 0", "open · I_N = 0", "aberto · I_N = 0") : `I_N rms ≈ ${fmt(In)} A`}
         dashed
         vis={vis}
         onToggle={onToggle}
@@ -1164,12 +1189,14 @@ function WaveView({ spectra, phi, In, nColor, vis, onToggle, neutralOpen, langua
       />
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center">
         {neutralOpen
-          ? (language === "es"
-            ? "Neutro abierto: no circula retorno; la tension se desplaza."
-            : "Neutral open: no return current flows; voltage shifts.")
-          : (language === "es"
-            ? "El neutro punteado es la suma instantanea de las tres fases."
-            : "Dashed neutral is the instantaneous sum of the three phases.")}
+          ? pick(language,
+            "Neutro abierto: no circula retorno; la tension se desplaza.",
+            "Neutral open: no return current flows; voltage shifts.",
+            "Neutro aberto: não circula retorno; a tensão se desloca.")
+          : pick(language,
+            "El neutro punteado es la suma instantanea de las tres fases.",
+            "Dashed neutral is the instantaneous sum of the three phases.",
+            "O neutro tracejado é a soma instantânea das três fases.")}
       </p>
     </div>
   );
@@ -1279,7 +1306,7 @@ function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle,
         {PHASES.map((p) => {
           if (faults[p.key]) return (
             <span key={p.key} className="text-slate-600">
-              {localizeText(p.label, language)}: {language === "es" ? "cortada" : "open"}
+              {localizeText(p.label, language)}: {pick(language, "cortada", "open", "aberta")}
             </span>
           );
           const V = volt.V[p.key];
@@ -1294,12 +1321,14 @@ function VoltageView({ volt, spectra, R, Rn, faults, neutralOpen, vis, onToggle,
       </div>
       <p className="mt-1 text-[10px] text-slate-600 font-mono text-center max-w-md leading-relaxed">
         {neutralOpen
-          ? (language === "es"
-            ? "Neutro abierto: la tension de carga se redistribuye segun el desbalance."
-            : "Neutral open: load voltage redistributes based on imbalance.")
-          : (language === "es"
-            ? "Tension en la carga = nominal menos caida de cable (R·I)."
-            : "Load voltage = nominal minus cable drop (R·I).")}
+          ? pick(language,
+            "Neutro abierto: la tension de carga se redistribuye segun el desbalance.",
+            "Neutral open: load voltage redistributes based on imbalance.",
+            "Neutro aberto: a tensão na carga se redistribui conforme o desbalanceamento.")
+          : pick(language,
+            "Tension en la carga = nominal menos caida de cable (R·I).",
+            "Load voltage = nominal minus cable drop (R·I).",
+            "Tensão na carga = nominal menos queda no cabo (R·I).")}
       </p>
     </div>
   );
@@ -1334,7 +1363,7 @@ function HarmonicView({ perHarmonic, In, nColor, language }) {
                 fill={b.triplen ? nColor : "#64748b"} fontSize={10} fontFamily="monospace">{b.h}ª</text>
               {b.triplen && (
                 <text x={cx} y={baseY + 26} textAnchor="middle" fill="#475569"
-                  fontSize={8} fontFamily="monospace">triple</text>
+                  fontSize={8} fontFamily="monospace">{pick(language, "triple", "triplen", "triplo")}</text>
               )}
             </g>
           );
@@ -1342,15 +1371,16 @@ function HarmonicView({ perHarmonic, In, nColor, language }) {
         {bars.length === 0 && (
           <text x={W / 2} y={H / 2} textAnchor="middle" fill="#475569"
             fontSize={12} fontFamily="monospace">
-            {language === "es" ? "Sin corriente de neutro" : "No neutral current"}
+            {pick(language, "Sin corriente de neutro", "No neutral current", "Sem corrente de neutro")}
           </text>
         )}
       </svg>
 
       <p className="mt-2 text-[11px] text-slate-400 text-center max-w-md leading-relaxed">
-        {language === "es"
-          ? "Aporte de cada armonico a I_N. Los triples (3, 9...) se suman en el neutro."
-          : "Contribution of each harmonic to I_N. Triplen harmonics (3rd, 9th...) add in neutral."}
+        {pick(language,
+          "Aporte de cada armonico a I_N. Los triples (3, 9...) se suman en el neutro.",
+          "Contribution of each harmonic to I_N. Triplen harmonics (3rd, 9th...) add in neutral.",
+          "Contribuição de cada harmônico para I_N. Os triplos (3, 9...) se somam no neutro.")}
       </p>
       <Legend nColor={nColor} note={`I_N rms ≈ ${fmt(In)} A`} language={language} />
     </div>
@@ -1367,11 +1397,11 @@ function HarmonicView({ perHarmonic, In, nColor, language }) {
 
 function PowerView({ power, language }) {
   const { total, per } = power;
-  const es = language === "es";
+  const t = (es, en, pt) => pick(language, es, en, pt);
   const kind = reactiveKind(total.Q, 1); // Q en var
-  const qSub = { ind: es ? "inductiva · atrasa" : "inductive · lags",
-                 cap: es ? "capacitiva · adelanta" : "capacitive · leads",
-                 res: es ? "sin reactiva" : "none" }[kind];
+  const qSub = { ind: t("inductiva · atrasa", "inductive · lags", "indutiva · atrasa"),
+                 cap: t("capacitiva · adelanta", "capacitive · leads", "capacitiva · adianta"),
+                 res: t("sin reactiva", "none", "sem reativa") }[kind];
 
   return (
     <div className="flex flex-col gap-4">
@@ -1379,14 +1409,14 @@ function PowerView({ power, language }) {
         <PowerTriangle total={total} language={language} />
         <div className="w-full flex-1 space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            <PowerStat label={es ? "Activa (P)" : "Active (P)"} value={total.P / 1000} unit="kW"
-              color="#34d399" sub={es ? "hace el trabajo" : "does the work"} />
-            <PowerStat label={es ? "Reactiva (Q)" : "Reactive (Q)"} value={total.Q / 1000} unit="kvar"
+            <PowerStat label={t("Activa (P)", "Active (P)", "Ativa (P)")} value={total.P / 1000} unit="kW"
+              color="#34d399" sub={t("hace el trabajo", "does the work", "faz o trabalho")} />
+            <PowerStat label={t("Reactiva (Q)", "Reactive (Q)", "Reativa (Q)")} value={total.Q / 1000} unit="kvar"
               color={reactiveColor(total.Q, 1)} sub={qSub} />
-            <PowerStat label={es ? "Distorsion (D)" : "Distortion (D)"} value={total.D / 1000} unit="kvar"
-              color={DIST} sub={es ? "armonicos" : "harmonics"} />
-            <PowerStat label={es ? "Aparente (S)" : "Apparent (S)"} value={total.S / 1000} unit="kVA"
-              color={ACCENT} sub={es ? "lo que carga el cable" : "what the cable carries"} />
+            <PowerStat label={t("Distorsion (D)", "Distortion (D)", "Distorção (D)")} value={total.D / 1000} unit="kvar"
+              color={DIST} sub={t("armonicos", "harmonics", "harmônicos")} />
+            <PowerStat label={t("Aparente (S)", "Apparent (S)", "Aparente (S)")} value={total.S / 1000} unit="kVA"
+              color={ACCENT} sub={t("lo que carga el cable", "what the cable carries", "o que o cabo carrega")} />
           </div>
           <PfBar cosPhi={total.cosPhi} pf={total.pf} q={total.Q} language={language} />
         </div>
@@ -1423,9 +1453,10 @@ function PowerView({ power, language }) {
       </div>
 
       <p className="text-[10px] text-slate-600 font-mono text-center leading-relaxed max-w-2xl mx-auto">
-        {es
-          ? "S² = P² + Q² + D². La reactiva se compensa con capacitores; la distorsion NO (para eso van filtros). Potencias calculadas a la tension nominal."
-          : "S² = P² + Q² + D². Reactive power is fixed with capacitors; distortion is NOT (that needs filters). Powers computed at nominal voltage."}
+        {"S² = P² + Q² + D². " + t(
+          "La reactiva se compensa con capacitores; la distorsion NO (para eso van filtros). Potencias calculadas a la tension nominal.",
+          "Reactive power is fixed with capacitors; distortion is NOT (that needs filters). Powers computed at nominal voltage.",
+          "A reativa se compensa com capacitores; a distorção NÃO (para isso servem os filtros). Potências calculadas na tensão nominal.")}
       </p>
     </div>
   );
@@ -1433,13 +1464,13 @@ function PowerView({ power, language }) {
 
 function PowerTriangle({ total, language }) {
   const W = 340, H = 250, PAD = 30;
-  const es = language === "es";
+  const t = (es, en, pt) => pick(language, es, en, pt);
 
   if (total.S <= 1e-6) {
     return (
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 360 }}>
         <text x={W / 2} y={H / 2} textAnchor="middle" fill="#475569" fontSize={12} fontFamily="monospace">
-          {es ? "Sin carga" : "No load"}
+          {t("Sin carga", "No load", "Sem carga")}
         </text>
       </svg>
     );
@@ -1543,7 +1574,7 @@ function PowerStat({ label, value, unit, color, sub }) {
    separa del lleno es distorsión, que ningún capacitor corrige. */
 function PfBar({ cosPhi, pf, q, language }) {
   const W = 320, H = 56, barY = 20, barH = 12, half = W / 2;
-  const es = language === "es";
+  const t = (es, en, pt) => pick(language, es, en, pt);
   const sign = q >= 0 ? 1 : -1;
   const at = (c) => half + sign * (Math.acos(Math.min(1, Math.max(0, c))) / (Math.PI / 2)) * half;
   const band = (c) => (Math.acos(c) / (Math.PI / 2)) * half;
@@ -1563,11 +1594,11 @@ function PfBar({ cosPhi, pf, q, language }) {
         <circle cx={x2} cy={barY + barH + 7} r={4} fill="none" stroke={pfColor(Math.abs(pf))} strokeWidth={2} />
 
         <text x={2} y={barY + barH + 20} fill={CAP} fontSize={9} fontFamily="monospace">
-          {es ? "capacitivo" : "leading"}
+          {t("capacitivo", "leading", "capacitivo")}
         </text>
         <text x={half} y={barY - 13} textAnchor="middle" fill="#94a3b8" fontSize={9} fontFamily="monospace">1.00</text>
         <text x={W - 2} y={barY + barH + 20} textAnchor="end" fill={IND} fontSize={9} fontFamily="monospace">
-          {es ? "inductivo" : "lagging"}
+          {t("inductivo", "lagging", "indutivo")}
         </text>
       </svg>
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-0.5 text-[11px] font-mono">
@@ -1575,7 +1606,7 @@ function PfBar({ cosPhi, pf, q, language }) {
           cos φ {fmt2(cosPhi)}
         </span>
         <span style={{ color: pfColor(Math.abs(pf)) }}>
-          {es ? "FP real" : "true PF"} {fmt2(pf)}
+          {t("FP real", "true PF", "FP real")} {fmt2(pf)}
         </span>
       </div>
     </div>
@@ -1611,7 +1642,7 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral, l
       <button
         key={key}
         onClick={() => onToggle(key)}
-        title={on ? (language === "es" ? "Ocultar" : "Hide") : (language === "es" ? "Mostrar" : "Show")}
+        title={on ? pick(language, "Ocultar", "Hide", "Ocultar") : pick(language, "Mostrar", "Show", "Mostrar")}
         className={`${base} rounded-md px-2 py-1 transition-colors hover:bg-slate-800/70`}
         style={{ color: on ? (bold ? color : "#94a3b8") : "#64748b" }}>
         {content}
@@ -1619,7 +1650,7 @@ function Legend({ nColor, note, dashed, vis, onToggle, neutralOpen, noNeutral, l
     );
   };
 
-  const neutralLabel = `${language === "es" ? "Neutro" : "Neutral"}${note ? ` · ${note}` : ""}`;
+  const neutralLabel = `${pick(language, "Neutro", "Neutral", "Neutro")}${note ? ` · ${note}` : ""}`;
   return (
     <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs">
       {PHASES.map((p) => item(p.key, localizeText(p.label, language), p.color))}

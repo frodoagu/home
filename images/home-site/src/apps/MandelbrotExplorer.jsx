@@ -13,7 +13,7 @@ import {
   zoomView,
   panView,
 } from "./mandelbrot";
-import { useLanguage } from "../i18n/LanguageProvider";
+import { localizeText, useLanguage } from "../i18n/LanguageProvider";
 
 /* -------------------------------------------------------------------------
  * Explorador del conjunto de Mandelbrot.
@@ -31,7 +31,7 @@ export default function MandelbrotExplorer() {
   const [maxIter, setMaxIter] = useState(200);
   const [palIdx, setPalIdx] = useState(0);
   const [rendering, setRendering] = useState(false);
-  const [presetLabel, setPresetLabel] = useState("Vista completa");
+  const [presetLabel, setPresetLabel] = useState(PRESETS[0].label);
   const [exportPct, setExportPct] = useState(null); // null = no exportando
 
   const canvasRef = useRef(null);
@@ -267,45 +267,65 @@ export default function MandelbrotExplorer() {
     : `${zoomLevel.toFixed(zoomLevel < 10 ? 1 : 0)}×`;
   const nearLimit = view.span <= MIN_SPAN * 50;
 
-  const txt = language === "es"
-    ? {
-        title: "Mandelbrot · Explorador de fractales",
-        subtitle: "z <- z^2 + c · coloreado suave · zoom hasta el limite del double",
-        zoomIn: "Acercar",
-        zoomOut: "Alejar",
-        resetView: "Reiniciar vista",
-        canvasHelp1: "Toca/clic para acercar · arrastra para mover · rueda para zoom ·",
-        canvasHelp2: "shift+clic",
-        canvasHelp3: "para alejar",
-        rendering4k: "Renderizando 4K...",
-        export4k: "Exportar vista en 4K (JPG)",
-        spots: "Lugares",
-        palette: "Paleta",
-        detail: "Detalle",
-        iterations: "Iteraciones",
-        iterHint: "Mas iteraciones = mas detalle en lo profundo (y render mas lento).",
-        coords: "Coordenadas",
-        limitWarn: "Cerca del limite de precision (double): mas zoom se ve pixelado.",
-      }
-    : {
-        title: "Mandelbrot · Fractal explorer",
-        subtitle: "z <- z^2 + c · smooth coloring · zoom until double precision limits",
-        zoomIn: "Zoom in",
-        zoomOut: "Zoom out",
-        resetView: "Reset view",
-        canvasHelp1: "Tap/click to zoom in · drag to pan · wheel to zoom ·",
-        canvasHelp2: "shift+click",
-        canvasHelp3: "to zoom out",
-        rendering4k: "Rendering 4K...",
-        export4k: "Export current view in 4K (JPG)",
-        spots: "Spots",
-        palette: "Palette",
-        detail: "Detail",
-        iterations: "Iterations",
-        iterHint: "More iterations = more detail in deep zones (and slower render).",
-        coords: "Coordinates",
-        limitWarn: "Near floating-point precision limits: extra zoom may look pixelated.",
-      };
+  const txt = {
+    es: {
+      title: "Mandelbrot · Explorador de fractales",
+      subtitle: "z <- z^2 + c · coloreado suave · zoom hasta el limite del double",
+      zoomIn: "Acercar",
+      zoomOut: "Alejar",
+      resetView: "Reiniciar vista",
+      canvasHelp1: "Toca/clic para acercar · arrastra para mover · rueda para zoom ·",
+      canvasHelp2: "shift+clic",
+      canvasHelp3: "para alejar",
+      rendering4k: "Renderizando 4K...",
+      export4k: "Exportar vista en 4K (JPG)",
+      spots: "Lugares",
+      palette: "Paleta",
+      detail: "Detalle",
+      iterations: "Iteraciones",
+      iterHint: "Mas iteraciones = mas detalle en lo profundo (y render mas lento).",
+      coords: "Coordenadas",
+      limitWarn: "Cerca del limite de precision (double): mas zoom se ve pixelado.",
+    },
+    en: {
+      title: "Mandelbrot · Fractal explorer",
+      subtitle: "z <- z^2 + c · smooth coloring · zoom until double precision limits",
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
+      resetView: "Reset view",
+      canvasHelp1: "Tap/click to zoom in · drag to pan · wheel to zoom ·",
+      canvasHelp2: "shift+click",
+      canvasHelp3: "to zoom out",
+      rendering4k: "Rendering 4K...",
+      export4k: "Export current view in 4K (JPG)",
+      spots: "Spots",
+      palette: "Palette",
+      detail: "Detail",
+      iterations: "Iterations",
+      iterHint: "More iterations = more detail in deep zones (and slower render).",
+      coords: "Coordinates",
+      limitWarn: "Near floating-point precision limits: extra zoom may look pixelated.",
+    },
+    pt: {
+      title: "Mandelbrot · Explorador de fractais",
+      subtitle: "z <- z^2 + c · coloração suave · zoom até o limite do double",
+      zoomIn: "Aproximar",
+      zoomOut: "Afastar",
+      resetView: "Reiniciar visão",
+      canvasHelp1: "Toque/clique para aproximar · arraste para mover · roda para zoom ·",
+      canvasHelp2: "shift+clique",
+      canvasHelp3: "para afastar",
+      rendering4k: "Renderizando 4K...",
+      export4k: "Exportar visão em 4K (JPG)",
+      spots: "Lugares",
+      palette: "Paleta",
+      detail: "Detalhe",
+      iterations: "Iterações",
+      iterHint: "Mais iterações = mais detalhe nas profundezas (e render mais lento).",
+      coords: "Coordenadas",
+      limitWarn: "Perto do limite de precisão (double): mais zoom fica pixelado.",
+    },
+  }[language];
 
   return (
     <div className="w-full min-h-full bg-slate-950 text-slate-100 p-4 sm:p-6 font-sans">
@@ -385,7 +405,7 @@ export default function MandelbrotExplorer() {
                   const active = pr.label === presetLabel;
                   return (
                     <button
-                      key={pr.label}
+                      key={pr.label.es}
                       onClick={() => applyPreset(pr)}
                       className={`rounded-md border px-2 py-2 text-xs transition-colors ${
                         active
@@ -393,7 +413,7 @@ export default function MandelbrotExplorer() {
                           : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-600 hover:bg-slate-800"
                       }`}
                     >
-                      {pr.label}
+                      {localizeText(pr.label, language)}
                     </button>
                   );
                 })}
@@ -404,7 +424,7 @@ export default function MandelbrotExplorer() {
               <div className="space-y-2 pt-1">
                 {PALETTES.map((p, i) => (
                   <button
-                    key={p.name}
+                    key={p.name.es}
                     onClick={() => setPalIdx(i)}
                     className={`flex w-full items-center gap-3 rounded-md border px-2 py-1.5 text-xs transition-colors ${
                       i === palIdx
@@ -416,7 +436,7 @@ export default function MandelbrotExplorer() {
                       className="h-4 w-16 flex-none rounded"
                       style={{ background: paletteGradient(p) }}
                     />
-                    {p.name}
+                    {localizeText(p.name, language)}
                   </button>
                 ))}
               </div>
