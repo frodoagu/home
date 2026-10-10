@@ -425,14 +425,15 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
-  // Top bar: the way back to agu.com.ar, then where the setup is saved
-  // (account.js) and the language.
+  // Top bar: the way back to agu.com.ar, the transport buttons, then where
+  // the setup is saved (account.js) and the language.
   const back = el("a", { class: "back", href: "https://agu.com.ar/", text: `← ${tx.topbar.back}` });
   back.title = tx.topbar.backTitle;
   const topbar = el(
     "nav",
     { class: "topbar" },
     back,
+    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn),
     el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
   );
 
@@ -468,7 +469,6 @@ export function mountApp(root, engine, opts = {}) {
       delay.node,
       reverb.node,
       djBox,
-      el("div", { class: "transport-end" }, snapBtn, cueBtn, stopBtn),
     ),
     el(
       "div",

@@ -77,7 +77,7 @@ goes through it:
   the wait: the second click (the event's `detail` 2) applies what the first
   one asked for right away and empties the queue; with nothing waiting it does
   nothing, so it never goes on-off-on.
-- **⏺ Arm** (in the transport, only while stopped) builds the start: armed, a
+- **⏺ Arm** (in the top bar, only while stopped) builds the start: armed, a
   click queues like "On the beat" does (a second click takes it back out, a
   double click counts once) and nothing sounds; **▶ Play** starts everything
   queued together from step 0, a queued snapshot included. Stop disarms and
@@ -274,7 +274,7 @@ Generic, in `ui/sortable.js`.
 
 ### Snapshots
 
-**📸 Snapshot** (in the transport, next to Stop) saves what plays as a moment of
+**📸 Snapshot** (in the top bar, next to Stop) saves what plays as a moment of
 the track, in the **Snapshots** panel. That panel is one more layer: it reorders
 with its handle and starts at the end. A snapshot (`snapshots.js`) saves:
 

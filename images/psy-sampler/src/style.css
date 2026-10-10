@@ -589,10 +589,13 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
-.transport-end {
+.topbar-transport {
   display: flex;
   gap: 8px;
-  margin-left: auto;
+}
+
+.topbar-transport button {
+  padding: 6px 14px;
 }
 
 .snap-btn {
@@ -1470,15 +1473,20 @@ html {
   .topbar {
     position: relative; /* not sticky, still the background's anchor */
   }
-  /* Row 1: back + language. Row 2: where the setup lives + sign-in. */
+  /* Row 1: back + language. Row 2: the transport buttons. Row 3: where the
+     setup lives + sign-in. */
   .topbar-end {
     display: contents;
+  }
+  .topbar-transport {
+    order: 1;
+    flex-basis: 100%;
   }
   .topbar .pick {
     margin-left: auto;
   }
   .account {
-    order: 1;
+    order: 2;
     flex-basis: 100%;
   }
   .topbar .pick > span {
@@ -1493,9 +1501,6 @@ html {
   }
   .variants {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  }
-  .transport-end {
-    margin-left: 0;
   }
   .sample-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
