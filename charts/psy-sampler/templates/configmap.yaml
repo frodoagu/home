@@ -54,6 +54,14 @@ data:
             add_header X-Content-Type-Options nosniff always;
         }
 
+        # The build id an open page polls to notice a deploy (src/update.js):
+        # never cached, here or at Cloudflare, or the notice comes late.
+        location = /version.json {
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header X-Content-Type-Options nosniff always;
+            try_files $uri =404;
+        }
+
         # Only Vite's output dir is content-hashed; public/ files (favicon)
         # keep their name across builds, so they stay revalidatable.
         location /assets/ {

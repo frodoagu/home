@@ -89,15 +89,17 @@ export const slug = (text) =>
     .replace(/^-|-$/g, "") || "sound";
 
 // A toggle that is a slider too: a drag along `axis` (once it travels a few
-// px) or the arrow keys set a 0-1 amount in 5 % steps, and a drag does not
-// click. `at(e, start)` maps the pointer to an amount, where `start` holds
-// the position (`at`) and the `amount` the drag began from.
-export function amountSlider(b, { axis = "x", get, set, at, onClick, onSlide = () => {} }) {
-  const put = (v) => set(Math.round(Math.min(1, Math.max(0, v)) * 20) / 20);
+// px) or the arrow keys set a 0-1 amount in `steps` steps, and a drag does
+// not click. `at(e, start)` maps the pointer to an amount, where `start`
+// holds the position (`at`) and the `amount` the drag began from. While
+// `sliding()` is false it is just a button.
+export function amountSlider(b, { axis = "x", steps = 20, get, set, at, onClick, onSlide = () => {}, sliding = () => true }) {
+  const put = (v) => set(Math.round(Math.min(1, Math.max(0, v)) * steps) / steps);
   const pos = (e) => (axis === "y" ? e.clientY : e.clientX);
   let drag = null; // { at, amount, moved } while a pointer is down
   let swallow = false;
   b.addEventListener("pointerdown", (e) => {
+    if (!sliding()) return;
     e.stopPropagation(); // the pointer is the slider's, not a reorder's
     drag = { at: pos(e), amount: get(), moved: false };
     b.setPointerCapture?.(e.pointerId);
@@ -118,14 +120,14 @@ export function amountSlider(b, { axis = "x", get, set, at, onClick, onSlide = (
   };
   b.addEventListener("pointerup", release);
   b.addEventListener("pointercancel", release);
-  b.addEventListener("click", () => {
+  b.addEventListener("click", (e) => {
     if (swallow) swallow = false;
-    else onClick();
+    else onClick(e);
   });
   b.addEventListener("keydown", (e) => {
-    const delta = { ArrowLeft: -0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowUp: 0.05 }[e.key];
-    if (delta === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
+    const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowDown: -1, ArrowUp: 1 }[e.key];
+    if (delta === undefined || e.altKey || e.ctrlKey || e.metaKey || !sliding()) return;
     e.preventDefault();
-    put(get() + delta);
+    put(get() + delta / steps);
   });
 }

@@ -135,7 +135,8 @@ export function createEditor({
 
   /* ---- sliders: the voice's params (or the sample's) + volume ---- */
   const voiceKnobs = el("div", { class: "knob-group" });
-  const knobs = el("div", { class: "knobs" }, voiceKnobs, slider(localized(LEVEL), current.level, (v) => set({ level: v })));
+  const level = slider(localized(LEVEL), current.level, (v) => set({ level: v }));
+  const knobs = el("div", { class: "knobs" }, voiceKnobs, level);
   const synthOnly = []; // controls that mean nothing while a sample plays
 
   function renderVoiceKnobs() {
@@ -494,6 +495,12 @@ export function createEditor({
     show: (data) => {
       current = data;
       refreshGrid();
+    },
+    // The volume, set from the tile's fill.
+    showLevel: (v) => {
+      current = { ...current, level: v };
+      level.querySelector("input").value = String(v);
+      level.querySelector("output").textContent = LEVEL.fmt(v);
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),
