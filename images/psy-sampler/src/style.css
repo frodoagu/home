@@ -337,6 +337,18 @@ html {
   color: var(--muted);
 }
 
+.synth-note {
+  display: inline-block;
+  margin: 8px 0 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--current);
+  border-radius: 999px;
+  background: var(--current-tint);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 /* ---- how to use it: a page over the app ---- */
 .help {
   width: min(760px, calc(100vw - 32px));
