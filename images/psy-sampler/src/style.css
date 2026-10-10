@@ -133,14 +133,67 @@ html {
   gap: 8px 12px;
 }
 
-/* The select already reads «Español»: its label is for screen readers only,
-   which keeps the bar on one row. */
-.topbar .pick > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+/* Same pill as agu.com.ar's language toggle; phones get the select. */
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.lang-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.lang-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.lang-buttons button {
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lang-buttons button:hover {
+  color: var(--text);
+}
+
+.lang-buttons button[aria-pressed="true"] {
+  color: var(--current);
+  background: var(--current-tint);
+}
+
+.lang-switch select {
+  display: none;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+@media (max-width: 640px) {
+  .lang-switch select {
+    display: block;
+  }
+  .lang-buttons {
+    display: none;
+  }
 }
 
 .account {

@@ -17,25 +17,35 @@ export default function Landing() {
     ? apps.filter((app) => app.categories?.includes(active))
     : apps;
 
-  const txt = language === "es"
-    ? {
-        intro: "Herramientas y experimentos web que voy armando. Cosas de oficios, infra y lo que se cruce.",
-        publicTitle: "Publicas",
-        privateLabel: "Privadas",
-        clearFilter: "limpiar filtro",
-        empty: "Todavia no hay apps en",
-        soon: "Pronto.",
-        footer: "agu.com.ar · self-hosted en un Raspberry Pi",
-      }
-    : {
-        intro: "Web tools and experiments I keep building. A mix of trades, infra, and whatever comes next.",
-        publicTitle: "Public",
-        privateLabel: "Private",
-        clearFilter: "clear filter",
-        empty: "No apps yet in",
-        soon: "Soon.",
-        footer: "agu.com.ar · self-hosted on a Raspberry Pi",
-      };
+  const txt = {
+    es: {
+      intro: "Herramientas y experimentos web que voy armando. Cosas de oficios, infra y lo que se cruce.",
+      publicTitle: "Publicas",
+      privateLabel: "Privadas",
+      clearFilter: "limpiar filtro",
+      empty: "Todavia no hay apps en",
+      soon: "Pronto.",
+      footer: "agu.com.ar · self-hosted en un Raspberry Pi",
+    },
+    en: {
+      intro: "Web tools and experiments I keep building. A mix of trades, infra, and whatever comes next.",
+      publicTitle: "Public",
+      privateLabel: "Private",
+      clearFilter: "clear filter",
+      empty: "No apps yet in",
+      soon: "Soon.",
+      footer: "agu.com.ar · self-hosted on a Raspberry Pi",
+    },
+    pt: {
+      intro: "Ferramentas e experimentos web que vou montando. Coisas de ofícios, infra e o que mais aparecer.",
+      publicTitle: "Públicas",
+      privateLabel: "Privadas",
+      clearFilter: "limpar filtro",
+      empty: "Ainda não há apps em",
+      soon: "Em breve.",
+      footer: "agu.com.ar · self-hosted em um Raspberry Pi",
+    },
+  }[language];
 
   return (
     <div className="min-h-full bg-slate-950 text-slate-100 font-sans">

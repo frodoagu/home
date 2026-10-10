@@ -60,7 +60,7 @@ export const APPLIANCES = [
     // Split inverter ~4000 frig a plena carga: ~1.4 kW eléctricos (EER ~3.2).
     // El variador tiene corrección activa, así que casi no desplaza.
     key: "aire",
-    label: { es: "Aire (inverter)", en: "AC (inverter)" },
+    label: { es: "Aire (inverter)", en: "AC (inverter)", pt: "Ar-condicionado (inverter)" },
     icon: "AirVent",
     current: 6,
     pf: 0.95,
@@ -71,7 +71,7 @@ export const APPLIANCES = [
     // Magnetrón ~1000 W de salida ≈ 1.5 kW de entrada. Doblador media onda
     // sobre un transformador con fuga -> muy inductivo Y muy distorsionado.
     key: "micro",
-    label: { es: "Microondas", en: "Microwave" },
+    label: { es: "Microondas", en: "Microwave", pt: "Micro-ondas" },
     icon: "Microwave",
     current: 6.5,
     pf: 0.65,
@@ -83,7 +83,7 @@ export const APPLIANCES = [
     // lineal (mucha corriente, poco aporte al neutro). La distorsión chica es
     // por la bomba vibratoria y el control electrónico.
     key: "cafetera",
-    label: { es: "Cafetera (2000 W)", en: "Coffee maker (2000 W)" },
+    label: { es: "Cafetera (2000 W)", en: "Coffee maker (2000 W)", pt: "Cafeteira (2000 W)" },
     icon: "Coffee",
     current: 8.7,
     pf: 1,
@@ -94,7 +94,7 @@ export const APPLIANCES = [
     // Compresor 1/2 HP (~0.37 kW mec.): motor de inducción a plena carga,
     // ~1 kW de entrada en marcha. Arranque (LRA) 4-6× la nominal, no modelado.
     key: "compresor",
-    label: { es: "Compresor (½ HP)", en: "Compressor (½ HP)" },
+    label: { es: "Compresor (½ HP)", en: "Compressor (½ HP)", pt: "Compressor (½ HP)" },
     icon: "Wind",
     current: 4.5,
     pf: 0.8,
@@ -104,7 +104,7 @@ export const APPLIANCES = [
   {
     // Bomba de agua 1/2 HP en marcha (~0.69 kW de entrada). Motor de inducción.
     key: "bomba",
-    label: { es: "Bomba de agua", en: "Water pump" },
+    label: { es: "Bomba de agua", en: "Water pump", pt: "Bomba d'água" },
     icon: "Droplets",
     current: 3,
     pf: 0.82,
@@ -116,7 +116,7 @@ export const APPLIANCES = [
     // suma más, pero el catálogo modela el compresor en régimen). Motor chico
     // = cos φ pobre.
     key: "heladera",
-    label: { es: "Heladera", en: "Fridge" },
+    label: { es: "Heladera", en: "Fridge", pt: "Geladeira" },
     icon: "Refrigerator",
     current: 1.2,
     pf: 0.75,
@@ -127,7 +127,7 @@ export const APPLIANCES = [
     // Motor de inducción girando en vacío: casi no entrega potencia activa
     // pero la magnetización sigue ahí -> el caso de libro de reactiva pura.
     key: "motor",
-    label: { es: "Motor en vacio", en: "Idle motor" },
+    label: { es: "Motor en vacio", en: "Idle motor", pt: "Motor em vazio" },
     icon: "Fan",
     current: 3.5,
     pf: 0.35,
@@ -138,7 +138,7 @@ export const APPLIANCES = [
     // Tubo fluorescente con balasto electromagnético (sin capacitor de
     // compensación): el balasto es una inductancia en serie.
     key: "tubo",
-    label: { es: "Tubo fluorescente", en: "Fluorescent tube" },
+    label: { es: "Tubo fluorescente", en: "Fluorescent tube", pt: "Lâmpada fluorescente" },
     icon: "Lamp",
     current: 0.9,
     pf: 0.5,
@@ -148,7 +148,7 @@ export const APPLIANCES = [
   {
     // TV LED/OLED grande ~160 W. Fuente conmutada -> fuerte 3er armónico.
     key: "tele",
-    label: { es: "Televisores", en: "TVs" },
+    label: { es: "Televisores", en: "TVs", pt: "Televisores" },
     icon: "Tv",
     current: 0.7,
     pf: 0.95,
@@ -159,7 +159,7 @@ export const APPLIANCES = [
     // Fuente sin PFC: el pico de corriente cae junto al pico de tensión, así
     // que cos φ ≈ 1; lo que arruina el factor de potencia real es la distorsión.
     key: "pc",
-    label: { es: "PC / Fuente", en: "PC / PSU" },
+    label: { es: "PC / Fuente", en: "PC / PSU", pt: "PC / Fonte" },
     icon: "MonitorSmartphone",
     current: 2,
     pf: 0.99,
@@ -170,7 +170,7 @@ export const APPLIANCES = [
     // Lámpara LED barata con fuente capacitiva (capacitive dropper): la
     // corriente ADELANTA. Es el artefacto capacitivo típico de una casa.
     key: "led",
-    label: { es: "Luces LED", en: "LED lights" },
+    label: { es: "Luces LED", en: "LED lights", pt: "Luzes LED" },
     icon: "Lightbulb",
     current: 1,
     pf: 0.55,
@@ -182,7 +182,7 @@ export const APPLIANCES = [
     // adelantada (φ = −90°). Sirve para compensar a mano, artefacto por
     // artefacto, en vez de con el banco.
     key: "capacitor",
-    label: { es: "Capacitor 20 uF", en: "20 uF capacitor" },
+    label: { es: "Capacitor 20 uF", en: "20 uF capacitor", pt: "Capacitor 20 uF" },
     icon: "CircuitBoard",
     current: 1.45,
     pf: 0,
@@ -337,10 +337,10 @@ export const V_NOM = 230; // V fase-neutro (AR)
 
 // Fallas combinables que se pueden simular (cortes de fase y/o de neutro).
 export const FAULTS = [
-  { key: "a", label: { es: "Corte Fase A", en: "Phase A open" } },
-  { key: "b", label: { es: "Corte Fase B", en: "Phase B open" } },
-  { key: "c", label: { es: "Corte Fase C", en: "Phase C open" } },
-  { key: "n", label: { es: "Corte de Neutro", en: "Neutral open" } },
+  { key: "a", label: { es: "Corte Fase A", en: "Phase A open", pt: "Fase A aberta" } },
+  { key: "b", label: { es: "Corte Fase B", en: "Phase B open", pt: "Fase B aberta" } },
+  { key: "c", label: { es: "Corte Fase C", en: "Phase C open", pt: "Fase C aberta" } },
+  { key: "n", label: { es: "Corte de Neutro", en: "Neutral open", pt: "Neutro aberto" } },
 ];
 
 /** Multiplica todas las magnitudes de un espectro por un factor. */

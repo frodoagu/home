@@ -37,6 +37,7 @@ import {
 import { dress } from "../dress.js";
 import { IMPROV_DEFAULT, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
+import { langSwitch } from "./langSwitch.js";
 import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
@@ -148,16 +149,15 @@ export function mountApp(root, engine, opts = {}) {
   engine.setBpm(state.tempo);
 
   /* ---- header + transport ---- */
-  const language = select(
+  const language = langSwitch(
     tx.tools.language,
-    LANGS.map((id) => ({ value: id, label: DICTS[id].langName })),
+    LANGS.map((id) => ({ id, name: DICTS[id].langName })),
     lang(),
     (value) => {
       setLang(value);
       persist();
       remount();
     },
-    "lang",
   );
 
   const bpm = el("input", {

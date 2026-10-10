@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "site:language";
-const SUPPORTED = ["es", "en"];
+export const SUPPORTED = ["es", "en", "pt"];
 
 function normalizeLanguage(raw) {
   if (!raw || typeof raw !== "string") return "es";
-  return raw.toLowerCase().startsWith("es") ? "es" : "en";
+  const base = raw.toLowerCase().slice(0, 2);
+  return SUPPORTED.includes(base) ? base : "en";
 }
 
 function detectBrowserLanguage() {
@@ -27,6 +28,9 @@ export function localizeText(value, language) {
   }
   return value;
 }
+
+// Inline form of localizeText for one-off strings.
+export const pick = (language, es, en, pt) => localizeText({ es, en, pt }, language);
 
 const LanguageContext = createContext(null);
 
@@ -52,14 +56,7 @@ export function LanguageProvider({ children, initialLanguage }) {
     }
   }, [language]);
 
-  const value = useMemo(
-    () => ({
-      language,
-      setLanguage,
-      toggleLanguage: () => setLanguage((cur) => (cur === "es" ? "en" : "es")),
-    }),
-    [language],
-  );
+  const value = useMemo(() => ({ language, setLanguage }), [language]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
