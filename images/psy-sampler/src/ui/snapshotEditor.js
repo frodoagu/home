@@ -164,6 +164,7 @@ export function createSnapshotEditor({
       name.select();
     },
     paint: () => {},
+    showNewPart: () => {},
     destroy: () => {},
   };
 }
