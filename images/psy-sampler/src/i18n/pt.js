@@ -1,5 +1,6 @@
 export default {
   langName: "Português",
+  synthNote: "∿ Zero samples: cada som de fábrica é uma fórmula matemática calculada ao vivo. Nada gravado, nada comprimido: lossless.",
   lede:
     "Uma máquina de música eletrônica ao vivo: kick, baixo, percussão, glitches, leads, pads e FX que você monta, " +
     "edita, filtra, distorce e mixa enquanto tocam, ou seus próprios samples. Escolha um estilo e deixe o 🤖 Piloto automático montar a faixa " +

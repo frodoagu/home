@@ -2,6 +2,7 @@
 // (i18n.test.js checks it).
 export default {
   langName: "Español",
+  synthNote: "∿ Cero samples: cada sonido de fábrica es una fórmula matemática que se calcula en vivo. Nada grabado, nada comprimido: lossless.",
   lede:
     "Una máquina de música electrónica en vivo: kick, bajo, percusión, glitches, leads, pads y FX que armás, " +
     "editás, filtrás, distorsionás y mezclás mientras suenan, o tus propios samples. Elegí un estilo y dejá que el 🤖 Piloto automático arme el tema " +

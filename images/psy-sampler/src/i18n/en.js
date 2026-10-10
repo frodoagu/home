@@ -1,5 +1,6 @@
 export default {
   langName: "English",
+  synthNote: "∿ Zero samples: every factory sound is a mathematical formula computed live. Nothing recorded, nothing compressed: lossless.",
   lede:
     "A live electronic music machine: kick, bass, percussion, glitches, leads, pads and FX you build, " +
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
