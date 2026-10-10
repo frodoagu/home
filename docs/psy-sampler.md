@@ -92,9 +92,9 @@ goes through it:
   one after (see below).
 - **Snapshots** (see below): a click plays the saved moment from the next bar,
   always, even with "On the beat" off.
-- **BPM change**: "BPM change [N] over [1-32 bars] ▶ Go" moves one linear stretch
-  on each bar line (`rampAt` in `tempo.js`) and lands exactly on N on the last
-  one. The in-between BPM goes to the engine with decimals, and rounded to the
+- **BPM change** (in the top bar, next to the BPM slider): "BPM change [N]
+  over [1-32 bars] ▶ Go" moves one linear stretch on each bar line (`rampAt`
+  in `tempo.js`) and lands exactly on N on the last one. The in-between BPM goes to the engine with decimals, and rounded to the
   slider and to storage. The scheduler reads the BPM every tick, so each stretch
   comes in at most one step after the line. With the loop stopped there are no
   bars: it changes right away. Moving the slider, Stop or the same button cut
