@@ -197,10 +197,13 @@ export function createEngine({
   const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered }
   const fxPlaying = new Map(); // fx id -> { gain, input, chain, end }
   const data = new Map(); // variant id -> edited data (factory data otherwise)
+  const volumes = new Map(); // layer id -> its fader over every sound in it (1 otherwise)
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
+  const volumeOf = (layer) => volumes.get(layer) ?? 1;
   const laneLevel = (key, variant) =>
-    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) * dataOf(variant).level;
+    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) * volumeOf(layerOf(variant)) * dataOf(variant).level;
+  const shotLevel = (id) => LAYER_LEVEL[layerOf(id)] * volumeOf(layerOf(id)) * dataOf(id).level;
 
   // Must run synchronously inside a click handler: browsers only let an
   // AudioContext start (or resume) from a user gesture.
@@ -395,6 +398,21 @@ export function createEngine({
     }
   }
 
+  // A layer's fader: the lanes and FX shots of that layer glide to it (20 ms).
+  function setLayerVolume(layer, value) {
+    volumes.set(layer, value);
+    if (!ctx) return;
+    for (const [key, lane] of lanes) {
+      if (layerOf(lane.variant) !== layer) continue;
+      lane.level = laneLevel(key, lane.variant);
+      lane.gain.gain.setTargetAtTime(lane.level, ctx.currentTime, 0.02);
+    }
+    if (layer !== "fx") return;
+    for (const [id, fx] of fxPlaying) {
+      if (fx.end > ctx.currentTime) fx.gain.gain.setTargetAtTime(shotLevel(id), ctx.currentTime, 0.02);
+    }
+  }
+
   function setEffects(next) {
     effects = { ...effects, ...next };
     if (!bus) return;
@@ -429,8 +447,7 @@ export function createEngine({
     const t = at ?? (cursor ? nextBeatTime(cursor, stepDur) : ctx.currentTime + START_DELAY);
     const prev = fxPlaying.get(id);
     if (prev) fadeOut(prev);
-    const { level, insert } = dataOf(id);
-    const shot = openVoice(LAYER_LEVEL.fx * level, "fx", insert, t);
+    const shot = openVoice(shotLevel(id), "fx", dataOf(id).insert, t);
     const end = fxVoice(ctx, shot.input, t, stepDur, id);
     shot.chain.stop(end + FADE);
     fxPlaying.set(id, { ...shot, end });
@@ -444,7 +461,7 @@ export function createEngine({
     if (!ev) return;
     const layer = layerOf(id);
     const t = ctx.currentTime + SAFETY;
-    const shot = openVoice(LAYER_LEVEL[layer] * dataOf(id).level, layer, dataOf(id).insert, t);
+    const shot = openVoice(shotLevel(id), layer, dataOf(id).insert, t);
     voice(ctx, shot.input, t, ev, stepDuration(bpm));
     fadeOut(shot, t + AUDITION_SECONDS);
   }
@@ -504,8 +521,7 @@ export function createEngine({
     const chain = buildChain(off, bpm, effects, djValue);
     const into = (level, layer, insert) => withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0).input;
     if (fx) {
-      const { level, insert } = dataOf(fx);
-      fxVoice(off, into(LAYER_LEVEL.fx * level, "fx", insert), 0, stepDur, fx);
+      fxVoice(off, into(shotLevel(fx), "fx", dataOf(fx).insert), 0, stepDur, fx);
     } else {
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
@@ -564,6 +580,7 @@ export function createEngine({
     ensureContext,
     setLanes,
     setData,
+    setLayerVolume,
     setEffects,
     setBpm,
     setMasterFilter,

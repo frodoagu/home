@@ -126,10 +126,14 @@ Selection → lanes is a pure reconcile
 computes the desired state and `engine.setLanes()` closes/opens the difference.
 **Kick and bass are exclusive** (one lane per layer: a second variant replaces
 the first; two kicks or two basses only muddy things); **percussion, lead and
-pad stack** (one lane per variant, `laneKey()`). Layers always combine: a
+pad stack** (one lane per variant, `laneKey()`). **Ctrl+click** (⌘) stacks on
+an exclusive layer anyway: the extra kick or bass gets a lane keyed by its own
+id, like a stacking layer's, and a plain click there leaves just that one
+again (`pressVariant`). So "is it playing" is `isOn()` (any lane), never
+`active[laneKey()]`. Layers always combine: a
 click toggles its variant and leaves the other layers playing. The background kick is a
 derived lane: it only plays when another layer is on and no kick variant is
-picked.
+picked (stacked ones included).
 
 ### Delay and reverb
 
@@ -187,6 +191,15 @@ the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
 
+Each **layer volume** (the slider under a layer's name, 0-150 %) is a fader over
+every sound in that layer, on top of each sound's own volume. It is not a node:
+`engine.setLayerVolume` multiplies it into the level of the lanes and FX shots
+of that layer, so the sends (after the lane gain) follow it, and changing it
+glides the lanes that are playing (20 ms), the way a sound's volume does.
+Auditions and WAV exports use it too. It lives in the workspace (`volumes`),
+so it is saved and travels in presets, but snapshots and share links leave it
+out.
+
 ## Editable data
 
 What each variant plays is **data**, not code
@@ -206,11 +219,20 @@ the next scheduled step (≤ 120 ms), without reopening the lane. A volume chang
 glides over 20 ms in the lanes playing that variant. Knobs (`params.js`) store
 the voice's units (Hz, s, bars) and only format them for display.
 
+Drums and notes also have **Reset hits** / **Reset notes**: only `steps` or
+`notes` go back to factory, and the voice, knobs, insert, scale and volume stay.
+A queued 🎲 New part is cancelled. If nothing else differed from factory, the
+edit is forgotten (no ✎), the same as a full **Reset**.
+
 - **Click** on a step or cell: empty → hit/note → accent → empty. New notes are
   as long as "New note" says (shortened so they don't overlap the next one in
   the row or run past the end of the loop). **Dragging** with the mouse along a
   row paints a long note; on touch, dragging scrolls the piano roll and a tap
   adds a note.
+- **Ctrl+click** (⌘ on a Mac) puts the clicked cell's new state on the same
+  16th of every beat in its bar; **Ctrl+Shift+click**, of both bars
+  (`cycleStepEcho` / `cycleNoteEcho`). In the piano roll it echoes the note's
+  start, and a cell already inside a longer note is left alone.
 - **Editing something that isn't playing switches it on**: what you edit is
   what you hear. Adding a note previews it
   right away (`engine.audition`), except drum hits while the loop runs (an
@@ -687,6 +709,14 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 1800 px), each with its title above its tiles. A phone on its side (height ≤
 500 px): two columns and no subtitle. There's never horizontal page scroll: the
 32-step grids scroll inside their box.
+
+**Flashes** follow the audio clock, like the step bar: on each audible step the
+frame loop asks `eventsAt` (with the data the engine is playing, variations and
+build-ups included) which playing sounds hit, and flashes their tiles, brighter
+on an accent, plus their layer's edge once. FX tiles flash when they fire, the
+BPM flashes on every beat (harder on the bar line), and ● Record blinks while
+it records. A flash replays by alternating two identical animations (`hit-a` /
+`hit-b`), so no reflow is forced; `prefers-reduced-motion` turns them all off.
 
 ## Layers
 

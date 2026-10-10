@@ -212,9 +212,10 @@ function vary(active, lists, rng, style) {
   if (!pool.length) return active;
   const out = pick(playing, rng);
   const next = { ...active };
-  delete next[laneKey(layer, out)];
+  const lane = Object.keys(active).find((k) => active[k] === out);
+  delete next[lane];
   const id = pick(pool, rng);
-  next[laneKey(layer, id)] = id;
+  next[lane === out ? id : laneKey(layer, id)] = id; // a stacked kick or bass keeps its own lane
   return next;
 }
 

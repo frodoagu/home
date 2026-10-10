@@ -12,8 +12,9 @@
 // drives recorder.js, which outlives remounts like the engine.
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
-import { baseOf, defOf, defaultData, isCopy, sampleDefaults } from "../audio/patterns.js";
+import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
+import { LEVEL } from "../audio/params.js";
 import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
@@ -38,7 +39,7 @@ import { dress } from "../dress.js";
 import { IMPROV_DEFAULT, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
-import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
+import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
@@ -54,7 +55,7 @@ import {
   toSnapshotFile,
 } from "../workspace.js";
 import { djCutoffs } from "../audio/insert.js";
-import { amountSlider, checkbox, download, el, select, slug } from "./dom.js";
+import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
@@ -146,6 +147,7 @@ export function mountApp(root, engine, opts = {}) {
   for (const id of allIds()) feed(id, dataOf(id));
   for (const [id, anchor] of state.varying) feed(id, varied(id, anchor));
   engine.setEffects(ws.effects);
+  for (const [id, v] of Object.entries(ws.volumes)) engine.setLayerVolume(id, v);
   engine.setBpm(state.tempo);
 
   /* ---- header + transport ---- */
@@ -304,7 +306,8 @@ export function mountApp(root, engine, opts = {}) {
     );
     if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
     if (id === BG_KICK_VARIANT) node.title = tx.tile.bgKick;
-    node.addEventListener("click", (e) => press(layer, id, e.detail));
+    // Ctrl (⌘) stacks another kick or bass instead of replacing the one playing.
+    node.addEventListener("click", (e) => press(layer, id, e.detail, e.ctrlKey || e.metaKey));
     const edit = el("button", {
       type: "button",
       class: "edit",
@@ -384,6 +387,19 @@ export function mountApp(root, engine, opts = {}) {
     sorters.push(sortable(group, { item: ".tile", key: "key", onDrop }));
   }
 
+  // The layer's fader: scales every sound in it, on top of each one's own volume.
+  function layerVolume(id) {
+    const knob = slider({ ...LEVEL, key: "layer-volume", label: tx.tile.volume }, ws.volumes[id], (v) => {
+      ws.volumes[id] = v;
+      engine.setLayerVolume(id, v);
+      persist();
+    });
+    knob.classList.add("layer-volume");
+    knob.querySelector("input").setAttribute("aria-label", tx.tile.layerVolume(tx.layers[id].name));
+    knob.title = tx.tile.layerVolumeTitle;
+    return knob;
+  }
+
   /* ---- snapshot tiles ---- */
   const snapTiles = new Map(); // snapshot id -> { node, tile, edit, labelEl, detailEl }
   const snapDetail = (snap) => `${tx.sections[snap.section]} · ${tx.snap.count(partsOf(snap).length)}`;
@@ -440,10 +456,15 @@ export function mountApp(root, engine, opts = {}) {
       continue;
     }
     const layer = layerById(id);
-    makeSection(id, tx.layers[id], (ids) => {
-      ws.lists[id] = ids;
-      persist();
-    });
+    makeSection(
+      id,
+      tx.layers[id],
+      (ids) => {
+        ws.lists[id] = ids;
+        persist();
+      },
+      layerVolume(id),
+    );
     renderTiles(layer);
   }
   const layersMain = el("main", { class: "layers" }, ...ws.order.map((id) => sections.get(id).node));
@@ -557,9 +578,8 @@ export function mountApp(root, engine, opts = {}) {
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
     for (const [id, { layer, node, tile, vary }] of tiles) {
-      const key = laneKey(layer, id);
-      const on = layer.oneShot ? playingFx.has(id) : state.active[key] === id;
-      const next = !layer.oneShot && target[key] === id;
+      const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
+      const next = !layer.oneShot && isOn(target, id);
       node.classList.toggle("is-active", on);
       node.classList.toggle("is-queued", Boolean(state.pending) && next && !on);
       node.classList.toggle("is-leaving", Boolean(state.pending) && on && !next);
@@ -629,18 +649,53 @@ export function mountApp(root, engine, opts = {}) {
     shownStep = step;
   }
 
+  // A short flash, replayed on every call: alternating between two identical
+  // animations restarts it without forcing a reflow.
+  function strike(node, accent = false) {
+    const again = node.classList.contains("hit-a");
+    node.classList.toggle("hit-a", !again);
+    node.classList.toggle("hit-b", again);
+    node.classList.toggle("hit-accent", accent);
+  }
+
+  // Each audible step flashes the tiles that play on it (and their layer),
+  // brighter on an accent, and the BPM on every beat.
+  let struck = null;
+  function strikeStep(step) {
+    if (step === struck) return;
+    struck = step;
+    if (step === null) return;
+    if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
+    const layers = new Map(); // layer id -> accented: one flash each, however many sounds hit
+    for (const id of Object.values(lanes)) {
+      const events = eventsAt(id, step, false, dataNow(id));
+      const t = tiles.get(id);
+      if (!events.length || !t) continue;
+      const accent = events.some((ev) => ev.accent);
+      strike(t.node, accent);
+      layers.set(t.layer.id, accent || layers.get(t.layer.id) === true);
+    }
+    for (const [id, accent] of layers) strike(sections.get(id).node, accent);
+  }
+
   // The bar follows the audio clock, not the timer: each frame asks the engine
   // which scheduled step is audible now. The loop parks itself when idle.
   let frame = 0;
-  let fxShown = "";
+  let fxShown = new Set();
   function draw() {
     frame = 0;
-    paintStep(engine.visibleStep());
+    const step = engine.visibleStep();
+    paintStep(step);
+    strikeStep(step);
     const fx = engine.activeFx();
-    const key = [...fx].sort().join();
-    if (key !== fxShown) {
+    if ([...fx].sort().join() !== [...fxShown].sort().join()) {
       renderButtons(fx);
-      fxShown = key;
+      for (const id of fx) {
+        if (fxShown.has(id) || !tiles.has(id)) continue;
+        strike(tiles.get(id).node, true);
+        strike(sections.get("fx").node, true);
+      }
+      fxShown = fx;
     }
     if (engine.isRunning() || fx.size > 0) frame = requestAnimationFrame(draw);
   }
@@ -658,7 +713,7 @@ export function mountApp(root, engine, opts = {}) {
 
   function fire(id, at) {
     engine.triggerFx(id, at);
-    fxShown = ""; // force a repaint so the button lights up this frame
+    fxShown = new Set(); // force a repaint (and a flash) so the button lights up this frame
     animate();
   }
 
@@ -679,24 +734,23 @@ export function mountApp(root, engine, opts = {}) {
 
   // A double click (its second click, `clicks` 2) skips the bar line: the
   // first click's selection applies right away.
-  let lastPress = null; // { id, from }: the selection a tile's click started from
-  function press(layer, id, clicks = 1) {
+  let lastPress = null; // { id, from, add }: the selection a tile's click started from
+  function press(layer, id, clicks = 1, add = false) {
     if (layer.oneShot) {
       fire(id);
       return;
     }
     if (state.armed && clicks === 2) return; // armed, a double click queues like a single one
-    const key = laneKey(layer, id);
     if (clicks === 2 && lastPress?.id === id) {
       state.pending = null;
-      state.active = pressVariant(lastPress.from, key, id);
+      state.active = pressVariant(lastPress.from, layer, id, lastPress.add);
       lastPress = null;
       sync();
       return;
     }
     const from = state.pending ?? state.active;
-    lastPress = { id, from };
-    commit(pressVariant(from, key, id));
+    lastPress = { id, from, add };
+    commit(pressVariant(from, layer, id, add));
   }
 
   /* ---- the bar hook: everything that must land on the grid ---- */
@@ -833,7 +887,7 @@ export function mountApp(root, engine, opts = {}) {
       open?.editor.showNewPart(true);
     }
     const target = state.pending ?? state.active;
-    if (target[laneKey(layer, id)] !== id) press(layer, id);
+    if (!isOn(target, id)) press(layer, id);
   }
 
   function setImprov(id, amount) {
@@ -1047,7 +1101,7 @@ export function mountApp(root, engine, opts = {}) {
         setVariant(id, next);
         // Editing something silent switches it on: what you edit is what you hear.
         const target = state.pending ?? state.active;
-        if (!layer.oneShot && target[laneKey(layer, id)] !== id) press(layer, id);
+        if (!layer.oneShot && !isOn(target, id)) press(layer, id);
       },
       onAudition: (note) => {
         // A drum hit off the grid while the loop runs only sounds like a mistake.
@@ -1065,6 +1119,20 @@ export function mountApp(root, engine, opts = {}) {
         persist();
         renderButtons();
         openEditor(layer, id); // rebuild with the factory values
+      },
+      // Only the factory notes (or hits): the voice, the insert and the volume stay.
+      onResetPart: () => {
+        const key = defOf(id).kind === "drum" ? "steps" : "notes";
+        const factory = defaultData(id);
+        state.newParts.delete(id);
+        open.editor.showNewPart(false);
+        setVariant(id, { ...dataOf(id), [key]: structuredClone(factory[key]) });
+        if (!isCopy(id) && JSON.stringify(ws.variants[id]) === JSON.stringify(factory)) {
+          delete ws.variants[id]; // nothing left that differs from factory
+          persist();
+          renderButtons();
+        }
+        open.editor.show(dataNow(id));
       },
       onClose: closeEditor,
       onTrigger: () => fire(id),
@@ -1085,7 +1153,7 @@ export function mountApp(root, engine, opts = {}) {
         setBuildUp(id, on);
         // Like an edit: arming a silent kick switches it on, so the build-up is heard.
         const target = state.pending ?? state.active;
-        if (on && target[laneKey(layer, id)] !== id) press(layer, id);
+        if (on && !isOn(target, id)) press(layer, id);
       },
     });
     open = { layer, id, editor };
@@ -1454,7 +1522,7 @@ export function mountApp(root, engine, opts = {}) {
     engine.stop();
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
-    fxShown = "";
+    fxShown = new Set();
     renderButtons(new Set());
     paintStep(null);
     showSection();

@@ -4,6 +4,7 @@
 // object always comes out playable.
 import { LAYERS, LAYER_IDS, layerById, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
+import { LEVEL } from "./audio/params.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
 import { CHANGE_BARS, CHANGE_DEFAULT, SECTIONS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
 import { laneKey } from "./selection.js";
@@ -24,6 +25,7 @@ export { layerOfVariant };
 /**
  * {
  *   bpm, bgKick, quantize, effects: { delay, reverb },
+ *   volumes:  { layer: its fader over every sound in it, 0-1.5 }
  *   seed:     the autopilot's seed ("" until the app draws one)
  *   style:    the autopilot's style (autopilot.js STYLES)
  *   changeBars: how often the autopilot swaps a sound inside a section
@@ -85,12 +87,19 @@ export function normalize(raw) {
     if (snapshots.length === SNAP_MAX) break;
   }
 
+  const volumes = {};
+  for (const id of LAYER_IDS) {
+    const v = src.volumes?.[id];
+    volumes[id] = Number.isFinite(v) ? Math.min(LEVEL.max, Math.max(LEVEL.min, v)) : LEVEL.def;
+  }
+
   const bpm = Number.isFinite(src.bpm) ? Math.round(Math.min(BPM_MAX, Math.max(BPM_MIN, src.bpm))) : BPM_DEFAULT;
   return {
     bpm,
     bgKick: bool(src.bgKick, true),
     quantize: bool(src.quantize, true),
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },
+    volumes,
     rampBars: RAMP_BARS.includes(src.rampBars) ? src.rampBars : RAMP_DEFAULT,
     seed: cleanSeed(src.seed),
     style: Object.hasOwn(STYLES, src.style) ? src.style : STYLE_DEFAULT,
@@ -111,7 +120,8 @@ function cleanActive(raw, known) {
   const active = {};
   for (const [key, id] of Object.entries(raw && typeof raw === "object" ? raw : {})) {
     const layer = LAYERS.find((l) => l.id === (typeof id === "string" && layerOfVariant(id)));
-    if (layer && !layer.oneShot && known.has(id) && laneKey(layer, id) === key) active[key] = id;
+    // A Ctrl-stacked kick or bass plays on a lane keyed by its own id.
+    if (layer && !layer.oneShot && known.has(id) && (laneKey(layer, id) === key || key === id)) active[key] = id;
   }
   return active;
 }
@@ -184,9 +194,9 @@ export function importSnapshots(ws, text) {
   for (const snap of from.snapshots) {
     const active = {};
     const data = {};
-    for (const id of Object.values(snap.active)) {
+    for (const [key, id] of Object.entries(snap.active)) {
       const to = target(id);
-      active[laneKey(layerById(layerOfVariant(to)), to)] = to;
+      active[key === id ? to : laneKey(layerById(layerOfVariant(to)), to)] = to;
       data[to] = snap.data[id];
     }
     const parts = { section: snap.section, active, data };

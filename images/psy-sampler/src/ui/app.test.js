@@ -142,6 +142,20 @@ describe("layers", () => {
     expect(engine.isRunning()).toBe(true);
   });
 
+  it("Ctrl+click stacks basses (or kicks); a plain click leaves one again", () => {
+    const ctrlClick = (v) => button(v).dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true, detail: 1 }));
+    click("bass.offbeat");
+    ctrlClick("bass.rolling");
+    ctrlClick("kick.long");
+    ctrlClick("kick.tok");
+    expect(pressed().sort()).toEqual(["bass.offbeat", "bass.rolling", "kick.long", "kick.tok"]);
+    expect(button("kick.punchy").classList.contains("is-background")).toBe(false);
+    ctrlClick("bass.offbeat");
+    expect(pressed().sort()).toEqual(["bass.rolling", "kick.long", "kick.tok"]);
+    click("kick.dark");
+    expect(pressed().sort()).toEqual(["bass.rolling", "kick.dark"]);
+  });
+
   it("toggles variants across layers, one per layer", () => {
     click("bass.rolling");
     click("lead.acid");
@@ -445,6 +459,35 @@ describe("editors", () => {
     expect(stepCell("perc.hat", 2).dataset.state).toBe("hit");
   });
 
+  it("Restaurar notas brings back the factory part and keeps the sound", () => {
+    openEditor("bass.offbeat");
+    const bright = editor("bass.offbeat").querySelector('[data-param="bright"]');
+    bright.value = "2";
+    bright.dispatchEvent(new Event("input"));
+    editor("bass.offbeat").querySelector(".editor-actions button:last-child").click(); // clear all
+    expect(saved().variants["bass.offbeat"].notes).toEqual([]);
+    editor("bass.offbeat").querySelector('[data-action="reset-part"]').click();
+    const stored = saved().variants["bass.offbeat"];
+    expect(stored.notes).toEqual(defaultData("bass.offbeat").notes);
+    expect(stored.params.bright).toBe(2);
+    expect(editor("bass.offbeat").querySelectorAll('[data-state="hit"], [data-state="accent"]').length).toBeGreaterThan(0);
+  });
+
+  it("Restaurar golpes on an edit that only touched the hits forgets the edit", () => {
+    openEditor("perc.hat");
+    expect(editor("perc.hat").querySelector('[data-action="reset-part"]').textContent).toBe("Restaurar golpes");
+    stepCell("perc.hat", 0).click();
+    editor("perc.hat").querySelector('[data-action="reset-part"]').click();
+    expect(saved().variants["perc.hat"]).toBeUndefined();
+    expect(stepCell("perc.hat", 0).dataset.state).toBe("");
+    expect(button("perc.hat").parentElement.classList.contains("is-edited")).toBe(false);
+  });
+
+  it("FX editors have no part to reset", () => {
+    openEditor("fx.riser");
+    expect(editor("fx.riser").querySelector('[data-action="reset-part"]')).toBeNull();
+  });
+
   it("edits survive a reload", () => {
     openEditor("lead.arp");
     rollCell("lead.arp", 81, 0).click();
@@ -488,6 +531,21 @@ describe("editors", () => {
     expect(btn().getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("a playing sound's tile and layer flash on its hits, and the BPM on the beat", () => {
+    const flashes = (node) => (node.classList.contains("hit-a") ? "a" : node.classList.contains("hit-b") ? "b" : "");
+    click("kick.punchy");
+    advance(4);
+    flushFrame();
+    const first = flashes(button("kick.punchy"));
+    expect(first).not.toBe("");
+    expect(flashes($('[data-layer="kick"]'))).not.toBe("");
+    expect(flashes($(".bpm-value"))).not.toBe("");
+    expect(flashes(button("kick.long"))).toBe("");
+    advanceSeconds(BAR);
+    flushFrame();
+    expect(flashes(button("kick.punchy"))).not.toBe(first); // replayed on a later hit
+  });
+
   it("the open editor follows the playhead", () => {
     openEditor("kick.punchy");
     click("kick.punchy");
@@ -513,6 +571,27 @@ describe("editors", () => {
   it("the effect switches are remembered", () => {
     $("#reverb").click();
     expect(saved().effects).toEqual({ delay: true, reverb: false });
+  });
+
+  it("each layer has a volume over all its sounds, remembered", () => {
+    const fader = $('[data-layer="lead"] .layer-volume input');
+    expect(fader.getAttribute("aria-label")).toMatch(/^Volumen de /);
+    fader.value = "0.5";
+    fader.dispatchEvent(new Event("input"));
+    expect(saved().volumes.lead).toBe(0.5);
+    expect(saved().volumes.pad).toBe(1);
+  });
+
+  it("Ctrl+click repeats a step on every beat of its bar; with Shift, of both bars", () => {
+    openEditor("perc.hat");
+    const ctrlClick = (step, shiftKey = false) =>
+      stepCell("perc.hat", step).dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true, shiftKey }));
+    const on = () => saved().variants["perc.hat"].steps.flatMap((v, s) => (v ? [s] : []));
+    $("[data-editor] .editor-actions button:last-child").click(); // clear all
+    ctrlClick(1);
+    expect(on()).toEqual([1, 5, 9, 13]);
+    ctrlClick(19, true);
+    expect(on()).toEqual([1, 3, 5, 7, 9, 11, 13, 15, 19, 23, 27, 31]);
   });
 });
 

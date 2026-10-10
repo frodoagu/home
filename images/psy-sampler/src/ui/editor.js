@@ -7,13 +7,14 @@
 // filter + distortion section (the insert).
 // Every change goes out through onChange(next) as fresh data; the editor
 // never talks to the engine itself. The header names the variant (editable)
-// and carries the per-sound actions: duplicate, WAV, reset, delete (copies).
+// and carries the per-sound actions: duplicate, WAV, reset (the part alone,
+// or the whole sound), delete (copies).
 import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES } from "../audio/insert.js";
 import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
 import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs, sampleDefaults } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleStep, doubleSteps, placeNote } from "../editing.js";
+import { cycleNote, cycleNoteEcho, cycleStep, cycleStepEcho, doubleSteps, placeNote } from "../editing.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
@@ -26,6 +27,7 @@ export function createEditor({
   onChange,
   onAudition,
   onReset,
+  onResetPart,
   onClose,
   onTrigger,
   onRename,
@@ -116,7 +118,10 @@ export function createEditor({
   const actions = [
     [button("duplicate", tx.duplicate), onDuplicate],
     [button("wav", tx.wav, tx.wavTitle), onWav],
-    [button("reset", tx.reset), onReset],
+    ...(def.kind === "fx"
+      ? []
+      : [[button("reset-part", def.kind === "drum" ? tx.resetHits : tx.resetNotes, tx.resetPartTitle), onResetPart]]),
+    [button("reset", tx.reset, tx.resetTitle), onReset],
     ...(isCopy(id) ? [[button("remove", tx.remove), onRemove]] : []),
     [button("close", tx.close), onClose],
   ];
@@ -261,7 +266,7 @@ export function createEditor({
       const cell = e.target.closest("[data-step]");
       if (!cell) return;
       const s = Number(cell.dataset.step);
-      const steps = cycleStep(current.steps, s);
+      const steps = echoing(e) ? cycleStepEcho(current.steps, s, e.shiftKey) : cycleStep(current.steps, s);
       set({ steps });
       refreshGrid();
       if (steps[s]) onAudition({ accent: steps[s] === 2 });
@@ -414,7 +419,9 @@ export function createEditor({
     grid.addEventListener("click", (e) => {
       const hit = at(e.target);
       if (!hit) return; // a drag that ended on another cell clicks the grid, not a cell
-      const notes = cycleNote(current.notes, hit.step, hit.midi, current.len);
+      const notes = echoing(e)
+        ? cycleNoteEcho(current.notes, hit.step, hit.midi, current.len, e.shiftKey)
+        : cycleNote(current.notes, hit.step, hit.midi, current.len);
       set({ notes });
       refreshGrid();
       const now = notes.find((n) => n.midi === hit.midi && n.step <= hit.step && n.step + n.len > hit.step);
@@ -522,6 +529,10 @@ function gridHeader(tx) {
   );
   return [corner(), ...bars, corner(), ...beats];
 }
+
+// Ctrl+click (⌘ on a Mac, where Ctrl+click is a right click) repeats the
+// change on every beat of the bar; with Shift, of both bars.
+const echoing = (e) => e.ctrlKey || e.metaKey;
 
 const legend = (text) => el("p", { class: "legend", text });
 
