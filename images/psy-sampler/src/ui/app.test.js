@@ -586,6 +586,31 @@ describe("improvise toggle", () => {
     expect(saved().improv).toEqual({});
   });
 
+  it("the tile's 🔀 slides too: up and down set the amount without the editor, and a drag does not toggle", () => {
+    const tile = $('[data-vary="perc.clap"]');
+    tile.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(saved().improv).toEqual({ "perc.clap": 0.55 });
+    expect(tile.style.getPropertyValue("--amount")).toBe("55%");
+    tile.dispatchEvent(new MouseEvent("pointerdown", { clientY: 200, bubbles: true }));
+    tile.dispatchEvent(new MouseEvent("pointermove", { clientY: 140, bubbles: true }));
+    expect(tile.textContent).toBe("100");
+    expect(tile.classList.contains("is-sliding")).toBe(true);
+    tile.dispatchEvent(new MouseEvent("pointermove", { clientY: 230, bubbles: true }));
+    tile.dispatchEvent(new MouseEvent("pointerup", { clientY: 230, bubbles: true }));
+    tile.click();
+    expect(saved().improv).toEqual({ "perc.clap": 0.3 });
+    expect(tile.textContent).toBe("🔀");
+    expect(tile.getAttribute("aria-pressed")).toBe("false");
+    expect(button("perc.clap").parentElement.classList.contains("is-dragging")).toBe(false);
+    openEditor("perc.clap");
+    const inEditor = editor("perc.clap").querySelector('[data-action="vary"]');
+    expect(inEditor.textContent).toContain("30 %");
+    tile.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(inEditor.textContent).toContain("25 %");
+    tile.click();
+    expect(inEditor.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("keeps going with the editor closed, and shows its state when reopened", () => {
     openEditor("perc.clap");
     editor("perc.clap").querySelector('[data-action="vary"]').click();
