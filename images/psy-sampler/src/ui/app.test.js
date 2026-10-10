@@ -105,11 +105,11 @@ describe("layout", () => {
     expect($("#seed").value).toMatch(/^[a-z2-9]{6}$/);
   });
 
-  it("opens the how-to page from under the lede, and closes it with ✕ or the backdrop", () => {
+  it("opens the how-to page from the top bar, and closes it with ✕ or the backdrop", () => {
     const dialog = $("dialog.help");
     dialog.showModal = () => dialog.setAttribute("open", "");
     dialog.close = () => dialog.removeAttribute("open");
-    expect($(".lede").nextElementSibling.dataset.action).toBe("help");
+    expect($('.topbar [data-action="help"]')).not.toBeNull();
     $('[data-action="help"]').click();
     expect(dialog.open).toBe(true);
     expect(dialog.querySelector("h3").textContent).toBe("Trucos");

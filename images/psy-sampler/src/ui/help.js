@@ -1,4 +1,4 @@
-// The "how to use it" page: a button under the lede that opens a modal
+// The "how to use it" page: a top-bar button that opens a modal
 // dialog with every gesture and trick, from the dictionary's `help`
 // sections ([term, text] pairs). Esc, ✕ or a click on the backdrop closes it.
 import { el } from "./dom.js";
@@ -27,6 +27,7 @@ export function createHelp(tx) {
     ),
   );
   const button = el("button", { type: "button", class: "ghost help-open", "data-action": "help", text: tx.open });
+  button.title = tx.title;
   button.addEventListener("click", () => dialog.showModal());
   close.addEventListener("click", () => dialog.close());
   // The page fills the dialog, so a click on the dialog itself is the backdrop.
