@@ -645,6 +645,12 @@ same shape. The default is the saved language; otherwise the browser's;
 otherwise Spanish. Changing the language rebuilds the app without stopping what
 plays (not the autopilot, not the queue, not the open editor).
 
+The **📖 How to use it** button under the lede opens a page (`ui/help.js`, a
+modal `<dialog>`, full screen on a phone) built from each dictionary's `help`:
+the hidden tricks first (double click, clicking a queued sound, Arm, dragging
+across 🔀, Alt + arrows…), then a reference per area. It is plain text, so a
+new gesture or control needs a line there too, in all three languages.
+
 ## Screen
 
 Portrait: one column. Landscape from 1000 px: layers in two columns (three from

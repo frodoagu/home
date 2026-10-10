@@ -47,6 +47,7 @@ import { djCutoffs } from "../audio/insert.js";
 import { checkbox, download, el, select, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
+import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
@@ -461,6 +462,7 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
+  const help = createHelp(tx.help);
   root.replaceChildren(
     topbar,
     el(
@@ -468,6 +470,8 @@ export function mountApp(root, engine, opts = {}) {
       { class: "top" },
       el("h1", { text: "Psy Layers" }),
       el("p", { class: "lede", text: tx.lede }),
+      help.button,
+      help.dialog,
     ),
     el(
       "div",

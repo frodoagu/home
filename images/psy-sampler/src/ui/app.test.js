@@ -105,6 +105,24 @@ describe("layout", () => {
     expect($("#seed").value).toMatch(/^[a-z2-9]{6}$/);
   });
 
+  it("opens the how-to page from under the lede, and closes it with ✕ or the backdrop", () => {
+    const dialog = $("dialog.help");
+    dialog.showModal = () => dialog.setAttribute("open", "");
+    dialog.close = () => dialog.removeAttribute("open");
+    expect($(".lede").nextElementSibling.dataset.action).toBe("help");
+    $('[data-action="help"]').click();
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector("h3").textContent).toBe("Trucos");
+    expect(dialog.textContent).toContain("Doble clic en un sonido");
+    $(".help-close").click();
+    expect(dialog.open).toBe(false);
+    $('[data-action="help"]').click();
+    dialog.querySelector("dd").click(); // inside the page: stays open
+    expect(dialog.open).toBe(true);
+    dialog.click();
+    expect(dialog.open).toBe(false);
+  });
+
   it("has one row per layer plus the snapshots, and a 16-cell bar with the 4 beats marked", () => {
     expect(root.querySelectorAll("section.layer")).toHaveLength(8);
     expect(root.querySelector("section.layer:last-of-type").dataset.layer).toBe("snap");
