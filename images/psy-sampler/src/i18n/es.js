@@ -36,7 +36,7 @@ export default {
           ["Entrar a tiempo", "Prendido (viene así), cada clic queda en cola y entra en el próximo compás. Apagado, todo cambia al instante."],
           ["FX", "Son de un disparo: suenan una vez y se terminan. Con el loop andando entran en el próximo beat."],
           ["Kick de fondo", "Si prendés cualquier capa sin elegir un kick, suena uno de fondo (borde punteado) para no perder el pulso."],
-          ["Parar", "Corta todo: el loop, el piloto, la cola y cualquier cambio de BPM en curso."],
+          ["Parar", "Corta el loop, el piloto y cualquier cambio de BPM en curso. Lo que sonaba queda en cola (punteado) y el botón pasa a ▶ Arrancar: lo vuelve a largar todo junto."],
           ["La barra de pasos", "Marca el paso que suena. El loop dura 2 compases de 4/4."],
         ],
       },

@@ -34,7 +34,7 @@ export default {
           ["Entrar no tempo", "Ligado (vem assim), cada clique fica na fila e entra no próximo compasso. Desligado, tudo muda na hora."],
           ["FX", "São de um disparo: tocam uma vez e acabam. Com o loop rodando entram no próximo beat."],
           ["Kick de fundo", "Se você liga qualquer camada sem escolher um kick, toca um de fundo (borda tracejada) para não perder o pulso."],
-          ["Parar", "Corta tudo: o loop, o piloto, a fila e qualquer mudança de BPM em andamento."],
+          ["Parar", "Corta o loop, o piloto e qualquer mudança de BPM em andamento. O que tocava fica na fila (pontilhado) e o botão vira ▶ Tocar: solta tudo junto de novo."],
           ["A barra de passos", "Marca o passo que está tocando. O loop dura 2 compassos de 4/4."],
         ],
       },

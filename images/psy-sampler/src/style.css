@@ -771,6 +771,7 @@ html {
   animation: pulse 0.9s ease-in-out infinite alternate;
 }
 
+.stop[hidden],
 .cue[hidden] {
   display: none;
 }

@@ -34,7 +34,7 @@ export default {
           ["On the beat", "On (the default), each click queues and comes in on the next bar. Off, everything changes at once."],
           ["FX", "One-shots: they play once and end. With the loop running they come in on the next beat."],
           ["Background kick", "Switch on any layer without picking a kick and one plays underneath (dashed outline), so the pulse never drops."],
-          ["Stop", "Cuts everything: the loop, the autopilot, the queue and any BPM change on its way."],
+          ["Stop", "Cuts the loop, the autopilot and any BPM change on its way. What was playing stays queued (dotted) and the button turns into ▶ Play: it brings it all back together."],
           ["The step bar", "Shows the step that's sounding. The loop is 2 bars of 4/4."],
         ],
       },

@@ -81,9 +81,10 @@ goes through it:
 - **⏺ Arm** (in the top bar, only while stopped) builds the start: armed, a
   click queues like "On the beat" does (a second click takes it back out, a
   double click counts once) and nothing sounds; **▶ Play** starts everything
-  queued together from step 0, a queued snapshot included. Stop disarms and
-  drops the queue; the autopilot, armed, takes the queued mix and starts. FX
-  still fire at once.
+  queued together from step 0, a queued snapshot included. Stop arms with
+  what was playing queued (dotted) and hides itself, so ▶ Play sits in its
+  slot and brings that mix back; the autopilot, armed, takes the queued mix
+  and starts. FX still fire at once.
 - **Autopilot** (see below), at every loop start.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
