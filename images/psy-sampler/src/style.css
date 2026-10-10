@@ -646,6 +646,33 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+/* A tempo light: the BPM flashes on every beat, harder on the bar line. */
+.bpm-value.hit-a {
+  animation: beat-a 200ms ease-out;
+}
+
+.bpm-value.hit-b {
+  animation: beat-b 200ms ease-out;
+}
+
+.bpm-value.hit-accent {
+  --beat-scale: 1.25;
+}
+
+@keyframes beat-a {
+  from {
+    color: var(--current);
+    transform: scale(var(--beat-scale, 1.1));
+  }
+}
+
+@keyframes beat-b {
+  from {
+    color: var(--current);
+    transform: scale(var(--beat-scale, 1.1));
+  }
+}
+
 .check {
   display: flex;
   align-items: center;
@@ -864,6 +891,18 @@ html {
   animation: pulse 0.9s ease-in-out infinite alternate;
 }
 
+/* On air: a slow blink, like a recorder's red light. */
+.rec.is-recording {
+  animation: on-air 1.2s steps(1) infinite;
+}
+
+@keyframes on-air {
+  50% {
+    background: transparent;
+    color: var(--stop);
+  }
+}
+
 .rec:disabled {
   cursor: progress;
   opacity: 0.6;
@@ -991,6 +1030,10 @@ html {
   color: var(--muted);
 }
 
+.layer-volume {
+  margin-top: 8px;
+}
+
 .snap-files {
   display: flex;
   flex-wrap: wrap;
@@ -1080,6 +1123,73 @@ html {
   }
   to {
     opacity: 0.45;
+  }
+}
+
+/* A hit: a flash over the tile (brighter on an accent) that fades in a
+   moment. hit-a and hit-b are the same flash, alternated so it replays. */
+.variant::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.variant.hit-a::after {
+  animation: strike-a 180ms ease-out;
+}
+
+.variant.hit-b::after {
+  animation: strike-b 180ms ease-out;
+}
+
+.variant.hit-accent::after {
+  --strike: 0.55;
+}
+
+.variant.hit-accent::before {
+  box-shadow: 0 0 6px currentColor;
+}
+
+@keyframes strike-a {
+  from {
+    opacity: var(--strike, 0.3);
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes strike-b {
+  from {
+    opacity: var(--strike, 0.3);
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The layer's colour edge glows with whatever plays in it. */
+.layer.hit-a {
+  animation: layer-strike-a 220ms ease-out;
+}
+
+.layer.hit-b {
+  animation: layer-strike-b 220ms ease-out;
+}
+
+@keyframes layer-strike-a {
+  from {
+    box-shadow: -2px 0 14px -4px var(--layer);
+  }
+}
+
+@keyframes layer-strike-b {
+  from {
+    box-shadow: -2px 0 14px -4px var(--layer);
   }
 }
 
@@ -1734,8 +1844,12 @@ html {
   }
   .variant.is-queued,
   .variant.is-leaving,
+  .variant::after,
+  .layer,
+  .bpm-value,
   .cue.is-armed,
-  .rec.is-waiting {
-    animation: none;
+  .rec.is-waiting,
+  .rec.is-recording {
+    animation: none !important;
   }
 }

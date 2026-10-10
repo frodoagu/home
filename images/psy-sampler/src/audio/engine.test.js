@@ -362,6 +362,21 @@ describe("edits (setData)", () => {
     expect(laneGains()[0].gain.value).toBeCloseTo(0.45, 9);
   });
 
+  it("a layer's volume scales every lane of that layer, FX shots and new lanes", () => {
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp" });
+    run(0.2);
+    const [bass, lead] = laneGains();
+    engine.setLayerVolume("lead", 0.5);
+    expect(lead.gain.events.at(-1)).toEqual(["target", 0.15, ctx.currentTime, 0.02]);
+    expect(bass.gain.events).toHaveLength(0);
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp", "lead.acid": "lead.acid" });
+    expect(laneGains().at(-1).gain.value).toBeCloseTo(0.15, 9);
+    engine.triggerFx("fx.impact");
+    const shot = laneGains().at(-1);
+    engine.setLayerVolume("fx", 0);
+    expect(shot.gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.02]);
+  });
+
   it("FX read their sliders: a 4-bar sweep lasts 4 bars", () => {
     engine.setData("fx.sweep", { ...defaultData("fx.sweep"), params: { bars: 4, top: 6000 } });
     const { start, end } = engine.triggerFx("fx.sweep");

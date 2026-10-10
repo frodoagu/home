@@ -2,7 +2,7 @@
 // mutates its input, so the UI can hand the result straight to the engine.
 import { ACCENT, HIT, OFF } from "./audio/patterns.js";
 import { isRoot } from "./audio/music.js";
-import { LOOP_STEPS } from "./audio/timing.js";
+import { BAR_STEPS, LOOP_STEPS } from "./audio/timing.js";
 
 // Drum grid click: off -> hit -> accent -> off.
 export function cycleStep(steps, i) {
@@ -57,11 +57,53 @@ export function cycleNote(notes, step, midi, len) {
   if (hit) {
     return hit.accent ? notes.filter((n) => n !== hit) : notes.map((n) => (n === hit ? { ...n, accent: true } : n));
   }
+  return addNote(notes, step, midi, len, false);
+}
+
+function addNote(notes, step, midi, len, accent) {
   const nextStart = Math.min(
     LOOP_STEPS,
     ...notes.filter((n) => n.midi === midi && n.step > step).map((n) => n.step),
   );
-  return [...notes, { step, midi, len: Math.min(len, nextStart - step), accent: false }];
+  return [...notes, { step, midi, len: Math.min(len, nextStart - step), accent }];
+}
+
+// The same 16th in every beat of the bar holding `step`, or of both bars.
+export function beatEchoes(step, bothBars = false) {
+  const from = bothBars ? 0 : step - (step % BAR_STEPS);
+  const beats = (bothBars ? LOOP_STEPS : BAR_STEPS) / 4;
+  return Array.from({ length: beats }, (_, k) => from + (step % 4) + 4 * k);
+}
+
+// Ctrl+click on the drum grid: the clicked step's new state on all its echoes.
+export function cycleStepEcho(steps, i, bothBars = false) {
+  const v = cycleStep(steps, i)[i];
+  const out = steps.slice();
+  for (const s of beatEchoes(i, bothBars)) out[s] = v;
+  return out;
+}
+
+/**
+ * Ctrl+click on the piano roll: the clicked note's new state (note, accent or
+ * gone) on every echo of its start in that row. A cell already inside a
+ * longer note is left alone.
+ */
+export function cycleNoteEcho(notes, step, midi, len, bothBars = false) {
+  const hit = noteAt(notes, step, midi);
+  const state = !hit ? HIT : hit.accent ? OFF : ACCENT;
+  let out = notes;
+  // From the last echo back, so each new note is shortened by the ones after it.
+  for (const s of beatEchoes(hit ? hit.step : step, bothBars).reverse()) {
+    const head = out.find((n) => n.midi === midi && n.step === s);
+    if (state === OFF) {
+      if (head) out = out.filter((n) => n !== head);
+    } else if (head) {
+      out = out.map((n) => (n === head ? { ...n, accent: state === ACCENT } : n));
+    } else if (!noteAt(out, s, midi)) {
+      out = addNote(out, s, midi, len, state === ACCENT);
+    }
+  }
+  return out;
 }
 
 // Drag on a row: the dragged span wins over whatever it covers on that row.

@@ -12,8 +12,9 @@
 // drives recorder.js, which outlives remounts like the engine.
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
-import { baseOf, defOf, defaultData, isCopy, sampleDefaults } from "../audio/patterns.js";
+import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
+import { LEVEL } from "../audio/params.js";
 import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
@@ -54,7 +55,7 @@ import {
   toSnapshotFile,
 } from "../workspace.js";
 import { djCutoffs } from "../audio/insert.js";
-import { amountSlider, checkbox, download, el, select, slug } from "./dom.js";
+import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
@@ -146,6 +147,7 @@ export function mountApp(root, engine, opts = {}) {
   for (const id of allIds()) feed(id, dataOf(id));
   for (const [id, anchor] of state.varying) feed(id, varied(id, anchor));
   engine.setEffects(ws.effects);
+  for (const [id, v] of Object.entries(ws.volumes)) engine.setLayerVolume(id, v);
   engine.setBpm(state.tempo);
 
   /* ---- header + transport ---- */
@@ -384,6 +386,19 @@ export function mountApp(root, engine, opts = {}) {
     sorters.push(sortable(group, { item: ".tile", key: "key", onDrop }));
   }
 
+  // The layer's fader: scales every sound in it, on top of each one's own volume.
+  function layerVolume(id) {
+    const knob = slider({ ...LEVEL, key: "layer-volume", label: tx.tile.volume }, ws.volumes[id], (v) => {
+      ws.volumes[id] = v;
+      engine.setLayerVolume(id, v);
+      persist();
+    });
+    knob.classList.add("layer-volume");
+    knob.querySelector("input").setAttribute("aria-label", tx.tile.layerVolume(tx.layers[id].name));
+    knob.title = tx.tile.layerVolumeTitle;
+    return knob;
+  }
+
   /* ---- snapshot tiles ---- */
   const snapTiles = new Map(); // snapshot id -> { node, tile, edit, labelEl, detailEl }
   const snapDetail = (snap) => `${tx.sections[snap.section]} · ${tx.snap.count(partsOf(snap).length)}`;
@@ -440,10 +455,15 @@ export function mountApp(root, engine, opts = {}) {
       continue;
     }
     const layer = layerById(id);
-    makeSection(id, tx.layers[id], (ids) => {
-      ws.lists[id] = ids;
-      persist();
-    });
+    makeSection(
+      id,
+      tx.layers[id],
+      (ids) => {
+        ws.lists[id] = ids;
+        persist();
+      },
+      layerVolume(id),
+    );
     renderTiles(layer);
   }
   const layersMain = el("main", { class: "layers" }, ...ws.order.map((id) => sections.get(id).node));
@@ -629,18 +649,53 @@ export function mountApp(root, engine, opts = {}) {
     shownStep = step;
   }
 
+  // A short flash, replayed on every call: alternating between two identical
+  // animations restarts it without forcing a reflow.
+  function strike(node, accent = false) {
+    const again = node.classList.contains("hit-a");
+    node.classList.toggle("hit-a", !again);
+    node.classList.toggle("hit-b", again);
+    node.classList.toggle("hit-accent", accent);
+  }
+
+  // Each audible step flashes the tiles that play on it (and their layer),
+  // brighter on an accent, and the BPM on every beat.
+  let struck = null;
+  function strikeStep(step) {
+    if (step === struck) return;
+    struck = step;
+    if (step === null) return;
+    if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
+    const layers = new Map(); // layer id -> accented: one flash each, however many sounds hit
+    for (const id of Object.values(lanes)) {
+      const events = eventsAt(id, step, false, dataNow(id));
+      const t = tiles.get(id);
+      if (!events.length || !t) continue;
+      const accent = events.some((ev) => ev.accent);
+      strike(t.node, accent);
+      layers.set(t.layer.id, accent || layers.get(t.layer.id) === true);
+    }
+    for (const [id, accent] of layers) strike(sections.get(id).node, accent);
+  }
+
   // The bar follows the audio clock, not the timer: each frame asks the engine
   // which scheduled step is audible now. The loop parks itself when idle.
   let frame = 0;
-  let fxShown = "";
+  let fxShown = new Set();
   function draw() {
     frame = 0;
-    paintStep(engine.visibleStep());
+    const step = engine.visibleStep();
+    paintStep(step);
+    strikeStep(step);
     const fx = engine.activeFx();
-    const key = [...fx].sort().join();
-    if (key !== fxShown) {
+    if ([...fx].sort().join() !== [...fxShown].sort().join()) {
       renderButtons(fx);
-      fxShown = key;
+      for (const id of fx) {
+        if (fxShown.has(id) || !tiles.has(id)) continue;
+        strike(tiles.get(id).node, true);
+        strike(sections.get("fx").node, true);
+      }
+      fxShown = fx;
     }
     if (engine.isRunning() || fx.size > 0) frame = requestAnimationFrame(draw);
   }
@@ -658,7 +713,7 @@ export function mountApp(root, engine, opts = {}) {
 
   function fire(id, at) {
     engine.triggerFx(id, at);
-    fxShown = ""; // force a repaint so the button lights up this frame
+    fxShown = new Set(); // force a repaint (and a flash) so the button lights up this frame
     animate();
   }
 
@@ -1066,6 +1121,20 @@ export function mountApp(root, engine, opts = {}) {
         renderButtons();
         openEditor(layer, id); // rebuild with the factory values
       },
+      // Only the factory notes (or hits): the voice, the insert and the volume stay.
+      onResetPart: () => {
+        const key = defOf(id).kind === "drum" ? "steps" : "notes";
+        const factory = defaultData(id);
+        state.newParts.delete(id);
+        open.editor.showNewPart(false);
+        setVariant(id, { ...dataOf(id), [key]: structuredClone(factory[key]) });
+        if (!isCopy(id) && JSON.stringify(ws.variants[id]) === JSON.stringify(factory)) {
+          delete ws.variants[id]; // nothing left that differs from factory
+          persist();
+          renderButtons();
+        }
+        open.editor.show(dataNow(id));
+      },
       onClose: closeEditor,
       onTrigger: () => fire(id),
       onRename: (name) => rename(id, name),
@@ -1454,7 +1523,7 @@ export function mountApp(root, engine, opts = {}) {
     engine.stop();
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
-    fxShown = "";
+    fxShown = new Set();
     renderButtons(new Set());
     paintStep(null);
     showSection();

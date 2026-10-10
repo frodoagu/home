@@ -16,6 +16,12 @@ describe("normalize", () => {
     expect(ws.active).toEqual({});
   });
 
+  it("keeps each layer's volume in range, 1 when missing", () => {
+    const ws = normalize({ volumes: { lead: 0.4, pad: 9, kick: -1, bass: "loud", nope: 0.2 } });
+    expect(ws.volumes).toEqual({ kick: 0, bass: 1, perc: 1, lead: 0.4, pad: 1.5, glitch: 1, fx: 1 });
+    expect(normalize(undefined).volumes.fx).toBe(1);
+  });
+
   it("keeps a valid layout and appends whatever is missing", () => {
     const ws = normalize({
       order: ["pad", "nope", "kick", "pad"],

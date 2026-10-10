@@ -3,8 +3,11 @@ import { inScale, isRoot, scaleRows } from "./audio/music.js";
 import { ACCENT, HIT, OFF } from "./audio/patterns.js";
 import {
   BUILD_UP,
+  beatEchoes,
   cycleNote,
+  cycleNoteEcho,
   cycleStep,
+  cycleStepEcho,
   doubleSteps,
   changesFor,
   improvise,
@@ -85,6 +88,41 @@ describe("cycleNote", () => {
 
   it("other rows are independent: chords are allowed", () => {
     expect(cycleNote([n(0, 60, 4)], 0, 64, 4)).toHaveLength(2);
+  });
+});
+
+describe("beatEchoes", () => {
+  it("the same 16th in each beat of the clicked bar, or of both bars", () => {
+    expect(beatEchoes(2)).toEqual([2, 6, 10, 14]);
+    expect(beatEchoes(21)).toEqual([17, 21, 25, 29]);
+    expect(beatEchoes(21, true)).toEqual([1, 5, 9, 13, 17, 21, 25, 29]);
+  });
+});
+
+describe("cycleStepEcho", () => {
+  it("copies the clicked step's new state onto its echoes only", () => {
+    const steps = Array(32).fill(OFF);
+    steps[6] = ACCENT;
+    steps[3] = HIT;
+    const out = cycleStepEcho(steps, 2);
+    expect(out.flatMap((v, s) => (v ? [s] : []))).toEqual([2, 3, 6, 10, 14]);
+    expect([out[2], out[6]]).toEqual([HIT, HIT]);
+    expect(cycleStepEcho(out, 18, true).every((v, s) => s % 4 !== 2 || v === HIT)).toBe(true);
+    expect(steps[2]).toBe(OFF);
+  });
+});
+
+describe("cycleNoteEcho", () => {
+  it("adds the note on every beat of the bar, shortened before the next one", () => {
+    expect(cycleNoteEcho([], 2, 60, 8)).toEqual([n(14, 60, 8), n(10, 60, 4), n(6, 60, 4), n(2, 60, 4)]);
+    expect(cycleNoteEcho([], 1, 60, 1, true)).toHaveLength(8);
+  });
+
+  it("accents and deletes the echoes of the clicked note, row by row", () => {
+    const notes = [n(2, 60), n(6, 60), n(10, 64), n(9, 60, 3)];
+    const accented = cycleNoteEcho(notes, 2, 60, 1);
+    expect(accented).toEqual([n(2, 60, 1, true), n(6, 60, 1, true), n(10, 64), n(9, 60, 3), n(14, 60, 1, true)]);
+    expect(cycleNoteEcho(accented, 6, 60, 1)).toEqual([n(10, 64), n(9, 60, 3)]);
   });
 });
 
