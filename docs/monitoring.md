@@ -204,7 +204,10 @@ after a restart; only `psy_sync_http_requests_total` lives in memory.
 | `psy_sync_workspace_bytes_limit` | largest workspace the API accepts (256 KB) |
 | `psy_sync_db_bytes{file="db\|wal"}`, `psy_sync_volume_request_bytes` | SQLite files on the PVC, and the PVC request (`sync.persistence.size`) |
 | `psy_sync_volume_size_bytes`, `psy_sync_volume_avail_bytes` | `statfs` of the data volume: with local-path, the SD card |
-| `psy_sync_http_requests_total{route,status}` | API requests; unknown paths fold into `route="other"` |
+| `psy_sync_samples`, `psy_sync_sample_bytes_total` | uploaded audio samples, and their total size |
+| `psy_sync_sample_bytes_limit`, `psy_sync_sample_quota_bytes` | the shared cap on all samples (`sync.samples.total`) and the per-account quota (`sync.samples.quota`) |
+| `psy_sync_user_sample_bytes{email}` | sample bytes of the `sync.metrics.topUsers` accounts storing the most |
+| `psy_sync_http_requests_total{route,status}` | API requests; unknown paths fold into `route="other"`, every sample id into one `…/api/samples/:id` route per method |
 
 - **Anonymous visitors.** The page keeps a random id in localStorage
   (`psy-sampler:visitor`) and sends it as `X-Psy-Visitor` on the session check
@@ -221,7 +224,7 @@ after a restart; only `psy_sync_http_requests_total` lives in memory.
   are larger (pages, indexes, WAL, the visitor table). local-path does not
   enforce the PVC size, so the database can outgrow its 2 Gi into the SD card's
   free space. That is why `PsySyncDataVolumeHigh` compares against the request.
-- **Emails are labels** on `psy_sync_user_workspace_bytes`, so they land in
+- **Emails are labels** on `psy_sync_user_workspace_bytes` and `psy_sync_user_sample_bytes`, so they land in
   VictoriaMetrics. Grafana is behind google-auth, and only the top N accounts
   are exported.
 
@@ -243,6 +246,7 @@ Alerts (group `psy-sampler.sync` in `templates/vmrules.yaml`):
 | `PsySyncAnonymousBurst` / `PsySyncVisitorsCapReached` | > 500 new browser rows in 1h / visitor table full (anonymous counts frozen) |
 | `PsySyncWorkspaceNearLimit` | an account's workspace > 90% of 256 KB for 1h (its saves are about to get 413) |
 | `PsySyncDataVolumeHigh` | SQLite files > 80% of the PVC request for 30m |
+| `PsySyncSamplesNearCap` | all samples together > 80% of `sync.samples.total` for 1h (uploads are about to get 507) |
 
 ## GeoIP
 

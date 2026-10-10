@@ -40,7 +40,11 @@ export class FakeNode {
     this.outputs.push(dest);
     return dest;
   }
-  disconnect() {
+  disconnect(dest) {
+    if (dest) {
+      this.outputs = this.outputs.filter((o) => o !== dest);
+      return;
+    }
     this.outputs = [];
     this.disconnected = true;
   }
@@ -89,7 +93,7 @@ export class FakeAudioContext {
     return n;
   }
   createBiquadFilter() {
-    const n = withParams(new FakeNode(this, "filter"), { frequency: 350, Q: 1, gain: 0 });
+    const n = withParams(new FakeNode(this, "filter"), { frequency: 350, detune: 0, Q: 1, gain: 0 });
     n.type = "lowpass";
     return n;
   }
@@ -105,14 +109,20 @@ export class FakeAudioContext {
   createDelay() {
     return withParams(new FakeNode(this, "delay"), { delayTime: 0 });
   }
+  createWaveShaper() {
+    const n = new FakeNode(this, "waveshaper");
+    n.curve = null;
+    n.oversample = "none";
+    return n;
+  }
   createConvolver() {
     const n = new FakeNode(this, "convolver");
     n.buffer = null;
     return n;
   }
   createBuffer(channels, length, sampleRate) {
-    const data = new Float32Array(length);
-    return { length, sampleRate, numberOfChannels: channels, getChannelData: () => data };
+    const data = Array.from({ length: channels }, () => new Float32Array(length));
+    return { length, sampleRate, duration: length / sampleRate, numberOfChannels: channels, getChannelData: (c) => data[c] };
   }
   sources() {
     return this.nodes.filter((n) => n instanceof FakeSource);

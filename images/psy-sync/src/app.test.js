@@ -3,6 +3,7 @@ import { createApp } from "./app.js";
 import { openDb } from "./db.js";
 import { verifyIdToken } from "./google.js";
 import { parseQuantity, renderMetrics } from "./metrics.js";
+import { cleanName, sniffAudio } from "./samples.js";
 import { hmacKey, readSession, signSession } from "./session.js";
 
 const CLIENT = "client-123.apps.googleusercontent.com";
@@ -209,6 +210,126 @@ describe("API", () => {
   });
 });
 
+describe("samples", () => {
+  // A minimal WAV header and some bytes after it.
+  const wav = (size = 64) => {
+    const bytes = new Uint8Array(size);
+    bytes.set(enc.encode("RIFF"), 0);
+    bytes.set(enc.encode("WAVE"), 8);
+    return bytes;
+  };
+  const upload = (cookie, bytes, { name = "kick.wav", origin = ORIGIN } = {}) =>
+    app.fetch(
+      new Request(`https://psy.agu.com.ar/api/samples?name=${encodeURIComponent(name)}`, {
+        method: "POST",
+        headers: { "content-type": "audio/wav", ...(cookie ? { cookie } : {}), ...(origin ? { origin } : {}) },
+        body: bytes,
+      }),
+    );
+  const limited = (samples) => {
+    app = createApp({ db, clientId: CLIENT, key, origins: [ORIGIN], getKey, now: () => clock, samples });
+  };
+
+  it("sniffs the audio formats browsers decode, and nothing else", () => {
+    const head = (text, at = 0, size = 16) => {
+      const b = new Uint8Array(size);
+      b.set(enc.encode(text), at);
+      return b;
+    };
+    const aiff = head("FORM");
+    aiff.set(enc.encode("AIFF"), 8);
+    expect(sniffAudio(wav())).toBe("audio/wav");
+    expect(sniffAudio(aiff)).toBe("audio/aiff");
+    expect(sniffAudio(head("OggS"))).toBe("audio/ogg");
+    expect(sniffAudio(head("fLaC"))).toBe("audio/flac");
+    expect(sniffAudio(head("ftyp", 4))).toBe("audio/mp4");
+    expect(sniffAudio(head("ID3"))).toBe("audio/mpeg");
+    expect(sniffAudio(Uint8Array.from([0xff, 0xfb, ...new Array(14).fill(0)]))).toBe("audio/mpeg");
+    expect(sniffAudio(Uint8Array.from([0xff, 0xf1, ...new Array(14).fill(0)]))).toBe("audio/aac");
+    expect(sniffAudio(Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3, ...new Array(12).fill(0)]))).toBe("audio/webm");
+    expect(sniffAudio(head("<html><script>"))).toBeNull();
+    expect(sniffAudio(head("RIFF"))).toBeNull(); // RIFF but not WAVE (an AVI, say)
+    expect(sniffAudio(new Uint8Array(4))).toBeNull();
+  });
+
+  it("cleans names", () => {
+    expect(cleanName("  kick\u0000 909\n")).toBe("kick 909");
+    expect(cleanName("")).toBe("sample");
+    expect(cleanName(null)).toBe("sample");
+    expect(cleanName("x".repeat(100))).toHaveLength(60);
+  });
+
+  it("uploads, lists, serves and deletes a sample, only for its owner", async () => {
+    const ana = await signIn();
+    const bob = await signIn({ sub: "2002", email: "bob@example.com" });
+    const res = await upload(ana, wav(100), { name: "Kick 909" });
+    expect(res.status).toBe(201);
+    const sample = await res.json();
+    expect(sample).toMatchObject({ name: "Kick 909", type: "audio/wav", bytes: 100, createdAt: clock });
+    expect(sample.id).toMatch(/^[A-Za-z0-9_-]{22}$/);
+
+    const list = await (await call("GET", "/api/samples", { cookie: ana })).json();
+    expect(list.samples).toEqual([{ id: sample.id, name: "Kick 909", type: "audio/wav", bytes: 100, createdAt: clock }]);
+    expect(list.used).toEqual({ count: 1, bytes: 100 });
+    expect(list.limits).toEqual({ bytes: 3 * 2 ** 20, count: 24, quota: 30 * 2 ** 20 });
+
+    const file = await call("GET", `/api/samples/${sample.id}`, { cookie: ana });
+    expect(file.status).toBe(200);
+    expect(file.headers.get("content-type")).toBe("audio/wav");
+    expect(file.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(wav(100));
+
+    expect((await call("GET", `/api/samples/${sample.id}`, { cookie: bob })).status).toBe(404);
+    expect((await call("DELETE", `/api/samples/${sample.id}`, { cookie: bob })).status).toBe(404);
+    expect((await (await call("GET", "/api/samples", { cookie: bob })).json()).samples).toEqual([]);
+
+    expect((await call("DELETE", `/api/samples/${sample.id}`, { cookie: ana })).status).toBe(204);
+    expect((await call("GET", `/api/samples/${sample.id}`, { cookie: ana })).status).toBe(404);
+  });
+
+  it("needs a session and our origin", async () => {
+    expect((await upload(null, wav())).status).toBe(401);
+    expect((await call("GET", "/api/samples")).status).toBe(401);
+    expect((await call("GET", "/api/samples/aaaaaaaaaaaaaaaaaaaaaa")).status).toBe(401);
+    const cookie = await signIn();
+    expect((await upload(cookie, wav(), { origin: "https://evil.example" })).status).toBe(403);
+  });
+
+  it("refuses what is not audio, and every limit: file, count, quota, volume", async () => {
+    const cookie = await signIn();
+    expect((await upload(cookie, enc.encode("<html><script>alert(1)</script></html>"))).status).toBe(415);
+
+    limited({ bytes: 100, count: 2, quota: 150, total: 1000 });
+    const big = await upload(cookie, wav(101));
+    expect([big.status, (await big.json()).error]).toEqual([413, "too big"]);
+    expect((await upload(cookie, wav(100))).status).toBe(201);
+    const quota = await upload(cookie, wav(60));
+    expect([quota.status, (await quota.json()).error]).toEqual([507, "quota"]);
+    expect((await upload(cookie, wav(50))).status).toBe(201);
+    const count = await upload(cookie, wav(20));
+    expect([count.status, (await count.json()).error]).toEqual([507, "count"]);
+
+    limited({ bytes: 100, count: 9, quota: 1000, total: 200 });
+    const bob = await signIn({ sub: "2002", email: "bob@example.com" });
+    const full = await upload(bob, wav(51));
+    expect([full.status, (await full.json()).error]).toEqual([507, "full"]);
+  });
+
+  it("deleting the account deletes its samples", async () => {
+    const cookie = await signIn();
+    await upload(cookie, wav());
+    await call("DELETE", "/api/account", { cookie });
+    expect(db.sampleBytesTotal()).toBe(0);
+    expect(db.samples("1001")).toEqual([]);
+  });
+
+  it("counts every sample id as one route", async () => {
+    await call("GET", "/api/samples/aaaaaaaaaaaaaaaaaaaaaa");
+    await call("GET", "/api/samples/bbbbbbbbbbbbbbbbbbbbbb");
+    expect(app.requests.entries()).toEqual([["GET /api/samples/:id", "401", 2]]);
+  });
+});
+
 describe("visitors and metrics", () => {
   const HOUR = 3600 * 1000;
   const DAY = 24 * HOUR;
@@ -298,6 +419,8 @@ describe("visitors and metrics", () => {
     expect(text).toContain("psy_sync_volume_request_bytes 2147483648\n");
     expect(text).toContain('psy_sync_http_requests_total{route="POST /api/session",status="200"} 1\n');
     expect(text).toContain("# TYPE psy_sync_http_requests_total counter\n");
+    expect(text).toContain("psy_sync_samples 0\n");
+    expect(text).toContain(`psy_sync_sample_quota_bytes ${30 * 2 ** 20}\n`);
   });
 
   it("parses Kubernetes quantities", () => {

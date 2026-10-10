@@ -1,15 +1,18 @@
 # psy-sampler
 
 A live electronic music machine at `https://psy.agu.com.ar`. Each button loops a
-layer (kick, bass, percussion, lead, pad; 9 sounds per layer) over a grid of 32
-sixteenths (2 bars); FX are one-shots outside the loop. **Everything is
-editable**: every button has a ▾ that opens its editor (steps, notes, synth,
-knobs), and any sound can be duplicated and renamed. An autopilot builds a track
+layer (kick, bass, percussion, lead, pad, glitch; 9-11 sounds per layer) over a
+grid of 32 sixteenths (2 bars); FX are one-shots outside the loop. **Everything
+is editable**: every button has a ▾ that opens its editor (steps, notes, synth,
+knobs, filter and distortion), any sound can be duplicated and renamed, and a
+signed-in user can upload samples to their profile and play any sound through
+one. A DJ filter sweeps the whole mix. An autopilot builds a track
 on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
 sound sounds; its sections can be forced and queued. What plays exports to WAV.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
-browser with Web Audio: the pod only serves ~80 kB of static files.
+browser with Web Audio (the pod only serves ~200 kB of static files), except the
+users' own samples, which psy-sync keeps.
 
 | Piece | Where |
 |---|---|
@@ -24,14 +27,14 @@ browser with Web Audio: the pod only serves ~80 kB of static files.
 
 ```mermaid
 flowchart LR
-  subgraph lanes["one GainNode per playing variant"]
-    K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n]
+  subgraph lanes["one lane per playing variant: input → insert → GainNode"]
+    K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n]
   end
-  FX[one GainNode per playing FX]
-  lanes --> M[master 0.7] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
+  FX[one insert + GainNode per playing FX]
+  lanes --> M[master 0.7] --> DJ[DJ filter] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
   FX --> M
-  lanes -. send .-> DL[delay 3/16] -.-> C
-  lanes -. send .-> RV[reverb] -.-> C
+  lanes -. send .-> DL[delay 3/16] -.-> DJ
+  lanes -. send .-> RV[reverb] -.-> DJ
   FX -. send .-> DL & RV
 ```
 
@@ -129,6 +132,7 @@ global switch in the transport (the return glides over 30 ms):
 | percussion | — | 0.12 |
 | lead | 0.3 | 0.25 |
 | pad | — | 0.4 |
+| glitch | 0.25 | 0.15 |
 | FX | 0.2 | 0.35 |
 
 Kick and bass stay dry: a tail under them only muddies the low end. The delay is
@@ -136,6 +140,43 @@ Kick and bass stay dry: a tail under them only muddies the low end. The delay is
 2.5 kHz LP (each repeat darker), and it follows the BPM with a 50 ms glide (a
 jump in `delayTime` clicks). The reverb is a `ConvolverNode` with a synthetic
 impulse: 2.4 s of stereo noise with a cubic decay.
+
+### Filter, distortion and the DJ filter
+
+Every sound carries an **insert** (`data.insert`,
+[`insert.js`](../images/psy-sampler/src/audio/insert.js)) between its notes and
+its lane gain: a filter, then a distortion. The editor shows it as "Filter and
+distortion":
+
+| | Options | Knobs |
+|---|---|---|
+| Filter | off, lowpass, highpass, bandpass | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars |
+| Distortion | off, saturation (tanh), hard clip, wavefold, bitcrush | drive |
+
+- **Live**: knob moves glide (20 ms) on the playing lane. Switching a *type*
+  needs other nodes, so the engine builds a fresh chain and crossfades it in
+  over 30 ms (`swapInsert`), like a variant change.
+- **The LFO** is an `OscillatorNode` locked to the BPM (`1 / (rate × step)`,
+  re-glided on every BPM change) and starts on the lane's entry step, so the
+  wobble starts on the grid. It is stopped when the lane fades.
+- **Off is an identity**: a lowpass at Nyquist and a `WaveShaperNode` without a
+  curve (both pass-through by spec), so a sound with nothing on sounds as before.
+- **Level**: drive pushes harder into the curve and turns the output down
+  (`driveGains`). Measured in Chrome on the acid lead, saturation, clip and
+  wavefold stay within ±2 dB of the bypass from 0 to 100 % (wavefold needed its
+  own correction: it read 2.6 dB hot at 0 % and 6.6 dB quiet at 100 %). Bitcrush
+  goes from 8 bits (0 %) to 2 (100 %) at full scale and doesn't change the level.
+- FX shots and the editor's previews get an insert too, and WAV exports render it.
+
+`lead.bits` ships with a resonant lowpass wobbling over 2 bars, to show it off;
+every other factory sound starts with the insert off.
+
+The **DJ filter** (transport) is one bipolar knob on the master bus, before the
+compressor and after the effect returns: left closes a lowpass from Nyquist to
+150 Hz, right opens a highpass from 0 to 6 kHz, both on a log scale with Q 1.2;
+the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
+detent; a double click recentres it. It is a performance control: never saved,
+but carried across a remount and applied to WAV exports.
 
 ## Editable data
 
@@ -148,8 +189,9 @@ What each variant plays is **data**, not code
 | `notes` (bass, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + synth + brightness + scale + octave + new-note length |
 | `fx` | `params` (length in bars, range, decay…) | knobs + ▶ Fire |
 
-All of them also have **Volume** (`level`, 0-150 % of their layer's level) and
-**Reset**. `eventsAt(id, step, entering, data)` turns the data into events on
+All of them also have **Volume** (`level`, 0-150 % of their layer's level),
+**Reset**, the insert above (`insert`) and a **Source** (`sample`: `null` for
+their own voice, or one of the user's samples, see *Samples*). `eventsAt(id, step, entering, data)` turns the data into events on
 each step; `engine.setData(id, data)` replaces it and the scheduler reads it on
 the next scheduled step (≤ 120 ms), without reopening the lane. A volume change
 glides over 20 ms in the lanes playing that variant. Knobs (`params.js`) store
@@ -348,6 +390,7 @@ the token itself and issues its own session cookie.
 - The server **doesn't interpret** the workspace: it stores an opaque JSON
   object (capped at 256 KB) and the page runs it through `normalize()` when
   fetching it, like a preset.
+- Samples have their own routes (see *Samples* below).
 - Writes: on top of `SameSite=Lax`, the `Origin` header must be
   `https://psy.agu.com.ar`.
 - The session is a stateless HMAC (`sub.expiry.signature`); the key is generated
@@ -375,6 +418,51 @@ was built on; a 409 (another device saved in between) asks the same question.
 Hiding the tab uploads anything pending with `keepalive`. Offline, it stays local
 and uploads with the next change.
 
+### Samples
+
+A signed-in user uploads audio files (WAV, AIFF, MP3, AAC/M4A, OGG, FLAC, WebM)
+in the **🎵 Samples** panel (under the tools, collapsed). They are kept **on the
+Pi**, in the user's profile: BLOBs in the same SQLite file, so deleting the
+account takes them along.
+
+| Route | |
+|---|---|
+| `GET /api/samples` | `{ samples: [{ id, name, type, bytes, createdAt }], used, limits }` |
+| `POST /api/samples?name=…` | the raw file → **201** `{ id, … }`; **413** too big, **415** not audio, **507** no room (`error`: `quota`, `count` or `full`) |
+| `GET /api/samples/:id` | the file, to its owner only (anyone else gets 404); `immutable`, `nosniff`, `attachment` |
+| `DELETE /api/samples/:id` | 204 |
+
+- **Checks, twice.** The page decodes a file before sending it: what the browser
+  can't play, or what runs longer than 15 s (`MAX_SECONDS` in
+  [`samples.js`](../images/psy-sampler/src/samples.js)), never leaves the page.
+  The server trusts none of it: the bytes must start like one of the formats
+  above (`sniffAudio`), and the stored `content-type` is the sniffed one.
+- **Limits** (`sync.samples`): 3 MiB per file, 24 samples and 30 MiB per account,
+  and **1 GiB for everyone together**: that shared cap, not the number of
+  accounts, is what keeps uploads off the SD card's free space (local-path
+  doesn't enforce the PVC size). Alert `PsySyncSamplesNearCap` at 80 %.
+- **Ids** are 16 random bytes in base64url. The workspace refers to a sample by
+  id (`sample: { id, name, pitch, start, length, reverse }`), so shared links
+  and presets travel without the audio.
+- **Playing one.** In any editor, **Source** picks the sound's own voice or a
+  sample; with a sample, the voice's knobs become Pitch (±24 semitones), Start
+  and Length (fractions of the file) and Reverse. A hit or an FX plays the
+  sample out; a note transposes it from **A3** (where it plays as recorded) and
+  lasts as long as the note. Every playback gets 2-6 ms fades, so a slice cut
+  mid-waveform doesn't click.
+- **+ Sound in…** (in the panel) makes a new sound in a layer from a template
+  (`SAMPLE_TEMPLATES` in `catalog.js`): the kick's quarters, the clap's 2 and 4,
+  the bass's offbeat (transposed +2 octaves, back around A3), the melodic lead
+  (−1 octave)…, named after the sample, with its editor open.
+- **Fallback.** Samples are decoded on demand (the ones the sounds and snapshots
+  use, plus previews), off the live context in an `OfflineAudioContext`. Until a
+  sample is decoded, and whenever it can't be (signed out, another account, a
+  shared link, a deleted file), the sound plays **its own voice**: a sample
+  event keeps it as `fallback`. Deleting a sample switches the sounds using it
+  back to their voice.
+- The decoded audio lives in memory for the session; nothing is cached in the
+  browser's storage.
+
 **Infra** (in the `psy-sampler` chart, `sync.*` in `values.yaml`): a separate
 Deployment (if the API is down, or its image isn't public yet, the static site
 keeps working and the page hides the cloud row), `strategy: Recreate` (SQLite on
@@ -382,8 +470,11 @@ an RWO volume), a 2 Gi PVC on `local-path` with `helm.sh/resource-policy: keep`
 and `Prune=false`, a non-root container with a read-only root filesystem and no
 capabilities.
 
+The `/api/` rate limit is 120 requests/min per IP with a burst of 60: a page load
+fetches every sample its sounds use on top of the usual calls.
+
 Metrics, dashboard and alerts (accounts, anonymous browsers, disk per account,
-visitor countries):
+samples, visitor countries):
 [monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
 
 ### One-time setup
@@ -418,13 +509,19 @@ cd images/psy-sampler && npm run dev   # Vite proxies /api to :8787
 **🤖 Autopilot** (`autopilot.js`) walks through the sections of a track and
 decides at every loop start what plays:
 
-| Section | Bars | Kick | Bass | Perc | Lead | Pad | On entry |
-|---|---|---|---|---|---|---|---|
-| Intro | 8 | 1 | – | 1 | – | 1 | |
-| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | sometimes a laser or siren; 25 % new bass |
-| Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 50 % new lead |
-| Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | crash or impact |
-| Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | downlifter; 60 % new lead |
+| Section | Bars | Kick | Bass | Perc | Lead | Pad | Glitch | On entry |
+|---|---|---|---|---|---|---|---|---|
+| Intro | 8 | 1 | – | 1 | – | 1 | – | |
+| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 0-1 | sometimes a laser or siren; 25 % new bass |
+| Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 0-1 | 50 % new lead |
+| Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | 1 | crash or impact |
+| Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | – | downlifter; 60 % new lead |
+
+The glitch column only applies to the styles that have a glitch pool (techno,
+psytech, hi-tech, dark psy, and "anything goes"). A style without a pool for a
+layer leaves it out entirely and **draws nothing from the PRNG** for it, so the
+seeds of the other styles replay the same tracks they did before the layer
+existed.
 
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
 Build-up. Each section's length is drawn from its options (always whole 8-bar
@@ -460,13 +557,13 @@ comes from a Build-up or from a queued section.
 
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
-| Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths |
+| Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
 | Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4 |
 | Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads |
-| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, dark pad |
-| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid |
+| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, dark pad; zips, bleeps, stutter, ring mod; stutter roll |
+| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
 | Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens |
-| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, dark pad |
+| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
 It uses copies too. While it runs the background kick doesn't play (the
@@ -573,6 +670,8 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 | | Bell | FM bell, dotted figure |
 | | Phrygian acid | 303 with B♭ (Phrygian scale) |
 | | Techno stab | analog, Am7 on steps 3, 11, 19 and 27 |
+| | Bits | bit lead, a Phrygian 16th figure, with a resonant LP wobbling over 2 bars (insert) |
+| | Chirp | chirp, pairs of 16ths on the offbeats, A4 / C5 / E5 |
 | Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
 | | Am → B♭ | i → ♭II, the Phrygian move |
 | | Drone | A2 + E3, resonant LP with a 0.12 Hz LFO, 2 bars |
@@ -582,6 +681,15 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 | | Am → F → G | i-VI-VII, the progressive lift |
 | | Supersaw | A minor with A4 on top, 2 bars |
 | | Fifths | A2-E3-A3, no third |
+| Glitch (stack) | Stutter | 4 band-passed noise bursts squeezed into one step, on steps 7, 14 and 15 |
+| | Bleeps | a square on a random semitone up to 2 octaves above 1.2 kHz, every hit different |
+| | Zips | a sine diving 4 octaves onto 180 Hz in 30 ms, the 16th before every kick |
+| | Bitcrush | a falling sine through a 3-bit quantizer (`WaveShaperNode`) |
+| | FM metal | FM ping at ratio 2.76, index ringing down |
+| | Ring mod | 900 Hz square × 1.37 kHz sine |
+| | Crackle | 4 random dust clicks inside every step |
+| | Bwip | a square rising 3 octaves in 80 ms, before each offbeat |
+| | Tape stop | a saw slowing to 4 % of its pitch, the filter closing with it, at the end of the loop |
 | FX | Riser | BP noise 300 Hz → "To" (9 kHz) over "Length" (2 bars) |
 | | Riser + impact | the impact lands right at the end of the riser |
 | | Downlifter | BP noise "From" (8 kHz) → 150 Hz + sine 400→40 Hz |
@@ -591,6 +699,8 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 | | Crash | HP noise 6 kHz, 2 s |
 | | Goa siren | saw 300 → 1200 Hz with vibrato |
 | | Reverse cymbal | HP noise ("HP cutoff", 5 kHz) swelling over "Length" (2 bars) and cutting on the bar line |
+| | Stutter roll | noise bursts accelerating from eighths to 64ths over "Length", the band rising to "To" |
+| | Tape stop | saw + sub falling from "From" (600 Hz) to 3 % over "Decay" (0.8 s), LP closing |
 
 FX length follows the BPM at the moment they fire. While the loop runs they come
 in on the next beat; with the loop stopped, right away.
@@ -616,6 +726,8 @@ cutoff, capped at 18 kHz):
 | | Saw lead | sustained saw with delayed vibrato |
 | | FM bell | ratio 3.5, index falling over the note (Operator style) |
 | | Zapper | every note falls 2 octaves in 40 ms |
+| | Bit lead | square through a 3-bit quantizer: chiptune grit |
+| | Chirp | FM at ratio 2: pitch and index drop in the first 25-60 ms, a squelchy "tchiu" |
 | Pads | Saw pad / Drone / Wind | see the layers table |
 | Percussion | Tom | sine falling to 0.6× over 250 ms |
 
@@ -624,7 +736,14 @@ cutoff, capped at 18 kHz):
 Measured in Chrome (`OfflineAudioContext`, 2 passes at 145 BPM, lane → master):
 the 16 synths playing the same line sit between **-19 and -28 dBFS RMS**; Wind,
 FM bell, Zapper and Pluck were raised 4-10 dB so switching synths doesn't sound
-like it went silent.
+like it went silent. Measured the same way (lane only, no layer level), Bit lead
+and Chirp read -9.6 and -7.0 dBFS RMS, inside the range of the other synths on
+that line (-5.3 to -13.7).
+
+At their layer level, the glitch sounds sit at -30 to -39 dBFS RMS (peaks -6 to
+-10) against the percussion's -30 to -36: they are sparse by design. Stutter,
+Crackle, Bwip, Bleeps, Bitcrush and Tape stop were raised 5-10 dB to get there,
+and the stutter roll FX 8 dB.
 
 At the real output (every node, taken from the destination):
 
@@ -685,7 +804,9 @@ npm test         # Vitest
 npm run build
 ```
 
-- Pure logic in `.js` with its `*.test.js` next to it: `timing`, `patterns`,
+- Pure logic in `.js` with its `*.test.js` next to it: `insert` (curves, drive
+  gains, LFO, DJ cutoffs), `samples` (the store: upload checks, decode once,
+  error codes), `timing`, `patterns`,
   `music`, `selection`, `editing` (click cycles, dragging, improvisation, amount,
   variations and new melodies with a seeded PRNG), `workspace` (normalize,
   presets), `autopilot` (sections, forms, never without lead/pad, changes every
@@ -697,7 +818,16 @@ npm run build
   records nodes and automation. It includes an anti-click invariant: every
   audible source must start and end at gain 0 and not stop before its envelope
   reaches 0. It runs for every variant, every synth with notes from 1 to 32
-  steps, and every drum and FX voice with its knobs at minimum and maximum.
+  steps, and every drum (glitch included) and FX voice with its knobs at minimum
+  and maximum, plus the sample voice (start, length, pitch, note length,
+  reverse). The fake also has `WaveShaperNode`, `detune` on filters and buffers
+  with a `duration`. `engine.test.js` covers the per-lane insert (glide vs
+  crossfade, LFO following the BPM), sample fallback, FX samples and the DJ
+  filter.
+- `ui/samples.test.js` (jsdom, a fake psy-sync) covers the samples panel signed
+  out and in, upload, "+ Sound in…", switching an editor's source and deleting a
+  sample; `app.test.js` the insert controls, the log cutoff slider and the DJ
+  knob.
 - `app.test.js` (jsdom) covers solo / combine / stack mode, the bar queue,
   double click, Stop, background kick, FX, the editors (click, playhead, knobs,
   Reset, Improvise with its amount and the tile's 🔀, queued New part, ×2,
@@ -728,7 +858,19 @@ npm run build
   Measure at the real output before touching threshold or ratio.
 - **A new voice** needs: the function in `voices.js` (in `INSTRUMENTS` if it's
   melodic, with an entry in `SYNTHS` in `params.js`; if it's a drum, its spec in
-  `PARAMS`), and to pass the anti-click invariant. The tests fail if a synth in
-  the list has no voice or the other way round.
+  `PARAMS`, and in `GLITCH` if it's one), and to pass the anti-click invariant.
+  The tests fail if a synth in the list has no voice or the other way round.
+  Measure its level in Chrome against its neighbours (see *Mix*): the fake
+  context only checks envelopes.
+- **A new layer** shifts every seed unless every style that should not use it
+  leaves it out of its pools (`leftOut` in `autopilot.js` skips it without
+  touching the PRNG). Stored workspaces get it appended at the end of the
+  layer order (`normalize()`), after the snapshots.
+- **Decoding detaches its input.** `decodeAudioData` takes the `ArrayBuffer`
+  over, so an upload decodes a copy and sends the original.
+- **A sample event without its buffer must still sound**: the engine resolves
+  `voice: "sample"` through `sampleBuffer(id)` on every note and falls back to
+  `ev.fallback`. Never schedule a sample source without its fades: a slice
+  starting mid-waveform clicks like any other note.
 - **`listen [::]:80`** in the nginx config (like `agu-spa`) fails on a host
   without IPv6 (e.g. a test Docker); on the Pi it works.

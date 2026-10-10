@@ -75,7 +75,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
   psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
                      any Google account signs in (ID token verified server-side, own HMAC
-                     cookie), one opaque JSON workspace per user on a PVC. Deployed by
+                     cookie), one opaque JSON workspace + the user's uploaded audio samples
+                     (SQLite BLOBs, capped per file/account/total) per user on a PVC. Deployed by
                      charts/psy-sampler (sync.*). `bun test`. See docs/psy-sampler.md.
                      /metrics on :9787 (in-cluster only) → "psy-sampler — Cloud save"
                      dashboard + psy-sampler.sync alerts (docs/monitoring.md).
@@ -421,10 +422,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   already past begins mid-envelope = click. `voices.test.js` enforces "every
   audible source starts and ends at gain 0" for every variant, synth and FX — keep
   it passing when adding a voice. Every variant is DATA (patterns.js `DEFAULTS`:
-  drum steps / piano-roll notes + synth / FX params) that the UI edits and hands
-  to `engine.setData()`; edits persist per browser in localStorage and are run
-  through `sanitize()` on load. Kick and bass are exclusive lanes, perc/lead/pad
-  stack. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
+  drum steps / piano-roll notes + synth / FX params, plus an `insert` (filter +
+  distortion, insert.js) and an optional user `sample` that replaces the voice
+  but keeps it as the `fallback` whenever the sample isn't decoded) that the UI
+  edits and hands to `engine.setData()`; edits persist per browser in
+  localStorage and are run through `sanitize()` on load. Kick and bass are
+  exclusive lanes, perc/lead/pad/glitch stack. A style with no pool for a layer
+  leaves it out WITHOUT drawing from the PRNG (`leftOut`), which is what keeps
+  old seeds replaying when a layer is added. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
   compressors add makeup gain, so re-measure at the destination before touching
   them. Anything that must land on the grid (queued clicks, autopilot, improvise
   variations) goes through `engine.onBar()`, never a UI timer. Duplicated sounds
@@ -439,8 +444,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through
   oauth2-proxy. The server stores the workspace opaquely; the page's
-  `normalize()` is still the only gate. Its PVC (SQLite + session key) has no
-  backup. See docs/psy-sampler.md.
+  `normalize()` is still the only gate. Samples are sniffed server-side (magic
+  bytes, never the client's type) and the shared `sync.samples.total` cap, not
+  the PVC size (local-path ignores it), is what protects the SD card. Its PVC
+  (SQLite + samples + session key) has no backup. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

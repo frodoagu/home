@@ -14,8 +14,12 @@ import {
   defaultData,
   eventsAt,
   paramSpecs,
+  sampleDefaults,
   sanitize,
+  cleanInsert,
+  cleanSample,
 } from "./patterns.js";
+import { INSERT_DEFAULT } from "./insert.js";
 
 const STEPS = [...Array(32).keys()];
 const stepsWith = (variant) => STEPS.filter((s) => eventsAt(variant, s).length > 0);
@@ -233,7 +237,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(45);
+  expect(LOOP_VARIANTS).toHaveLength(56);
 });
 
 describe("copies", () => {
@@ -251,5 +255,40 @@ describe("copies", () => {
     for (const id of ["kick.nope", "kick.nope~1", "kick.punchy~", "kick.punchy~0", "kick.punchy~1~2", "kick.punchy~x", 3, null]) {
       expect(isVariant(id)).toBe(false);
     }
+  });
+});
+
+describe("insert and sample data", () => {
+  it("every variant starts with its insert bypassed (but lead.bits) and no sample", () => {
+    for (const [id, def] of Object.entries(DEFAULTS)) {
+      expect(def.data.sample, id).toBeNull();
+      if (id !== "lead.bits") expect(def.data.insert, id).toEqual(INSERT_DEFAULT);
+    }
+    expect(DEFAULTS["lead.bits"].data.insert).toMatchObject({ filter: "lowpass", lfo: 0.45 });
+  });
+
+  it("a sample replaces the voice and keeps it as the fallback", () => {
+    const sample = sampleDefaults("abcdefghijklmnopqrstuv", "Clap");
+    const drum = { ...defaultData("perc.clap"), sample };
+    expect(eventsAt("perc.clap", 4, false, drum)).toEqual([expect.objectContaining({ voice: "sample", fallback: "clap", sample })]);
+    const notes = { ...defaultData("lead.melodic"), sample };
+    const [ev] = eventsAt("lead.melodic", 0, false, notes);
+    expect(ev).toMatchObject({ voice: "sample", fallback: "lead", sample, steps: 8 });
+    expect(ev.freq).toBeCloseTo(440, 9);
+    expect(auditionEvent("perc.clap", drum)).toMatchObject({ voice: "sample", fallback: "clap" });
+  });
+
+  it("sanitize keeps a valid insert and sample, and clamps or drops the rest", () => {
+    const id = "abcdefghijklmnopqrstuv";
+    const out = sanitize("perc.hat", {
+      insert: { filter: "bandpass", cutoff: 99999, res: 3, lfo: -1, rate: 7, drive: "fuzz", amount: 0.5 },
+      sample: { id, name: " Snare ", pitch: 99, start: 0.2, length: 0, reverse: "yes", extra: 1 },
+    });
+    expect(out.insert).toEqual({ ...INSERT_DEFAULT, filter: "bandpass", cutoff: 16000, res: 3, lfo: 0, amount: 0.5 });
+    expect(out.sample).toEqual({ id, name: "Snare", pitch: 24, start: 0.2, length: 0.02, reverse: false });
+    expect(sanitize("perc.hat", { sample: { id: "../../etc" } }).sample).toBeNull();
+    expect(sanitize("perc.hat", { insert: "nope" }).insert).toEqual(INSERT_DEFAULT);
+    expect(cleanSample({ id, reverse: true })).toMatchObject({ reverse: true, pitch: 0, length: 1 });
+    expect(cleanInsert(undefined)).toEqual(INSERT_DEFAULT);
   });
 });

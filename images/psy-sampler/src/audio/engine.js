@@ -1,10 +1,14 @@
 // Audio engine: owns the AudioContext, the output chain, the lookahead
 // scheduler and one gain "lane" per playing variant.
 //
-//   lane gain ─┬──────────────────────> master (0.7) ─> compressor ─> limiter ─> trim ─> destination
-//   fx gain  ──┤                                         ▲
-//              ├─ delay send ─> delay 3/16 ─> return ────┤
-//              └─ reverb send ─> convolver ─> return ────┘
+//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> compressor ─> limiter ─> trim ─> destination
+//                                   fx gain  ───┤                      ▲
+//                                               ├─ delay send ─> delay 3/16 ─> return ─┤
+//                                               └─ reverb send ─> convolver ─> return ─┘
+//
+// The insert is the variant's own filter + distortion (insert.js); FX shots
+// and auditions get one too. A variant using a sample plays it through
+// `sampleBuffer(id)`, or its own voice while that returns nothing.
 //
 // Lanes are what make changes click-free: a variant change or a stop never
 // touches individual notes, it fades the whole lane out over FADE and opens a
@@ -29,15 +33,16 @@ import {
   SAFETY,
   TICK_MS,
 } from "./timing.js";
-import { auditionEvent, baseOf, defOf, eventsAt } from "./patterns.js";
-import { FX, VOICES } from "./voices.js";
+import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
+import { auditionEvent, baseOf, defOf, eventsAt, sampleDefaults } from "./patterns.js";
+import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
 
 const MASTER_GAIN = 0.7;
 const OUTPUT_TRIM = 0.8;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
-const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, fx: 0.6 };
+const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, glitch: 0.45, fx: 0.6 };
 const BG_KICK_LEVEL = 0.6;
 // Sends per layer, after the lane gain (so they follow its fades). Kick and
 // bass stay dry: tails under them only muddy the low end.
@@ -45,6 +50,7 @@ const SENDS = {
   perc: { delay: 0, reverb: 0.12 },
   lead: { delay: 0.3, reverb: 0.25 },
   pad: { delay: 0, reverb: 0.4 },
+  glitch: { delay: 0.25, reverb: 0.15 },
   fx: { delay: 0.2, reverb: 0.35 },
 };
 const DELAY_STEPS = 3; // dotted 8th: the classic psy lead echo
@@ -71,9 +77,10 @@ function impulse(ctx, seconds) {
   return buf;
 }
 
-// Output chain: master -> compressor -> limiter -> trim -> destination, plus
-// the shared delay and reverb buses. Built once per context, live or offline.
-function buildChain(ctx, bpm, effects) {
+// Output chain: master -> DJ filter -> compressor -> limiter -> trim ->
+// destination, plus the shared delay and reverb buses (their returns go
+// through the DJ filter too). Built once per context, live or offline.
+function buildChain(ctx, bpm, effects, djValue = 0) {
   // Gentle settings: it only catches peaks when layers stack up. The
   // defaults (-24 dB, 12:1) would flatten exactly the dynamics a solo
   // layer is meant to let you hear.
@@ -97,11 +104,19 @@ function buildChain(ctx, bpm, effects) {
   trim.gain.value = OUTPUT_TRIM;
   const master = ctx.createGain();
   master.gain.value = MASTER_GAIN;
-  master.connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
-  return { master, bus: buildBus(ctx, comp, bpm, effects) };
+  const dj = { low: ctx.createBiquadFilter(), high: ctx.createBiquadFilter() };
+  dj.low.type = "lowpass";
+  dj.high.type = "highpass";
+  const { low, high } = djCutoffs(djValue, ctx.sampleRate / 2);
+  dj.low.frequency.value = low;
+  dj.high.frequency.value = high;
+  dj.low.Q.value = DJ_Q;
+  dj.high.Q.value = DJ_Q;
+  master.connect(dj.low).connect(dj.high).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
+  return { master, dj, bus: buildBus(ctx, dj.low, bpm, effects) };
 }
 
-function buildBus(ctx, comp, bpm, effects) {
+function buildBus(ctx, into, bpm, effects) {
   const delay = ctx.createDelay(2);
   delay.delayTime.value = DELAY_STEPS * stepDuration(bpm);
   // Repeats go through a lowpass on their way back in, so each one is darker.
@@ -114,7 +129,7 @@ function buildBus(ctx, comp, bpm, effects) {
   delaySend.connect(delay).connect(damp).connect(feedback).connect(delay);
   const delayReturn = ctx.createGain();
   delayReturn.gain.value = effects.delay ? RETURN_LEVEL : 0;
-  damp.connect(delayReturn).connect(comp);
+  damp.connect(delayReturn).connect(into);
 
   const convolver = ctx.createConvolver();
   convolver.buffer = impulse(ctx, REVERB_SECONDS);
@@ -122,7 +137,7 @@ function buildBus(ctx, comp, bpm, effects) {
   reverbSend.connect(convolver);
   const reverbReturn = ctx.createGain();
   reverbReturn.gain.value = effects.reverb ? RETURN_LEVEL : 0;
-  convolver.connect(reverbReturn).connect(comp);
+  convolver.connect(reverbReturn).connect(into);
   return { delay, delaySend, delayReturn, reverbSend, reverbReturn };
 }
 
@@ -145,12 +160,25 @@ function connectGain(ctx, { master, bus }, level, layer) {
   return gain;
 }
 
+// Notes connect to `input`; its insert chain feeds `gain`. Used by lanes,
+// FX shots and auditions alike.
+function withInsert(ctx, gain, insert, stepDur, at) {
+  const input = ctx.createGain();
+  const chain = buildInsert(ctx, insert, { stepDur, at });
+  input.connect(chain.input);
+  chain.output.connect(gain);
+  return { gain, input, chain };
+}
+
 export function createEngine({
   createContext = () => new AudioContext(),
   createOffline = (channels, length, rate) => new OfflineAudioContext(channels, length, rate),
+  sampleBuffer = () => null, // sample id -> decoded AudioBuffer, or null while it is not there
 } = {}) {
   let ctx = null;
   let master = null;
+  let dj = null; // { low, high }: the DJ filter's two biquads
+  let djValue = 0;
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
   let bpm = BPM_DEFAULT;
   let timer = null;
@@ -160,8 +188,8 @@ export function createEngine({
   let barHook = null; // (time, step, bar) -> desired lanes | undefined
   let bars = 0; // bar lines queued since start(); the first one is 0
   let stopAt = null; // a bar-line stop: the timer ends once this time passes
-  const lanes = new Map(); // lane key -> { variant, gain, level, entered }
-  const fxPlaying = new Map(); // fx id -> { gain, end }
+  const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered }
+  const fxPlaying = new Map(); // fx id -> { gain, input, chain, end }
   const data = new Map(); // variant id -> edited data (factory data otherwise)
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
@@ -173,15 +201,29 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, bus } = buildChain(ctx, bpm, effects));
+      ({ master, dj, bus } = buildChain(ctx, bpm, effects, djValue));
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   }
 
+  // One event on any context. A sample plays only once it is decoded.
+  function voice(c, out, t, ev, stepDur) {
+    if (ev.voice !== "sample") return VOICES[ev.voice](c, out, t, ev, stepDur);
+    const buffer = sampleBuffer(ev.sample.id);
+    return buffer ? sample(c, out, t, { ...ev, buffer }, stepDur) : VOICES[ev.fallback](c, out, t, ev, stepDur);
+  }
+
+  // An FX shot: its sample if it has one and it is loaded, else its synth.
+  function fxVoice(c, out, t, stepDur, id) {
+    const { params, sample: s } = dataOf(id);
+    const buffer = s && sampleBuffer(s.id);
+    return buffer ? sample(c, out, t, { sample: s, buffer }, stepDur) : FX[baseOf(id)](c, out, t, stepDur, params);
+  }
+
   function scheduleLane(lane, step, time, stepDur) {
     for (const ev of eventsAt(lane.variant, step, !lane.entered, dataOf(lane.variant))) {
-      VOICES[ev.voice](ctx, lane.gain, time, ev, stepDur);
+      voice(ctx, lane.input, time, ev, stepDur);
     }
     lane.entered = true;
   }
@@ -211,9 +253,13 @@ export function createEngine({
 
   const openGain = (level, layer) => connectGain(ctx, { master, bus }, level, layer);
 
-  function openLane(key, variant, backfill) {
+  // Gain + input + insert, the insert's LFO starting at `at`.
+  const openVoice = (level, layer, insert, at) =>
+    withInsert(ctx, openGain(level, layer), insert, stepDuration(bpm), at);
+
+  function openLane(key, variant, backfill, at) {
     const level = laneLevel(key, variant);
-    const lane = { variant, level, gain: openGain(level, layerOf(variant)), entered: false };
+    const lane = { variant, level, ...openVoice(level, layerOf(variant), dataOf(variant).insert, at), entered: false };
     // Steps inside the lookahead window were queued before this lane existed.
     // Backfill them so the new variant enters on the very next step instead of
     // leaving a hole up to LOOKAHEAD long; steps closer than SAFETY are skipped
@@ -227,16 +273,45 @@ export function createEngine({
   }
 
   // Linear fade to 0 starting at `at`. Notes still queued on this gain play
-  // into silence and stop themselves; the timeout only disconnects the node
+  // into silence and stop themselves; the timeout only disconnects the nodes
   // for GC, it never times audio.
-  function fadeOut(gain, at = ctx.currentTime) {
+  function fadeOut(holder, at = ctx.currentTime) {
+    const { gain } = holder;
     gain.gain.cancelScheduledValues(at);
     gain.gain.setValueAtTime(gain.gain.value, at);
     gain.gain.linearRampToValueAtTime(0, at + FADE);
+    holder.chain.stop(at + FADE);
+    setTimeout(() => release(holder), (at - ctx.currentTime + FADE + 0.05) * 1000);
+  }
+
+  function release({ gain, input, chain }) {
+    gain.disconnect();
+    for (const send of gain.sends) send.disconnect();
+    input.disconnect();
+    chain.output.disconnect();
+  }
+
+  // A filter or distortion type changed: a fresh chain crossfades in.
+  function swapInsert(lane, insert) {
+    const now = ctx.currentTime;
+    const old = lane.chain;
+    const next = buildInsert(ctx, insert, { stepDur: stepDuration(bpm), at: now });
+    next.output.gain.setValueAtTime(0, now);
+    next.output.gain.linearRampToValueAtTime(1, now + FADE);
+    lane.input.connect(next.input);
+    next.output.connect(lane.gain);
+    old.output.gain.setValueAtTime(1, now);
+    old.output.gain.linearRampToValueAtTime(0, now + FADE);
+    old.stop(now + FADE);
     setTimeout(() => {
-      gain.disconnect();
-      for (const send of gain.sends) send.disconnect();
-    }, (at - ctx.currentTime + FADE + 0.05) * 1000);
+      try {
+        lane.input.disconnect(old.input);
+      } catch {
+        // The lane was released first: nothing left to unplug.
+      }
+      old.output.disconnect();
+    }, (FADE + 0.05) * 1000);
+    lane.chain = next;
   }
 
   // First step boundary that can still be scheduled safely: where a lane
@@ -262,7 +337,7 @@ export function createEngine({
     cursor = null;
     queued = [];
     stopAt = null;
-    for (const lane of lanes.values()) fadeOut(lane.gain);
+    for (const lane of lanes.values()) fadeOut(lane);
     lanes.clear();
   }
 
@@ -286,25 +361,27 @@ export function createEngine({
   function reconcile(desired, at, backfill) {
     for (const [key, lane] of lanes) {
       if (desired[key] !== lane.variant) {
-        fadeOut(lane.gain, at);
+        fadeOut(lane, at);
         lanes.delete(key);
       }
     }
     for (const [key, variant] of Object.entries(desired)) {
-      if (!lanes.has(key)) lanes.set(key, openLane(key, variant, backfill));
+      if (!lanes.has(key)) lanes.set(key, openLane(key, variant, backfill, at));
     }
   }
 
   /**
    * Swap the data a variant plays. Notes and params apply from the next
    * scheduled step; a volume change glides the lanes playing it (20 ms) so
-   * the slider never zips.
+   * the slider never zips, and so do the insert's knobs.
    */
   function setData(id, next) {
     data.set(id, next);
     if (!ctx) return;
     for (const [key, lane] of lanes) {
       if (lane.variant !== id) continue;
+      if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime);
+      else swapInsert(lane, next.insert);
       const level = laneLevel(key, id);
       if (level === lane.level) continue;
       lane.level = level;
@@ -323,7 +400,18 @@ export function createEngine({
     bpm = value;
     // The echo stays on the grid; the short glide bends the tail a little
     // instead of jumping (a jump in delay time clicks).
-    if (bus) bus.delay.delayTime.setTargetAtTime(DELAY_STEPS * stepDuration(bpm), ctx.currentTime, 0.05);
+    if (!bus) return;
+    bus.delay.delayTime.setTargetAtTime(DELAY_STEPS * stepDuration(bpm), ctx.currentTime, 0.05);
+    for (const lane of lanes.values()) lane.chain.setStepDur(stepDuration(bpm), ctx.currentTime);
+  }
+
+  // The DJ filter knob, -1 (lowpass closed) .. 0 (open) .. 1 (highpass up).
+  function setMasterFilter(value) {
+    djValue = value;
+    if (!dj) return;
+    const { low, high } = djCutoffs(value, ctx.sampleRate / 2);
+    dj.low.frequency.setTargetAtTime(low, ctx.currentTime, 0.03);
+    dj.high.frequency.setTargetAtTime(high, ctx.currentTime, 0.03);
   }
 
   // One-shot FX: at `at` if given (a bar hook passes its bar line), else on
@@ -334,11 +422,12 @@ export function createEngine({
     const stepDur = stepDuration(bpm);
     const t = at ?? (cursor ? nextBeatTime(cursor, stepDur) : ctx.currentTime + START_DELAY);
     const prev = fxPlaying.get(id);
-    if (prev) fadeOut(prev.gain);
-    const { params, level } = dataOf(id);
-    const gain = openGain(LAYER_LEVEL.fx * level, "fx");
-    const end = FX[baseOf(id)](ctx, gain, t, stepDur, params);
-    fxPlaying.set(id, { gain, end });
+    if (prev) fadeOut(prev);
+    const { level, insert } = dataOf(id);
+    const shot = openVoice(LAYER_LEVEL.fx * level, "fx", insert, t);
+    const end = fxVoice(ctx, shot.input, t, stepDur, id);
+    shot.chain.stop(end + FADE);
+    fxPlaying.set(id, { ...shot, end });
     return { start: t, end };
   }
 
@@ -348,10 +437,22 @@ export function createEngine({
     const ev = auditionEvent(id, dataOf(id), note);
     if (!ev) return;
     const layer = layerOf(id);
-    const gain = openGain(LAYER_LEVEL[layer] * dataOf(id).level, layer);
     const t = ctx.currentTime + SAFETY;
-    VOICES[ev.voice](ctx, gain, t, ev, stepDuration(bpm));
-    fadeOut(gain, t + AUDITION_SECONDS);
+    const shot = openVoice(LAYER_LEVEL[layer] * dataOf(id).level, layer, dataOf(id).insert, t);
+    voice(ctx, shot.input, t, ev, stepDuration(bpm));
+    fadeOut(shot, t + AUDITION_SECONDS);
+  }
+
+  // A sample from the library as recorded, right now. False until it is loaded.
+  function previewSample(id) {
+    ensureContext();
+    const buffer = sampleBuffer(id);
+    if (!buffer) return false;
+    const t = ctx.currentTime + SAFETY;
+    const shot = openVoice(LAYER_LEVEL.fx, "fx", INSERT_DEFAULT, t);
+    const end = sample(ctx, shot.input, t, { sample: sampleDefaults(id), buffer }, stepDuration(bpm));
+    fadeOut(shot, end);
+    return true;
   }
 
   // Ids of FX still sounding; finished ones are released here.
@@ -361,8 +462,7 @@ export function createEngine({
     for (const [id, fx] of fxPlaying) {
       if (fx.end > ctx.currentTime) ids.add(id);
       else {
-        fx.gain.disconnect();
-        for (const send of fx.gain.sends) send.disconnect();
+        release(fx);
         fxPlaying.delete(id);
       }
     }
@@ -383,8 +483,8 @@ export function createEngine({
   }
 
   /**
-   * Renders offline what the engine would play, with the current data, BPM
-   * and effects: `lanes` (a lane map, as setLanes takes) or one `fx`. A loop
+   * Renders offline what the engine would play, with the current data, BPM,
+   * effects and DJ filter: `lanes` (a lane map, as setLanes takes) or one `fx`. A loop
    * render plays the loop twice and keeps the second pass, so the tails at
    * its end are already wrapped into its start and the file loops without a
    * seam. An FX render is the one-shot and its tail, trimmed at silence.
@@ -395,18 +495,17 @@ export function createEngine({
     const loop = Math.round(LOOP_STEPS * stepDur * RENDER_RATE);
     const length = fx ? FX_RENDER_SECONDS * RENDER_RATE : 2 * loop;
     const off = createOffline(2, length, RENDER_RATE);
-    const chain = buildChain(off, bpm, effects);
+    const chain = buildChain(off, bpm, effects, djValue);
+    const into = (level, layer, insert) => withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0).input;
     if (fx) {
-      const { params, level } = dataOf(fx);
-      FX[baseOf(fx)](off, connectGain(off, chain, LAYER_LEVEL.fx * level, "fx"), 0, stepDur, params);
+      const { level, insert } = dataOf(fx);
+      fxVoice(off, into(LAYER_LEVEL.fx * level, "fx", insert), 0, stepDur, fx);
     } else {
       for (const [key, variant] of Object.entries(desired)) {
-        const gain = connectGain(off, chain, laneLevel(key, variant), layerOf(variant));
         const d = dataOf(variant);
+        const input = into(laneLevel(key, variant), layerOf(variant), d.insert);
         for (let i = 0; i < 2 * LOOP_STEPS; i++) {
-          for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d)) {
-            VOICES[ev.voice](off, gain, i * stepDur, ev, stepDur);
-          }
+          for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d)) voice(off, input, i * stepDur, ev, stepDur);
         }
       }
     }
@@ -421,7 +520,7 @@ export function createEngine({
   function stop() {
     stopLoop();
     if (!ctx) return;
-    for (const fx of fxPlaying.values()) fadeOut(fx.gain);
+    for (const fx of fxPlaying.values()) fadeOut(fx);
     fxPlaying.clear();
   }
 
@@ -431,8 +530,10 @@ export function createEngine({
     setData,
     setEffects,
     setBpm,
+    setMasterFilter,
     triggerFx,
     audition,
+    previewSample,
     activeFx,
     visibleStep,
     stop,

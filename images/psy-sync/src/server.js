@@ -4,7 +4,7 @@
 // port of its own, which the IngressRoute never routes to.
 import { existsSync, readFileSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createApp } from "./app.js";
+import { SAMPLE_LIMITS, createApp } from "./app.js";
 import { openDb } from "./db.js";
 import { googleKeys } from "./google.js";
 import { parseQuantity, renderMetrics } from "./metrics.js";
@@ -33,9 +33,17 @@ const app = createApp({
   origins,
   getKey: googleKeys(),
   maxUsers: Number(process.env.MAX_USERS ?? 5000),
+  samples: {
+    bytes: parseQuantity(process.env.SAMPLE_MAX_BYTES) || SAMPLE_LIMITS.bytes,
+    count: Number(process.env.SAMPLE_MAX_COUNT) || SAMPLE_LIMITS.count,
+    quota: parseQuantity(process.env.SAMPLE_QUOTA_BYTES) || SAMPLE_LIMITS.quota,
+    total: parseQuantity(process.env.SAMPLE_TOTAL_BYTES) || SAMPLE_LIMITS.total,
+  },
 });
 
-const server = Bun.serve({ port: Number(process.env.PORT ?? 8787), fetch: app.fetch, maxRequestBodySize: 512 * 1024 });
+// Room for the largest sample upload; JSON bodies have their own, smaller cap.
+const maxRequestBodySize = Math.max(512 * 1024, app.limits.samples.bytes + 64 * 1024);
+const server = Bun.serve({ port: Number(process.env.PORT ?? 8787), fetch: app.fetch, maxRequestBodySize });
 console.log(`psy-sync listening on :${server.port}`);
 
 const prune = () => db.pruneVisitors(Date.now() - VISITOR_RETENTION_MS);

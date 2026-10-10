@@ -77,6 +77,14 @@ spec:
               value: {{ .Values.sync.persistence.size | quote }}
             - name: METRICS_TOP_USERS
               value: {{ .Values.sync.metrics.topUsers | quote }}
+            - name: SAMPLE_MAX_BYTES
+              value: {{ .Values.sync.samples.maxBytes | quote }}
+            - name: SAMPLE_MAX_COUNT
+              value: {{ .Values.sync.samples.maxCount | quote }}
+            - name: SAMPLE_QUOTA_BYTES
+              value: {{ .Values.sync.samples.quota | quote }}
+            - name: SAMPLE_TOTAL_BYTES
+              value: {{ .Values.sync.samples.total | quote }}
           ports:
             - name: http
               containerPort: 8787

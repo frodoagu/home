@@ -102,7 +102,7 @@ describe("layout", () => {
   });
 
   it("has one row per layer plus the snapshots, and a 16-cell bar with the 4 beats marked", () => {
-    expect(root.querySelectorAll("section.layer")).toHaveLength(7);
+    expect(root.querySelectorAll("section.layer")).toHaveLength(8);
     expect(root.querySelector("section.layer:last-of-type").dataset.layer).toBe("snap");
     expect(root.querySelectorAll(".cell")).toHaveLength(16);
     expect([...root.querySelectorAll(".cell.beat")].map((c) => c.textContent)).toEqual(["1", "2", "3", "4"]);
@@ -707,6 +707,15 @@ describe("snapshots", () => {
     expect(pressed()).toEqual(["kick.long"]);
   });
 
+  it("Parar stops with the snapshot editor open", () => {
+    click("kick.long");
+    snapBtn().click();
+    expect(snapEditor()).not.toBeNull();
+    $("button.stop").click();
+    expect(engine.isRunning()).toBe(false);
+    expect(pressed()).toEqual([]);
+  });
+
   it("the editor works on a draft: Guardar keeps it, Descartar goes back", () => {
     immediate();
     click("kick.long");
@@ -1003,6 +1012,7 @@ describe("autopilot", () => {
       perc: ["perc.hat", "perc.hat16", "perc.clap", "perc.rim", "perc.ride"],
       lead: ["lead.techno", "lead.stabs", "lead.acid"],
       pad: ["pad.drone", "pad.fifths", "pad.air"],
+      glitch: ["glitch.metal", "glitch.crush", "glitch.stutter"],
     };
     for (let i = 0; i < 20; i++) {
       for (const v of pressed()) expect(techno[v.split(".")[0]]).toContain(v);
@@ -1142,5 +1152,51 @@ describe("share links", () => {
     expect(node.querySelector("#bpm").value).toBe("160");
     expect(node.querySelector(".status").textContent).toMatch(/goa42/);
     expect(location.hash).toBe("");
+  });
+});
+
+describe("filter, distortion and the DJ filter", () => {
+  const editorSelect = (variant, name) => editor(variant).querySelector(`[data-control="${name}"]`);
+  const choose = (sel, value) => {
+    sel.value = value;
+    sel.dispatchEvent(new Event("change"));
+  };
+  const knob = (variant, key) => editor(variant).querySelector(`[data-param="${key}"]`);
+
+  it("every editor has a filter and a distortion; their knobs show once one is on", () => {
+    openEditor("perc.hat");
+    const cutoff = knob("perc.hat", "cutoff").closest(".knob");
+    const drive = knob("perc.hat", "amount").closest(".knob");
+    expect([cutoff.hidden, drive.hidden]).toEqual([true, true]);
+    choose(editorSelect("perc.hat", "filter"), "lowpass");
+    choose(editorSelect("perc.hat", "drive"), "fold");
+    expect([cutoff.hidden, drive.hidden]).toEqual([false, false]);
+    expect(saved().variants["perc.hat"].insert).toMatchObject({ filter: "lowpass", drive: "fold" });
+  });
+
+  it("the cutoff slider moves in octaves", () => {
+    openEditor("lead.acid");
+    choose(editorSelect("lead.acid", "filter"), "highpass");
+    const input = knob("lead.acid", "cutoff");
+    input.value = "200"; // half way between 40 Hz and 16 kHz, on a log scale
+    input.dispatchEvent(new Event("input"));
+    expect(saved().variants["lead.acid"].insert.cutoff).toBe(Math.round(40 * Math.sqrt(16000 / 40)));
+    expect(input.closest(".knob").querySelector("output").textContent).toBe("800 Hz");
+  });
+
+  it("the DJ knob filters the master, reads out its cutoff and recentres on a double click", () => {
+    const spy = vi.spyOn(engine, "setMasterFilter");
+    const dj = $("#dj");
+    dj.value = "-1";
+    dj.dispatchEvent(new Event("input"));
+    expect(spy).toHaveBeenLastCalledWith(-1);
+    expect($(".dj-value").textContent).toBe("LP 150 Hz");
+    dj.value = "1";
+    dj.dispatchEvent(new Event("input"));
+    expect($(".dj-value").textContent).toBe("HP 6.0 kHz");
+    dj.dispatchEvent(new Event("dblclick"));
+    expect(spy).toHaveBeenLastCalledWith(0);
+    expect($(".dj-value").textContent).toBe("abierto");
+    expect(saved()).not.toHaveProperty("dj"); // a performance control, never stored
   });
 });

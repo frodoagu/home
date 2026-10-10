@@ -68,6 +68,18 @@ export function renderMetrics({ stats, requests, limits, files = {}, volume = nu
     stats.top.map(({ email, bytes }) => [{ email }, bytes]),
   );
 
+  const sl = limits.samples;
+  metric("psy_sync_samples", "gauge", "Audio samples stored, all accounts.", single(stats.samples.count));
+  metric("psy_sync_sample_bytes_total", "gauge", "Bytes of stored samples, all accounts.", single(stats.samples.bytes));
+  metric("psy_sync_sample_bytes_limit", "gauge", "Uploads stop once all samples together reach this many bytes.", single(sl.total));
+  metric("psy_sync_sample_quota_bytes", "gauge", "Sample bytes one account may store.", single(sl.quota));
+  metric(
+    "psy_sync_user_sample_bytes",
+    "gauge",
+    "Sample bytes of the accounts storing the most, in bytes.",
+    stats.samplesTop.map(({ email, bytes }) => [{ email }, bytes]),
+  );
+
   metric(
     "psy_sync_db_bytes",
     "gauge",

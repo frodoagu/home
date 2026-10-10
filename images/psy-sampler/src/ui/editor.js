@@ -2,16 +2,20 @@
 //   drum   one row of 32 steps + the voice's sliders
 //   notes  piano roll + synth, brightness, scale, octave, note length
 //   fx     just the sliders
+// Every kind also picks its source (its own voice or one of the user's
+// samples, which swaps the voice's sliders for the sample's) and has a
+// filter + distortion section (the insert).
 // Every change goes out through onChange(next) as fresh data; the editor
 // never talks to the engine itself. The header names the variant (editable)
 // and carries the per-sound actions: duplicate, WAV, reset, delete (copies).
-import { LEVEL, SYNTHS } from "../audio/params.js";
-import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs } from "../audio/patterns.js";
+import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES } from "../audio/insert.js";
+import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
+import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs, sampleDefaults } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
 import { cycleNote, cycleStep, doubleSteps, placeNote } from "../editing.js";
 import { t } from "../i18n/index.js";
-import { el, select, slider } from "./dom.js";
+import { checkbox, el, nextId, select, slider } from "./dom.js";
 
 const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
@@ -36,6 +40,8 @@ export function createEditor({
   onAmount,
   buildUp = false,
   onBuildUp,
+  samples = [], // the user's samples: [{ id, name }]
+  onSample = () => {}, // a sample was picked: load it (and let it be heard)
 }) {
   const def = defOf(id);
   const tx = t().editor;
@@ -142,26 +148,120 @@ export function createEditor({
     el("div", { class: "editor-tools" }, ...actions.map(([b]) => b)),
   );
 
-  /* ---- sliders: the voice's params + volume ---- */
-  const knobs = el("div", { class: "knobs" });
-  for (const spec of paramSpecs(id)) {
-    knobs.append(
-      slider(localized(spec), current.params[spec.key], (v) => set({ params: { ...current.params, [spec.key]: v } })),
+  /* ---- sliders: the voice's params (or the sample's) + volume ---- */
+  const voiceKnobs = el("div", { class: "knob-group" });
+  const knobs = el("div", { class: "knobs" }, voiceKnobs, slider(localized(LEVEL), current.level, (v) => set({ level: v })));
+  const synthOnly = []; // controls that mean nothing while a sample plays
+
+  function renderVoiceKnobs() {
+    const s = current.sample;
+    if (!s) {
+      voiceKnobs.replaceChildren(
+        ...paramSpecs(id).map((spec) =>
+          slider(localized(spec), current.params[spec.key], (v) => set({ params: { ...current.params, [spec.key]: v } })),
+        ),
+      );
+    } else {
+      const setSample = (patch) => set({ sample: { ...current.sample, ...patch } });
+      const reverse = checkbox(nextId("reverse"), tx.reverse, s.reverse);
+      reverse.input.dataset.param = "reverse";
+      reverse.input.addEventListener("change", () => setSample({ reverse: reverse.input.checked }));
+      voiceKnobs.replaceChildren(
+        ...SAMPLE_PARAMS.map((spec) => slider(localized(spec), s[spec.key], (v) => setSample({ [spec.key]: v }))),
+        reverse.node,
+      );
+    }
+    for (const n of synthOnly) n.hidden = Boolean(s);
+  }
+
+  /* ---- source: the voice, or one of the user's samples ---- */
+  function sourcePicker() {
+    const options = [{ value: "", label: tx.synthesized }, ...samples.map((s) => ({ value: s.id, label: s.name }))];
+    const s = current.sample;
+    if (s && !samples.some((x) => x.id === s.id)) options.push({ value: s.id, label: tx.sampleMissing(s.name) });
+    const picker = select(
+      tx.source,
+      options,
+      s?.id ?? "",
+      (value) => {
+        if (!value) set({ sample: null });
+        else {
+          set({ sample: sampleDefaults(value, samples.find((x) => x.id === value)?.name ?? current.sample?.name) });
+          onSample(value);
+        }
+        renderVoiceKnobs();
+      },
+      "source",
+    );
+    const hint = el("p", { class: "legend", text: tx.sampleHint });
+    hint.hidden = samples.length > 0;
+    return [picker, hint];
+  }
+
+  /* ---- insert: filter (+ LFO) and distortion ---- */
+  function insertControls() {
+    const ins = () => current.insert;
+    const setInsert = (patch) => set({ insert: { ...current.insert, ...patch } });
+    const knob = (key) => {
+      const spec = INSERT_PARAMS.find((p) => p.key === key);
+      return slider(localized(spec), ins()[key], (v) => setInsert({ [key]: v }));
+    };
+    const filterKnobs = [knob("cutoff"), knob("res"), knob("lfo")];
+    const rate = select(
+      tx.lfoRate,
+      LFO_RATES.map((n) => ({ value: n, label: tx.lfoRates[n] })),
+      ins().rate,
+      (v) => setInsert({ rate: Number(v) }),
+      "lfo-rate",
+    );
+    const drive = knob("amount");
+    const show = () => {
+      for (const n of [...filterKnobs, rate]) n.hidden = ins().filter === "off";
+      drive.hidden = ins().drive === "off";
+    };
+    const filterType = select(
+      tx.filter,
+      FILTER_TYPES.map((v) => ({ value: v, label: tx.filterTypes[v] })),
+      ins().filter,
+      (v) => {
+        setInsert({ filter: v });
+        show();
+      },
+      "filter",
+    );
+    const driveType = select(
+      tx.drive,
+      DRIVE_TYPES.map((v) => ({ value: v, label: tx.driveTypes[v] })),
+      ins().drive,
+      (v) => {
+        setInsert({ drive: v });
+        show();
+      },
+      "drive",
+    );
+    show();
+    return el(
+      "fieldset",
+      { class: "insert" },
+      el("legend", { text: tx.insert }),
+      el("div", { class: "pickers" }, filterType, rate, driveType),
+      el("div", { class: "knobs" }, ...filterKnobs, drive),
     );
   }
-  knobs.append(slider(localized(LEVEL), current.level, (v) => set({ level: v })));
 
   const node = el("div", { class: "editor", role: "region", "aria-label": tx.region(label), "data-editor": id }, head);
+  const source = el("div", { class: "pickers source" }, ...sourcePicker());
 
   if (def.kind === "fx") {
     const fire = el("button", { type: "button", class: "action", text: tx.fire });
     fire.addEventListener("click", onTrigger);
-    node.append(knobs, el("div", { class: "editor-actions" }, fire));
+    node.append(source, knobs, insertControls(), el("div", { class: "editor-actions" }, fire));
   } else if (def.kind === "drum") {
-    node.append(knobs, ...drumGrid());
+    node.append(source, knobs, insertControls(), ...drumGrid());
   } else {
-    node.append(...noteControls(), knobs, ...pianoRoll());
+    node.append(...noteControls(), knobs, insertControls(), ...pianoRoll());
   }
+  renderVoiceKnobs();
 
   /* ---- drums: one row ---- */
   function drumGrid() {
@@ -269,7 +369,8 @@ export function createEditor({
       (v) => set({ len: Number(v) }),
       "len",
     );
-    return [el("div", { class: "pickers" }, synth, scale, octave, len), synthDetail];
+    synthOnly.push(synth, synthDetail);
+    return [el("div", { class: "pickers" }, ...sourcePicker(), synth, scale, octave, len), synthDetail];
   }
 
   /* ---- notes: piano roll ---- */

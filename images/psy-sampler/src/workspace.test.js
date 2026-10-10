@@ -21,7 +21,7 @@ describe("normalize", () => {
       lists: { kick: ["kick.tok", "kick.punchy~2", "bass.offbeat", "kick.punchy~x"] },
     });
     expect(ws.order.slice(0, 2)).toEqual(["pad", "kick"]);
-    expect(ws.order).toHaveLength(7);
+    expect(ws.order).toHaveLength(8);
     expect(ws.lists.kick).toEqual([
       "kick.tok", "kick.punchy~2", ...LAYERS[0].variants.filter((id) => id !== "kick.tok"),
     ]);
