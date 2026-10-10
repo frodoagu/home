@@ -5,7 +5,7 @@ export default {
     "edita, filtra, distorce e mixa enquanto tocam, ou seus próprios samples. Escolha um estilo e deixe o 🤖 Piloto automático montar a faixa " +
     "a partir de uma semente, ou assuma o controle: enfileire fases, improvise partes e salve momentos com 📸.",
   help: {
-    open: "📖 Como usar",
+    open: "📖 Ajuda",
     title: "Como usar o Psy Layers",
     close: "Fechar",
     intro: "Primeiro os truques que não se veem de cara; depois, tudo o que cada parte faz.",

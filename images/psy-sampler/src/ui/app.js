@@ -436,8 +436,9 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
-  // Top bar: the way back to agu.com.ar, the transport buttons, then where
-  // the setup is saved (account.js) and the language.
+  // Top bar: the way back to agu.com.ar, the transport buttons, then the
+  // how-to page, where the setup is saved (account.js) and the language.
+  const help = createHelp(tx.help);
   const back = el("a", { class: "back", href: "https://agu.com.ar/", text: `← ${tx.topbar.back}` });
   back.title = tx.topbar.backTitle;
   const topbar = el(
@@ -445,7 +446,7 @@ export function mountApp(root, engine, opts = {}) {
     { class: "topbar" },
     back,
     el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
-    el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
+    el("div", { class: "topbar-end" }, help.button, ...(account ? [account.node] : []), language),
   );
 
   const samplesPanel = samples
@@ -462,16 +463,14 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
-  const help = createHelp(tx.help);
   root.replaceChildren(
     topbar,
+    help.dialog,
     el(
       "header",
       { class: "top" },
       el("h1", { text: "Psy Layers" }),
       el("p", { class: "lede", text: tx.lede }),
-      help.button,
-      help.dialog,
     ),
     el(
       "div",
