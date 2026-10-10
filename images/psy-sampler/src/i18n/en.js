@@ -5,7 +5,7 @@ export default {
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
   help: {
-    open: "📖 How to use it",
+    open: "📖 Help",
     title: "How to use Psy Layers",
     close: "Close",
     intro: "First the tricks you won't spot at a glance; then everything each part does.",
