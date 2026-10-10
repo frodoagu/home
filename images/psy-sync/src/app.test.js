@@ -271,7 +271,7 @@ describe("samples", () => {
     const list = await (await call("GET", "/api/samples", { cookie: ana })).json();
     expect(list.samples).toEqual([{ id: sample.id, name: "Kick 909", type: "audio/wav", bytes: 100, createdAt: clock }]);
     expect(list.used).toEqual({ count: 1, bytes: 100 });
-    expect(list.limits).toEqual({ bytes: 3 * 2 ** 20, count: 24, quota: 30 * 2 ** 20 });
+    expect(list.limits).toEqual({ bytes: 3 * 2 ** 20, count: 24, quota: 100 * 2 ** 20 });
 
     const file = await call("GET", `/api/samples/${sample.id}`, { cookie: ana });
     expect(file.status).toBe(200);
@@ -420,7 +420,7 @@ describe("visitors and metrics", () => {
     expect(text).toContain('psy_sync_http_requests_total{route="POST /api/session",status="200"} 1\n');
     expect(text).toContain("# TYPE psy_sync_http_requests_total counter\n");
     expect(text).toContain("psy_sync_samples 0\n");
-    expect(text).toContain(`psy_sync_sample_quota_bytes ${30 * 2 ** 20}\n`);
+    expect(text).toContain(`psy_sync_sample_quota_bytes ${100 * 2 ** 20}\n`);
   });
 
   it("parses Kubernetes quantities", () => {

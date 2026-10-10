@@ -438,7 +438,7 @@ account takes them along.
   [`samples.js`](../images/psy-sampler/src/samples.js)), never leaves the page.
   The server trusts none of it: the bytes must start like one of the formats
   above (`sniffAudio`), and the stored `content-type` is the sniffed one.
-- **Limits** (`sync.samples`): 3 MiB per file, 24 samples and 30 MiB per account,
+- **Limits** (`sync.samples`): 3 MiB per file, 24 samples and 100 MiB per account,
   and **1 GiB for everyone together**: that shared cap, not the number of
   accounts, is what keeps uploads off the SD card's free space (local-path
   doesn't enforce the PVC size). Alert `PsySyncSamplesNearCap` at 80 %.
