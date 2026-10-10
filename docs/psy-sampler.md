@@ -308,6 +308,18 @@ a page reload. **▶ Try** plays the draft from the next bar without saving it.
 Deleting a sound copy removes it from the snapshots, and a snapshot left with no
 sounds disappears.
 
+**⬇ Export** (in the panel) downloads the snapshots alone as
+`psy-layers-snapshots.json` (`kind: "snapshots"`, plus the names of the copies
+they play). **⬆ Import** takes that file, or a whole preset, and **adds** its
+snapshots after the ones there (`importSnapshots()` in `workspace.js`): they are
+renumbered, a repeated name gets " 2", and a snapshot that already exists with
+the same moment, sounds and data is skipped, so importing the same file twice
+adds nothing. A copy a snapshot plays comes along when the workspace lacks it;
+if the workspace uses that id for a copy with another name, it arrives as a
+fresh copy (`~n`). Past `SNAP_MAX` the rest stay out, and so do their copies. A
+user sample travels as its id only: in another account the sound plays its own
+voice.
+
 ### What gets saved
 
 Everything lives in one object, the **workspace** (`workspace.js`), in
@@ -347,7 +359,8 @@ except the language.
   the take.
 - **Export / Import preset**: the workspace (snapshots included) + what plays,
   as JSON (`app: "psy-sampler"`). Importing replaces it entirely and plays its
-  mix. Shared links carry only the sounds, not the snapshots.
+  mix. Shared links carry only the sounds, not the snapshots. The snapshots
+  alone travel through the panel's own Export / Import (see Snapshots).
 
 ## Cloud save
 
@@ -852,7 +865,7 @@ npm run build
   error codes), `timing`, `patterns`,
   `music`, `selection`, `editing` (click cycles, dragging, improvisation, amount,
   variations and new melodies with a seeded PRNG), `workspace` (normalize,
-  presets), `autopilot` (sections, forms, never without lead/pad, changes every
+  presets, snapshot files), `autopilot` (sections, forms, never without lead/pad, changes every
   N bars, section queue, styles, per-seed determinism), `dress` (per-seed
   sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`.
@@ -878,7 +891,7 @@ npm run build
   reordering, autopilot (same seed = same track and same sounds, never more than
   one bar without lead/pad, styles, queued sections and Next, the changes
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
-  section), bar-by-bar BPM change, languages, export / import, WAV, recording
+  section, export / import), bar-by-bar BPM change, languages, export / import, WAV, recording
   (through a fake worklet), Reset everything and shared links.
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
   those drag critical advisories into the test toolchain.

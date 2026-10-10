@@ -927,6 +927,13 @@ html {
   color: var(--muted);
 }
 
+.snap-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .variants {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));

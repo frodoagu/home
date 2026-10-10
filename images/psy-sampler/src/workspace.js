@@ -2,12 +2,12 @@
 // keeps between visits and what an exported preset carries. normalize() is
 // the single gate both pass through, so a stale, hand-edited or foreign
 // object always comes out playable.
-import { LAYERS, LAYER_IDS, layerOfVariant } from "./catalog.js";
+import { LAYERS, LAYER_IDS, layerById, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
 import { CHANGE_BARS, CHANGE_DEFAULT, SECTIONS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
 import { laneKey } from "./selection.js";
-import { SNAP_MAX } from "./snapshots.js";
+import { SNAP_MAX, freshName, nextSnapId } from "./snapshots.js";
 import { RAMP_BARS, RAMP_DEFAULT } from "./tempo.js";
 
 export const PRESET_APP = "psy-sampler";
@@ -123,6 +123,84 @@ export function parsePreset(text) {
   const raw = JSON.parse(text);
   if (!raw || raw.app !== PRESET_APP) throw new Error("not a psy-sampler preset");
   return normalize(raw);
+}
+
+export const SNAPS_KIND = "snapshots";
+
+// The snapshots alone, as a file. The names of the copies they play travel
+// along, so each copy arrives under the name it had.
+export function toSnapshotFile(ws) {
+  const names = {};
+  for (const snap of ws.snapshots) {
+    for (const id of Object.values(snap.active)) if (isCopy(id) && ws.names[id]) names[id] = ws.names[id];
+  }
+  return { app: PRESET_APP, kind: SNAPS_KIND, version: PRESET_VERSION, names, snapshots: ws.snapshots };
+}
+
+/**
+ * A snapshots file (or a whole preset) added after the snapshots `ws` has.
+ * A copy they play that `ws` lacks comes along; one whose id `ws` uses for
+ * a sound with another name arrives as a fresh copy. Snapshots `ws` already
+ * has, and those past SNAP_MAX, stay out. Throws on anything that is not ours.
+ */
+export function importSnapshots(ws, text) {
+  const raw = JSON.parse(text);
+  if (!raw || raw.app !== PRESET_APP || !Array.isArray(raw.snapshots)) throw new Error("not psy-sampler snapshots");
+  // The copies the file plays get a list so normalize() keeps them.
+  const lists = {};
+  for (const snap of raw.snapshots) {
+    for (const id of Object.values(snap?.active && typeof snap.active === "object" ? snap.active : {})) {
+      if (typeof id === "string" && isCopy(id) && isVariant(id)) (lists[layerOfVariant(id)] ??= []).push(id);
+    }
+  }
+  const from = normalize({ lists, names: raw.names, snapshots: raw.snapshots });
+
+  const next = { ...ws, lists: structuredClone(ws.lists), names: { ...ws.names }, variants: { ...ws.variants } };
+  const taken = [...Object.values(ws.lists).flat(), ...Object.values(from.lists).flat()];
+  const renamed = new Map();
+  const target = (id) => {
+    if (!isCopy(id)) return id;
+    if (!renamed.has(id)) {
+      const clash = ws.lists[layerOfVariant(id)].includes(id) && (ws.names[id] ?? "") !== (from.names[id] ?? "");
+      const to = clash ? copyId(id, taken) : id;
+      taken.push(to);
+      renamed.set(id, to);
+    }
+    return renamed.get(id);
+  };
+  const bring = (id, to, data) => {
+    const list = next.lists[layerOfVariant(to)];
+    if (list.includes(to)) return;
+    list.push(to);
+    next.variants[to] = data;
+    if (from.names[id]) next.names[to] = from.names[id];
+  };
+
+  const sound = ({ section, active, data }) => JSON.stringify([section, active, data]);
+  const had = new Set(ws.snapshots.map(sound));
+  const snapshots = [...ws.snapshots];
+  let added = 0;
+  let left = 0;
+  for (const snap of from.snapshots) {
+    const active = {};
+    const data = {};
+    for (const id of Object.values(snap.active)) {
+      const to = target(id);
+      active[laneKey(layerById(layerOfVariant(to)), to)] = to;
+      data[to] = snap.data[id];
+    }
+    const parts = { section: snap.section, active, data };
+    if (had.has(sound(parts))) continue;
+    if (snapshots.length >= SNAP_MAX) {
+      left++;
+      continue;
+    }
+    had.add(sound(parts));
+    for (const id of Object.values(snap.active)) bring(id, target(id), snap.data[id]);
+    snapshots.push({ id: nextSnapId(snapshots), name: freshName(snap.name, snapshots.map((s) => s.name)), ...parts });
+    added++;
+  }
+  return { ws: normalize({ ...next, snapshots }), added, left };
 }
 
 // First free "<base>~n" id for a copy of `id` (a copy of a copy shares the base).

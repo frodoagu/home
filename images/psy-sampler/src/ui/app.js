@@ -42,7 +42,16 @@ import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unp
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { RAMP_BARS, clampBpm, rampAt } from "../tempo.js";
-import { SNAP_PANEL, cleanSeed, copyId, normalize, parsePreset, toPreset } from "../workspace.js";
+import {
+  SNAP_PANEL,
+  cleanSeed,
+  copyId,
+  importSnapshots,
+  normalize,
+  parsePreset,
+  toPreset,
+  toSnapshotFile,
+} from "../workspace.js";
 import { djCutoffs } from "../audio/insert.js";
 import { checkbox, download, el, select, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
@@ -326,7 +335,7 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // One row of the layer list: a layer's tiles, or the snapshots'.
-  function makeSection(id, text, onDrop) {
+  function makeSection(id, text, onDrop, ...extras) {
     const group = el("div", { class: "variants", role: "group", "aria-label": text.name });
     const slot = el("div", { class: "editor-slot" });
     const grip = el("button", {
@@ -344,6 +353,7 @@ export function mountApp(root, engine, opts = {}) {
         { class: "layer-meta" },
         el("div", { class: "layer-title" }, grip, el("h2", { text: text.name })),
         el("p", { class: "hint", text: text.hint }),
+        ...extras,
       ),
       group,
       slot,
@@ -381,17 +391,29 @@ export function mountApp(root, engine, opts = {}) {
     return tile;
   }
 
+  const snapExport = el("button", { type: "button", class: "ghost", "data-action": "export-snaps", text: tx.snap.export });
+  snapExport.title = tx.snap.exportTitle;
+  const snapImport = el("button", { type: "button", class: "ghost", "data-action": "import-snaps", text: tx.snap.import });
+  snapImport.title = tx.snap.importTitle;
+  const snapFile = el("input", { type: "file", accept: ".json,application/json", hidden: "", "data-input": "snaps" });
+
   function renderSnaps() {
+    snapExport.disabled = !ws.snapshots.length;
     snapTiles.clear();
     sections.get(SNAP_PANEL).group.replaceChildren(...ws.snapshots.map(makeSnapTile));
   }
 
   for (const id of ws.order) {
     if (id === SNAP_PANEL) {
-      makeSection(id, tx.snap, (ids) => {
-        ws.snapshots = ids.map(snapById);
-        persist();
-      });
+      makeSection(
+        id,
+        tx.snap,
+        (ids) => {
+          ws.snapshots = ids.map(snapById);
+          persist();
+        },
+        el("div", { class: "snap-files" }, snapExport, snapImport, snapFile),
+      );
       renderSnaps();
       continue;
     }
@@ -1493,6 +1515,23 @@ export function mountApp(root, engine, opts = {}) {
     state.auto = false;
     state.varying = new Map();
     remount({ ws: preset, ...fresh(), active: preset.active, pending: null, open: null, status: tx.tools.imported });
+  });
+  snapExport.addEventListener("click", () => {
+    download("psy-layers-snapshots.json", JSON.stringify(toSnapshotFile(ws), null, 2), "application/json");
+  });
+  snapImport.addEventListener("click", () => snapFile.click());
+  snapFile.addEventListener("change", async () => {
+    const file = snapFile.files?.[0];
+    snapFile.value = "";
+    if (!file) return;
+    let merged;
+    try {
+      merged = importSnapshots(ws, await file.text());
+    } catch {
+      status(tx.snap.importFailed);
+      return;
+    }
+    remount({ ws: merged.ws, status: tx.snap.imported(merged.added, merged.left) });
   });
   resetBtn.addEventListener("click", () => {
     if (!confirm(tx.tools.confirmReset)) return;

@@ -210,6 +210,14 @@ export default {
     recaptureTitle: "Reemplaza sus sonidos por lo que está sonando ahora",
     remove: "Borrar snapshot",
     confirmRemove: (name) => `¿Borrar el snapshot «${name}»?`,
+    export: "⬇ Exportar",
+    exportTitle: "Descarga los snapshots en un archivo, con los sonidos que usan",
+    import: "⬆ Importar",
+    importTitle: "Agrega los snapshots de un archivo (o de un preset) a los que ya tenés",
+    importFailed: "Ese archivo no tiene snapshots de Psy Layers.",
+    imported: (n, left) =>
+      (n ? `${n === 1 ? "1 snapshot importado" : `${n} snapshots importados`}.` : "Ya tenías esos snapshots.") +
+      (left ? ` ${left} no ${left === 1 ? "entró" : "entraron"}: llegaste al máximo.` : ""),
   },
   tools: {
     language: "Idioma",
