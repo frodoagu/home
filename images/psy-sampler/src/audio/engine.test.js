@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeAudioContext } from "../test/fakeAudio.js";
+import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "./engine.js";
 import { defaultData, sampleDefaults } from "./patterns.js";
 import { stepDuration, TICK_MS } from "./timing.js";
@@ -12,7 +12,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   ctx = new FakeAudioContext();
   createContext = vi.fn(() => ctx);
-  engine = createEngine({ createContext });
+  engine = createEngine({ createContext, createWorklet: (c, name, options) => new FakeWorklet(c, name, options) });
 });
 
 afterEach(() => {
@@ -544,5 +544,39 @@ describe("DJ filter", () => {
     const high = low.outputs[0];
     expect(low.frequency.events.at(-1)).toEqual(["target", 24000, ctx.currentTime, 0.03]);
     expect(high.frequency.events.at(-1)[1]).toBeCloseTo(6000, 6);
+  });
+});
+
+describe("tap", () => {
+  const trim = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
+
+  it("hands out what goes to the speakers until untapped", async () => {
+    const blocks = [];
+    const untap = await engine.tap((b) => blocks.push(b));
+    const node = ctx.nodes.find((n) => n.kind === "worklet");
+    expect(ctx.modules).toHaveLength(1);
+    expect(node.name).toBe("psy-tap");
+    expect(node.options).toMatchObject({ channelCount: 2, channelCountMode: "explicit" });
+    expect(trim().outputs).toContain(node);
+
+    const block = [new Float32Array(4), new Float32Array(4)];
+    node.port.onmessage({ data: block });
+    expect(blocks).toEqual([block]);
+
+    const closing = untap();
+    expect(node.port.sent).toEqual(["flush"]);
+    const last = [new Float32Array(2), new Float32Array(2)];
+    node.port.onmessage({ data: last });
+    node.port.onmessage({ data: null });
+    await closing;
+    expect(blocks).toEqual([block, last]);
+    expect(trim().outputs).not.toContain(node);
+    expect(node.disconnected).toBe(true);
+  });
+
+  it("loads the processor once per context", async () => {
+    await engine.tap(() => {});
+    await engine.tap(() => {});
+    expect(ctx.modules).toHaveLength(1);
   });
 });

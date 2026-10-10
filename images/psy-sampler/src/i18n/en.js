@@ -28,6 +28,18 @@ export default {
     bar: (n) => `Bar ${n} of 2`,
     barIdle: "Bar –",
   },
+  rec: {
+    idle: "● Record",
+    idleTitle: "Records what comes out of the speakers: it starts on the first sound and downloads a WAV when you stop",
+    waiting: "● Waiting for sound…",
+    waitingTitle: "Recording starts on the first sound. Click to cancel",
+    recording: (time) => `■ ${time}`,
+    recordingTitle: (max) => `Stops recording and downloads the WAV (${max} min max)`,
+    saved: (file, time) => `Recording saved: ${file} (${time})`,
+    full: (max) => `Reached the ${max}-minute maximum: the recording stops there.`,
+    empty: "Nothing played: no recording.",
+    unsupported: "This browser cannot record.",
+  },
   sections: { intro: "Intro", groove: "Groove", build: "Build-up", peak: "Peak", breakdown: "Breakdown" },
   pilot: {
     style: "Style",

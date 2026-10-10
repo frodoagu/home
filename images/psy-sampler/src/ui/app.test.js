@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeAudioContext } from "../test/fakeAudio.js";
+import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "../audio/engine.js";
 import { stepDuration } from "../audio/timing.js";
 import { mountApp } from "./app.js";
@@ -23,7 +23,12 @@ function fakeOffline(channels, length) {
   return off;
 }
 
-const newEngine = (c = new FakeAudioContext()) => createEngine({ createContext: () => c, createOffline: fakeOffline });
+const newEngine = (c = new FakeAudioContext()) =>
+  createEngine({
+    createContext: () => c,
+    createOffline: fakeOffline,
+    createWorklet: (ctx, name, options) => new FakeWorklet(ctx, name, options),
+  });
 const mount = (node, eng = engine, opts = {}) =>
   mountApp(node, eng, { languages: ["es-AR"], confirm: () => true, ...opts });
 
@@ -1146,6 +1151,76 @@ describe("export, import, reset", () => {
     editor("fx.crash").querySelector('[data-action="wav"]').click();
     await flushPromises();
     expect(downloads.at(-1).fileName).toBe("crash-145bpm.wav");
+  });
+
+  describe("recording", () => {
+    const rec = () => $('[data-action="record"]');
+    const tap = () => ctx.nodes.filter((n) => n.kind === "worklet").at(-1);
+    const play = (seconds, level = 0.5) => {
+      const n = 48000 * seconds;
+      tap().port.onmessage({ data: [new Float32Array(n).fill(level), new Float32Array(n).fill(level)] });
+    };
+    // The worklet answers the flush with what it held, then null.
+    const stopRec = async () => {
+      rec().click();
+      await flushPromises();
+      tap().port.onmessage({ data: null });
+      await flushPromises();
+    };
+
+    it("waits for the first sound, shows the time, and downloads a WAV on stop", async () => {
+      expect(rec().textContent).toBe("● Grabar");
+      rec().click();
+      await flushPromises();
+      expect(rec().textContent).toBe("● Esperando sonido…");
+      expect(rec().classList.contains("is-waiting")).toBe(true);
+      play(1, 0);
+      vi.advanceTimersByTime(250);
+      expect(rec().textContent).toBe("● Esperando sonido…");
+      play(2);
+      vi.advanceTimersByTime(250);
+      expect(rec().textContent).toBe("■ 0:02");
+      expect(rec().classList.contains("is-recording")).toBe(true);
+
+      await stopRec();
+      expect(downloads.at(-1).fileName).toMatch(/^psy-layers-\d{4}-\d\d-\d\d-\d{4}\.wav$/);
+      expect(downloads.at(-1).type).toBe("audio/wav");
+      expect(downloads.at(-1).size).toBe(44 + 2 * 48000 * 6);
+      expect($(".status").textContent).toMatch(/Grabación guardada: .* \(0:02\)/);
+      expect(rec().textContent).toBe("● Grabar");
+    });
+
+    it("downloads nothing when nothing sounded", async () => {
+      rec().click();
+      await flushPromises();
+      play(1, 0);
+      const before = downloads.length;
+      await stopRec();
+      expect(downloads).toHaveLength(before);
+      expect($(".status").textContent).toMatch(/No sonó nada/);
+    });
+
+    it("keeps recording through a language change", async () => {
+      rec().click();
+      await flushPromises();
+      play(1);
+      const lang = $('[data-control="lang"]');
+      lang.value = "en";
+      lang.dispatchEvent(new Event("change"));
+      play(1);
+      vi.advanceTimersByTime(250);
+      expect(rec().textContent).toBe("■ 0:02");
+      await stopRec();
+      expect($(".status").textContent).toMatch(/Recording saved: .* \(0:02\)/);
+    });
+
+    it("says so where the browser can't record", async () => {
+      ctx.audioWorklet = undefined;
+      rec().click();
+      await flushPromises();
+      expect($(".status").textContent).toMatch(/no puede grabar/);
+      expect(rec().textContent).toBe("● Grabar");
+    });
   });
 
   it("Restaurar todo goes back to factory", () => {

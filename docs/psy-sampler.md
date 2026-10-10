@@ -9,7 +9,8 @@ signed-in user can upload samples to their profile and play any sound through
 one. A DJ filter sweeps the whole mix. An autopilot builds a track
 on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
-sound sounds; its sections can be forced and queued. What plays exports to WAV.
+sound sounds; its sections can be forced and queued. What plays exports to WAV,
+as a loop or as a live recording.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
@@ -330,6 +331,19 @@ except the language.
   **twice, keeping the second pass**, so the tails from the end are already
   wrapped into the start and the file loops seamlessly in any DAW. An FX renders
   12 s and is trimmed at silence (-80 dBFS). 24-bit stereo (`audio/wav.js`).
+- **● Record** (top bar): records what reaches the speakers, live, and downloads
+  `psy-layers-<date>-<time>.wav` on stop. Pressed, it waits for sound and the
+  take starts on the first sample above -80 dBFS; the silence after the last
+  sound is trimmed. `engine.tap()` connects an AudioWorklet
+  (`audio/tap.worklet.js`, loaded as its own file via `?url&no-inline`) after
+  the output trim, so the DJ filter, FX, auditions and the limiter are all in
+  it, at the context's own sample rate. `audio/take.js` encodes 24-bit PCM as
+  blocks arrive and folds it into a Blob every 16 MB, so memory holds about the
+  file's size, not the floats. **Capped at 15 min** (`MAX_SECONDS` in
+  `audio/recorder.js`, ~260 MB at 48 kHz: a whole track, and still safe in a
+  phone's tab); at the cap it stops and downloads on its own. The recorder
+  lives as long as the engine, so a language switch or an import doesn't cut
+  the take.
 - **Export / Import preset**: the workspace (snapshots included) + what plays,
   as JSON (`app: "psy-sampler"`). Importing replaces it entirely and plays its
   mix. Shared links carry only the sounds, not the snapshots.
@@ -820,7 +834,7 @@ npm run build
   presets), `autopilot` (sections, forms, never without lead/pad, changes every
   N bars, section queue, styles, per-seed determinism), `dress` (per-seed
   sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
-  `i18n`.
+  `take` (silence gate, cap, tail trim), `recorder`, `i18n`.
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
   records nodes and automation. It includes an anti-click invariant: every
@@ -843,8 +857,8 @@ npm run build
   reordering, autopilot (same seed = same track and same sounds, never more than
   one bar without lead/pad, styles, queued sections and Next, the changes
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
-  section), bar-by-bar BPM change, languages, export / import, WAV, Reset
-  everything and shared links.
+  section), bar-by-bar BPM change, languages, export / import, WAV, recording
+  (through a fake worklet), Reset everything and shared links.
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
   those drag critical advisories into the test toolchain.
 
