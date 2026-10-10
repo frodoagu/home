@@ -707,6 +707,15 @@ describe("snapshots", () => {
     expect(pressed()).toEqual(["kick.long"]);
   });
 
+  it("Parar stops with the snapshot editor open", () => {
+    click("kick.long");
+    snapBtn().click();
+    expect(snapEditor()).not.toBeNull();
+    $("button.stop").click();
+    expect(engine.isRunning()).toBe(false);
+    expect(pressed()).toEqual([]);
+  });
+
   it("the editor works on a draft: Guardar keeps it, Descartar goes back", () => {
     immediate();
     click("kick.long");
