@@ -589,10 +589,13 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
-.transport-end {
+.topbar-transport {
   display: flex;
   gap: 8px;
-  margin-left: auto;
+}
+
+.topbar-transport button {
+  padding: 6px 14px;
 }
 
 .snap-btn {
@@ -650,6 +653,31 @@ html {
 .stop:hover {
   background: var(--stop);
   color: var(--surface);
+}
+
+.cue {
+  padding: 8px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--current);
+  background: transparent;
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cue:hover,
+.cue.is-armed {
+  background: var(--current);
+  color: var(--surface);
+}
+
+.cue.is-armed {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.cue[hidden] {
+  display: none;
 }
 
 /* ---- step bar ---- */
@@ -1445,15 +1473,20 @@ html {
   .topbar {
     position: relative; /* not sticky, still the background's anchor */
   }
-  /* Row 1: back + language. Row 2: where the setup lives + sign-in. */
+  /* Row 1: back + language. Row 2: the transport buttons. Row 3: where the
+     setup lives + sign-in. */
   .topbar-end {
     display: contents;
+  }
+  .topbar-transport {
+    order: 1;
+    flex-basis: 100%;
   }
   .topbar .pick {
     margin-left: auto;
   }
   .account {
-    order: 1;
+    order: 2;
     flex-basis: 100%;
   }
   .topbar .pick > span {
@@ -1468,9 +1501,6 @@ html {
   }
   .variants {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  }
-  .transport-end {
-    margin-left: 0;
   }
   .sample-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1492,7 +1522,8 @@ html {
     transition: none;
   }
   .variant.is-queued,
-  .variant.is-leaving {
+  .variant.is-leaving,
+  .cue.is-armed {
     animation: none;
   }
 }

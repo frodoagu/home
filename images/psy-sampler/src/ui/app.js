@@ -54,7 +54,7 @@ const sameLanes = (a, b) =>
 const sameData = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Everything tied to the old workspace, dropped when another one replaces it.
-const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null });
+const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null, armed: false });
 
 export function mountApp(root, engine, opts = {}) {
   const {
@@ -76,7 +76,8 @@ export function mountApp(root, engine, opts = {}) {
   if (!ws.seed) ws.seed = randomSeed();
   const state = {
     active: resume?.active ?? {}, // lane key -> variant: what plays
-    pending: resume?.pending ?? null, // a queued selection, applied on the next bar line
+    pending: resume?.pending ?? null, // a queued selection, applied on the next bar line (or on ▶ when armed)
+    armed: resume?.armed ?? false, // stopped, queuing clicks for ▶ to start together
     auto: resume?.auto ?? false,
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
@@ -156,6 +157,7 @@ export function mountApp(root, engine, opts = {}) {
   const delay = checkbox("delay", tx.transport.delay, ws.effects.delay);
   const reverb = checkbox("reverb", tx.transport.reverb, ws.effects.reverb);
   const stopBtn = el("button", { type: "button", class: "stop", text: tx.transport.stop });
+  const cueBtn = el("button", { type: "button", class: "cue", "data-action": "cue" });
   const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
   snapBtn.title = tx.transport.snapshotTitle;
 
@@ -423,14 +425,15 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
-  // Top bar: the way back to agu.com.ar, then where the setup is saved
-  // (account.js) and the language.
+  // Top bar: the way back to agu.com.ar, the transport buttons, then where
+  // the setup is saved (account.js) and the language.
   const back = el("a", { class: "back", href: "https://agu.com.ar/", text: `← ${tx.topbar.back}` });
   back.title = tx.topbar.backTitle;
   const topbar = el(
     "nav",
     { class: "topbar" },
     back,
+    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn),
     el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
   );
 
@@ -466,7 +469,6 @@ export function mountApp(root, engine, opts = {}) {
       delay.node,
       reverb.node,
       djBox,
-      el("div", { class: "transport-end" }, snapBtn, stopBtn),
     ),
     el(
       "div",
@@ -518,6 +520,15 @@ export function mountApp(root, engine, opts = {}) {
       node.setAttribute("aria-pressed", String(on));
       tile.classList.toggle("is-dirty", state.drafts.has(id));
     }
+    showCue();
+  }
+
+  // Stopped, the cue button arms; armed, it plays what was queued.
+  function showCue() {
+    cueBtn.hidden = engine.isRunning();
+    cueBtn.textContent = state.armed ? tx.transport.play : tx.transport.arm;
+    cueBtn.title = state.armed ? tx.transport.playTitle : tx.transport.armTitle;
+    cueBtn.classList.toggle("is-armed", state.armed);
   }
 
   // Now: the section and the bars it has left, then the queue (✕ drops one
@@ -589,9 +600,9 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // A new selection: on the next bar line when "On the beat" is on and the
-  // loop runs, right away otherwise.
+  // loop runs, on ▶ when armed, right away otherwise.
   function commit(next) {
-    if (ws.quantize && engine.isRunning()) {
+    if ((ws.quantize && engine.isRunning()) || state.armed) {
       state.pending = sameLanes(next, state.active) ? null : next;
       if (!state.pending) state.queuedSnap = null;
       renderButtons();
@@ -611,6 +622,7 @@ export function mountApp(root, engine, opts = {}) {
       fire(id);
       return;
     }
+    if (state.armed && clicks === 2) return; // armed, a double click queues like a single one
     const key = laneKey(layer, id);
     if (clicks === 2 && lastPress?.id === id) {
       state.pending = null;
@@ -847,11 +859,13 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // On the next bar line while the loop runs (clicking the queued one again
-  // cancels it, a double click enters now), at once when it is stopped.
+  // cancels it, a double click enters now), on ▶ when armed, at once when it
+  // is stopped.
   function recall(snap, { clicks = 1, toggle = false } = {}) {
+    if (state.armed && clicks === 2) return;
     const queued = state.queuedSnap?.id === snap.id;
     if (clicks === 2 && queued) snap = state.queuedSnap;
-    else if (engine.isRunning()) {
+    else if (engine.isRunning() || state.armed) {
       if (toggle && queued) {
         state.queuedSnap = null;
         state.pending = null;
@@ -1179,8 +1193,8 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj } = state;
-    const carried = { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj };
+    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, resume: next });
@@ -1214,6 +1228,7 @@ export function mountApp(root, engine, opts = {}) {
   // `section`.
   function engageAuto(section = null) {
     const playing = { ...(state.pending ?? state.active) };
+    state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
     state.bare = 0;
     state.rng = seeded(hashSeed(ws.seed));
@@ -1321,6 +1336,7 @@ export function mountApp(root, engine, opts = {}) {
   stopBtn.addEventListener("click", () => {
     state.active = {};
     state.pending = null;
+    state.armed = false;
     state.auto = false;
     state.pilot = null;
     state.queuedSnap = null;
@@ -1337,6 +1353,20 @@ export function mountApp(root, engine, opts = {}) {
     renderButtons(new Set());
     paintStep(null);
     showSection();
+  });
+  cueBtn.addEventListener("click", () => {
+    if (!state.armed) {
+      state.armed = true;
+      renderButtons();
+      return;
+    }
+    engine.ensureContext(); // inside the click: the queued mix starts now
+    state.armed = false;
+    if (state.queuedSnap) load(state.queuedSnap);
+    if (state.pending) state.active = state.pending;
+    state.pending = null;
+    state.queuedSnap = null;
+    sync();
   });
   autoBtn.addEventListener("click", () => {
     if (!state.auto) {
