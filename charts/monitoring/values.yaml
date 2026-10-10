@@ -336,12 +336,15 @@ victoria-metrics-k8s-stack:
     # (and no SD writes) are needed.
     persistence:
       enabled: false
+    # Idles around 330Mi. The chart sets GOMEMLIMIT to 90% of the limit, but that
+    # caps only Grafana's Go heap: the logs datasource plugin is a separate process
+    # in the same cgroup, so a burst of heavy queries still OOMKills at 512Mi.
     resources:
       requests:
         cpu: 25m
         memory: 128Mi
       limits:
-        memory: 512Mi
+        memory: 768Mi
     # VictoriaLogs datasource plugin — query the log DB (charts/victoria-logs)
     # from Grafana Explore alongside the metrics. The plugin is signed and
     # fetched from grafana.com on pod start (needs egress). The datasource itself

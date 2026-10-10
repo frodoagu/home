@@ -35,6 +35,12 @@ interval, short retention, ephemeral Grafana). The Pi has 8 GB RAM, so the
 memory *limits* are generous — the earlier values were too tight and caused
 OOMKills.
 
+Grafana idles around 330Mi, so its limit is 768Mi. At 512Mi, opening a few
+dashboards in a row OOMKilled it. The chart's `GOMEMLIMIT` (90% of the limit)
+doesn't prevent that: it bounds only Grafana's Go heap, and the
+`victoriametrics-logs-datasource` plugin runs as a separate process in the same
+container.
+
 **Logs** live in a separate app, [VictoriaLogs](../charts/victoria-logs) (single
 node + a bundled Vector collector). This chart provisions the VictoriaLogs
 **Grafana datasource** (`victoria-metrics-k8s-stack.defaultDatasources.extra` →
