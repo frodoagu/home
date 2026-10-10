@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeAudioContext, FakeNode, FakeParam, FakeSource } from "../test/fakeAudio.js";
 import { DEFAULTS, KICK_LONG, KICK_PUNCHY, LOOP_VARIANTS, eventsAt } from "./patterns.js";
 import { PARAMS, SYNTH_IDS } from "./params.js";
-import { ACID_SWEEP_PERIOD, FX, INSTRUMENTS, VOICES, acidCutoff, kick } from "./voices.js";
+import { ACID_SWEEP_PERIOD, FX, GLITCH, INSTRUMENTS, SAMPLE_ROOT, VOICES, acidCutoff, kick, sample } from "./voices.js";
 
 const T = 1;
 const STEP = 60 / 145 / 4;
@@ -129,7 +129,7 @@ describe("every synth plays any note length click-free", () => {
 });
 
 describe("drum voices stay click-free across their sliders", () => {
-  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride", "rim"]) {
+  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride", "rim", ...Object.keys(GLITCH)]) {
     it(voice, () => {
       const spec = PARAMS[voice];
       const at = (pick) => Object.fromEntries(spec.map((p) => [p.key, p[pick]]));
@@ -175,6 +175,72 @@ describe("FX", () => {
     expect(set).toEqual(["set", 90, boom.startTime]);
     expect(exp[1]).toBeCloseTo(28, 0);
     expect(exp[2]).toBeCloseTo(boom.startTime + 0.8, 9);
+  });
+});
+
+describe("glitch voices", () => {
+  it("every one has its sliders", () => {
+    for (const voice of Object.keys(GLITCH)) expect(PARAMS[voice], voice).toBeDefined();
+  });
+
+  it("stutter squeezes its repeats into one step", () => {
+    VOICES.stutter(ctx, out, T, { tone: 2500, repeats: 4, decay: 0.012 }, STEP);
+    const starts = ctx.sources().map((s) => s.startTime);
+    expect(starts).toHaveLength(4);
+    starts.forEach((t, i) => expect(t).toBeCloseTo(T + (i * STEP) / 4, 9));
+  });
+
+  it("crush runs its sine through a quantizer of `bits`", () => {
+    VOICES.crush(ctx, out, T, { tone: 3000, bits: 2, decay: 0.05 }, STEP);
+    const shaper = ctx.nodes.find((n) => n.kind === "waveshaper");
+    expect(new Set(shaper.curve).size).toBe(5); // 2 bits, mid-tread
+    expect(shaper.curve[512]).toBe(0);
+  });
+
+  it("crackle scatters its clicks inside the step", () => {
+    VOICES.crackle(ctx, out, T, { tone: 4000, density: 7 }, STEP);
+    const starts = ctx.sources().map((s) => s.startTime);
+    expect(starts).toHaveLength(7);
+    for (const t of starts) expect(t).toBeLessThan(T + STEP);
+  });
+});
+
+describe("sample", () => {
+  // One second of a 48 kHz buffer.
+  const buffer = () => ctx.createBuffer(2, 48000, 48000);
+  const settings = { pitch: 0, start: 0, length: 1, reverse: false };
+
+  it("a hit plays the sample out, from `start`, cut to `length`, click-free", () => {
+    const end = sample(ctx, out, T, { sample: { ...settings, start: 0.5, length: 0.5 }, buffer: buffer() }, STEP);
+    const [src] = ctx.sources();
+    expect(src.offset).toBe(0.5);
+    expect(end).toBeCloseTo(T + 0.25, 9);
+    expectClickFree(T);
+  });
+
+  it("pitch and the note transpose it; a note lasts as long as the note", () => {
+    sample(ctx, out, T, { sample: { ...settings, pitch: 12 }, buffer: buffer() }, STEP);
+    expect(ctx.sources()[0].playbackRate.value).toBe(2);
+    const end = sample(ctx, out, T, { sample: settings, buffer: buffer(), freq: SAMPLE_ROOT / 2, steps: 2 }, STEP);
+    expect(ctx.sources()[1].playbackRate.value).toBe(0.5);
+    expect(end).toBeCloseTo(T + 2 * STEP - 0.05 * STEP, 9);
+    expectClickFree(T);
+  });
+
+  it("never outlasts the audio it has left", () => {
+    const end = sample(ctx, out, T, { sample: { ...settings, pitch: 24 }, buffer: buffer(), freq: SAMPLE_ROOT, steps: 32 }, STEP);
+    expect(end).toBeCloseTo(T + 0.25, 9); // 1 s at 4× speed
+  });
+
+  it("reverse plays a reversed copy, made once per buffer", () => {
+    const b = buffer();
+    b.getChannelData(0)[0] = 1;
+    sample(ctx, out, T, { sample: { ...settings, reverse: true }, buffer: b }, STEP);
+    sample(ctx, out, T + 1, { sample: { ...settings, reverse: true }, buffer: b }, STEP);
+    const [a, c] = ctx.sources();
+    expect(a.buffer).not.toBe(b);
+    expect(a.buffer).toBe(c.buffer);
+    expect(a.buffer.getChannelData(0).at(-1)).toBe(1);
   });
 });
 

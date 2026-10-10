@@ -7,9 +7,11 @@
 // sound it brings in from the seed (dress.js) and writes new melodies.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
-import { layerById } from "../catalog.js";
+// The signed-in user's samples (samples.js) load as the sounds using them
+// need them; until then those sounds play their own voice.
+import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
-import { baseOf, defOf, defaultData, isCopy } from "../audio/patterns.js";
+import { baseOf, defOf, defaultData, isCopy, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
 import { encodeWav } from "../audio/wav.js";
 import {
@@ -39,9 +41,11 @@ import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from ".
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { RAMP_BARS, clampBpm, rampAt } from "../tempo.js";
 import { SNAP_PANEL, cleanSeed, copyId, normalize, parsePreset, toPreset } from "../workspace.js";
+import { djCutoffs } from "../audio/insert.js";
 import { checkbox, download, el, select, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
+import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
 
@@ -59,6 +63,7 @@ export function mountApp(root, engine, opts = {}) {
     location = globalThis.location,
     confirm = (message) => window.confirm(message),
     cloud = null, // cloud.js; survives remounts, like the engine
+    samples = null, // samples.js; same
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
   } = opts;
@@ -84,6 +89,7 @@ export function mountApp(root, engine, opts = {}) {
     ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
     bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
+    dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
   };
   let open = null; // the one open editor: { layer, id, editor }
   const snapshot = () => ({ lang: lang(), ...ws });
@@ -143,6 +149,10 @@ export function mountApp(root, engine, opts = {}) {
   const bgKick = checkbox("bgkick", tx.transport.bgKick, ws.bgKick);
   const quantize = checkbox("quantize", tx.transport.quantize, ws.quantize);
   quantize.node.title = tx.transport.quantizeTitle;
+  const djInput = el("input", { type: "range", id: "dj", min: "-1", max: "1", step: "0.02", value: String(state.dj) });
+  const djOut = el("output", { for: "dj", class: "dj-value" });
+  const djBox = el("label", { class: "dj", for: "dj" }, el("span", { text: tx.transport.djFilter }), djInput, djOut);
+  djBox.title = tx.transport.djTitle;
   const delay = checkbox("delay", tx.transport.delay, ws.effects.delay);
   const reverb = checkbox("reverb", tx.transport.reverb, ws.effects.reverb);
   const stopBtn = el("button", { type: "button", class: "stop", text: tx.transport.stop });
@@ -424,6 +434,20 @@ export function mountApp(root, engine, opts = {}) {
     el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
   );
 
+  const samplesPanel = samples
+    ? mountSamplesPanel({
+        samples,
+        cloud,
+        tx,
+        lang: lang(),
+        confirm,
+        status: (text) => status(text),
+        onPreview: previewSample,
+        onUse: addSampleSound,
+        onRemove: forgetSample,
+      })
+    : null;
+
   root.replaceChildren(
     topbar,
     el(
@@ -441,6 +465,7 @@ export function mountApp(root, engine, opts = {}) {
       quantize.node,
       delay.node,
       reverb.node,
+      djBox,
       el("div", { class: "transport-end" }, snapBtn, stopBtn),
     ),
     el(
@@ -457,6 +482,7 @@ export function mountApp(root, engine, opts = {}) {
       el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn),
       statusLine,
     ),
+    ...(samplesPanel ? [samplesPanel.node] : []),
     el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
     layersMain,
   );
@@ -969,6 +995,13 @@ export function mountApp(root, engine, opts = {}) {
       onRemove: () => remove(layer, id),
       onWav: () => exportWav({ layer, id }),
       onVary: (on) => setVarying(id, on),
+      samples: samples?.info.samples ?? [],
+      onSample: (sampleId) => {
+        engine.ensureContext(); // inside the change event: the first sound may be this one
+        samples?.load(sampleId).then((buffer) => {
+          if (buffer && open?.id === id && !engine.isRunning()) engine.audition(id, { midi: 57 });
+        });
+      },
       buildUp: state.buildUp?.id === id,
       onBuildUp: (on) => {
         setBuildUp(id, on);
@@ -1004,21 +1037,78 @@ export function mountApp(root, engine, opts = {}) {
     return label;
   }
 
-  function duplicate(layer, id) {
+  // A new copy of `id` with `data`, at `at` in its layer, opened with its name selected.
+  function addCopy(layer, id, data, name, at) {
     const copy = copyId(id, allIds());
     const list = ws.lists[layer.id];
-    const at = list.indexOf(id) + 1;
     ws.lists[layer.id] = [...list.slice(0, at), copy, ...list.slice(at)];
-    ws.variants[copy] = structuredClone(dataOf(id));
-    ws.names[copy] = tx.tile.copyName(labelOf(id));
-    if (id in ws.improv) ws.improv[copy] = ws.improv[id];
-    feed(copy, ws.variants[copy]);
+    ws.variants[copy] = data;
+    ws.names[copy] = name;
+    feed(copy, data);
     persist();
     closeEditor();
     renderTiles(layer);
     renderButtons();
     openEditor(layer, copy, { focusName: true });
+    return copy;
   }
+
+  function duplicate(layer, id) {
+    const at = ws.lists[layer.id].indexOf(id) + 1;
+    const copy = copyId(id, allIds());
+    if (id in ws.improv) ws.improv[copy] = ws.improv[id];
+    addCopy(layer, id, structuredClone(dataOf(id)), tx.tile.copyName(labelOf(id)), at);
+  }
+
+  /* ---- samples ---- */
+  // "+ Sound in…": the layer's template part, playing the sample.
+  function addSampleSound(sample, layerId) {
+    const layer = layerById(layerId);
+    const { from, transpose = 0 } = SAMPLE_TEMPLATES[layerId];
+    const data = { ...defaultData(from), sample: sampleDefaults(sample.id, sample.name) };
+    if (defOf(from).kind === "notes") data.transpose = transpose;
+    addCopy(layer, from, data, sample.name, ws.lists[layerId].length);
+    samples.load(sample.id);
+    status(tx.samples.created(sample.name, tx.layers[layerId].name));
+  }
+
+  // The panel's ▶: the AudioContext opens inside the click, the sound once loaded.
+  function previewSample(sampleId) {
+    engine.ensureContext();
+    samples.load(sampleId).then((buffer) => buffer && engine.previewSample(sampleId));
+  }
+
+  // A deleted sample: the sounds using it go back to their own voice.
+  function forgetSample(sampleId) {
+    for (const id of allIds()) {
+      if (dataOf(id).sample?.id === sampleId) setVariant(id, { ...dataOf(id), sample: null });
+    }
+    if (open && tiles.has(open.id)) openEditor(open.layer, open.id);
+  }
+
+  // Every sample the sounds and snapshots use, decoded ahead of playing.
+  function preloadSamples() {
+    const used = new Set();
+    for (const data of [...Object.values(ws.variants), ...ws.snapshots.flatMap((s) => Object.values(s.data))]) {
+      if (data.sample) used.add(data.sample.id);
+    }
+    for (const id of used) samples.load(id);
+  }
+
+  // Signed in: the library, then what the sounds need. Signed out: nothing.
+  function syncSamples() {
+    if (!samples) return;
+    if (!cloud?.info.user) samples.clear();
+    else if (!samples.info.ready) samples.refresh().then(preloadSamples);
+    else preloadSamples();
+  }
+  const sampleOffs = [
+    cloud?.on((event) => (event === "user" || event === "info") && syncSamples()),
+    // A new upload or delete: an open editor offers the new list.
+    samples?.on(() => {
+      if (open && tiles.has(open.id) && !open.editor.node.contains(document.activeElement)) openEditor(open.layer, open.id);
+    }),
+  ];
 
   function remove(layer, id) {
     if (!confirm(tx.editor.confirmRemove(labelOf(id)))) return;
@@ -1083,12 +1173,14 @@ export function mountApp(root, engine, opts = {}) {
     engine.onBar(null);
     sorters.forEach((s) => s.destroy());
     account?.destroy();
+    samplesPanel?.destroy();
+    sampleOffs.forEach((off) => off?.());
     window.removeEventListener("hashchange", onHash);
   }
 
   function remount(changes = {}) {
-    const { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp } = state;
-    const carried = { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp };
+    const { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj } = state;
+    const carried = { pending, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, resume: next });
@@ -1196,6 +1288,16 @@ export function mountApp(root, engine, opts = {}) {
     if (e.key === "Enter") startRamp();
   });
   snapBtn.addEventListener("click", takeSnapshot);
+  const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
+  function setDj(value) {
+    state.dj = Math.abs(value) < 0.02 ? 0 : value; // a detent at the centre
+    djInput.value = String(state.dj);
+    engine.setMasterFilter(state.dj);
+    const { low, high } = djCutoffs(state.dj, 24000);
+    djOut.textContent = state.dj < 0 ? tx.transport.djLow(hz(low)) : state.dj > 0 ? tx.transport.djHigh(hz(high)) : tx.transport.djOff;
+  }
+  djInput.addEventListener("input", () => setDj(Number(djInput.value)));
+  djInput.addEventListener("dblclick", () => setDj(0));
   for (const [key, box] of [
     ["bgKick", bgKick],
     ["quantize", quantize],
@@ -1310,6 +1412,8 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- first paint ---- */
   showSection();
   showRamp();
+  setDj(state.dj);
+  syncSamples();
   if (resume) {
     persist();
     sync();

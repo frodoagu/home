@@ -234,3 +234,11 @@ spec:
           annotations:
             summary: {{ `psy-sync database at {{ $value | humanizePercentage }} of its PVC request` | quote }}
             description: "The SQLite files outgrow sync.persistence.size. local-path does not enforce it, so this eats the SD card's free space."
+        - alert: PsySyncSamplesNearCap
+          expr: psy_sync_sample_bytes_total / psy_sync_sample_bytes_limit > 0.8 and psy_sync_sample_bytes_limit > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Uploaded samples at {{ $value | humanizePercentage }} of the shared cap` | quote }}
+            description: "Every upload gets 507 once all samples together reach sync.samples.total. Raise it only if the SD card has room (the PVC size is not enforced)."

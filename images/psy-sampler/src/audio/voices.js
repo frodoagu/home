@@ -196,6 +196,142 @@ export function rim(ctx, out, t, { tone = 1700, decay = 0.04, accent }) {
   src.connect(filter(ctx, "highpass", 4000)).connect(g).connect(out);
 }
 
+/* ------------------------------------------------------------- glitch -- */
+// Hi-tech ear candy: digital artefacts rather than instruments. Several draw
+// from Math.random on purpose (a different bleep per hit), like the noise.
+
+// 2..8 bit mid-tread quantizer, shared per bit depth.
+const quantizers = new Map();
+function quantizer(bits) {
+  let curve = quantizers.get(bits);
+  if (!curve) {
+    curve = new Float32Array(1025);
+    const step = 2 / 2 ** bits;
+    for (let i = 0; i < curve.length; i++) curve[i] = Math.round(((i / 512) - 1) / step) * step;
+    quantizers.set(bits, curve);
+  }
+  return curve;
+}
+
+function shaper(ctx, curve) {
+  const s = ctx.createWaveShaper();
+  s.curve = curve;
+  return s;
+}
+
+// Ratchet: `repeats` band-passed noise bursts squeezed into one step.
+export function stutter(ctx, out, t, { tone = 2500, repeats = 4, decay = 0.012, accent }, stepDur) {
+  const gap = stepDur / repeats;
+  for (let i = 0; i < repeats; i++) {
+    const at = t + i * gap;
+    const len = Math.min(decay, gap * 0.8);
+    const src = noise(ctx, at, len + 0.01);
+    const g = ctx.createGain();
+    // Each repeat a little quieter: the stutter decays like a bouncing ball.
+    percEnv(g.gain, at, (accent ? 3.2 : 2.4) * (1 - (0.4 * i) / repeats), 0.0005, len);
+    src.connect(filter(ctx, "bandpass", tone, 2.5)).connect(g).connect(out);
+  }
+}
+
+// Computer bleep: a square on a random semitone up to `spread` octaves above `tone`.
+export function blip(ctx, out, t, { tone = 1200, spread = 2, decay = 0.04, accent }) {
+  const semis = Math.floor(Math.random() * (spread * 12 + 1));
+  const sq = osc(ctx, "square", tone * 2 ** (semis / 12));
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.8 : 0.58, 0.001, decay);
+  sq.connect(filter(ctx, "lowpass", 7000)).connect(amp).connect(out);
+  sq.start(t);
+  sq.stop(end);
+}
+
+// "Pew": a sine diving four octaves onto `tone` in `sweep`.
+export function zip(ctx, out, t, { tone = 180, sweep = 0.03, decay = 0.08, accent }) {
+  const sine = osc(ctx, "sine", tone * 16);
+  sine.frequency.setValueAtTime(tone * 16, t);
+  sine.frequency.exponentialRampToValueAtTime(tone, t + sweep);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 1 : 0.75, 0.0005, decay);
+  sine.connect(amp).connect(out);
+  sine.start(t);
+  sine.stop(end);
+}
+
+// A falling sine through a few-bit quantizer: digital crunch.
+export function crush(ctx, out, t, { tone = 3000, bits = 3, decay = 0.05, accent }) {
+  const sine = osc(ctx, "sine", tone);
+  sine.frequency.setValueAtTime(tone, t);
+  sine.frequency.exponentialRampToValueAtTime(tone / 4, t + decay);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.95 : 0.68, 0.0005, decay);
+  sine.connect(shaper(ctx, quantizer(bits))).connect(amp).connect(out);
+  sine.start(t);
+  sine.stop(end);
+}
+
+// FM ping at an inharmonic ratio: struck metal, the index ringing down.
+export function metal(ctx, out, t, { tone = 600, ratio = 2.76, decay = 0.12, accent }) {
+  const carrier = osc(ctx, "sine", tone);
+  const mod = osc(ctx, "sine", tone * ratio);
+  const depth = ctx.createGain();
+  depth.gain.setValueAtTime(tone * 6, t);
+  depth.gain.exponentialRampToValueAtTime(tone * 0.5, t + decay);
+  mod.connect(depth).connect(carrier.frequency);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.75 : 0.55, 0.0005, decay);
+  carrier.connect(filter(ctx, "highpass", 300)).connect(amp).connect(out);
+  play([carrier, mod], t, end);
+}
+
+// Ring modulation: a square times a sine, the robot voice of the 80s.
+export function ring(ctx, out, t, { tone = 900, ring: ringHz = 1370, decay = 0.09, accent }) {
+  const carrier = osc(ctx, "square", tone);
+  const mod = osc(ctx, "sine", ringHz);
+  const vca = constGain(ctx, 0);
+  mod.connect(vca.gain);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.7 : 0.5, 0.0005, decay);
+  carrier.connect(vca).connect(filter(ctx, "lowpass", 9000)).connect(amp).connect(out);
+  play([carrier, mod], t, end);
+}
+
+// `density` dust clicks at random spots inside the step.
+export function crackle(ctx, out, t, { tone = 4000, density = 4, accent }, stepDur) {
+  for (let i = 0; i < density; i++) {
+    const at = t + Math.random() * stepDur * 0.9;
+    const src = noise(ctx, at, 0.012);
+    const g = ctx.createGain();
+    percEnv(g.gain, at, (accent ? 1.4 : 0.8) * (0.4 + 0.6 * Math.random()), 0.0002, 0.002);
+    src.connect(filter(ctx, "highpass", tone)).connect(g).connect(out);
+  }
+}
+
+// "Bwip": a square rising three octaves from `tone` over `sweep`.
+export function rise(ctx, out, t, { tone = 300, sweep = 0.08, accent }) {
+  const sq = osc(ctx, "square", tone);
+  sq.frequency.setValueAtTime(tone, t);
+  sq.frequency.exponentialRampToValueAtTime(tone * 8, t + sweep);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.8 : 0.56, 0.002, sweep);
+  sq.connect(filter(ctx, "lowpass", 6000, 3)).connect(amp).connect(out);
+  sq.start(t);
+  sq.stop(end);
+}
+
+// Tape stop: a saw slowing to a halt, its filter closing with it.
+export function tape(ctx, out, t, { tone = 800, decay = 0.18, accent }) {
+  const saw = osc(ctx, "sawtooth", tone);
+  saw.frequency.setValueAtTime(tone, t);
+  saw.frequency.exponentialRampToValueAtTime(tone * 0.04, t + decay);
+  const lp = filter(ctx, "lowpass", 5000, 2);
+  lp.frequency.setValueAtTime(5000, t);
+  lp.frequency.exponentialRampToValueAtTime(200, t + decay);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.95 : 0.72, 0.002, decay);
+  saw.connect(lp).connect(amp).connect(out);
+  saw.start(t);
+  saw.stop(end);
+}
+
 /* --------------------------------------------------------- instruments -- */
 // Melodic voices: { freq, steps, accent, bright }. Any of them can play any
 // melodic variant (the editor's "Sinte" select).
@@ -370,6 +506,37 @@ export function zap(ctx, out, t, ev, stepDur) {
   play([saw], t, end);
 }
 
+// Square through a 3-bit quantizer: chiptune grit on a hi-tech line.
+export function bitLead(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.85);
+  const sq = osc(ctx, "square", ev.freq);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.5 * vel(ev), 0.002, dur - 0.01, 0.01);
+  sq.connect(constGain(ctx, 0.9))
+    .connect(shaper(ctx, quantizer(3)))
+    .connect(filter(ctx, "lowpass", cut(5000, ev), 1))
+    .connect(amp)
+    .connect(out);
+  play([sq], t, end);
+}
+
+// FM chirp: pitch and index both drop in the first 25 ms, a squelchy "tchiu".
+export function chirp(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.9);
+  const carrier = osc(ctx, "sine", ev.freq * 2);
+  carrier.frequency.setValueAtTime(ev.freq * 2, t);
+  carrier.frequency.exponentialRampToValueAtTime(ev.freq, t + Math.min(0.025, dur));
+  const mod = osc(ctx, "sine", ev.freq * 2);
+  const depth = ctx.createGain();
+  depth.gain.setValueAtTime(ev.freq * 8 * (ev.bright ?? 1), t);
+  depth.gain.exponentialRampToValueAtTime(ev.freq * 0.5, t + Math.min(0.06, dur));
+  mod.connect(depth).connect(carrier.frequency);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.7 * vel(ev), 0.001, dur - 0.012, 0.012);
+  carrier.connect(amp).connect(out);
+  play([carrier, mod], t, end);
+}
+
 export function pad(ctx, out, t, ev, stepDur) {
   const dur = (ev.steps ?? 1) * stepDur;
   const lp = filter(ctx, "lowpass", cut(1400, ev), 0.5);
@@ -433,13 +600,17 @@ export const INSTRUMENTS = {
   lead,
   fmBell,
   zap,
+  bitLead,
+  chirp,
   pad,
   drone,
   air,
   tom,
 };
 
-export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, ...INSTRUMENTS };
+export const GLITCH = { stutter, blip, zip, crush, metal, ring, crackle, rise, tape };
+
+export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, ...GLITCH, ...INSTRUMENTS };
 
 /* ------------------------------------------------------------------ FX -- */
 
@@ -573,6 +744,44 @@ export function reverse(ctx, out, t, stepDur, { bars = 2, tone = 5000 } = {}) {
   return t + dur;
 }
 
+// Stutter roll: noise bursts accelerating from eighths to 64ths, the band
+// rising with them, cut on the bar line.
+export function stutterRoll(ctx, out, t, stepDur, { bars = 1, top = 6000 } = {}) {
+  const dur = barsDur(bars, stepDur);
+  let at = t;
+  let end = t;
+  while (at < t + dur - 0.01) {
+    const p = (at - t) / dur; // 0..1 through the roll
+    const gap = Math.max(stepDur / 4, 2 * stepDur * (1 - p) ** 2);
+    const len = Math.min(gap * 0.7, t + dur - at - 0.006);
+    const src = noise(ctx, at, len + 0.01);
+    const g = ctx.createGain();
+    end = percEnv(g.gain, at, 0.6 + 1.6 * p, 0.0005, len);
+    src.connect(filter(ctx, "bandpass", 400 * (top / 400) ** p, 3)).connect(g).connect(out);
+    at += gap;
+  }
+  return end;
+}
+
+// Tape stop: saw + sub slowing from `f0` to nearly nothing over `decay`.
+export function tapeStop(ctx, out, t, stepDur, { f0 = 600, decay = 0.8 } = {}) {
+  const lp = filter(ctx, "lowpass", 4000, 1.5);
+  lp.frequency.setValueAtTime(4000, t);
+  lp.frequency.exponentialRampToValueAtTime(120, t + decay);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.45, 0.005, decay * 0.7, decay * 0.3);
+  lp.connect(amp).connect(out);
+  const voices = [osc(ctx, "sawtooth", f0), osc(ctx, "sine", f0 / 2)];
+  voices.forEach((o, i) => {
+    const f = f0 / (i + 1);
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 0.03, t + decay);
+    o.connect(lp);
+  });
+  play(voices, t, end);
+  return end;
+}
+
 export const FX = {
   "fx.riser": riser,
   "fx.riserImpact": riserImpact,
@@ -583,4 +792,45 @@ export const FX = {
   "fx.crash": crash,
   "fx.siren": siren,
   "fx.reverse": reverse,
+  "fx.stutter": stutterRoll,
+  "fx.tapeStop": tapeStop,
 };
+
+/* ------------------------------------------------------------- sample -- */
+// A user's sample (samples.js) as a one-shot: `ev.buffer` is the decoded
+// audio, `ev.sample` its settings { pitch, start, length, reverse }. A note
+// event (it has `freq`) plays it transposed from A3 and as long as the note;
+// a hit or an FX plays it out. Returns when it is silent.
+
+export const SAMPLE_ROOT = 220; // A3: a note there plays the sample as recorded
+
+const reversedCache = new WeakMap();
+function reversed(ctx, buffer) {
+  let rev = reversedCache.get(buffer);
+  if (!rev) {
+    rev = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+    for (let c = 0; c < buffer.numberOfChannels; c++) rev.getChannelData(c).set(buffer.getChannelData(c).toReversed());
+    reversedCache.set(buffer, rev);
+  }
+  return rev;
+}
+
+export function sample(ctx, out, t, ev, stepDur) {
+  const { buffer, sample: s } = ev;
+  const src = ctx.createBufferSource();
+  src.buffer = s.reverse ? reversed(ctx, buffer) : buffer;
+  const rate = 2 ** (s.pitch / 12) * (ev.freq ? ev.freq / SAMPLE_ROOT : 1);
+  src.playbackRate.value = rate;
+  const offset = s.start * buffer.duration;
+  // Seconds of output the sample has left, cut to `length` of it.
+  const left = ((buffer.duration - offset) * s.length) / rate;
+  const want = ev.freq ? noteLen(ev, stepDur, 0.95) : left;
+  const dur = Math.max(0.01, Math.min(left, want));
+  const amp = ctx.createGain();
+  // Fades of a few ms both ends: a slice taken mid-waveform would click.
+  const end = holdEnv(amp.gain, t, vel(ev), 0.002, dur - 0.006, 0.006);
+  src.connect(amp).connect(out);
+  src.start(t, offset);
+  src.stop(end + 0.01);
+  return end;
+}

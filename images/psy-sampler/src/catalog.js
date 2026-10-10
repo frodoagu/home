@@ -30,7 +30,7 @@ export const LAYERS = [
     id: "lead",
     variants: [
       "lead.acid", "lead.arp", "lead.arp3", "lead.melodic", "lead.stabs",
-      "lead.zap", "lead.bell", "lead.acidPhryg", "lead.techno",
+      "lead.zap", "lead.bell", "lead.acidPhryg", "lead.techno", "lead.bits", "lead.chirp",
     ],
   },
   {
@@ -41,16 +41,36 @@ export const LAYERS = [
     ],
   },
   {
+    id: "glitch",
+    variants: [
+      "glitch.stutter", "glitch.blips", "glitch.zips", "glitch.crush", "glitch.metal",
+      "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape",
+    ],
+  },
+  {
     id: "fx",
     oneShot: true,
     variants: [
       "fx.riser", "fx.riserImpact", "fx.down", "fx.sweep", "fx.impact",
-      "fx.zap", "fx.crash", "fx.siren", "fx.reverse",
+      "fx.zap", "fx.crash", "fx.siren", "fx.reverse", "fx.stutter", "fx.tapeStop",
     ],
   },
 ];
 
 export const LAYER_IDS = LAYERS.map((l) => l.id);
+
+// "+ Sound in…" a layer from the samples panel copies this variant (its
+// rhythm or notes) and plays the sample through it. `transpose` puts the
+// part's notes back around A3, where a sample plays as recorded.
+export const SAMPLE_TEMPLATES = {
+  kick: { from: "kick.punchy" },
+  bass: { from: "bass.offbeat", transpose: 24 },
+  perc: { from: "perc.clap" },
+  lead: { from: "lead.melodic", transpose: -12 },
+  pad: { from: "pad.chord" },
+  glitch: { from: "glitch.blips" },
+  fx: { from: "fx.impact" },
+};
 
 export const layerById = (id) => LAYERS.find((l) => l.id === id);
 

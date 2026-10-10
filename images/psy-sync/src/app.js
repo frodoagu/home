@@ -11,11 +11,19 @@
 //   PUT    /api/state     { state, base, force? } -> { updatedAt }, or 409 with
 //                         the newer stored copy when `base` is stale
 //   DELETE /api/account   forget the user and their data
+//   GET    /api/samples   { samples: [{ id, name, type, bytes, createdAt }], used, limits }
+//   POST   /api/samples?name=…   the raw audio file -> 201 { id, … }; 413 too
+//                         big, 415 not audio, 507 no room (`error`: quota,
+//                         count or full)
+//   GET    /api/samples/:id   the file, to its owner only
+//   DELETE /api/samples/:id
 //
 // The server never interprets a workspace: it stores an opaque JSON object
 // (size-capped) and the page runs it through normalize() on the way back in.
+// Samples are opaque too, past a check that they start like an audio file.
 import { verifyIdToken } from "./google.js";
 import { requestCounter } from "./metrics.js";
+import { SAMPLE_PATH, cleanName, sampleId, sniffAudio } from "./samples.js";
 import { SESSION_MS, cookieValue, readSession, setCookie, signSession } from "./session.js";
 
 const MAX_BYTES = 256 * 1024;
@@ -29,7 +37,19 @@ const ROUTES = new Set([
   "GET /api/state",
   "PUT /api/state",
   "DELETE /api/account",
+  "GET /api/samples",
+  "POST /api/samples",
+  "GET /api/samples/:id",
+  "DELETE /api/samples/:id",
 ]);
+const PUBLIC = ["GET /api/health", "POST /api/session", "GET /api/session", "DELETE /api/session"];
+const PRIVATE = new Set([...ROUTES].filter((r) => !PUBLIC.includes(r)));
+
+const MiB = 2 ** 20;
+export const SAMPLE_LIMITS = { bytes: 3 * MiB, count: 24, quota: 30 * MiB, total: 1024 * MiB };
+
+// "/api/samples/<id>" counts as one route.
+const routeOf = (method, pathname) => `${method} ${SAMPLE_PATH.test(pathname) ? "/api/samples/:id" : pathname}`;
 
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body), {
@@ -48,7 +68,9 @@ export function createApp({
   maxBytes = MAX_BYTES,
   maxUsers = 5000,
   maxVisitors = MAX_VISITORS,
+  samples: sampleLimits = {},
 }) {
+  const sampleMax = { ...SAMPLE_LIMITS, ...sampleLimits };
   const requests = requestCounter();
 
   async function currentUser(req) {
@@ -101,9 +123,46 @@ export function createApp({
     return json({ updatedAt });
   }
 
+  function listSamples(user) {
+    const { count, bytes } = db.sampleUsage(user.sub);
+    const { bytes: max, count: maxCount, quota } = sampleMax;
+    return json({ samples: db.samples(user.sub), used: { count, bytes }, limits: { bytes: max, count: maxCount, quota } });
+  }
+
+  // The file is the body, as is. Every limit is checked before it is stored:
+  // the file's own size, the user's count and bytes, the volume's share.
+  async function uploadSample(req, user) {
+    if (Number(req.headers.get("content-length") ?? 0) > sampleMax.bytes) return json({ error: "too big" }, 413);
+    const data = new Uint8Array(await req.arrayBuffer());
+    if (data.length > sampleMax.bytes) return json({ error: "too big" }, 413);
+    const type = sniffAudio(data);
+    if (!type) return json({ error: "not audio" }, 415);
+    const used = db.sampleUsage(user.sub);
+    if (used.count >= sampleMax.count) return json({ error: "count" }, 507);
+    if (used.bytes + data.length > sampleMax.quota) return json({ error: "quota" }, 507);
+    if (db.sampleBytesTotal() + data.length > sampleMax.total) return json({ error: "full" }, 507);
+    const sample = { id: sampleId(), name: cleanName(new URL(req.url).searchParams.get("name")), type, createdAt: now() };
+    db.putSample({ ...sample, sub: user.sub, data });
+    return json({ ...sample, bytes: data.length }, 201);
+  }
+
+  function getSample(user, id) {
+    const row = db.sample(user.sub, id);
+    if (!row) return json({ error: "not found" }, 404);
+    return new Response(row.data, {
+      headers: {
+        "content-type": row.type,
+        // An id never changes its bytes.
+        "cache-control": "private, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+        "content-disposition": "attachment",
+      },
+    });
+  }
+
   async function handle(req) {
     const { pathname } = new URL(req.url);
-    const route = `${req.method} ${pathname}`;
+    const route = routeOf(req.method, pathname);
     if (route === "GET /api/health") return json({ ok: true, clientId });
 
     // Cookies are SameSite=Lax, and every write must also come from our own page.
@@ -119,11 +178,7 @@ export function createApp({
       if (VISITOR_ID.test(visitor ?? "")) db.visit(visitor, user?.sub ?? null, now(), maxVisitors);
       return json({ email: user?.email ?? null });
     }
-    if (!user) {
-      return ["GET /api/state", "PUT /api/state", "DELETE /api/account"].includes(route)
-        ? json({ error: "signed out" }, 401)
-        : json({ error: "not found" }, 404);
-    }
+    if (!user) return PRIVATE.has(route) ? json({ error: "signed out" }, 401) : json({ error: "not found" }, 404);
     if (route === "GET /api/state") {
       const stored = db.state(user.sub);
       return stored ? json({ state: JSON.parse(stored.data), updatedAt: stored.updated_at }) : json({ error: "none" }, 404);
@@ -133,14 +188,21 @@ export function createApp({
       db.deleteUser(user.sub);
       return empty(204, { "set-cookie": setCookie("", 0) });
     }
+    if (route === "GET /api/samples") return listSamples(user);
+    if (route === "POST /api/samples") return uploadSample(req, user);
+    const id = SAMPLE_PATH.exec(pathname)?.[1];
+    if (route === "GET /api/samples/:id") return getSample(user, id);
+    if (route === "DELETE /api/samples/:id") {
+      return db.deleteSample(user.sub, id) ? empty(204) : json({ error: "not found" }, 404);
+    }
     return json({ error: "not found" }, 404);
   }
 
   return {
     requests,
-    limits: { maxBytes, maxUsers, maxVisitors },
+    limits: { maxBytes, maxUsers, maxVisitors, samples: sampleMax },
     async fetch(req) {
-      const route = `${req.method} ${new URL(req.url).pathname}`;
+      const route = routeOf(req.method, new URL(req.url).pathname);
       let res;
       try {
         res = await handle(req);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAudioContext } from "../test/fakeAudio.js";
 import { createEngine } from "./engine.js";
-import { defaultData } from "./patterns.js";
+import { defaultData, sampleDefaults } from "./patterns.js";
 import { stepDuration, TICK_MS } from "./timing.js";
 
 let ctx;
@@ -29,10 +29,18 @@ function run(seconds) {
   }
 }
 
+// master -> DJ lowpass -> DJ highpass -> compressor; the master is the first
+// gain into the DJ filter (the effect returns join it there too).
+function masterGain() {
+  const comp = ctx.nodes.find((n) => n.kind === "compressor");
+  const high = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
+  const low = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === high);
+  return ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === low);
+}
+
 // Lane gains are the ones wired straight into the master gain.
 function laneGains() {
-  const comp = ctx.nodes.find((n) => n.kind === "compressor");
-  const master = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === comp);
+  const master = masterGain();
   return ctx.nodes.filter((n) => n.kind === "gain" && n.outputs[0] === master);
 }
 const startTimes = (kind) =>
@@ -50,16 +58,20 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> DJ filter -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
     engine.setLanes({ bass: "bass.rolling" });
     expect(createContext).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalled();
-    const comp = ctx.nodes.find((n) => n.kind === "compressor");
-    const master = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === comp);
+    const master = masterGain();
     expect(master.gain.value).toBe(0.7);
+    const [low] = master.outputs;
+    const [high] = low.outputs;
+    expect([low.type, low.frequency.value, high.type, high.frequency.value]).toEqual(["lowpass", 24000, "highpass", 0]);
+    const comp = high.outputs[0];
+    expect(comp.kind).toBe("compressor");
     const limiter = comp.outputs[0];
     expect(limiter.kind).toBe("compressor");
     expect([limiter.threshold.value, limiter.ratio.value]).toEqual([-1.5, 20]);
@@ -424,5 +436,113 @@ describe("audition", () => {
     expect(engine.isRunning()).toBe(false);
     vi.runOnlyPendingTimers();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("insert", () => {
+  const insertOf = (lane) => {
+    // lane gain <- chain output <- post <- shaper <- pre <- filter <- chain input <- lane input
+    const output = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(lane));
+    const input = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0]?.kind === "filter" && n.outputs[0].outputs[0]?.outputs[0]?.kind === "waveshaper"
+      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
+    return { output, input, filter: input.outputs[0] };
+  };
+
+  it("every lane plays its notes through its own filter + distortion", () => {
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), insert: { ...defaultData("bass.offbeat").insert, filter: "highpass", cutoff: 300 } });
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.5);
+    const [lane] = laneGains();
+    const { filter } = insertOf(lane);
+    expect([filter.type, filter.frequency.value]).toEqual(["highpass", 300]);
+    // A note's envelope ends in the lane input, which feeds the insert.
+    const laneInput = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === insertOf(lane).input);
+    const saw = ctx.sources().find((src) => src.type === "sawtooth");
+    let node = saw;
+    while (node.outputs[0] && node !== laneInput) node = node.outputs[0];
+    expect(node).toBe(laneInput);
+  });
+
+  it("knob moves glide; a new filter type crossfades a fresh chain in", () => {
+    const base = defaultData("lead.arp");
+    engine.setLanes({ lead: "lead.arp" });
+    run(0.3);
+    const [lane] = laneGains();
+    const old = insertOf(lane);
+    const lp = { ...base, insert: { ...base.insert, cutoff: 500 } };
+    engine.setData("lead.arp", lp); // still "off": same chain
+    expect(insertOf(lane).output).toBe(old.output);
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 500 } });
+    const fresh = ctx.nodes.filter((n) => n.kind === "gain" && n.outputs.includes(lane) && n !== old.output);
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0].gain.events).toEqual([["set", 0, ctx.currentTime], ["linear", 1, ctx.currentTime + 0.03]]);
+    expect(old.output.gain.events.at(-1)).toEqual(["linear", 0, ctx.currentTime + 0.03]);
+    vi.runOnlyPendingTimers();
+    expect(old.output.outputs).toEqual([]);
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 900 } });
+    const filter = fresh[0].outputs.length && ctx.nodes.find((n) => n.kind === "filter" && n.type === "lowpass" && n.frequency.events.length);
+    expect(filter.frequency.events.at(-1)).toEqual(["target", 900, ctx.currentTime, 0.02]);
+  });
+
+  it("a filter's LFO follows the BPM and stops with its lane", () => {
+    const base = defaultData("lead.arp");
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", lfo: 0.5, rate: 16 } });
+    engine.setLanes({ lead: "lead.arp" });
+    const lfo = ctx.sources().find((src) => src.kind === "oscillator" && src.outputs[0].outputs[0]?.constructor.name === "FakeParam");
+    expect(lfo.frequency.value).toBeCloseTo(145 / 60 / 4, 9);
+    engine.setBpm(180);
+    expect(lfo.frequency.events.at(-1)[1]).toBeCloseTo(180 / 60 / 4, 9);
+    engine.stop();
+    expect(lfo.stopTime).toBeCloseTo(ctx.currentTime + 0.03, 9);
+  });
+});
+
+describe("samples", () => {
+  const ID = "abcdefghijklmnopqrstuv";
+  let buffer;
+  beforeEach(() => {
+    buffer = null;
+    engine = createEngine({ createContext, sampleBuffer: (id) => (id === ID ? buffer : null) });
+  });
+  const withSample = (variant) => ({ ...defaultData(variant), sample: sampleDefaults(ID, "x") });
+
+  it("plays the sound's own voice until the sample is loaded, then the sample", () => {
+    engine.setData("perc.hat", withSample("perc.hat"));
+    engine.setLanes({ "perc.hat": "perc.hat" });
+    run(0.6);
+    const before = ctx.sources().filter((s) => s.kind === "buffer");
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.every((s) => s.buffer !== null && s.buffer.length === 96000)).toBe(true); // the noise
+    buffer = ctx.createBuffer(1, 4800, 48000);
+    run(0.6);
+    expect(ctx.sources().some((s) => s.buffer === buffer)).toBe(true);
+  });
+
+  it("an FX with a loaded sample fires the sample and reports its end", () => {
+    buffer = ctx.createBuffer(1, 24000, 48000);
+    engine.setData("fx.impact", withSample("fx.impact"));
+    const { start, end } = engine.triggerFx("fx.impact");
+    expect(end).toBeCloseTo(start + 0.5, 9);
+    expect(ctx.sources().map((s) => s.buffer)).toEqual([buffer]);
+  });
+
+  it("previews a library sample, once it is there", () => {
+    expect(engine.previewSample(ID)).toBe(false);
+    buffer = ctx.createBuffer(1, 4800, 48000);
+    expect(engine.previewSample(ID)).toBe(true);
+    expect(ctx.sources().at(-1).buffer).toBe(buffer);
+  });
+});
+
+describe("DJ filter", () => {
+  it("glides the master lowpass down or the highpass up, and renders with it", async () => {
+    engine.setMasterFilter(-1);
+    engine.setLanes({ kick: "kick.punchy" });
+    const low = masterGain().outputs[0];
+    expect(low.frequency.value).toBeCloseTo(150, 6);
+    engine.setMasterFilter(1);
+    const high = low.outputs[0];
+    expect(low.frequency.events.at(-1)).toEqual(["target", 24000, ctx.currentTime, 0.03]);
+    expect(high.frequency.events.at(-1)[1]).toBeCloseTo(6000, 6);
   });
 });

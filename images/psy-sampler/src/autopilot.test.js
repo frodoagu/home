@@ -106,14 +106,33 @@ describe("autopilot", () => {
   });
 
   it("every section change matches the section's shape", () => {
-    for (const seed of [7, 8, 9]) {
-      for (const { pilot, active } of run(seed, 200).filter((m) => m.pilot.left === m.pilot.length)) {
-        const shape = SECTIONS[pilot.section].shape;
-        for (const [layer, spec] of Object.entries(shape)) {
-          const [lo, hi] = Array.isArray(spec) ? spec : [spec, spec];
-          expect(count(active, layer)).toBeGreaterThanOrEqual(lo);
-          expect(count(active, layer)).toBeLessThanOrEqual(hi);
+    for (const style of ["psytrance", "hitech"]) {
+      for (const seed of [7, 8, 9]) {
+        for (const { pilot, active } of run(seed, 200, { style }).filter((m) => m.pilot.left === m.pilot.length)) {
+          const shape = SECTIONS[pilot.section].shape;
+          for (const [layer, spec] of Object.entries(shape)) {
+            // A style without a pool for a layer leaves it out.
+            const [lo, hi] = !STYLES[style].pool[layer] ? [0, 0] : Array.isArray(spec) ? spec : [spec, spec];
+            expect(count(active, layer)).toBeGreaterThanOrEqual(lo);
+            expect(count(active, layer)).toBeLessThanOrEqual(hi);
+          }
         }
+      }
+    }
+  });
+
+  it("only the styles with a glitch pool glitch, and their peaks always do", () => {
+    const glitchy = STYLE_IDS.filter((id) => STYLES[id].pool?.glitch);
+    expect(glitchy.sort()).toEqual(["darkpsy", "hitech", "psytech", "techno"]);
+    for (const style of STYLE_IDS) {
+      const log = run(3, 120, { style });
+      const glitches = log.flatMap((m) => Object.values(m.active)).filter((id) => layerOfVariant(id) === "glitch");
+      if (!STYLES[style].pool) continue; // anything goes: maybe, maybe not
+      if (!STYLES[style].pool.glitch) expect(glitches).toEqual([]);
+      else {
+        for (const id of glitches) expect(STYLES[style].pool.glitch).toContain(baseOf(id));
+        const peaks = log.filter((m) => m.pilot.section === "peak" && m.pilot.left === m.pilot.length);
+        for (const m of peaks) expect(count(m.active, "glitch")).toBe(1);
       }
     }
   });

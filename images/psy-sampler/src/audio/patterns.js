@@ -6,10 +6,16 @@
 //            level, scale, transpose, len }                       piano roll
 //   fx     { params, level }                                      one-shot
 //
+// All three also carry `insert` (its filter and distortion, insert.js) and
+// `sample`: null, or a user's sample { id, name, pitch, start, length,
+// reverse } that plays instead of the voice. A sample event names the voice
+// it replaces as `fallback`, which plays whenever the sample is not loaded.
+//
 // DEFAULTS holds the factory data; the UI keeps edited copies and hands them
 // to the engine, which passes them back into eventsAt() on every step.
+import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES } from "./insert.js";
 import { NOTE, SCALES, midiToFreq } from "./music.js";
-import { LEVEL, PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
+import { INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
 import { LOOP_STEPS } from "./timing.js";
 
 export const OFF = 0;
@@ -56,6 +62,8 @@ export const BELL_LINE = [
   [16, A4], [19, C5], [22, E5], [26, G4], [28, A4],
 ];
 export const TECHNO_CHORD = [A3, C4, E4, G4]; // Am7
+// Hi-tech 16ths in Phrygian, the B♭ rubbing against the root.
+export const BITS_LINE = [[0, A3], [2, A3], [3, Bb3], [6, E4], [8, A3], [10, C4], [11, Bb3], [14, G3]];
 export const TOM_LINE = [
   [3, A3], [7, E3], [11, A3], [14, G3], [19, A3], [23, E3],
   [27, C4], [28, A3], [29, G3], [30, E3], [31, C3],
@@ -65,22 +73,29 @@ const steps = (fn) => Array.from({ length: LOOP_STEPS }, (_, s) => fn(s));
 const note = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
 const every = (fn) => steps(fn).filter(Boolean);
 
+// What every variant starts with on top of its own data.
+const extras = (insert = {}) => ({ insert: { ...INSERT_DEFAULT, ...insert }, sample: null });
+
 function drum(voice, pattern, params = {}) {
-  return { kind: "drum", voice, data: { steps: pattern, params: { ...paramDefaults(voice), ...params }, level: 1 } };
+  return {
+    kind: "drum",
+    voice,
+    data: { steps: pattern, params: { ...paramDefaults(voice), ...params }, level: 1, ...extras() },
+  };
 }
 
 // low/high: the piano roll's range. `len` is what a click adds.
-function notes(synth, list, { low, high, len = 1, scale = "minor" }) {
+function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
   return {
     kind: "notes",
     low,
     high,
-    data: { notes: list, synth, params: paramDefaults("synth"), level: 1, scale, transpose: 0, len },
+    data: { notes: list, synth, params: paramDefaults("synth"), level: 1, scale, transpose: 0, len, ...extras(insert) },
   };
 }
 
 function fx(id) {
-  return { kind: "fx", data: { params: paramDefaults(id), level: 1 } };
+  return { kind: "fx", data: { params: paramDefaults(id), level: 1, ...extras() } };
 }
 
 const BEATS = steps((s) => (s % 4 === 0 ? HIT : OFF));
@@ -150,6 +165,17 @@ export const DEFAULTS = {
     ...LEAD,
     len: 2,
   }),
+  // Ships with a resonant lowpass wobbling over 2 bars: the insert at work.
+  "lead.bits": notes(
+    "bitLead",
+    [0, 16].flatMap((bar) => BITS_LINE.map(([s, m]) => note(bar + s, bar && s === 14 ? E4 : m))),
+    { ...LEAD, scale: "phrygian", insert: { filter: "lowpass", cutoff: 2200, res: 7, lfo: 0.45, rate: 32 } },
+  ),
+  "lead.chirp": notes(
+    "chirp",
+    every((s) => s % 4 >= 2 && note(s, s % 16 === 15 ? E5 : s % 8 === 3 ? C5 : A4, 1, s % 4 === 2)),
+    LEAD,
+  ),
 
   "pad.chord": notes("pad", [0, 16].flatMap((s) => PAD_CHORD.map((m) => note(s, m, 16))), { ...PAD, len: 16 }),
   // i -> bII: the Phrygian move that sounds like psy.
@@ -179,6 +205,17 @@ export const DEFAULTS = {
   "pad.supersaw": notes("supersaw", [A3, C4, E4, A4].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
   "pad.fifths": notes("pad", [A2, E3, A3].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
 
+  // Step positions as above; most glitches sit just before a kick or between beats.
+  "glitch.stutter": drum("stutter", steps((s) => (s % 16 === 15 ? ACCENT : s % 16 === 14 || s === 7 ? HIT : OFF))),
+  "glitch.blips": drum("blip", steps((s) => ([2, 3, 7, 10, 13].includes(s % 16) ? HIT : OFF))),
+  "glitch.zips": drum("zip", steps((s) => (s % 4 === 3 ? (s % 16 === 15 ? ACCENT : HIT) : OFF))),
+  "glitch.crush": drum("crush", steps((s) => (s % 8 === 6 ? HIT : s === 31 ? ACCENT : OFF))),
+  "glitch.metal": drum("metal", steps((s) => ([3, 6, 10, 13].includes(s % 16) ? (s % 16 === 10 ? ACCENT : HIT) : OFF))),
+  "glitch.ring": drum("ring", steps((s) => (s % 8 === 5 ? ACCENT : s % 16 === 11 ? HIT : OFF))),
+  "glitch.crackle": drum("crackle", steps(() => HIT)),
+  "glitch.rise": drum("rise", steps((s) => (s % 8 === 7 ? HIT : OFF))),
+  "glitch.tape": drum("tape", steps((s) => (s === 28 ? ACCENT : s === 12 ? HIT : OFF))),
+
   "fx.riser": fx("fx.riser"),
   "fx.riserImpact": fx("fx.riserImpact"),
   "fx.down": fx("fx.down"),
@@ -188,6 +225,8 @@ export const DEFAULTS = {
   "fx.crash": fx("fx.crash"),
   "fx.siren": fx("fx.siren"),
   "fx.reverse": fx("fx.reverse"),
+  "fx.stutter": fx("fx.stutter"),
+  "fx.tapeStop": fx("fx.tapeStop"),
 };
 
 export const LOOP_VARIANTS = Object.keys(DEFAULTS).filter((id) => DEFAULTS[id].kind !== "fx");
@@ -220,25 +259,23 @@ export function paramSpecs(id) {
  * with whatever is left of them, so a pad switched on mid-phrase sounds now
  * instead of up to 2 bars later.
  */
+// With a sample, the event plays it and keeps its own voice as the fallback.
+const withSample = (ev, data) => (data.sample ? { ...ev, voice: "sample", fallback: ev.voice, sample: data.sample } : ev);
+
 export function eventsAt(id, step, entering = false, data = defOf(id)?.data) {
   const def = defOf(id);
   if (!def || def.kind === "fx") return [];
   if (def.kind === "drum") {
     const v = data.steps[step];
-    return v ? [{ voice: def.voice, ...data.params, accent: v === ACCENT }] : [];
+    return v ? [withSample({ voice: def.voice, ...data.params, accent: v === ACCENT }, data)] : [];
   }
   const events = [];
   for (const n of data.notes) {
     const left =
       n.step === step ? n.len : entering && n.step < step && n.step + n.len > step ? n.step + n.len - step : 0;
     if (left) {
-      events.push({
-        voice: data.synth,
-        ...data.params,
-        freq: midiToFreq(n.midi + data.transpose),
-        steps: left,
-        accent: n.accent,
-      });
+      const ev = { voice: data.synth, ...data.params, freq: midiToFreq(n.midi + data.transpose), steps: left, accent: n.accent };
+      events.push(withSample(ev, data));
     }
   }
   return events;
@@ -247,9 +284,10 @@ export function eventsAt(id, step, entering = false, data = defOf(id)?.data) {
 // One note (or hit) to preview in the editor, outside the loop.
 export function auditionEvent(id, data, { midi, accent = false } = {}) {
   const def = defOf(id);
-  if (def.kind === "drum") return { voice: def.voice, ...data.params, accent };
+  if (def.kind === "drum") return withSample({ voice: def.voice, ...data.params, accent }, data);
   if (def.kind === "notes") {
-    return { voice: data.synth, ...data.params, freq: midiToFreq(midi + data.transpose), steps: 2, accent };
+    const ev = { voice: data.synth, ...data.params, freq: midiToFreq(midi + data.transpose), steps: 2, accent };
+    return withSample(ev, data);
   }
   return null;
 }
@@ -261,6 +299,37 @@ const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
 export const NOTE_LENGTHS = [1, 2, 4, 8, 16, 32];
 export const TRANSPOSE = [-24, -12, 0, 12, 24];
+// What psy-sync hands out: 16 random bytes, base64url.
+export const SAMPLE_ID = /^[A-Za-z0-9_-]{16,32}$/;
+const SAMPLE_NAME_MAX = 60;
+
+const cleanNumbers = (out, saved, specs) => {
+  for (const p of specs) if (Number.isFinite(saved[p.key])) out[p.key] = clamp(saved[p.key], p.min, p.max);
+  return out;
+};
+
+export function cleanInsert(saved, base = INSERT_DEFAULT) {
+  if (!saved || typeof saved !== "object") return { ...base };
+  const out = cleanNumbers({ ...base }, saved, INSERT_PARAMS);
+  if (FILTER_TYPES.includes(saved.filter)) out.filter = saved.filter;
+  if (DRIVE_TYPES.includes(saved.drive)) out.drive = saved.drive;
+  if (LFO_RATES.includes(saved.rate)) out.rate = saved.rate;
+  return out;
+}
+
+export const sampleDefaults = (id, name = "") => ({
+  id,
+  name: String(name).slice(0, SAMPLE_NAME_MAX),
+  ...Object.fromEntries(SAMPLE_PARAMS.map((p) => [p.key, p.def])),
+  reverse: false,
+});
+
+export function cleanSample(saved) {
+  if (!saved || typeof saved !== "object" || !SAMPLE_ID.test(saved.id)) return null;
+  const out = cleanNumbers(sampleDefaults(saved.id, typeof saved.name === "string" ? saved.name.trim() : ""), saved, SAMPLE_PARAMS);
+  out.reverse = saved.reverse === true;
+  return out;
+}
 
 /**
  * Rebuilds variant data from whatever localStorage returned: every field is
@@ -280,6 +349,8 @@ export function sanitize(id, saved) {
     if (Number.isFinite(v)) params[p.key] = clamp(v, p.min, p.max);
   }
   out.params = params;
+  out.insert = cleanInsert(saved.insert, base.insert);
+  out.sample = cleanSample(saved.sample);
 
   if (def.kind === "drum" && Array.isArray(saved.steps) && saved.steps.length === LOOP_STEPS) {
     out.steps = saved.steps.map((v) => (isInt(v, OFF, ACCENT) ? v : OFF));

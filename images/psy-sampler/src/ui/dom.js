@@ -20,21 +20,28 @@ export function checkbox(id, label, checked) {
   return { input, node: el("label", { class: "check", for: id }, input, el("span", { text: label })) };
 }
 
-// Range input with its live readout; `spec` is a params.js slider spec.
+const LOG_STEPS = 400;
+
+// Range input with its live readout; `spec` is a params.js slider spec. A
+// `log` spec moves evenly in ratios (octaves for Hz): the input runs over
+// 0..LOG_STEPS and maps onto [min, max].
 export function slider(spec, value, onInput) {
   const id = nextId(spec.key);
+  const span = Math.log(spec.max / spec.min);
+  const toPos = (v) => (spec.log ? Math.round((Math.log(v / spec.min) / span) * LOG_STEPS) : v);
+  const fromPos = (p) => (spec.log ? Math.round(spec.min * Math.exp((p / LOG_STEPS) * span)) : p);
   const input = el("input", {
     type: "range",
     id,
-    min: String(spec.min),
-    max: String(spec.max),
-    step: String(spec.step),
-    value: String(value),
+    min: String(spec.log ? 0 : spec.min),
+    max: String(spec.log ? LOG_STEPS : spec.max),
+    step: String(spec.log ? 1 : spec.step),
+    value: String(toPos(value)),
     "data-param": spec.key,
   });
   const out = el("output", { for: id, text: spec.fmt(value) });
   input.addEventListener("input", () => {
-    const v = Number(input.value);
+    const v = fromPos(Number(input.value));
     out.textContent = spec.fmt(v);
     onInput(v);
   });

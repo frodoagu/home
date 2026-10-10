@@ -14,7 +14,8 @@
 // ask for parts to be rewritten (every lead that comes in gets a new melody).
 //
 // A style narrows each layer to the variants that fit it (copies follow their
-// base) and sets the BPM and the scale new melodies use. Every choice comes
+// base) and sets the BPM and the scale new melodies use; a style with no pool
+// for a layer leaves it out (only some styles glitch). Every choice comes
 // from `rng`, so a seeded rng replays the same track: pools are read in id
 // order (never in the user's tile order). A run from silence starts an intro;
 // over a playing mix it carries on from that mix.
@@ -23,11 +24,19 @@ import { baseOf } from "./audio/patterns.js";
 import { laneKey } from "./selection.js";
 
 export const SECTIONS = {
-  intro: { loops: [4], next: ["groove"], shape: { kick: 1, bass: 0, perc: [1, 1], lead: 0, pad: 1 } },
-  groove: { loops: [4, 8], next: ["build"], shape: { kick: 1, bass: 1, perc: [1, 2], lead: [0, 1], pad: [0, 1] } },
-  build: { loops: [4], next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1] } },
-  peak: { loops: [8, 12], next: ["breakdown", "groove"], shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1 } },
-  breakdown: { loops: [4, 8], next: ["build"], shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1 } },
+  intro: { loops: [4], next: ["groove"], shape: { kick: 1, bass: 0, perc: [1, 1], lead: 0, pad: 1, glitch: 0 } },
+  groove: {
+    loops: [4, 8],
+    next: ["build"],
+    shape: { kick: 1, bass: 1, perc: [1, 2], lead: [0, 1], pad: [0, 1], glitch: [0, 1] },
+  },
+  build: { loops: [4], next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: [0, 1] } },
+  peak: {
+    loops: [8, 12],
+    next: ["breakdown", "groove"],
+    shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1, glitch: 1 },
+  },
+  breakdown: { loops: [4, 8], next: ["build"], shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1, glitch: 0 } },
 };
 export const SECTION_IDS = Object.keys(SECTIONS);
 
@@ -40,6 +49,7 @@ export const STYLES = {
       perc: ["perc.hat", "perc.hat16", "perc.clap", "perc.rim", "perc.ride"],
       lead: ["lead.techno", "lead.stabs", "lead.acid"],
       pad: ["pad.drone", "pad.fifths", "pad.air"],
+      glitch: ["glitch.metal", "glitch.crush", "glitch.stutter"],
     },
     entryFx: { groove: [null, null, "fx.sweep", "fx.reverse"] },
   },
@@ -71,9 +81,11 @@ export const STYLES = {
       kick: ["kick.psytech", "kick.punchy"],
       bass: ["bass.fm", "bass.rolling"],
       perc: ["perc.chat", "perc.clap", "perc.rim", "perc.hat"],
-      lead: ["lead.acidPhryg", "lead.arp", "lead.zap"],
+      lead: ["lead.acidPhryg", "lead.arp", "lead.zap", "lead.bits"],
       pad: ["pad.dark", "pad.drone", "pad.prog"],
+      glitch: ["glitch.zips", "glitch.blips", "glitch.stutter", "glitch.ring"],
     },
+    entryFx: { groove: [null, null, "fx.stutter", "fx.zap"] },
   },
   hitech: {
     bpm: 180,
@@ -82,10 +94,13 @@ export const STYLES = {
       kick: ["kick.tok", "kick.dark"],
       bass: ["bass.hitech", "bass.fm"],
       perc: ["perc.chat", "perc.hat16", "perc.snare", "perc.rim"],
-      lead: ["lead.zap", "lead.acidPhryg", "lead.arp"],
+      lead: ["lead.zap", "lead.acidPhryg", "lead.arp", "lead.bits", "lead.chirp"],
       pad: ["pad.dark", "pad.air", "pad.drone"],
+      glitch: [
+        "glitch.zips", "glitch.blips", "glitch.stutter", "glitch.rise", "glitch.tape", "glitch.metal", "glitch.crush",
+      ],
     },
-    entryFx: { groove: [null, "fx.zap", "fx.zap", "fx.siren"] },
+    entryFx: { groove: [null, "fx.zap", "fx.stutter", "fx.siren"], breakdown: ["fx.down", "fx.tapeStop"] },
   },
   goa: {
     bpm: 145,
@@ -106,9 +121,11 @@ export const STYLES = {
       kick: ["kick.dark", "kick.tok"],
       bass: ["bass.phrygian", "bass.fm", "bass.hitech"],
       perc: ["perc.chat", "perc.hat16", "perc.rim", "perc.toms", "perc.snare"],
-      lead: ["lead.acidPhryg", "lead.zap", "lead.bell"],
+      lead: ["lead.acidPhryg", "lead.zap", "lead.bell", "lead.chirp"],
       pad: ["pad.dark", "pad.drone", "pad.air"],
+      glitch: ["glitch.crackle", "glitch.ring", "glitch.metal", "glitch.crush", "glitch.tape"],
     },
+    entryFx: { breakdown: ["fx.down", "fx.tapeStop"] },
   },
   all: { bpm: null, pool: null }, // every sound, at any BPM
 };
@@ -133,6 +150,7 @@ const playingOf = (active, layerId) =>
     .filter((id) => layerOfVariant(id) === layerId)
     .sort();
 const range = (spec) => (Array.isArray(spec) ? spec : [spec, spec]);
+const leftOut = (style, layerId) => Boolean(STYLES[style]?.pool) && !STYLES[style].pool[layerId];
 
 /** A layer's variants under `style`, in id order; copies follow their base. */
 export function poolOf(lists, layerId, style = STYLE_DEFAULT) {
@@ -156,7 +174,7 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
   const wants = {};
   for (const layer of LOOP_LAYERS) {
     const [lo, hi] = range(shape[layer.id]);
-    wants[layer.id] = lo + Math.floor(rng() * (hi - lo + 1));
+    wants[layer.id] = leftOut(style, layer.id) ? 0 : lo + Math.floor(rng() * (hi - lo + 1));
   }
   if (MELODIC.every((id) => !wants[id])) {
     const open = MELODIC.filter((id) => range(shape[id])[1] > 0);
@@ -165,6 +183,7 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
   }
   const out = {};
   for (const layer of LOOP_LAYERS) {
+    if (leftOut(style, layer.id)) continue; // draws nothing: older layers replay as before
     const pool = poolOf(lists, layer.id, style);
     const playing = playingOf(active, layer.id).filter((id) => pool.includes(id));
     const kept = shuffle(playing, rng).filter(() => rng() < KEEP);
