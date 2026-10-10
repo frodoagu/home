@@ -6,6 +6,117 @@ export default {
     "Una máquina de música electrónica en vivo: kick, bajo, percusión, glitches, leads, pads y FX que armás, " +
     "editás, filtrás, distorsionás y mezclás mientras suenan, o tus propios samples. Elegí un estilo y dejá que el 🤖 Piloto automático arme el tema " +
     "desde una semilla, o tomá el control: encolá fases, improvisá partes y guardá momentos con 📸.",
+  help: {
+    open: "📖 Cómo se usa",
+    title: "Cómo se usa Psy Layers",
+    close: "Cerrar",
+    intro: "Primero los trucos que no se ven a simple vista; después, todo lo que hace cada parte.",
+    sections: [
+      {
+        title: "Trucos",
+        items: [
+          ["Doble clic en un sonido", "Entra ya mismo, sin esperar al próximo compás. También en los snapshots."],
+          ["Clic en uno que está en cola", "Lo saca de la cola antes de que entre."],
+          ["⏺ Armar y ▶ Arrancar", "Con todo parado, ⏺ Armar deja elegir sonidos sin que suenen; ▶ Arrancar los larga juntos desde el primer paso."],
+          ["Doble clic en el Filtro DJ", "Lo vuelve al centro: abierto."],
+          ["Editar algo apagado", "Lo prende: lo que editás es lo que escuchás."],
+          ["Arrastrar sobre 🔀 Improvisar", "En el editor, arrastrá a lo largo del botón (o ← →) para elegir cuánto cambia cada vuelta: a la izquierda casi nada, a la derecha mucho."],
+          ["Arrastrar en el piano roll", "Con el mouse, arrastrá a lo largo de una fila para escribir una nota larga."],
+          ["Una fase con el piloto apagado", "Prende el 🤖 Piloto automático y arranca el tema en esa fase."],
+          ["Piloto sobre lo que suena", "Si ya hay algo sonando, el piloto lo toma tal cual y sigue desde ahí, sin cortar."],
+          ["● Grabar antes de tocar", "La grabación espera al primer sonido: apretalo, preparate y arrancá; no queda silencio al principio."],
+          ["Reordenar", "Arrastrá un sonido dentro de su capa (en el celular, mantenelo apretado y movelo), o la capa entera desde ⠿. Con teclado: Alt + flechas en un sonido, flechas en el ⠿."],
+          ["Enter", "En «Cambio de BPM» arranca el cambio; en el nombre de un snapshot lo guarda."],
+        ],
+      },
+      {
+        title: "Lo básico",
+        items: [
+          ["Clic en un sonido", "Lo prende; otro clic lo apaga. Kick y Bajo suenan de a uno (elegir otro reemplaza al que está); Percusión, Lead, Pad y Glitch se apilan."],
+          ["Entrar a tiempo", "Prendido (viene así), cada clic queda en cola y entra en el próximo compás. Apagado, todo cambia al instante."],
+          ["FX", "Son de un disparo: suenan una vez y se terminan. Con el loop andando entran en el próximo beat."],
+          ["Kick de fondo", "Si prendés cualquier capa sin elegir un kick, suena uno de fondo (borde punteado) para no perder el pulso."],
+          ["Parar", "Corta todo: el loop, el piloto, la cola y cualquier cambio de BPM en curso."],
+          ["La barra de pasos", "Marca el paso que suena. El loop dura 2 compases de 4/4."],
+        ],
+      },
+      {
+        title: "Piloto automático y semilla",
+        items: [
+          ["🤖 Piloto automático", "Arma el tema solo: prende y apaga capas en cada frase, dispara FX, escribe melodías y va pasando por las fases."],
+          ["Fases", "Intro, Groove, Subida, Pico y Break. Un clic encola una: entra cuando termina la que suena. ✕ la saca de la cola."],
+          ["⏭ Siguiente", "Termina la fase que suena en el próximo loop."],
+          ["Estilo", "Qué sonidos usa el piloto. Cambiarlo lleva el BPM al del estilo, de a poco."],
+          ["Cambios", "Cada cuántos compases el piloto cambia un sonido dentro de una fase."],
+          ["Semilla", "La misma semilla arma el mismo tema en cualquier browser. Escribí la tuya o tirá 🎲 por una nueva; con el piloto andando, cambiarla lo reinicia."],
+          ["🔗 Compartir", "Copia un link con la semilla, el estilo, el BPM y tus sonidos editados: quien lo abra y toque 🤖 escucha lo mismo."],
+          ["Tus ediciones mandan", "El piloto no pisa lo que editaste a mano."],
+        ],
+      },
+      {
+        title: "Tocar en vivo",
+        items: [
+          ["BPM", "Entre 130 y 180; el slider cambia el tempo al instante."],
+          ["Cambio de BPM", "Elegí el destino y en cuántos compases: ▶ Ir lo mueve un paso por compás. ■ Cortar lo frena ahí; tocar el slider también."],
+          ["Filtro DJ", "A la izquierda cierra un pasa-bajos, a la derecha abre un pasa-altos, sobre toda la mezcla."],
+          ["Delay 3/16 y Reverb", "Los efectos de la mezcla: prendelos y apagalos cuando quieras."],
+          ["🔀 en un sonido", "Improvisar: lo varía en cada loop alrededor de su parte. La primera variación espera al próximo loop, así nada salta al tocarlo."],
+        ],
+      },
+      {
+        title: "Editar un sonido (▾)",
+        items: [
+          ["▾", "Abre el editor debajo de la capa; hay uno abierto a la vez."],
+          ["Golpes", "Kick, percusión y glitch: clic en un paso para golpe → acento → vacío. Con el loop parado, cada golpe suena al marcarlo."],
+          ["Piano roll", "Bajo, lead y pad: clic para nota → acento → borrar. En el celular cada toque pone una nota del largo de «Nota nueva»."],
+          ["Sinte, Escala, Octava", "Cambian la voz, las notas que muestra el piano roll y la altura de la parte."],
+          ["🎲 Nueva parte", "Escribe una melodía nueva en la escala elegida. Con el loop andando entra en el próximo loop; otro clic la cancela."],
+          ["×2 golpes", "Duplica los golpes marcados: negras → corcheas → semicorcheas."],
+          ["⏫ Build-up", "Sólo en los kicks: en el próximo compás hace negras, corcheas y un redoble; al compás siguiente vuelve solo."],
+          ["Filtro y distorsión", "Cada sonido tiene su propio filtro (con un LFO a tempo) y su distorsión."],
+          ["Fuente", "Cambia la voz sintetizada por uno de tus samples."],
+          ["Duplicar", "Crea una copia tuya al lado, para tener otra versión del mismo sonido."],
+          ["⬇ WAV, Restaurar, Borrar", "Baja ese sonido solo; lo vuelve a fábrica; las copias se pueden borrar."],
+        ],
+      },
+      {
+        title: "Snapshots",
+        items: [
+          ["📸 Snapshot", "Guarda lo que suena, con cada sonido tal como está editado, como un momento del tema."],
+          ["Volver a uno", "Un clic lo pone a sonar en el próximo compás; con el piloto andando, salta también a su fase."],
+          ["▾ en un snapshot", "Nombre, momento, sacar o agregar sonidos, ▶ Probar sin guardar y 📸 Capturar lo que suena. Los cambios quedan en borrador hasta Guardar."],
+        ],
+      },
+      {
+        title: "Grabar y exportar",
+        items: [
+          ["● Grabar", "Graba lo que sale por los parlantes y al terminar lo baja en WAV. Hasta 15 minutos."],
+          ["⬇ Audio del mix", "Baja en WAV un loop de 2 compases de lo que suena."],
+          ["Exportar e Importar preset", "Un archivo .json con tus sonidos, snapshots y orden, para guardarlo o pasarlo."],
+          ["Restaurar todo", "Vuelve todo a fábrica (pregunta antes)."],
+        ],
+      },
+      {
+        title: "Guardado y samples",
+        items: [
+          ["Se guarda solo", "Todo queda en este browser. Con sesión de Google, también en la nube, para usarlo en cualquier dispositivo."],
+          ["🎵 Samples", "Con sesión, subí tus audios. «+ Sonido en…» crea un sonido nuevo con ese sample en la capa que elijas; o elegilo como Fuente de cualquier sonido."],
+        ],
+      },
+      {
+        title: "Qué significa cada marca",
+        items: [
+          ["Borde punteado que titila", "En cola: entra en el próximo compás. Lo que titila relleno es lo que se va."],
+          ["Borde punteado quieto", "El kick de fondo, sonando."],
+          ["✎", "Lo editaste."],
+          ["+", "Una copia tuya."],
+          ["🎲", "Lo escribió o vistió el piloto desde la semilla."],
+          ["⏫", "Build-up armado o sonando."],
+          ["•", "Un snapshot con cambios sin guardar."],
+        ],
+      },
+    ],
+  },
   transport: {
     bpm: "BPM",
     bgKick: "Kick de fondo",

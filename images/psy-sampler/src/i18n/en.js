@@ -4,6 +4,117 @@ export default {
     "A live electronic music machine: kick, bass, percussion, glitches, leads, pads and FX you build, " +
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
+  help: {
+    open: "📖 How to use it",
+    title: "How to use Psy Layers",
+    close: "Close",
+    intro: "First the tricks you won't spot at a glance; then everything each part does.",
+    sections: [
+      {
+        title: "Tricks",
+        items: [
+          ["Double-click a sound", "It comes in right now, without waiting for the next bar. Snapshots too."],
+          ["Click one that's queued", "Takes it off the queue before it comes in."],
+          ["⏺ Arm and ▶ Play", "With everything stopped, ⏺ Arm lets you pick sounds without hearing them; ▶ Play sets them off together from the first step."],
+          ["Double-click the DJ filter", "Recentres it: fully open."],
+          ["Edit something silent", "It switches on: what you edit is what you hear."],
+          ["Drag across 🔀 Improvise", "In the editor, drag along the button (or ← →) to choose how much each loop changes: to the left barely, to the right a lot."],
+          ["Drag in the piano roll", "With a mouse, drag along a row to write one long note."],
+          ["A section with the autopilot off", "Turns the 🤖 Autopilot on and starts the track at that section."],
+          ["Autopilot over what's playing", "If something already plays, the autopilot takes it as it is and carries on from there, no cut."],
+          ["● Record before you play", "Recording waits for the first sound: press it, get ready and start; no silence at the top."],
+          ["Reorder", "Drag a sound within its layer (on a phone, press and hold it, then move), or a whole layer by its ⠿. Keyboard: Alt + arrows on a sound, arrows on the ⠿."],
+          ["Enter", "In «BPM change» it starts the change; in a snapshot's name it saves it."],
+        ],
+      },
+      {
+        title: "The basics",
+        items: [
+          ["Click a sound", "Switches it on; another click switches it off. Kick and Bass play one at a time (picking another replaces it); Percussion, Lead, Pad and Glitch stack."],
+          ["On the beat", "On (the default), each click queues and comes in on the next bar. Off, everything changes at once."],
+          ["FX", "One-shots: they play once and end. With the loop running they come in on the next beat."],
+          ["Background kick", "Switch on any layer without picking a kick and one plays underneath (dashed outline), so the pulse never drops."],
+          ["Stop", "Cuts everything: the loop, the autopilot, the queue and any BPM change on its way."],
+          ["The step bar", "Shows the step that's sounding. The loop is 2 bars of 4/4."],
+        ],
+      },
+      {
+        title: "Autopilot and seed",
+        items: [
+          ["🤖 Autopilot", "Builds the track by itself: switches layers on and off each phrase, fires FX, writes melodies and moves through the sections."],
+          ["Sections", "Intro, Groove, Build-up, Peak and Breakdown. A click queues one: it comes in when the current one ends. ✕ takes it off the queue."],
+          ["⏭ Next", "Ends the current section on the next loop."],
+          ["Style", "Which sounds the autopilot uses. Changing it takes the BPM to the style's, gradually."],
+          ["Changes", "How many bars between the autopilot's sound changes within a section."],
+          ["Seed", "The same seed builds the same track in any browser. Type your own or roll 🎲 for a new one; with the autopilot running, changing it restarts it."],
+          ["🔗 Share", "Copies a link with the seed, style, BPM and your edited sounds: whoever opens it and hits 🤖 hears the same."],
+          ["Your edits win", "The autopilot never overwrites what you edited by hand."],
+        ],
+      },
+      {
+        title: "Playing live",
+        items: [
+          ["BPM", "From 130 to 180; the slider changes the tempo at once."],
+          ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
+          ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],
+          ["Delay 3/16 and Reverb", "The mix effects: switch them on and off any time."],
+          ["🔀 on a sound", "Improvise: varies it every loop around its part. The first variation waits for the next loop, so nothing jumps when you press it."],
+        ],
+      },
+      {
+        title: "Editing a sound (▾)",
+        items: [
+          ["▾", "Opens the editor under the layer; one is open at a time."],
+          ["Hits", "Kick, percussion and glitch: click a step for hit → accent → empty. With the loop stopped, each hit sounds as you set it."],
+          ["Piano roll", "Bass, lead and pad: click for note → accent → erase. On a phone each tap places a note of the «New note» length."],
+          ["Synth, Scale, Octave", "Change the voice, the notes the piano roll shows and the pitch of the part."],
+          ["🎲 New part", "Writes a new melody in the chosen scale. With the loop running it comes in on the next loop; another click cancels it."],
+          ["×2 hits", "Doubles the marked hits: quarters → eighths → sixteenths."],
+          ["⏫ Build-up", "Kicks only: on the next bar it plays quarters, eighths and a roll; the bar after, it goes back by itself."],
+          ["Filter and distortion", "Every sound has its own filter (with a tempo-synced LFO) and its own distortion."],
+          ["Source", "Swaps the synthesized voice for one of your samples."],
+          ["Duplicate", "Makes your own copy right next to it, for another version of the same sound."],
+          ["⬇ WAV, Reset, Delete", "Downloads that sound alone; takes it back to factory; copies can be deleted."],
+        ],
+      },
+      {
+        title: "Snapshots",
+        items: [
+          ["📸 Snapshot", "Saves what's playing, each sound as it's edited, as a moment of the track."],
+          ["Going back to one", "A click plays it on the next bar; with the autopilot running, it also jumps to its section."],
+          ["▾ on a snapshot", "Name, moment, drop or add sounds, ▶ Try without saving and 📸 Capture what's playing. Changes stay a draft until Save."],
+        ],
+      },
+      {
+        title: "Recording and export",
+        items: [
+          ["● Record", "Records what comes out of the speakers and downloads it as WAV when you stop. Up to 15 minutes."],
+          ["⬇ Mix audio", "Downloads a 2-bar loop of what's playing as WAV."],
+          ["Export and Import preset", "A .json file with your sounds, snapshots and order, to keep or pass on."],
+          ["Reset everything", "Takes everything back to factory (asks first)."],
+        ],
+      },
+      {
+        title: "Saving and samples",
+        items: [
+          ["It saves itself", "Everything stays in this browser. Signed in with Google, also in the cloud, to use on any device."],
+          ["🎵 Samples", "Signed in, upload your own audio. «+ Sound in…» makes a new sound with that sample in the layer you pick; or choose it as any sound's Source."],
+        ],
+      },
+      {
+        title: "What each mark means",
+        items: [
+          ["Pulsing dashed outline", "Queued: comes in on the next bar. A pulsing fill is what's leaving."],
+          ["Steady dashed outline", "The background kick, playing."],
+          ["✎", "You edited it."],
+          ["+", "Your own copy."],
+          ["🎲", "Written or dressed by the autopilot from the seed."],
+          ["⏫", "Build-up armed or playing."],
+          ["•", "A snapshot with unsaved changes."],
+        ],
+      },
+    ],
+  },
   transport: {
     bpm: "BPM",
     bgKick: "Background kick",
