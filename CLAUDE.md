@@ -428,8 +428,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   edits and hands to `engine.setData()`; edits persist per browser in
   localStorage and are run through `sanitize()` on load. Kick and bass are
   exclusive lanes, perc/lead/pad/glitch stack. A style with no pool for a layer
-  leaves it out WITHOUT drawing from the PRNG (`leftOut`), which is what keeps
-  old seeds replaying when a layer is added. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
+  would leave it out WITHOUT drawing from the PRNG (`leftOut`), the way to add
+  a layer without shifting old seeds (every style has a glitch pool, so that
+  layer did shift them). Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
   compressors add makeup gain, so re-measure at the destination before touching
   them. Anything that must land on the grid (queued clicks, autopilot, improvise
   variations) goes through `engine.onBar()`, never a UI timer. Duplicated sounds

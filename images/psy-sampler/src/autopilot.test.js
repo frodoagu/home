@@ -121,18 +121,16 @@ describe("autopilot", () => {
     }
   });
 
-  it("only the styles with a glitch pool glitch, and their peaks always do", () => {
-    const glitchy = STYLE_IDS.filter((id) => STYLES[id].pool?.glitch);
-    expect(glitchy.sort()).toEqual(["darkpsy", "hitech", "psytech", "techno"]);
+  it("every style glitches: one glitch from its pool from the groove to the peak", () => {
     for (const style of STYLE_IDS) {
+      const pool = STYLES[style].pool?.glitch; // "anything goes" has none: every glitch
+      if (STYLES[style].pool) expect(pool, style).toBeDefined();
       const log = run(3, 120, { style });
-      const glitches = log.flatMap((m) => Object.values(m.active)).filter((id) => layerOfVariant(id) === "glitch");
-      if (!STYLES[style].pool) continue; // anything goes: maybe, maybe not
-      if (!STYLES[style].pool.glitch) expect(glitches).toEqual([]);
-      else {
-        for (const id of glitches) expect(STYLES[style].pool.glitch).toContain(baseOf(id));
-        const peaks = log.filter((m) => m.pilot.section === "peak" && m.pilot.left === m.pilot.length);
-        for (const m of peaks) expect(count(m.active, "glitch")).toBe(1);
+      const entries = log.filter((m) => ["groove", "build", "peak"].includes(m.pilot.section) && m.pilot.left === m.pilot.length);
+      expect(entries.length).toBeGreaterThan(0);
+      for (const m of entries) expect(count(m.active, "glitch"), style).toBe(1);
+      for (const id of log.flatMap((m) => Object.values(m.active)).filter((v) => layerOfVariant(v) === "glitch")) {
+        if (pool) expect(pool).toContain(baseOf(id));
       }
     }
   });

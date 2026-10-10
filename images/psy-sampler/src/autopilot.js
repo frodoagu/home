@@ -15,7 +15,7 @@
 //
 // A style narrows each layer to the variants that fit it (copies follow their
 // base) and sets the BPM and the scale new melodies use; a style with no pool
-// for a layer leaves it out (only some styles glitch). Every choice comes
+// for a layer leaves it out. Every choice comes
 // from `rng`, so a seeded rng replays the same track: pools are read in id
 // order (never in the user's tile order). A run from silence starts an intro;
 // over a playing mix it carries on from that mix.
@@ -28,15 +28,19 @@ export const SECTIONS = {
   groove: {
     loops: [4, 8],
     next: ["build"],
-    shape: { kick: 1, bass: 1, perc: [1, 2], lead: [0, 1], pad: [0, 1], glitch: [0, 1] },
+    shape: { kick: 1, bass: 1, perc: [1, 2], lead: [0, 1], pad: [0, 1], glitch: 1 },
   },
-  build: { loops: [4], next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: [0, 1] } },
+  build: { loops: [4], next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: 1 } },
   peak: {
     loops: [8, 12],
     next: ["breakdown", "groove"],
     shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1, glitch: 1 },
   },
-  breakdown: { loops: [4, 8], next: ["build"], shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1, glitch: 0 } },
+  breakdown: {
+    loops: [4, 8],
+    next: ["build"],
+    shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1, glitch: [0, 1] },
+  },
 };
 export const SECTION_IDS = Object.keys(SECTIONS);
 
@@ -61,6 +65,7 @@ export const STYLES = {
       perc: ["perc.hat", "perc.shaker", "perc.clap", "perc.ride"],
       lead: ["lead.arp3", "lead.bell", "lead.melodic"],
       pad: ["pad.epic", "pad.sus", "pad.chord", "pad.air"],
+      glitch: ["glitch.crackle", "glitch.metal", "glitch.rise"],
     },
     entryFx: { groove: [null, null, "fx.sweep"] },
   },
@@ -72,6 +77,7 @@ export const STYLES = {
       perc: ["perc.hat", "perc.chat", "perc.clap", "perc.snare", "perc.ride"],
       lead: ["lead.acid", "lead.arp", "lead.melodic", "lead.stabs"],
       pad: ["pad.chord", "pad.prog", "pad.supersaw"],
+      glitch: ["glitch.zips", "glitch.stutter", "glitch.rise", "glitch.metal"],
     },
   },
   psytech: {
@@ -111,6 +117,7 @@ export const STYLES = {
       perc: ["perc.hat", "perc.shaker", "perc.toms", "perc.snare"],
       lead: ["lead.acid", "lead.melodic", "lead.arp"],
       pad: ["pad.prog", "pad.chord", "pad.fifths"],
+      glitch: ["glitch.zips", "glitch.ring", "glitch.rise", "glitch.blips"],
     },
     entryFx: { groove: [null, "fx.siren", "fx.siren", "fx.zap"] },
   },
