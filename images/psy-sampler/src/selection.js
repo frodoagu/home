@@ -8,20 +8,12 @@
  */
 export const laneKey = (layer, variantId) => (layer.exclusive ? layer.id : variantId);
 
-/**
- * Solo (default): a click replaces everything that was on; clicking the only
- * active variant turns it off. Combine: each click toggles that variant,
- * replacing whatever shares its lane.
- */
-export function pressVariant(active, key, variantId, combine) {
-  const isOn = active[key] === variantId;
-  if (combine) {
-    const next = { ...active };
-    if (isOn) delete next[key];
-    else next[key] = variantId;
-    return next;
-  }
-  return isOn && Object.keys(active).length === 1 ? {} : { [key]: variantId };
+/** A click toggles that variant, replacing whatever shares its lane. */
+export function pressVariant(active, key, variantId) {
+  const next = { ...active };
+  if (active[key] === variantId) delete next[key];
+  else next[key] = variantId;
+  return next;
 }
 
 export const BG_KICK_VARIANT = "kick.punchy";

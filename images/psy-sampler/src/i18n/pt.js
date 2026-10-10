@@ -6,7 +6,6 @@ export default {
     "a partir de uma semente, ou assuma o controle: enfileire fases, improvise partes e salve momentos com 📸.",
   transport: {
     bpm: "BPM",
-    combine: "Combinar camadas",
     bgKick: "Kick de fundo",
     delay: "Delay 3/16",
     reverb: "Reverb",
@@ -144,7 +143,7 @@ export default {
     },
     perc: {
       name: "Percussão",
-      hint: "Elas se empilham: com “Combinar camadas” some várias. Repare em que parte da batida cai cada uma.",
+      hint: "Elas se empilham: some várias. Repare em que parte da batida cai cada uma.",
     },
     lead: {
       name: "Lead",
