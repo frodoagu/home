@@ -39,7 +39,7 @@ import { dress } from "../dress.js";
 import { IMPROV_DEFAULT, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
-import { BG_KICK_VARIANT, desiredLanes, laneKey, pressVariant } from "../selection.js";
+import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
@@ -306,7 +306,8 @@ export function mountApp(root, engine, opts = {}) {
     );
     if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
     if (id === BG_KICK_VARIANT) node.title = tx.tile.bgKick;
-    node.addEventListener("click", (e) => press(layer, id, e.detail));
+    // Ctrl (⌘) stacks another kick or bass instead of replacing the one playing.
+    node.addEventListener("click", (e) => press(layer, id, e.detail, e.ctrlKey || e.metaKey));
     const edit = el("button", {
       type: "button",
       class: "edit",
@@ -577,9 +578,8 @@ export function mountApp(root, engine, opts = {}) {
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
     for (const [id, { layer, node, tile, vary }] of tiles) {
-      const key = laneKey(layer, id);
-      const on = layer.oneShot ? playingFx.has(id) : state.active[key] === id;
-      const next = !layer.oneShot && target[key] === id;
+      const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
+      const next = !layer.oneShot && isOn(target, id);
       node.classList.toggle("is-active", on);
       node.classList.toggle("is-queued", Boolean(state.pending) && next && !on);
       node.classList.toggle("is-leaving", Boolean(state.pending) && on && !next);
@@ -734,24 +734,23 @@ export function mountApp(root, engine, opts = {}) {
 
   // A double click (its second click, `clicks` 2) skips the bar line: the
   // first click's selection applies right away.
-  let lastPress = null; // { id, from }: the selection a tile's click started from
-  function press(layer, id, clicks = 1) {
+  let lastPress = null; // { id, from, add }: the selection a tile's click started from
+  function press(layer, id, clicks = 1, add = false) {
     if (layer.oneShot) {
       fire(id);
       return;
     }
     if (state.armed && clicks === 2) return; // armed, a double click queues like a single one
-    const key = laneKey(layer, id);
     if (clicks === 2 && lastPress?.id === id) {
       state.pending = null;
-      state.active = pressVariant(lastPress.from, key, id);
+      state.active = pressVariant(lastPress.from, layer, id, lastPress.add);
       lastPress = null;
       sync();
       return;
     }
     const from = state.pending ?? state.active;
-    lastPress = { id, from };
-    commit(pressVariant(from, key, id));
+    lastPress = { id, from, add };
+    commit(pressVariant(from, layer, id, add));
   }
 
   /* ---- the bar hook: everything that must land on the grid ---- */
@@ -888,7 +887,7 @@ export function mountApp(root, engine, opts = {}) {
       open?.editor.showNewPart(true);
     }
     const target = state.pending ?? state.active;
-    if (target[laneKey(layer, id)] !== id) press(layer, id);
+    if (!isOn(target, id)) press(layer, id);
   }
 
   function setImprov(id, amount) {
@@ -1102,7 +1101,7 @@ export function mountApp(root, engine, opts = {}) {
         setVariant(id, next);
         // Editing something silent switches it on: what you edit is what you hear.
         const target = state.pending ?? state.active;
-        if (!layer.oneShot && target[laneKey(layer, id)] !== id) press(layer, id);
+        if (!layer.oneShot && !isOn(target, id)) press(layer, id);
       },
       onAudition: (note) => {
         // A drum hit off the grid while the loop runs only sounds like a mistake.
@@ -1154,7 +1153,7 @@ export function mountApp(root, engine, opts = {}) {
         setBuildUp(id, on);
         // Like an edit: arming a silent kick switches it on, so the build-up is heard.
         const target = state.pending ?? state.active;
-        if (on && target[laneKey(layer, id)] !== id) press(layer, id);
+        if (on && !isOn(target, id)) press(layer, id);
       },
     });
     open = { layer, id, editor };

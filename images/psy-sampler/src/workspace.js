@@ -120,7 +120,8 @@ function cleanActive(raw, known) {
   const active = {};
   for (const [key, id] of Object.entries(raw && typeof raw === "object" ? raw : {})) {
     const layer = LAYERS.find((l) => l.id === (typeof id === "string" && layerOfVariant(id)));
-    if (layer && !layer.oneShot && known.has(id) && laneKey(layer, id) === key) active[key] = id;
+    // A Ctrl-stacked kick or bass plays on a lane keyed by its own id.
+    if (layer && !layer.oneShot && known.has(id) && (laneKey(layer, id) === key || key === id)) active[key] = id;
   }
   return active;
 }
@@ -193,9 +194,9 @@ export function importSnapshots(ws, text) {
   for (const snap of from.snapshots) {
     const active = {};
     const data = {};
-    for (const id of Object.values(snap.active)) {
+    for (const [key, id] of Object.entries(snap.active)) {
       const to = target(id);
-      active[laneKey(layerById(layerOfVariant(to)), to)] = to;
+      active[key === id ? to : laneKey(layerById(layerOfVariant(to)), to)] = to;
       data[to] = snap.data[id];
     }
     const parts = { section: snap.section, active, data };

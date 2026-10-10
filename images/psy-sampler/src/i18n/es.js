@@ -22,6 +22,7 @@ export default {
           ["Editar algo apagado", "Lo prende: lo que editás es lo que escuchás."],
           ["Arrastrar sobre 🔀 Improvisar", "Arrastrá a lo largo del botón (o flechas) para elegir cuánto cambia cada vuelta: en el editor, a la izquierda casi nada y a la derecha mucho; en el 🔀 de cada sonido, hacia abajo o hacia arriba."],
           ["Arrastrar en el piano roll", "Con el mouse, arrastrá a lo largo de una fila para escribir una nota larga."],
+          ["Ctrl + clic en un Kick o un Bajo", "Lo suma al que ya suena en vez de reemplazarlo, para tener varios kicks o bajos a la vez. Un clic normal vuelve a dejar sólo ese. En Mac, ⌘."],
           ["Ctrl + clic en un paso", "En el piano roll o en los golpes, repite el cambio en el mismo lugar de cada negra del compás: una nota en la 2.ª semicorchea aparece en las 4 negras. Con Ctrl + Shift, en las 8 negras de los 2 compases. En Mac, ⌘ en vez de Ctrl."],
           ["Una fase con el piloto apagado", "Prende el 🤖 Piloto automático y arranca el tema en esa fase."],
           ["Piloto sobre lo que suena", "Si ya hay algo sonando, el piloto lo toma tal cual y sigue desde ahí, sin cortar."],
@@ -33,7 +34,7 @@ export default {
       {
         title: "Lo básico",
         items: [
-          ["Clic en un sonido", "Lo prende; otro clic lo apaga. Kick y Bajo suenan de a uno (elegir otro reemplaza al que está); Percusión, Lead, Pad y Glitch se apilan."],
+          ["Clic en un sonido", "Lo prende; otro clic lo apaga. Kick y Bajo suenan de a uno (elegir otro reemplaza al que está; con Ctrl se suman); Percusión, Lead, Pad y Glitch se apilan."],
           ["Entrar a tiempo", "Prendido (viene así), cada clic queda en cola y entra en el próximo compás. Apagado, todo cambia al instante."],
           ["FX", "Son de un disparo: suenan una vez y se terminan. Con el loop andando entran en el próximo beat."],
           ["Kick de fondo", "Si prendés cualquier capa sin elegir un kick, suena uno de fondo (borde punteado) para no perder el pulso."],

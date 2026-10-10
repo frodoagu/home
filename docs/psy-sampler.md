@@ -126,10 +126,14 @@ Selection → lanes is a pure reconcile
 computes the desired state and `engine.setLanes()` closes/opens the difference.
 **Kick and bass are exclusive** (one lane per layer: a second variant replaces
 the first; two kicks or two basses only muddy things); **percussion, lead and
-pad stack** (one lane per variant, `laneKey()`). Layers always combine: a
+pad stack** (one lane per variant, `laneKey()`). **Ctrl+click** (⌘) stacks on
+an exclusive layer anyway: the extra kick or bass gets a lane keyed by its own
+id, like a stacking layer's, and a plain click there leaves just that one
+again (`pressVariant`). So "is it playing" is `isOn()` (any lane), never
+`active[laneKey()]`. Layers always combine: a
 click toggles its variant and leaves the other layers playing. The background kick is a
 derived lane: it only plays when another layer is on and no kick variant is
-picked.
+picked (stacked ones included).
 
 ### Delay and reverb
 

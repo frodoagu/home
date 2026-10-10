@@ -142,6 +142,20 @@ describe("layers", () => {
     expect(engine.isRunning()).toBe(true);
   });
 
+  it("Ctrl+click stacks basses (or kicks); a plain click leaves one again", () => {
+    const ctrlClick = (v) => button(v).dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true, detail: 1 }));
+    click("bass.offbeat");
+    ctrlClick("bass.rolling");
+    ctrlClick("kick.long");
+    ctrlClick("kick.tok");
+    expect(pressed().sort()).toEqual(["bass.offbeat", "bass.rolling", "kick.long", "kick.tok"]);
+    expect(button("kick.punchy").classList.contains("is-background")).toBe(false);
+    ctrlClick("bass.offbeat");
+    expect(pressed().sort()).toEqual(["bass.rolling", "kick.long", "kick.tok"]);
+    click("kick.dark");
+    expect(pressed().sort()).toEqual(["bass.rolling", "kick.dark"]);
+  });
+
   it("toggles variants across layers, one per layer", () => {
     click("bass.rolling");
     click("lead.acid");

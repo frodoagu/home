@@ -20,6 +20,7 @@ export default {
           ["Edit something silent", "It switches on: what you edit is what you hear."],
           ["Drag across 🔀 Improvise", "Drag along the button (or arrow keys) to choose how much each loop changes: in the editor, to the left barely and to the right a lot; on each sound's 🔀, down or up."],
           ["Drag in the piano roll", "With a mouse, drag along a row to write one long note."],
+          ["Ctrl + click a Kick or a Bass", "Adds it to the one already playing instead of replacing it, for several kicks or basses at once. A plain click leaves just that one again. On a Mac, ⌘."],
           ["Ctrl + click a step", "In the piano roll or the hits row, repeats the change at the same spot in every beat of the bar: a note on the 2nd 16th shows up in all 4 beats. With Ctrl + Shift, in all 8 beats of both bars. On a Mac, ⌘ instead of Ctrl."],
           ["A section with the autopilot off", "Turns the 🤖 Autopilot on and starts the track at that section."],
           ["Autopilot over what's playing", "If something already plays, the autopilot takes it as it is and carries on from there, no cut."],
@@ -31,7 +32,7 @@ export default {
       {
         title: "The basics",
         items: [
-          ["Click a sound", "Switches it on; another click switches it off. Kick and Bass play one at a time (picking another replaces it); Percussion, Lead, Pad and Glitch stack."],
+          ["Click a sound", "Switches it on; another click switches it off. Kick and Bass play one at a time (picking another replaces it; with Ctrl they add up); Percussion, Lead, Pad and Glitch stack."],
           ["On the beat", "On (the default), each click queues and comes in on the next bar. Off, everything changes at once."],
           ["FX", "One-shots: they play once and end. With the loop running they come in on the next beat."],
           ["Background kick", "Switch on any layer without picking a kick and one plays underneath (dashed outline), so the pulse never drops."],

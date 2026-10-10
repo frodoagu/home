@@ -20,6 +20,7 @@ export default {
           ["Editar algo desligado", "Liga ele: o que você edita é o que você ouve."],
           ["Arrastar sobre 🔀 Improvisar", "Arraste ao longo do botão (ou setas) para escolher quanto muda cada volta: no editor, à esquerda quase nada e à direita muito; no 🔀 de cada som, para baixo ou para cima."],
           ["Arrastar no piano roll", "Com o mouse, arraste ao longo de uma linha para escrever uma nota longa."],
+          ["Ctrl + clique num Kick ou num Baixo", "Soma ele ao que já toca em vez de substituir, para ter vários kicks ou baixos ao mesmo tempo. Um clique normal volta a deixar só esse. No Mac, ⌘."],
           ["Ctrl + clique em um passo", "No piano roll ou nas batidas, repete a mudança no mesmo lugar de cada tempo do compasso: uma nota na 2.ª semicolcheia aparece nos 4 tempos. Com Ctrl + Shift, nos 8 tempos dos 2 compassos. No Mac, ⌘ em vez de Ctrl."],
           ["Uma fase com o piloto desligado", "Liga o 🤖 Piloto automático e começa a faixa nessa fase."],
           ["Piloto sobre o que toca", "Se já tem algo tocando, o piloto pega do jeito que está e segue dali, sem cortar."],
@@ -31,7 +32,7 @@ export default {
       {
         title: "O básico",
         items: [
-          ["Clique num som", "Liga; outro clique desliga. Kick e Baixo tocam um de cada vez (escolher outro substitui o que está); Percussão, Lead, Pad e Glitch se empilham."],
+          ["Clique num som", "Liga; outro clique desliga. Kick e Baixo tocam um de cada vez (escolher outro substitui o que está; com Ctrl se somam); Percussão, Lead, Pad e Glitch se empilham."],
           ["Entrar no tempo", "Ligado (vem assim), cada clique fica na fila e entra no próximo compasso. Desligado, tudo muda na hora."],
           ["FX", "São de um disparo: tocam uma vez e acabam. Com o loop rodando entram no próximo beat."],
           ["Kick de fundo", "Se você liga qualquer camada sem escolher um kick, toca um de fundo (borda tracejada) para não perder o pulso."],
