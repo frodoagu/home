@@ -353,6 +353,50 @@ html {
   background: rgba(0, 0, 0, 0.55);
 }
 
+/* The new-version notice: a card in the corner, not modal, so the loop and
+   the page stay live until you choose. */
+.update {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  z-index: 20;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 16px 18px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--current);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.update h2 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+
+.update p {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.update-reload {
+  padding: 6px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--on-current);
+  background: var(--current);
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 .help-page {
   padding: 0 20px 24px;
 }
@@ -801,6 +845,18 @@ html {
 }
 
 /* BPM change: target, length, go. */
+.tap {
+  min-width: 6ch;
+  touch-action: manipulation; /* fast taps are taps, not a zoom */
+  user-select: none;
+}
+
+.tap:active {
+  color: var(--on-current);
+  background: var(--current);
+  border-color: var(--current);
+}
+
 .ramp {
   display: flex;
   flex-wrap: wrap;
@@ -1095,9 +1151,34 @@ html {
   color: var(--on-layer);
 }
 
+/* A playing loop sound's fill is its volume (--level of the 0-150 % range,
+   the tick at 100 %) and a drag across it sets it. */
+.variant.has-level.is-active {
+  --level: 66.7%;
+  background:
+    linear-gradient(
+      to right,
+      transparent calc(100% / 1.5 - 1px),
+      color-mix(in srgb, var(--on-layer) 45%, transparent) 0 calc(100% / 1.5 + 1px),
+      transparent 0
+    ),
+    linear-gradient(
+      to right,
+      var(--layer) var(--level),
+      color-mix(in srgb, var(--layer) 55%, var(--surface-2)) var(--level)
+    );
+  cursor: ew-resize;
+  touch-action: pan-y; /* left and right is the slider, up and down still scrolls */
+}
+
 .variant.is-active .variant-detail {
   color: inherit;
   opacity: 0.85;
+}
+
+.variant.is-sliding .variant-detail {
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
 }
 
 .variant.is-active::before {
@@ -1169,27 +1250,6 @@ html {
   }
   to {
     opacity: 0;
-  }
-}
-
-/* The layer's colour edge glows with whatever plays in it. */
-.layer.hit-a {
-  animation: layer-strike-a 220ms ease-out;
-}
-
-.layer.hit-b {
-  animation: layer-strike-b 220ms ease-out;
-}
-
-@keyframes layer-strike-a {
-  from {
-    box-shadow: -2px 0 14px -4px var(--layer);
-  }
-}
-
-@keyframes layer-strike-b {
-  from {
-    box-shadow: -2px 0 14px -4px var(--layer);
   }
 }
 
@@ -1845,7 +1905,6 @@ html {
   .variant.is-queued,
   .variant.is-leaving,
   .variant::after,
-  .layer,
   .bpm-value,
   .cue.is-armed,
   .rec.is-waiting,

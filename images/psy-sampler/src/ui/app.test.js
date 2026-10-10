@@ -394,7 +394,8 @@ describe("editors", () => {
     expect(editor("pad.chord")).toBeNull();
   });
 
-  it("a piano-roll click adds a note, switches the variant on and previews it", () => {
+  it("a piano-roll click adds a note and switches the variant on, without a preview over the loop", () => {
+    const audition = vi.spyOn(engine, "audition");
     openEditor("lead.melodic");
     const cell = rollCell("lead.melodic", 64, 2);
     expect(cell.dataset.state).toBe("");
@@ -409,6 +410,35 @@ describe("editors", () => {
     expect(rollCell("lead.melodic", 64, 2).dataset.state).toBe("accent");
     rollCell("lead.melodic", 64, 5).click();
     expect(rollCell("lead.melodic", 64, 2).dataset.state).toBe("");
+    expect(audition).not.toHaveBeenCalled();
+  });
+
+  it("a playing tile's fill is its volume: ← → or a drag across it set it, and a drag does not toggle", () => {
+    immediate();
+    const tile = button("lead.acid");
+    const detail = () => tile.querySelector(".variant-detail").textContent;
+    tile.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(saved()?.variants?.["lead.acid"]).toBeUndefined(); // silent, it is just a button
+    click("lead.acid");
+    expect(tile.style.getPropertyValue("--level")).toBe("66.7%");
+    tile.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(saved().variants["lead.acid"].level).toBe(1.05);
+    expect(tile.style.getPropertyValue("--level")).toBe("70%");
+    openEditor("lead.acid");
+    const output = editor("lead.acid").querySelector('[data-param="level"]').nextElementSibling;
+    tile.getBoundingClientRect = () => ({ left: 0, width: 300 });
+    tile.dispatchEvent(new MouseEvent("pointerdown", { clientX: 100, bubbles: true }));
+    tile.dispatchEvent(new MouseEvent("pointermove", { clientX: 150, bubbles: true }));
+    expect(detail()).toBe("Volumen 75 %");
+    expect(output.textContent).toBe("75 %");
+    tile.dispatchEvent(new MouseEvent("pointermove", { clientX: 400, bubbles: true }));
+    tile.dispatchEvent(new MouseEvent("pointerup", { clientX: 400, bubbles: true }));
+    tile.click();
+    expect(saved().variants["lead.acid"].level).toBe(1.5);
+    expect(pressed()).toEqual(["lead.acid"]);
+    expect(detail()).not.toMatch(/Volumen/);
+    expect(tile.parentElement.classList.contains("is-dragging")).toBe(false);
+    expect(button("fx.riser").classList.contains("has-level")).toBe(false);
   });
 
   it("a drum-grid click cycles the step and the loop plays the edit", () => {
@@ -531,14 +561,14 @@ describe("editors", () => {
     expect(btn().getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("a playing sound's tile and layer flash on its hits, and the BPM on the beat", () => {
+  it("a playing sound's tile flashes on its hits (not its layer), and the BPM on the beat", () => {
     const flashes = (node) => (node.classList.contains("hit-a") ? "a" : node.classList.contains("hit-b") ? "b" : "");
     click("kick.punchy");
     advance(4);
     flushFrame();
     const first = flashes(button("kick.punchy"));
     expect(first).not.toBe("");
-    expect(flashes($('[data-layer="kick"]'))).not.toBe("");
+    expect(flashes($('[data-layer="kick"]'))).toBe("");
     expect(flashes($(".bpm-value"))).not.toBe("");
     expect(flashes(button("kick.long"))).toBe("");
     advanceSeconds(BAR);
@@ -1046,6 +1076,22 @@ describe("BPM change", () => {
     $('[data-action="ramp"]').click();
   };
 
+  it("Tap sets the BPM from the beat you tap, and cuts a ramp short", () => {
+    immediate();
+    click("kick.long");
+    advance(10);
+    rampTo(170, 8);
+    const tap = $('[data-action="tap"]');
+    for (let i = 0; i < 4; i++) {
+      tap.click();
+      vi.advanceTimersByTime(i < 3 ? 400 : 0);
+    }
+    expect($("#bpm").value).toBe("150");
+    expect(saved().bpm).toBe(150);
+    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    expect($(".bpm-value").textContent).toBe("150");
+  });
+
   it("with the loop stopped, it just sets the BPM", () => {
     rampTo(160);
     expect($("#bpm").value).toBe("160");
@@ -1407,7 +1453,7 @@ describe("export, import, reset", () => {
     });
   });
 
-  it("Restaurar sonidos takes the sounds back to factory and keeps the rest", () => {
+  it("Restaurar sonidos takes the sounds back to factory, deselects them all and keeps the rest", () => {
     immediate();
     openEditor("perc.hat");
     stepCell("perc.hat", 0).click();
@@ -1422,7 +1468,9 @@ describe("export, import, reset", () => {
     expect(button("perc.hat~1")).not.toBeNull();
     expect(saved().snapshots).toHaveLength(1);
     expect($("section.layer").dataset.layer).not.toBe("kick");
-    expect(engine.isRunning()).toBe(true);
+    expect(pressed()).toEqual([]);
+    expect(queued()).toEqual([]);
+    expect(engine.isRunning()).toBe(false);
     expect($(".status").textContent).toBe("Sonidos de fábrica.");
   });
 

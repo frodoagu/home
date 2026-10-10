@@ -43,7 +43,7 @@ import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../s
 import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
-import { RAMP_BARS, clampBpm, rampAt } from "../tempo.js";
+import { RAMP_BARS, addTap, clampBpm, rampAt, tapBpm } from "../tempo.js";
 import {
   SNAP_PANEL,
   cleanSeed,
@@ -171,6 +171,8 @@ export function mountApp(root, engine, opts = {}) {
     value: String(ws.bpm),
   });
   const bpmOut = el("output", { for: "bpm", class: "bpm-value", text: String(ws.bpm) });
+  const tapBtn = el("button", { type: "button", class: "ghost tap", "data-action": "tap", text: tx.transport.tap });
+  tapBtn.title = tx.transport.tapTitle;
   const bgKick = checkbox("bgkick", tx.transport.bgKick, ws.bgKick);
   const quantize = checkbox("quantize", tx.transport.quantize, ws.quantize);
   quantize.node.title = tx.transport.quantizeTitle;
@@ -298,16 +300,27 @@ export function mountApp(root, engine, opts = {}) {
 
   function makeTile(layer, id) {
     const labelEl = el("span", { class: "variant-label", text: labelOf(id) });
-    const node = el(
-      "button",
-      { type: "button", class: "variant", "data-variant": id },
-      labelEl,
-      el("span", { class: "variant-detail", text: detailOf(id) }),
-    );
+    const detailEl = el("span", { class: "variant-detail", text: detailOf(id) });
+    const node = el("button", { type: "button", class: layer.oneShot ? "variant" : "variant has-level", "data-variant": id }, labelEl, detailEl);
     if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
-    if (id === BG_KICK_VARIANT) node.title = tx.tile.bgKick;
-    // Ctrl (⌘) stacks another kick or bass instead of replacing the one playing.
-    node.addEventListener("click", (e) => press(layer, id, e.detail, e.ctrlKey || e.metaKey));
+    // Playing, its fill is the sound's volume: a drag across it (or ← →)
+    // sets it, 0-150 % over the tile's width. Ctrl (⌘) on a click stacks
+    // another kick or bass instead of replacing the one playing.
+    amountSlider(node, {
+      steps: Math.round(LEVEL.max / LEVEL.step),
+      sliding: () => !layer.oneShot && isOn(state.active, id),
+      get: () => dataOf(id).level / LEVEL.max,
+      set: (v) => setLevel(id, Math.round(v * LEVEL.max * 100) / 100),
+      at: (e) => {
+        const r = node.getBoundingClientRect();
+        return (e.clientX - r.left) / r.width;
+      },
+      onClick: (e) => press(layer, id, e.detail, e.ctrlKey || e.metaKey),
+      onSlide: (on) => {
+        node.classList.toggle("is-sliding", on);
+        detailEl.textContent = on ? tx.tile.level(LEVEL.fmt(dataOf(id).level)) : detailOf(id);
+      },
+    });
     const edit = el("button", {
       type: "button",
       class: "edit",
@@ -350,7 +363,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     const side = vary ? el("div", { class: "tile-side" }, vary, edit) : edit;
     const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, side);
-    tiles.set(id, { layer, node, tile, edit, vary, labelEl });
+    tiles.set(id, { layer, node, tile, edit, vary, labelEl, detailEl });
     return tile;
   }
 
@@ -515,6 +528,7 @@ export function mountApp(root, engine, opts = {}) {
       "div",
       { class: "topbar-tempo" },
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
+      tapBtn,
       rampBox,
     ),
     el("div", { class: "topbar-end" }, help.button, ...(account ? [account.node] : []), language),
@@ -579,6 +593,8 @@ export function mountApp(root, engine, opts = {}) {
     const target = state.pending ?? state.active;
     for (const [id, { layer, node, tile, vary }] of tiles) {
       const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
+      node.style.setProperty("--level", `${Math.round((dataOf(id).level / LEVEL.max) * 1000) / 10}%`);
+      node.title = on && !layer.oneShot ? tx.tile.levelTitle : id === BG_KICK_VARIANT ? tx.tile.bgKick : "";
       const next = !layer.oneShot && isOn(target, id);
       node.classList.toggle("is-active", on);
       node.classList.toggle("is-queued", Boolean(state.pending) && next && !on);
@@ -658,24 +674,19 @@ export function mountApp(root, engine, opts = {}) {
     node.classList.toggle("hit-accent", accent);
   }
 
-  // Each audible step flashes the tiles that play on it (and their layer),
-  // brighter on an accent, and the BPM on every beat.
+  // Each audible step flashes the tiles that play on it, brighter on an
+  // accent, and the BPM on every beat.
   let struck = null;
   function strikeStep(step) {
     if (step === struck) return;
     struck = step;
     if (step === null) return;
     if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
-    const layers = new Map(); // layer id -> accented: one flash each, however many sounds hit
     for (const id of Object.values(lanes)) {
       const events = eventsAt(id, step, false, dataNow(id));
       const t = tiles.get(id);
-      if (!events.length || !t) continue;
-      const accent = events.some((ev) => ev.accent);
-      strike(t.node, accent);
-      layers.set(t.layer.id, accent || layers.get(t.layer.id) === true);
+      if (events.length && t) strike(t.node, events.some((ev) => ev.accent));
     }
-    for (const [id, accent] of layers) strike(sections.get(id).node, accent);
   }
 
   // The bar follows the audio clock, not the timer: each frame asks the engine
@@ -693,7 +704,6 @@ export function mountApp(root, engine, opts = {}) {
       for (const id of fx) {
         if (fxShown.has(id) || !tiles.has(id)) continue;
         strike(tiles.get(id).node, true);
-        strike(sections.get("fx").node, true);
       }
       fxShown = fx;
     }
@@ -888,6 +898,20 @@ export function mountApp(root, engine, opts = {}) {
     }
     const target = state.pending ?? state.active;
     if (!isOn(target, id)) press(layer, id);
+  }
+
+  // The tile's fill: only the sound's volume changes, an improvised part
+  // keeps its variation.
+  function setLevel(id, level) {
+    ws.variants[id] = { ...dataOf(id), level };
+    ws.auto = ws.auto.filter((x) => x !== id);
+    if (state.varying.has(id)) state.varying.set(id, { ...state.varying.get(id), level });
+    feed(id, { ...dataNow(id), level });
+    const t = tiles.get(id);
+    if (t.node.classList.contains("is-sliding")) t.detailEl.textContent = tx.tile.level(LEVEL.fmt(level));
+    open?.id === id && open.editor.showLevel(level);
+    persist();
+    renderButtons();
   }
 
   function setImprov(id, amount) {
@@ -1104,8 +1128,8 @@ export function mountApp(root, engine, opts = {}) {
         if (!layer.oneShot && !isOn(target, id)) press(layer, id);
       },
       onAudition: (note) => {
-        // A drum hit off the grid while the loop runs only sounds like a mistake.
-        if (layer.oneShot || (defOf(id).kind === "drum" && engine.isRunning())) return;
+        // A note off the grid while the loop runs only cuts into what plays.
+        if (layer.oneShot || engine.isRunning()) return;
         engine.audition(id, note);
       },
       onReset: () => {
@@ -1463,6 +1487,20 @@ export function mountApp(root, engine, opts = {}) {
     setTempo(Number(bpm.value));
     showRamp();
   });
+  // Tap tempo: on the press, not the release, so it follows the hand.
+  let taps = [];
+  const tap = () => {
+    taps = addTap(taps, Date.now());
+    const next = tapBpm(taps);
+    if (next === null) return;
+    state.ramp = null;
+    setTempo(next);
+    showRamp();
+  };
+  tapBtn.addEventListener("pointerdown", tap);
+  tapBtn.addEventListener("click", (e) => {
+    if (e.detail === 0) tap(); // Enter or Space
+  });
   rampBtn.addEventListener("click", () => {
     if (!state.ramp) startRamp();
     else {
@@ -1633,11 +1671,24 @@ export function mountApp(root, engine, opts = {}) {
   });
   resetBtn.addEventListener("click", () => {
     if (!factoryCheck.input.checked) {
-      // Every sound back to its factory data, the way each editor's Reset does; the mix keeps playing.
+      // Every sound back to its factory data, the way each editor's Reset does, and none selected.
       if (!confirm(tx.tools.confirmSounds)) return;
       const variants = {};
       for (const id of allIds()) if (isCopy(id)) variants[id] = defaultData(id);
-      remount({ ws: { ...ws, variants, auto: [], improv: {} }, varying: new Map(), status: tx.tools.soundsReset });
+      engine.stop();
+      remount({
+        ws: { ...ws, variants, auto: [], improv: {} },
+        active: {},
+        pending: null,
+        armed: false,
+        auto: false,
+        pilot: null,
+        varying: new Map(),
+        queuedSnap: null,
+        applied: null,
+        ramp: null,
+        status: tx.tools.soundsReset,
+      });
       return;
     }
     if (!confirm(tx.tools.confirmReset)) return;

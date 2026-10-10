@@ -97,8 +97,14 @@ goes through it:
   in `tempo.js`) and lands exactly on N on the last one. The in-between BPM goes to the engine with decimals, and rounded to the
   slider and to storage. The scheduler reads the BPM every tick, so each stretch
   comes in at most one step after the line. With the loop stopped there are no
-  bars: it changes right away. Moving the slider, Stop or the same button cut
-  it short.
+  bars: it changes right away. Moving the slider, Stop, Tap or the same button
+  cut it short.
+- **Tap** (next to the BPM): tapping it to the beat sets the BPM to the average
+  interval of the last eight taps (`addTap` / `tapBpm` in `tempo.js`), from the
+  second tap on, at once, like the slider. A tempo far outside 130-180 moves by
+  octaves first, so tapping half or double time lands in range; a 2 s pause
+  starts a new count. It counts on `pointerdown`, not the click, to follow the
+  hand; Enter and Space tap too.
 
 `triggerFx(id, at)` takes a time, so the autopilot fires FX on the same bar
 line.
@@ -191,6 +197,16 @@ the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
 
+A playing loop sound's **tile fill is its volume**: the fill covers `level /
+1.5` of the tile (a tick marks 100 %), and dragging across it (or ← → on the
+focused tile) sets the level in the editor's 5 % steps, live (`amountSlider`
+in `ui/dom.js`, gated on the tile being on). The click still switches it off,
+and a drag does not click. While it slides the subtitle shows the volume.
+Only the level changes: an improvised part keeps its variation. Because the
+pointer is the slider's, a playing tile cannot be dragged to reorder (a silent
+one can, and Alt + arrows always work). FX and snapshot tiles keep a plain
+fill.
+
 Each **layer volume** (the slider under a layer's name, 0-150 %) is a fader over
 every sound in that layer, on top of each sound's own volume. It is not a node:
 `engine.setLayerVolume` multiplies it into the level of the lanes and FX shots
@@ -211,7 +227,8 @@ What each variant plays is **data**, not code
 | `notes` (bass, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + synth + brightness + scale + octave + new-note length |
 | `fx` | `params` (length in bars, range, decay…) | knobs + ▶ Fire |
 
-All of them also have **Volume** (`level`, 0-150 % of their layer's level),
+All of them also have **Volume** (`level`, 0-150 % of their layer's level,
+also set from the tile: see below),
 **Reset**, the insert above (`insert`) and a **Source** (`sample`: `null` for
 their own voice, or one of the user's samples, see *Samples*). `eventsAt(id, step, entering, data)` turns the data into events on
 each step; `engine.setData(id, data)` replaces it and the scheduler reads it on
@@ -234,9 +251,9 @@ edit is forgotten (no ✎), the same as a full **Reset**.
   (`cycleStepEcho` / `cycleNoteEcho`). In the piano roll it echoes the note's
   start, and a cell already inside a longer note is left alone.
 - **Editing something that isn't playing switches it on**: what you edit is
-  what you hear. Adding a note previews it
-  right away (`engine.audition`), except drum hits while the loop runs (an
-  off-grid hit only sounds like a mistake).
+  what you hear. Adding a note previews it right away (`engine.audition`), but
+  only with the loop stopped: over the loop an off-grid note only cuts into
+  what is playing.
 - **🔀 Improvise** is a toggle and a slider on the same button. Click: while it's
   on, the part changes at every loop start (`varyNotes` / `varySteps` in
   `editing.js`: move a note to a nearby row, flip an accent, an echo a few steps
@@ -362,7 +379,7 @@ the same, without remembering.
 **Reset sounds** (with a confirmation) does what each editor's **Reset** does,
 for every sound at once: edits, melodies, improvise amounts and the autopilot's
 parts go back to factory, copies keep their place with their base's factory data,
-and the mix keeps playing. Snapshots carry their own data, so they are untouched;
+and every sound is deselected: the loop and the autopilot stop. Snapshots carry their own data, so they are untouched;
 so are the layout and the settings. Ticking **Factory** next to it turns it into
 **Reset everything**, which puts everything back to factory except the language.
 
@@ -713,7 +730,7 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 **Flashes** follow the audio clock, like the step bar: on each audible step the
 frame loop asks `eventsAt` (with the data the engine is playing, variations and
 build-ups included) which playing sounds hit, and flashes their tiles, brighter
-on an accent, plus their layer's edge once. FX tiles flash when they fire, the
+on an accent; the layer itself never flashes. FX tiles flash when they fire, the
 BPM flashes on every beat (harder on the bar line), and ● Record blinks while
 it records. A flash replays by alternating two identical animations (`hit-a` /
 `hit-b`), so no reflow is forced; `prefers-reduced-motion` turns them all off.
@@ -859,6 +876,20 @@ Same pipeline as `agu-spa`: a push to `main` touching `images/psy-sampler/` →
 `psy-sampler-image.yml` publishes `ghcr.io/frodoagu/psy-sampler:latest` (+
 `sha-<commit>`) → Image Updater pins `latest@sha256:…` into
 `charts/psy-sampler/values.yaml` → Argo CD syncs.
+
+### New-version notice
+
+A page left open learns about a deploy by itself. Each `vite build` gets an id
+(its timestamp; `dev` under `npm run dev`), baked into the bundle as
+`import.meta.env.BUILD_ID` and written to `dist/version.json` by a small plugin
+in `vite.config.js`. `src/update.js` fetches `/version.json` (`cache:
+"no-store"`, and nginx serves it with `no-store` too, so Cloudflare never holds
+it) every minute and whenever the tab becomes visible; when the id differs it
+shows `ui/updateNotice.js`: a card in the corner, a `<dialog open>` rather than
+`showModal()`, so the loop keeps playing and the page stays usable. **Reload**
+flushes the cloud save and reloads (what is playing stops, everything saved
+stays); **Later** hides it until the next new build. Docker's layer cache
+reuses the build, and so the id, when the sources haven't changed.
 
 ### First deploy: the GHCR package must be public
 
