@@ -6,7 +6,6 @@ export default {
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
   transport: {
     bpm: "BPM",
-    combine: "Combine layers",
     bgKick: "Background kick",
     delay: "Delay 3/16",
     reverb: "Reverb",
@@ -144,7 +143,7 @@ export default {
     },
     perc: {
       name: "Percussion",
-      hint: "They stack: add several with “Combine layers”. Notice where in the beat each one falls.",
+      hint: "They stack: add several. Notice where in the beat each one falls.",
     },
     lead: {
       name: "Lead",
