@@ -192,7 +192,7 @@ describe("auditionEvent", () => {
     const ev = auditionEvent("lead.acid", defaultData("lead.acid"), { midi: 69 });
     expect(ev).toMatchObject({ voice: "acid", freq: 440, steps: 2, accent: false });
     expect(auditionEvent("perc.clap", defaultData("perc.clap"), { accent: true })).toMatchObject({ voice: "clap", accent: true });
-    expect(auditionEvent("fx.zap", defaultData("fx.zap"), {})).toBeNull();
+    expect(auditionEvent("fx.crash", defaultData("fx.crash"), {})).toBeNull();
   });
 });
 
@@ -237,7 +237,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(56);
+  expect(LOOP_VARIANTS).toHaveLength(57);
 });
 
 describe("copies", () => {

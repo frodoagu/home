@@ -652,6 +652,31 @@ html {
   color: var(--surface);
 }
 
+.cue {
+  padding: 8px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--current);
+  background: transparent;
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cue:hover,
+.cue.is-armed {
+  background: var(--current);
+  color: var(--surface);
+}
+
+.cue.is-armed {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.cue[hidden] {
+  display: none;
+}
+
 /* ---- step bar ---- */
 .stepbar {
   display: flex;
@@ -1492,7 +1517,8 @@ html {
     transition: none;
   }
   .variant.is-queued,
-  .variant.is-leaving {
+  .variant.is-leaving,
+  .cue.is-armed {
     animation: none;
   }
 }

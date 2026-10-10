@@ -332,6 +332,18 @@ export function tape(ctx, out, t, { tone = 800, decay = 0.18, accent }) {
   saw.stop(end);
 }
 
+// Laser: a saw diving from `tone` to 60 Hz over most of its decay.
+export function laser(ctx, out, t, { tone = 4000, decay = 0.15, accent }) {
+  const saw = osc(ctx, "sawtooth", tone);
+  saw.frequency.setValueAtTime(tone, t);
+  saw.frequency.exponentialRampToValueAtTime(60, t + decay * 0.9);
+  const amp = ctx.createGain();
+  const end = percEnv(amp.gain, t, accent ? 0.6 : 0.45, 0.001, decay);
+  saw.connect(filter(ctx, "lowpass", 8000, 4)).connect(amp).connect(out);
+  saw.start(t);
+  saw.stop(end);
+}
+
 /* --------------------------------------------------------- instruments -- */
 // Melodic voices: { freq, steps, accent, bright }. Any of them can play any
 // melodic variant (the editor's "Sinte" select).
@@ -608,7 +620,7 @@ export const INSTRUMENTS = {
   tom,
 };
 
-export const GLITCH = { stutter, blip, zip, crush, metal, ring, crackle, rise, tape };
+export const GLITCH = { stutter, blip, zip, crush, metal, ring, crackle, rise, tape, laser };
 
 export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, ...GLITCH, ...INSTRUMENTS };
 
@@ -696,18 +708,6 @@ export function sweep(ctx, out, t, stepDur, { bars = 1, top = 6000 } = {}) {
   return t + dur;
 }
 
-export function laser(ctx, out, t, stepDur, { f0 = 4000, decay = 0.4 } = {}) {
-  const saw = osc(ctx, "sawtooth", f0);
-  saw.frequency.setValueAtTime(f0, t);
-  saw.frequency.exponentialRampToValueAtTime(60, t + decay * 0.9);
-  const amp = ctx.createGain();
-  const end = percEnv(amp.gain, t, 0.5, 0.001, decay);
-  saw.connect(filter(ctx, "lowpass", 8000, 4)).connect(amp).connect(out);
-  saw.start(t);
-  saw.stop(end);
-  return end;
-}
-
 export function crash(ctx, out, t, stepDur, { tone = 6000, decay = 2 } = {}) {
   const src = noise(ctx, t, decay + 0.05);
   const g = ctx.createGain();
@@ -788,7 +788,6 @@ export const FX = {
   "fx.down": downlifter,
   "fx.sweep": sweep,
   "fx.impact": impact,
-  "fx.zap": laser,
   "fx.crash": crash,
   "fx.siren": siren,
   "fx.reverse": reverse,

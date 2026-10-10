@@ -44,7 +44,7 @@ export const LAYERS = [
     id: "glitch",
     variants: [
       "glitch.stutter", "glitch.blips", "glitch.zips", "glitch.crush", "glitch.metal",
-      "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape",
+      "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape", "glitch.lasers",
     ],
   },
   {
@@ -52,7 +52,7 @@ export const LAYERS = [
     oneShot: true,
     variants: [
       "fx.riser", "fx.riserImpact", "fx.down", "fx.sweep", "fx.impact",
-      "fx.zap", "fx.crash", "fx.siren", "fx.reverse", "fx.stutter", "fx.tapeStop",
+      "fx.crash", "fx.siren", "fx.reverse", "fx.stutter", "fx.tapeStop",
     ],
   },
 ];

@@ -77,6 +77,7 @@ export const PARAMS = {
     { key: "sweep", label: "sweep", min: 0.02, max: 0.25, step: 0.005, def: 0.08, fmt: ms },
   ],
   tape: [tone(800, 200, 3000, "startPitch"), decay(0.18, 0.05, 0.6)],
+  laser: [tone(4000, 1000, 8000, "from"), decay(0.15, 0.04, 0.6, 0.01)],
 
   /* every melodic synth */
   synth: [{ key: "bright", label: "bright", min: 0.25, max: 4, step: 0.05, def: 1, fmt: times }],
@@ -89,10 +90,6 @@ export const PARAMS = {
   "fx.impact": [
     { key: "f0", label: "tone", min: 50, max: 160, step: 1, def: 90, fmt: hz },
     decay(1.5, 0.4, 3, 0.1, sec),
-  ],
-  "fx.zap": [
-    { key: "f0", label: "from", min: 1000, max: 8000, step: 50, def: 4000, fmt: hz },
-    decay(0.4, 0.1, 1, 0.01),
   ],
   "fx.crash": [tone(6000, 3000, 10000, "hpCut"), decay(2, 0.5, 4, 0.1, sec)],
   "fx.siren": [length(1), { key: "rate", label: "vibrato", min: 2, max: 12, step: 0.5, def: 7, fmt: (v) => `${v} Hz` }],

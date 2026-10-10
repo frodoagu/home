@@ -198,6 +198,56 @@ describe("on the beat (queued clicks)", () => {
   });
 });
 
+describe("arming the start", () => {
+  const cue = () => $('[data-action="cue"]');
+
+  it("armed, clicks queue in silence and ▶ starts them together", () => {
+    expect(cue().textContent).toBe("⏺ Armar");
+    cue().click();
+    expect(cue().textContent).toBe("▶ Arrancar");
+    click("kick.long");
+    click("perc.shaker");
+    click("bass.rolling");
+    expect(engine.isRunning()).toBe(false);
+    expect(pressed()).toEqual([]);
+    expect(queued()).toEqual(["kick.long", "bass.rolling", "perc.shaker"]);
+    cue().click();
+    expect(engine.isRunning()).toBe(true);
+    expect(pressed()).toEqual(["kick.long", "bass.rolling", "perc.shaker"]);
+    expect(queued()).toEqual([]);
+    expect(cue().hidden).toBe(true);
+    $(".stop").click();
+    expect(cue().hidden).toBe(false);
+    expect(cue().textContent).toBe("⏺ Armar");
+  });
+
+  it("a second click takes a sound back out of the queue, a double click queues it once", () => {
+    cue().click();
+    click("lead.acid");
+    click("lead.acid");
+    dblclick("pad.chord");
+    expect(queued()).toEqual(["pad.chord"]);
+    expect(engine.isRunning()).toBe(false);
+  });
+
+  it("Parar drops the queue and disarms", () => {
+    cue().click();
+    click("kick.long");
+    $(".stop").click();
+    expect(queued()).toEqual([]);
+    expect(cue().textContent).toBe("⏺ Armar");
+    click("kick.long");
+    expect(engine.isRunning()).toBe(true);
+  });
+
+  it("FX still fire while armed", () => {
+    cue().click();
+    $('[data-variant="fx.crash"]').click();
+    expect(ctx.sources().length).toBeGreaterThan(0);
+    expect(engine.isRunning()).toBe(false);
+  });
+});
+
 describe("step bar", () => {
   it("highlights the audible step and clears on Parar", () => {
     click("kick.punchy");

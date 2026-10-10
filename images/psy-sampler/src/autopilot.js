@@ -89,9 +89,9 @@ export const STYLES = {
       perc: ["perc.chat", "perc.clap", "perc.rim", "perc.hat"],
       lead: ["lead.acidPhryg", "lead.arp", "lead.zap", "lead.bits"],
       pad: ["pad.dark", "pad.drone", "pad.prog"],
-      glitch: ["glitch.zips", "glitch.blips", "glitch.stutter", "glitch.ring"],
+      glitch: ["glitch.zips", "glitch.blips", "glitch.stutter", "glitch.ring", "glitch.lasers"],
     },
-    entryFx: { groove: [null, null, "fx.stutter", "fx.zap"] },
+    entryFx: { groove: [null, null, "fx.stutter"] },
   },
   hitech: {
     bpm: 180,
@@ -104,9 +104,10 @@ export const STYLES = {
       pad: ["pad.dark", "pad.air", "pad.drone"],
       glitch: [
         "glitch.zips", "glitch.blips", "glitch.stutter", "glitch.rise", "glitch.tape", "glitch.metal", "glitch.crush",
+        "glitch.lasers",
       ],
     },
-    entryFx: { groove: [null, "fx.zap", "fx.stutter", "fx.siren"], breakdown: ["fx.down", "fx.tapeStop"] },
+    entryFx: { groove: [null, "fx.stutter", "fx.siren"], breakdown: ["fx.down", "fx.tapeStop"] },
   },
   goa: {
     bpm: 145,
@@ -117,9 +118,9 @@ export const STYLES = {
       perc: ["perc.hat", "perc.shaker", "perc.toms", "perc.snare"],
       lead: ["lead.acid", "lead.melodic", "lead.arp"],
       pad: ["pad.prog", "pad.chord", "pad.fifths"],
-      glitch: ["glitch.zips", "glitch.ring", "glitch.rise", "glitch.blips"],
+      glitch: ["glitch.zips", "glitch.ring", "glitch.rise", "glitch.blips", "glitch.lasers"],
     },
-    entryFx: { groove: [null, "fx.siren", "fx.siren", "fx.zap"] },
+    entryFx: { groove: [null, "fx.siren", "fx.siren"] },
   },
   darkpsy: {
     bpm: 155,
@@ -143,7 +144,7 @@ export const STYLE_DEFAULT = "psytrance";
 export const CHANGE_BARS = [2, 4, 8, 16, 32];
 export const CHANGE_DEFAULT = 8;
 
-const ENTRY_FX = { peak: ["fx.crash", "fx.impact"], breakdown: ["fx.down"], groove: [null, null, "fx.zap", "fx.siren"] };
+const ENTRY_FX = { peak: ["fx.crash", "fx.impact"], breakdown: ["fx.down"], groove: [null, null, "fx.siren"] };
 const BUILD_FX = ["fx.riser", "fx.riserImpact", "fx.reverse"];
 const REWRITE = { build: ["lead", 0.5], breakdown: ["lead", 0.6], groove: ["bass", 0.25] };
 const KEEP = 0.75; // a playing variant survives a section change

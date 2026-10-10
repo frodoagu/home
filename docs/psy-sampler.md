@@ -77,6 +77,12 @@ goes through it:
   the wait: the second click (the event's `detail` 2) applies what the first
   one asked for right away and empties the queue; with nothing waiting it does
   nothing, so it never goes on-off-on.
+- **⏺ Arm** (in the transport, only while stopped) builds the start: armed, a
+  click queues like "On the beat" does (a second click takes it back out, a
+  double click counts once) and nothing sounds; **▶ Play** starts everything
+  queued together from step 0, a queued snapshot included. Stop disarms and
+  drops the queue; the autopilot, armed, takes the queued mix and starts. FX
+  still fire at once.
 - **Autopilot** (see below), at every loop start.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
@@ -513,7 +519,7 @@ decides at every loop start what plays:
 | Section | Bars | Kick | Bass | Perc | Lead | Pad | Glitch | On entry |
 |---|---|---|---|---|---|---|---|---|
 | Intro | 8 | 1 | – | 1 | – | 1 | – | |
-| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 1 | sometimes a laser or siren; 25 % new bass |
+| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 1 | sometimes a siren; 25 % new bass |
 | Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 1 | 50 % new lead |
 | Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | 1 | crash or impact |
 | Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | 0-1 | downlifter; 60 % new lead |
@@ -562,9 +568,9 @@ comes from a Build-up or from a queued section.
 | Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
 | Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4; crackle, FM metal, bwip |
 | Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads; zips, stutter, bwip, FM metal |
-| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, dark pad; zips, bleeps, stutter, ring mod; stutter roll |
+| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
 | Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
-| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps |
+| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
 | Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
@@ -692,12 +698,12 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 | | Crackle | 4 random dust clicks inside every step |
 | | Bwip | a square rising 3 octaves in 80 ms, before each offbeat |
 | | Tape stop | a saw slowing to 4 % of its pitch, the filter closing with it, at the end of the loop |
+| | Lasers | a saw diving from 4 kHz to 60 Hz in 150 ms on every off-beat 8th, the last of the bar accented |
 | FX | Riser | BP noise 300 Hz → "To" (9 kHz) over "Length" (2 bars) |
 | | Riser + impact | the impact lands right at the end of the riser |
 | | Downlifter | BP noise "From" (8 kHz) → 150 Hz + sine 400→40 Hz |
 | | Noise sweep | narrow BP rising to "Peak" and back down |
 | | Impact | sine "Tone" (90 Hz) → ×0.31 + LP noise, decay 1.5 s |
-| | Laser | saw 4 kHz → 60 Hz |
 | | Crash | HP noise 6 kHz, 2 s |
 | | Goa siren | saw 300 → 1200 Hz with vibrato |
 | | Reverse cymbal | HP noise ("HP cutoff", 5 kHz) swelling over "Length" (2 bars) and cutting on the bar line |
