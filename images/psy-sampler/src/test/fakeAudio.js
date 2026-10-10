@@ -60,6 +60,17 @@ export class FakeSource extends FakeNode {
   }
 }
 
+// An AudioWorkletNode: what the node posts lands in `port.sent`; the test
+// plays the processor by calling `port.onmessage({ data })`.
+export class FakeWorklet extends FakeNode {
+  constructor(ctx, name, options) {
+    super(ctx, "worklet");
+    this.name = name;
+    this.options = options;
+    this.port = { sent: [], onmessage: null, postMessage: (msg) => this.port.sent.push(msg) };
+  }
+}
+
 const withParams = (node, params) => {
   for (const [name, value] of Object.entries(params)) node[name] = new FakeParam(value);
   return node;
@@ -73,6 +84,8 @@ export class FakeAudioContext {
     this.outputLatency = 0;
     this.state = "running";
     this.destination = new FakeNode(this, "destination");
+    this.modules = [];
+    this.audioWorklet = { addModule: async (url) => void this.modules.push(url) };
   }
   resume() {
     this.state = "running";

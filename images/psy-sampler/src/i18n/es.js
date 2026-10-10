@@ -30,6 +30,18 @@ export default {
     bar: (n) => `Compás ${n} de 2`,
     barIdle: "Compás –",
   },
+  rec: {
+    idle: "● Grabar",
+    idleTitle: "Graba lo que sale por los parlantes: empieza con el primer sonido y al terminar lo descarga en WAV",
+    waiting: "● Esperando sonido…",
+    waitingTitle: "La grabación arranca con el primer sonido. Clic para cancelar",
+    recording: (time) => `■ ${time}`,
+    recordingTitle: (max) => `Termina la grabación y la descarga en WAV (máximo ${max} min)`,
+    saved: (file, time) => `Grabación guardada: ${file} (${time})`,
+    full: (max) => `Llegó al máximo de ${max} minutos: la grabación se cortó ahí.`,
+    empty: "No sonó nada: no hay grabación.",
+    unsupported: "Este navegador no puede grabar.",
+  },
   sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break" },
   pilot: {
     style: "Estilo",

@@ -22,6 +22,8 @@
 //
 // What a variant plays is data (patterns.js) the UI can edit at any time:
 // setData() swaps it and the scheduler reads it on the next step.
+//
+// tap() hands out what the trim sends to the destination, for recording.
 import {
   collectSteps,
   nextBeatTime,
@@ -37,6 +39,7 @@ import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.j
 import { auditionEvent, baseOf, defOf, eventsAt, sampleDefaults } from "./patterns.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
+import TAP_URL from "./tap.worklet.js?url&no-inline";
 
 const MASTER_GAIN = 0.7;
 const OUTPUT_TRIM = 0.8;
@@ -113,7 +116,7 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   dj.low.Q.value = DJ_Q;
   dj.high.Q.value = DJ_Q;
   master.connect(dj.low).connect(dj.high).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
-  return { master, dj, bus: buildBus(ctx, dj.low, bpm, effects) };
+  return { master, dj, out: trim, bus: buildBus(ctx, dj.low, bpm, effects) };
 }
 
 function buildBus(ctx, into, bpm, effects) {
@@ -173,10 +176,13 @@ function withInsert(ctx, gain, insert, stepDur, at) {
 export function createEngine({
   createContext = () => new AudioContext(),
   createOffline = (channels, length, rate) => new OfflineAudioContext(channels, length, rate),
+  createWorklet = (c, name, options) => new AudioWorkletNode(c, name, options),
   sampleBuffer = () => null, // sample id -> decoded AudioBuffer, or null while it is not there
 } = {}) {
   let ctx = null;
   let master = null;
+  let out = null; // the last node before the destination
+  let tapModule = null; // addModule()'s promise, once per context
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
@@ -201,7 +207,7 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, bus } = buildChain(ctx, bpm, effects, djValue));
+      ({ master, dj, out, bus } = buildChain(ctx, bpm, effects, djValue));
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -517,6 +523,36 @@ export function createEngine({
     };
   }
 
+  /**
+   * Feeds `onAudio([left, right])` with blocks of the output from now on.
+   * Resolves to untap(), which delivers the block in flight and then
+   * resolves; rejects where the browser has no AudioWorklet.
+   */
+  async function tap(onAudio) {
+    ensureContext();
+    tapModule ??= ctx.audioWorklet.addModule(TAP_URL);
+    await tapModule;
+    // Explicit stereo: a mono signal comes in on both channels.
+    const node = createWorklet(ctx, "psy-tap", { channelCount: 2, channelCountMode: "explicit", numberOfOutputs: 1 });
+    // Its output is silence; into the destination it keeps the node pulled.
+    node.connect(ctx.destination);
+    out.connect(node);
+    let closed = null;
+    node.port.onmessage = ({ data }) => {
+      if (data) onAudio(data);
+      else closed?.();
+    };
+    return () =>
+      new Promise((resolve) => {
+        closed = () => {
+          out.disconnect(node);
+          node.disconnect();
+          resolve();
+        };
+        node.port.postMessage("flush");
+      });
+  }
+
   function stop() {
     stopLoop();
     if (!ctx) return;
@@ -538,6 +574,7 @@ export function createEngine({
     visibleStep,
     stop,
     render,
+    tap,
     onBar: (fn) => {
       barHook = fn;
     },

@@ -17,6 +17,10 @@ export default [
     },
   },
   {
+    files: ["**/*.worklet.js"],
+    languageOptions: { globals: { ...globals.audioWorklet } },
+  },
+  {
     files: ["*.config.js"],
     languageOptions: { globals: { ...globals.node } },
   },

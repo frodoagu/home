@@ -8,11 +8,13 @@
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 // The signed-in user's samples (samples.js) load as the sounds using them
-// need them; until then those sounds play their own voice.
+// need them; until then those sounds play their own voice. The record button
+// drives recorder.js, which outlives remounts like the engine.
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, isCopy, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
+import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
@@ -52,6 +54,12 @@ import { sortable } from "./sortable.js";
 const sameLanes = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
 const sameData = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+// 2026-10-09-2130, local time: takes sort by when they were made.
+const stamp = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+};
 
 // Everything tied to the old workspace, dropped when another one replaces it.
 const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null, armed: false });
@@ -64,6 +72,7 @@ export function mountApp(root, engine, opts = {}) {
     confirm = (message) => window.confirm(message),
     cloud = null, // cloud.js; survives remounts, like the engine
     samples = null, // samples.js; same
+    recorder = createRecorder(engine),
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
   } = opts;
@@ -160,6 +169,7 @@ export function mountApp(root, engine, opts = {}) {
   const cueBtn = el("button", { type: "button", class: "cue", "data-action": "cue" });
   const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
   snapBtn.title = tx.transport.snapshotTitle;
+  const recBtn = el("button", { type: "button", class: "rec", "data-action": "record" });
 
   /* ---- BPM change: a ramp, bar by bar ---- */
   const rampTo = el("input", {
@@ -433,7 +443,7 @@ export function mountApp(root, engine, opts = {}) {
     "nav",
     { class: "topbar" },
     back,
-    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn),
+    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
     el("div", { class: "topbar-end" }, ...(account ? [account.node] : []), language),
   );
 
@@ -1179,9 +1189,48 @@ export function mountApp(root, engine, opts = {}) {
     }
   }
 
+  /* ---- recording ---- */
+  let recTimer = 0;
+  let recStopping = false;
+  function showRec() {
+    const now = recorder.state();
+    recBtn.textContent =
+      now === "recording" ? tx.rec.recording(clock(recorder.seconds())) : now === "waiting" ? tx.rec.waiting : tx.rec.idle;
+    recBtn.title =
+      now === "recording" ? tx.rec.recordingTitle(MAX_SECONDS / 60) : now === "waiting" ? tx.rec.waitingTitle : tx.rec.idleTitle;
+    recBtn.classList.toggle("is-waiting", now === "waiting");
+    recBtn.classList.toggle("is-recording", now === "recording");
+    recBtn.setAttribute("aria-pressed", String(now !== "idle"));
+    recBtn.disabled = recStopping;
+    if (now === "idle") {
+      clearInterval(recTimer);
+      recTimer = 0;
+    } else if (!recTimer) recTimer = setInterval(showRec, 250);
+  }
+
+  async function finishRecording(full = false) {
+    recStopping = true;
+    const take = recorder.stop();
+    showRec();
+    const done = await take;
+    recStopping = false;
+    showRec();
+    if (!done) {
+      status(tx.rec.empty);
+      return;
+    }
+    const name = `psy-layers-${stamp()}.wav`;
+    download(name, done.blob, "audio/wav");
+    const saved = tx.rec.saved(name, clock(done.seconds));
+    status(full ? `${tx.rec.full(MAX_SECONDS / 60)} ${saved}` : saved);
+  }
+  recorder.onFull(() => finishRecording(true));
+
   /* ---- remount: language, import, share links, reset ---- */
   function destroy() {
     closeEditor();
+    clearInterval(recTimer);
+    recorder.onFull(null);
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     engine.onBar(null);
@@ -1197,7 +1246,7 @@ export function mountApp(root, engine, opts = {}) {
     const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
-    return mountApp(root, engine, { ...opts, resume: next });
+    return mountApp(root, engine, { ...opts, recorder, resume: next });
   }
 
   async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds }) {
@@ -1399,6 +1448,21 @@ export function mountApp(root, engine, opts = {}) {
       status(tx.share.manual(url));
     }
   });
+  recBtn.addEventListener("click", async () => {
+    if (recStopping) return;
+    if (recorder.state() !== "idle") {
+      finishRecording();
+      return;
+    }
+    const starting = recorder.start(); // inside the click: it may create the AudioContext
+    showRec();
+    try {
+      await starting;
+    } catch {
+      status(tx.rec.unsupported);
+    }
+    showRec();
+  });
   wavBtn.addEventListener("click", () => exportWav(null));
   exportBtn.addEventListener("click", () => {
     const preset = toPreset({ ...ws, active: state.pending ?? state.active });
@@ -1441,6 +1505,7 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- first paint ---- */
   showSection();
+  showRec();
   showRamp();
   setDj(state.dj);
   syncSamples();

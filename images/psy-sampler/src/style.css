@@ -680,6 +680,35 @@ html {
   display: none;
 }
 
+/* Record: waiting for the first sound pulses; recording shows the time. */
+.rec {
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--stop);
+  background: transparent;
+  border: 1.5px solid var(--stop);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rec:hover,
+.rec.is-waiting,
+.rec.is-recording {
+  background: var(--stop);
+  color: var(--surface);
+}
+
+.rec.is-waiting {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.rec:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
 /* ---- step bar ---- */
 .stepbar {
   display: flex;
@@ -1523,7 +1552,8 @@ html {
   }
   .variant.is-queued,
   .variant.is-leaving,
-  .cue.is-armed {
+  .cue.is-armed,
+  .rec.is-waiting {
     animation: none;
   }
 }
