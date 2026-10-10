@@ -239,9 +239,6 @@ describe("arming the start", () => {
     expect(pressed()).toEqual(["kick.long", "bass.rolling", "perc.shaker"]);
     expect(queued()).toEqual([]);
     expect(cue().hidden).toBe(true);
-    $(".stop").click();
-    expect(cue().hidden).toBe(false);
-    expect(cue().textContent).toBe("⏺ Armar");
   });
 
   it("a second click takes a sound back out of the queue, a double click queues it once", () => {
@@ -253,14 +250,27 @@ describe("arming the start", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("Parar drops the queue and disarms", () => {
-    cue().click();
+  it("Parar leaves what played queued, and turns into ▶ to bring it back", () => {
+    immediate();
     click("kick.long");
+    click("perc.shaker");
+    expect($(".stop").hidden).toBe(false);
     $(".stop").click();
-    expect(queued()).toEqual([]);
-    expect(cue().textContent).toBe("⏺ Armar");
-    click("kick.long");
+    expect(engine.isRunning()).toBe(false);
+    expect(pressed()).toEqual([]);
+    expect(queued()).toEqual(["kick.long", "perc.shaker"]);
+    expect($(".stop").hidden).toBe(true);
+    expect(cue().hidden).toBe(false);
+    expect(cue().textContent).toBe("▶ Arrancar");
+    cue().click();
     expect(engine.isRunning()).toBe(true);
+    expect(pressed()).toEqual(["kick.long", "perc.shaker"]);
+    expect(queued()).toEqual([]);
+  });
+
+  it("stopped with nothing playing, the slot offers ⏺ Armar", () => {
+    expect($(".stop").hidden).toBe(true);
+    expect(cue().textContent).toBe("⏺ Armar");
   });
 
   it("FX still fire while armed", () => {

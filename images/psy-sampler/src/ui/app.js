@@ -536,8 +536,10 @@ export function mountApp(root, engine, opts = {}) {
     showCue();
   }
 
-  // Stopped, the cue button arms; armed, it plays what was queued.
+  // Running, the slot holds Parar; stopped, the cue button arms, and armed it
+  // plays what was queued.
   function showCue() {
+    stopBtn.hidden = !engine.isRunning();
     cueBtn.hidden = engine.isRunning();
     cueBtn.textContent = state.armed ? tx.transport.play : tx.transport.arm;
     cueBtn.title = state.armed ? tx.transport.playTitle : tx.transport.armTitle;
@@ -1385,10 +1387,12 @@ export function mountApp(root, engine, opts = {}) {
       persist();
     });
   }
+  // What played stays queued for ▶, so it comes back together on the first step.
   stopBtn.addEventListener("click", () => {
+    const playing = state.active;
     state.active = {};
-    state.pending = null;
-    state.armed = false;
+    state.armed = Object.keys(playing).length > 0;
+    state.pending = state.armed ? playing : null;
     state.auto = false;
     state.pilot = null;
     state.queuedSnap = null;
