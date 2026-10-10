@@ -80,7 +80,7 @@ export function normalize(raw) {
     const name = typeof snap.name === "string" ? snap.name.trim().slice(0, NAME_MAX) : "";
     const data = {};
     for (const v of Object.values(parts)) data[v] = sanitize(v, snap.data?.[v]);
-    const section = snap.section in SECTIONS ? snap.section : "groove";
+    const section = Object.hasOwn(SECTIONS, snap.section) ? snap.section : "groove";
     snapshots.push({ id, name: name || id, section, active: parts, data });
     if (snapshots.length === SNAP_MAX) break;
   }
@@ -93,7 +93,7 @@ export function normalize(raw) {
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },
     rampBars: RAMP_BARS.includes(src.rampBars) ? src.rampBars : RAMP_DEFAULT,
     seed: cleanSeed(src.seed),
-    style: src.style in STYLES ? src.style : STYLE_DEFAULT,
+    style: Object.hasOwn(STYLES, src.style) ? src.style : STYLE_DEFAULT,
     changeBars: CHANGE_BARS.includes(src.changeBars) ? src.changeBars : CHANGE_DEFAULT,
     order,
     lists,

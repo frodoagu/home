@@ -638,6 +638,12 @@ if you already had your own), clears the fragment and says to press the
 autopilot: audio needs that click. 🎲 draws a new seed (6 characters without
 0/o/1/l/i).
 
+A link is anyone's input. The sounds go through `normalize()` like any preset,
+and they inflate to at most `SOUNDS_MAX` (1 MiB): deflate expands up to ~1000×,
+so a URL at Chrome's 2 MB limit would otherwise unpack to gigabytes and kill
+the tab. Lookups of a name from outside (style, section, scale, language) use
+`Object.hasOwn`, never `in`: `"constructor" in STYLES` is true.
+
 ## Languages
 
 `i18n/{es,en,pt}.js` hold every string (layers, variants, synths, knobs, scales,
@@ -909,5 +915,13 @@ npm run build
   `voice: "sample"` through `sampleBuffer(id)` on every note and falls back to
   `ev.fallback`. Never schedule a sample source without its fades: a slice
   starting mid-waveform clicks like any other note.
+- **Content-Security-Policy.** nginx sends one with the page
+  (`charts/psy-sampler/templates/configmap.yaml`): the page's own files plus
+  Google Sign-In (`accounts.google.com/gsi/…`: script, stylesheet, button
+  iframe). A new third-party origin (a font, an analytics script, a CDN) is
+  blocked until it's added there. Inline styles stay allowed because the
+  editors set `style` attributes. The headers sit in `location = /index.html`
+  itself: nginx drops server-level `add_header`s in any location that sets its
+  own.
 - **`listen [::]:80`** in the nginx config (like `agu-spa`) fails on a host
   without IPv6 (e.g. a test Docker); on the Pi it works.

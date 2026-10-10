@@ -426,7 +426,7 @@ export function mountApp(root, engine, opts = {}) {
         snapshot,
         pristine: () => JSON.stringify({ ...ws, seed: "" }) === JSON.stringify({ ...factory, seed: "" }),
         apply: (remote) => {
-          if (remote?.lang in DICTS) setLang(remote.lang);
+          if (Object.hasOwn(DICTS, remote?.lang)) setLang(remote.lang);
           state.varying = new Map();
           remount({ ws: normalize(remote), open: null, status: t().cloud.pulled });
         },

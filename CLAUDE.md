@@ -448,7 +448,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `normalize()` is still the only gate. Samples are sniffed server-side (magic
   bytes, never the client's type) and the shared `sync.samples.total` cap, not
   the PVC size (local-path ignores it), is what protects the SD card. Its PVC
-  (SQLite + samples + session key) has no backup. See docs/psy-sampler.md.
+  (SQLite + samples + session key) has no backup. nginx sends a CSP (configmap.yaml):
+  a new third-party origin is blocked until listed there. Share links are untrusted
+  input: `#s=` inflates to `SOUNDS_MAX` at most, and outside names are looked up with
+  `Object.hasOwn`, never `in`. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

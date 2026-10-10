@@ -14,16 +14,16 @@ export const t = () => DICTS[current];
 export const lang = () => current;
 
 export function setLang(id) {
-  current = id in DICTS ? id : DEFAULT_LANG;
+  current = Object.hasOwn(DICTS, id) ? id : DEFAULT_LANG;
   return current;
 }
 
 // The stored choice wins; else the browser's first supported language.
 export function detectLang(saved, languages = []) {
-  if (saved in DICTS) return saved;
+  if (Object.hasOwn(DICTS, saved)) return saved;
   for (const l of languages) {
     const id = String(l).slice(0, 2).toLowerCase();
-    if (id in DICTS) return id;
+    if (Object.hasOwn(DICTS, id)) return id;
   }
   return DEFAULT_LANG;
 }

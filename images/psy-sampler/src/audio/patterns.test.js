@@ -229,6 +229,7 @@ describe("sanitize", () => {
     expect(out.notes).toEqual([{ step: 0, midi: 60, len: 4, accent: true }]);
     expect(out.synth).toBe("arp");
     expect(out.scale).toBe("phrygian");
+    expect(sanitize("lead.arp", { scale: "constructor" }).scale).toBe(defaultData("lead.arp").scale);
     expect(out.transpose).toBe(0);
     expect(out.len).toBe(1);
     expect(out.level).toBe(LEVEL.max);
