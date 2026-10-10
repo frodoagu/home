@@ -40,5 +40,6 @@ describe("detectLang", () => {
     expect(detectLang(undefined, ["fr-FR", "pt-BR"])).toBe("pt");
     expect(detectLang("xx", ["EN"])).toBe("en");
     expect(detectLang(null, ["de"])).toBe("es");
+    expect(detectLang("constructor", ["__proto__"])).toBe("es");
   });
 });

@@ -386,7 +386,7 @@ export function sanitize(id, saved) {
         .map((n) => note(n.step, n.midi, n.len, n.accent === true));
     }
     if (SYNTH_IDS.includes(saved.synth)) out.synth = saved.synth;
-    if (saved.scale in SCALES) out.scale = saved.scale;
+    if (Object.hasOwn(SCALES, saved.scale)) out.scale = saved.scale;
     if (TRANSPOSE.includes(saved.transpose)) out.transpose = saved.transpose;
     if (NOTE_LENGTHS.includes(saved.len)) out.len = saved.len;
   }

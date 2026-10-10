@@ -1,3 +1,21 @@
+{{- /*
+  The page loads nothing but its own files and Google Sign-In (script, its
+  stylesheet, the button's iframe). Inline styles stay allowed: the editors set
+  style attributes. A new third-party origin must be added here or it is blocked.
+  No Cross-Origin-Opener-Policy: same-origin would cut the sign-in popup off.
+*/}}
+{{- $csp := list
+  "default-src 'self'"
+  "script-src 'self' https://accounts.google.com/gsi/client"
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style"
+  "frame-src https://accounts.google.com/gsi/"
+  "connect-src 'self' https://accounts.google.com/gsi/"
+  "img-src 'self' data:"
+  "object-src 'none'"
+  "base-uri 'none'"
+  "form-action 'self'"
+  "frame-ancestors 'none'"
+  | join "; " }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -27,8 +45,13 @@ data:
             try_files $uri $uri/ /index.html;
         }
 
+        # Every page load ends here (try_files falls back to it), so the page's
+        # security headers live in this block: nginx drops server-level
+        # add_header in any location that sets its own.
         location = /index.html {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Content-Security-Policy "{{ $csp }}" always;
+            add_header X-Content-Type-Options nosniff always;
         }
 
         # Only Vite's output dir is content-hashed; public/ files (favicon)
@@ -36,6 +59,7 @@ data:
         location /assets/ {
             expires 1y;
             add_header Cache-Control "public, immutable";
+            add_header X-Content-Type-Options nosniff always;
             try_files $uri =404;
         }
 

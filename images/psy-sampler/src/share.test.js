@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { seeded } from "./editing.js";
 import { normalize } from "./workspace.js";
-import { cleanSeed, hashSeed, packSounds, randomSeed, readFragment, shareFragment, unpackSounds } from "./share.js";
+import {
+  SOUNDS_MAX,
+  cleanSeed,
+  hashSeed,
+  packSounds,
+  randomSeed,
+  readFragment,
+  shareFragment,
+  unpackSounds,
+} from "./share.js";
 
 describe("seeds", () => {
   it("hash deterministically, and differ from each other", () => {
@@ -55,6 +64,21 @@ describe("share links", () => {
     expect(back.variants["perc.hat"].level).toBe(0.5);
     expect(back.lists.lead).toContain("lead.acid~1");
     expect(await unpackSounds(await packSounds(ws))).toEqual(back);
+  });
+
+  it("refuse sounds that inflate past the cap", async () => {
+    const deflate = async (text) => {
+      const out = new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("deflate-raw")));
+      const bin = String.fromCharCode(...new Uint8Array(await out.arrayBuffer()));
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    };
+    const bomb = await deflate(`{"app":"psy-sampler","x":"${"a".repeat(SOUNDS_MAX)}"}`);
+    expect(bomb.length).toBeLessThan(2000);
+    await expect(unpackSounds(bomb)).rejects.toThrow("too big");
+    const ws = normalize({ variants: { "perc.hat": { level: 0.5 } } });
+    const sounds = await packSounds(ws);
+    await expect(unpackSounds(sounds, 100)).rejects.toThrow("too big");
+    expect((await unpackSounds(sounds)).variants["perc.hat"].level).toBe(0.5);
   });
 
   it("ignore fragments without a seed", () => {

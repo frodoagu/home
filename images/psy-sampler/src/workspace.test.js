@@ -35,6 +35,14 @@ describe("normalize", () => {
     expect(improv).toEqual({ "lead.acid": 0.9, "perc.hat": 1 });
   });
 
+  it("does not take inherited keys for a style or a section", () => {
+    for (const key of ["constructor", "__proto__", "toString"]) {
+      const ws = normalize({ style: key, snapshots: [{ id: "snap-1", section: key, active: { kick: "kick.long" } }] });
+      expect(ws.style).toBe("psytrance");
+      expect(ws.snapshots[0].section).toBe("groove");
+    }
+  });
+
   it("gives every copy data and drops data, names and selections of unknown variants", () => {
     const ws = normalize({
       lists: { lead: ["lead.acid~1"] },

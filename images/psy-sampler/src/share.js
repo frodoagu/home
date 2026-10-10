@@ -30,6 +30,27 @@ async function pipe(bytes, stream) {
   return new Uint8Array(await out.arrayBuffer());
 }
 
+// A link is anyone's input, and deflate expands up to ~1000x: a 2 MB URL
+// would inflate to gigabytes, so reading stops past `max` bytes.
+export const SOUNDS_MAX = 1024 * 1024;
+
+async function inflate(bytes, max) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error("shared sounds too big");
+    }
+    chunks.push(value);
+  }
+  return new Uint8Array(await new Blob(chunks).arrayBuffer());
+}
+
 function toBase64Url(bytes) {
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -50,8 +71,8 @@ export async function packSounds(ws) {
   return toBase64Url(await pipe(new TextEncoder().encode(json), new CompressionStream("deflate-raw")));
 }
 
-export async function unpackSounds(text) {
-  const bytes = await pipe(fromBase64Url(text), new DecompressionStream("deflate-raw"));
+export async function unpackSounds(text, max = SOUNDS_MAX) {
+  const bytes = await inflate(fromBase64Url(text), max);
   const { lists, names, variants, auto } = parsePreset(new TextDecoder().decode(bytes));
   return { lists, names, variants, auto };
 }
