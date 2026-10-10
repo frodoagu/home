@@ -8,7 +8,6 @@ export default {
     "desde una semilla, o tomá el control: encolá fases, improvisá partes y guardá momentos con 📸.",
   transport: {
     bpm: "BPM",
-    combine: "Combinar capas",
     bgKick: "Kick de fondo",
     delay: "Delay 3/16",
     reverb: "Reverb",
@@ -177,7 +176,7 @@ export default {
     },
     perc: {
       name: "Percusión",
-      hint: "Se apilan: con «Combinar capas» sumá varias. Fijate en qué parte del beat cae cada una.",
+      hint: "Se apilan: sumá varias. Fijate en qué parte del beat cae cada una.",
     },
     lead: {
       name: "Lead",

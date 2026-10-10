@@ -23,7 +23,7 @@ export { layerOfVariant };
 
 /**
  * {
- *   bpm, combine, bgKick, quantize, effects: { delay, reverb },
+ *   bpm, bgKick, quantize, effects: { delay, reverb },
  *   seed:     the autopilot's seed ("" until the app draws one)
  *   style:    the autopilot's style (autopilot.js STYLES)
  *   changeBars: how often the autopilot swaps a sound inside a section
@@ -88,7 +88,6 @@ export function normalize(raw) {
   const bpm = Number.isFinite(src.bpm) ? Math.round(Math.min(BPM_MAX, Math.max(BPM_MIN, src.bpm))) : BPM_DEFAULT;
   return {
     bpm,
-    combine: bool(src.combine, false),
     bgKick: bool(src.bgKick, true),
     quantize: bool(src.quantize, true),
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },

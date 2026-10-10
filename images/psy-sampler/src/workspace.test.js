@@ -6,7 +6,7 @@ import { copyId, moveItem, normalize, parsePreset, toPreset } from "./workspace.
 describe("normalize", () => {
   it("fills a factory workspace from nothing", () => {
     const ws = normalize(undefined);
-    expect(ws).toMatchObject({ bpm: 145, combine: false, bgKick: true, quantize: true, names: {}, variants: {} });
+    expect(ws).toMatchObject({ bpm: 145, bgKick: true, quantize: true, names: {}, variants: {} });
     expect(ws.effects).toEqual({ delay: true, reverb: true });
     expect(ws.order).toEqual([...LAYERS.map((l) => l.id), "snap"]);
     expect(ws.snapshots).toEqual([]);
@@ -86,7 +86,7 @@ describe("normalize", () => {
   it("clamps the BPM and ignores non-booleans", () => {
     expect(normalize({ bpm: 300 }).bpm).toBe(180);
     expect(normalize({ bpm: "150" }).bpm).toBe(145);
-    expect(normalize({ combine: "yes", quantize: false }).combine).toBe(false);
+    expect(normalize({ bgKick: "no" }).bgKick).toBe(true);
     expect(normalize({ quantize: false }).quantize).toBe(false);
   });
 });

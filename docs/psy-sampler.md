@@ -118,7 +118,8 @@ Selection → lanes is a pure reconcile
 computes the desired state and `engine.setLanes()` closes/opens the difference.
 **Kick and bass are exclusive** (one lane per layer: a second variant replaces
 the first; two kicks or two basses only muddy things); **percussion, lead and
-pad stack** (one lane per variant, `laneKey()`). The background kick is a
+pad stack** (one lane per variant, `laneKey()`). Layers always combine: a
+click toggles its variant and leaves the other layers playing. The background kick is a
 derived lane: it only plays when another layer is on and no kick variant is
 picked.
 
@@ -202,8 +203,8 @@ the voice's units (Hz, s, bars) and only format them for display.
   the row or run past the end of the loop). **Dragging** with the mouse along a
   row paints a long note; on touch, dragging scrolls the piano roll and a tap
   adds a note.
-- **Editing something that isn't playing switches it on** (following the
-  solo/combine mode): what you edit is what you hear. Adding a note previews it
+- **Editing something that isn't playing switches it on**: what you edit is
+  what you hear. Adding a note previews it
   right away (`engine.audition`), except drum hits while the loop runs (an
   off-grid hit only sounds like a mistake).
 - **🔀 Improvise** is a toggle and a slider on the same button. Click: while it's
@@ -828,7 +829,7 @@ npm run build
   out and in, upload, "+ Sound in…", switching an editor's source and deleting a
   sample; `app.test.js` the insert controls, the log cutoff slider and the DJ
   knob.
-- `app.test.js` (jsdom) covers solo / combine / stack mode, the bar queue,
+- `app.test.js` (jsdom) covers combining and stacking layers, the bar queue,
   double click, Stop, background kick, FX, the editors (click, playhead, knobs,
   Reset, Improvise with its amount and the tile's 🔀, queued New part, ×2,
   build-up, persistence, broken storage), duplicate / rename / delete,

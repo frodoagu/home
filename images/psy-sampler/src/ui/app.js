@@ -146,7 +146,6 @@ export function mountApp(root, engine, opts = {}) {
     value: String(ws.bpm),
   });
   const bpmOut = el("output", { for: "bpm", class: "bpm-value", text: String(ws.bpm) });
-  const combine = checkbox("combine", tx.transport.combine, ws.combine);
   const bgKick = checkbox("bgkick", tx.transport.bgKick, ws.bgKick);
   const quantize = checkbox("quantize", tx.transport.quantize, ws.quantize);
   quantize.node.title = tx.transport.quantizeTitle;
@@ -462,7 +461,6 @@ export function mountApp(root, engine, opts = {}) {
       { class: "transport panel" },
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
       rampBox,
-      combine.node,
       bgKick.node,
       quantize.node,
       delay.node,
@@ -616,14 +614,14 @@ export function mountApp(root, engine, opts = {}) {
     const key = laneKey(layer, id);
     if (clicks === 2 && lastPress?.id === id) {
       state.pending = null;
-      state.active = pressVariant(lastPress.from, key, id, ws.combine);
+      state.active = pressVariant(lastPress.from, key, id);
       lastPress = null;
       sync();
       return;
     }
     const from = state.pending ?? state.active;
     lastPress = { id, from };
-    commit(pressVariant(from, key, id, ws.combine));
+    commit(pressVariant(from, key, id));
   }
 
   /* ---- the bar hook: everything that must land on the grid ---- */
@@ -1301,7 +1299,6 @@ export function mountApp(root, engine, opts = {}) {
   djInput.addEventListener("input", () => setDj(Number(djInput.value)));
   djInput.addEventListener("dblclick", () => setDj(0));
   for (const [key, box] of [
-    ["combine", combine],
     ["bgKick", bgKick],
     ["quantize", quantize],
   ]) {

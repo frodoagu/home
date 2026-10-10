@@ -92,7 +92,6 @@ describe("layout", () => {
   it("renders the controls with their defaults", () => {
     const bpm = $("#bpm");
     expect([bpm.min, bpm.max, bpm.value]).toEqual(["130", "180", "145"]);
-    expect($("#combine").checked).toBe(false);
     expect($("#bgkick").checked).toBe(true);
     expect($("#quantize").checked).toBe(true);
     expect($("#delay").checked).toBe(true);
@@ -109,37 +108,17 @@ describe("layout", () => {
   });
 });
 
-describe("solo mode (default)", () => {
+describe("layers", () => {
   beforeEach(immediate);
 
-  it("a click replaces what was active", () => {
-    click("bass.rolling");
-    expect(pressed()).toEqual(["bass.rolling"]);
-    click("lead.acid");
-    expect(pressed()).toEqual(["lead.acid"]);
+  it("stacks percussion and leads, but keeps one kick and one bass", () => {
+    for (const v of ["perc.hat", "perc.clap", "lead.acid", "lead.arp", "kick.long", "kick.tok"]) click(v);
+    expect(pressed().sort()).toEqual(["kick.tok", "lead.acid", "lead.arp", "perc.clap", "perc.hat"]);
     expect(button("lead.acid").classList.contains("is-active")).toBe(true);
     expect(engine.isRunning()).toBe(true);
   });
 
-  it("clicking the active variant again stops", () => {
-    click("pad.chord");
-    click("pad.chord");
-    expect(pressed()).toEqual([]);
-    expect(engine.isRunning()).toBe(false);
-  });
-});
-
-describe("combine mode", () => {
-  beforeEach(immediate);
-
-  it("stacks percussion and leads, but keeps one kick and one bass", () => {
-    $("#combine").click();
-    for (const v of ["perc.hat", "perc.clap", "lead.acid", "lead.arp", "kick.long", "kick.tok"]) click(v);
-    expect(pressed().sort()).toEqual(["kick.tok", "lead.acid", "lead.arp", "perc.clap", "perc.hat"]);
-  });
-
   it("toggles variants across layers, one per layer", () => {
-    $("#combine").click();
     click("bass.rolling");
     click("lead.acid");
     expect(pressed().sort()).toEqual(["bass.rolling", "lead.acid"]);
@@ -148,6 +127,13 @@ describe("combine mode", () => {
     click("lead.acid");
     expect(pressed()).toEqual(["bass.offbeat"]);
   });
+
+  it("clicking the last active variant again stops", () => {
+    click("pad.chord");
+    click("pad.chord");
+    expect(pressed()).toEqual([]);
+    expect(engine.isRunning()).toBe(false);
+  });
 });
 
 describe("on the beat (queued clicks)", () => {
@@ -155,17 +141,16 @@ describe("on the beat (queued clicks)", () => {
     click("kick.long");
     expect(pressed()).toEqual(["kick.long"]);
     advance(10);
-    click("bass.rolling");
+    click("kick.tok");
     expect(pressed()).toEqual(["kick.long"]);
-    expect(queued()).toEqual(["bass.rolling"]);
+    expect(queued()).toEqual(["kick.tok"]);
     expect(button("kick.long").classList.contains("is-leaving")).toBe(true);
     advanceSeconds(BAR);
-    expect(pressed()).toEqual(["bass.rolling"]);
+    expect(pressed()).toEqual(["kick.tok"]);
     expect(queued()).toEqual([]);
   });
 
   it("a queued change enters exactly on the bar line", () => {
-    $("#combine").click();
     click("kick.long");
     advance(10);
     const before = ctx.sources().length;
@@ -183,7 +168,7 @@ describe("on the beat (queued clicks)", () => {
     click("pad.chord");
     advance(10);
     click("lead.acid");
-    click("pad.chord");
+    click("lead.acid");
     expect(queued()).toEqual([]);
     click("pad.chord");
     expect(engine.isRunning()).toBe(true);
@@ -196,7 +181,7 @@ describe("on the beat (queued clicks)", () => {
     click("kick.long");
     advance(10);
     dblclick("bass.rolling");
-    expect(pressed()).toEqual(["bass.rolling"]);
+    expect(pressed()).toEqual(["kick.long", "bass.rolling"]);
     expect(queued()).toEqual([]);
   });
 
@@ -204,7 +189,7 @@ describe("on the beat (queued clicks)", () => {
     immediate();
     click("kick.long");
     dblclick("bass.rolling");
-    expect(pressed()).toEqual(["bass.rolling"]);
+    expect(pressed()).toEqual(["kick.long", "bass.rolling"]);
   });
 
   it("is remembered", () => {
@@ -270,15 +255,14 @@ describe("controls", () => {
   });
 
   it("every switch and the BPM survive a reload", () => {
-    for (const id of ["#combine", "#bgkick", "#quantize", "#delay", "#reverb"]) $(id).click();
+    for (const id of ["#bgkick", "#quantize", "#delay", "#reverb"]) $(id).click();
     const bpm = $("#bpm");
     bpm.value = "150";
     bpm.dispatchEvent(new Event("input"));
     const again = document.createElement("div");
     mount(again, newEngine());
     const q = (sel) => again.querySelector(sel);
-    expect([q("#combine"), q("#bgkick"), q("#quantize"), q("#delay"), q("#reverb")].map((c) => c.checked)).toEqual([
-      true,
+    expect([q("#bgkick"), q("#quantize"), q("#delay"), q("#reverb")].map((c) => c.checked)).toEqual([
       false,
       false,
       false,
@@ -662,7 +646,6 @@ describe("snapshots", () => {
 
   it("captures the mix and how it sounded; a click brings it back on the next bar line", () => {
     immediate();
-    $("#combine").click();
     click("kick.long");
     click("bass.gallop");
     setLevel("bass.gallop", 0.5);
@@ -697,6 +680,7 @@ describe("snapshots", () => {
     click("kick.long");
     snapBtn().click();
     click("pad.air");
+    click("kick.long");
     advanceSeconds(BAR);
     snapTile().click();
     snapTile().click();
@@ -752,7 +736,6 @@ describe("snapshots", () => {
 
   it("parts can be dropped and recaptured; an empty name falls back to the section", () => {
     immediate();
-    $("#combine").click();
     click("kick.long");
     click("lead.acid");
     snapBtn().click();
@@ -799,7 +782,6 @@ describe("snapshots", () => {
 
   it("survive a reload, travel in presets and lose a deleted copy", async () => {
     immediate();
-    $("#combine").click();
     openEditor("lead.arp");
     editor("lead.arp").querySelector('[data-action="duplicate"]').click();
     click("kick.long");
@@ -970,7 +952,6 @@ describe("autopilot", () => {
       advanceSeconds(BAR);
       expect(layers().some((l) => l === "lead" || l === "pad")).toBe(true);
     }
-    $("#combine").click();
     for (const id of pressed().filter((v) => /^(lead|pad)\./.test(v))) click(id);
     advanceSeconds(BAR);
     expect(layers().some((l) => l === "lead" || l === "pad")).toBe(false); // the user's own bare bar
