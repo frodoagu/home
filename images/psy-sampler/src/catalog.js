@@ -31,6 +31,7 @@ export const LAYERS = [
     variants: [
       "lead.acid", "lead.arp", "lead.arp3", "lead.melodic", "lead.stabs",
       "lead.zap", "lead.bell", "lead.acidPhryg", "lead.techno", "lead.bits", "lead.chirp",
+      "lead.soaring", "lead.grid", "lead.vowel", "lead.rubber",
     ],
   },
   {

@@ -581,12 +581,12 @@ comes from a Build-up or from a queued section.
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
 | Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
-| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4; crackle, FM metal, bwip |
-| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads; zips, stutter, bwip, FM metal |
-| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
-| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
+| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
+| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
+| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, talking, rubber, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
+| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp, rubber; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
 | Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
-| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
+| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, talking, rubber, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
 It uses copies too. While it runs the background kick doesn't play (the
@@ -701,6 +701,10 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 | | Techno stab | analog, Am7 on steps 3, 11, 19 and 27 |
 | | Bits | bit lead, a Phrygian 16th figure, with a resonant LP wobbling over 2 bars (insert) |
 | | Chirp | chirp, pairs of 16ths on the offbeats, A4 / C5 / E5 |
+| | Soaring | glide lead, a 2-bar line climbing to E5 and landing on D5 |
+| | Grid | pluck, every accented note answered by its own unaccented echo 3 steps later (the dotted-8th delay, written in) |
+| | Talking | talking lead, A3 pairs on the offbeats with B♭3 and C4 (Phrygian) |
+| | Rubber | rubber, steps 3 and 6 of every half bar, A3 / C4 / G3 |
 | Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
 | | Am → B♭ | i → ♭II, the Phrygian move |
 | | Drone | A2 + E3, resonant LP with a 0.12 Hz LFO, 2 bars |
@@ -757,6 +761,9 @@ cutoff, capped at 18 kHz):
 | | Zapper | every note falls 2 octaves in 40 ms |
 | | Bit lead | square through a 3-bit quantizer: chiptune grit |
 | | Chirp | FM at ratio 2: pitch and index drop in the first 25-60 ms, a squelchy "tchiu" |
+| | Glide lead | 3 saws at ±12 cents scooping up 3 semitones in 70 ms, delayed vibrato |
+| | Talking | saw through 2 band-passes (Q 5) gliding from the formants of "o" (450/800 Hz) to "a" (800/1200 Hz) in 80 ms |
+| | Rubber | saw bending up an octave in 50 ms while an LP (Q 8) opens 400 Hz → 2.5 kHz: a "yoi" |
 | Pads | Saw pad / Drone / Wind | see the layers table |
 | Percussion | Tom | sine falling to 0.6× over 250 ms |
 
@@ -767,7 +774,8 @@ the 16 synths playing the same line sit between **-19 and -28 dBFS RMS**; Wind,
 FM bell, Zapper and Pluck were raised 4-10 dB so switching synths doesn't sound
 like it went silent. Measured the same way (lane only, no layer level), Bit lead
 and Chirp read -9.6 and -7.0 dBFS RMS, inside the range of the other synths on
-that line (-5.3 to -13.7).
+that line (-5.3 to -13.7). Glide lead, Talking and Rubber, on an A-C-E-A 16th
+line where the other leads span -6.8 to -14.4, read -9.9, -11.9 and -12.3.
 
 At their layer level, the glitch sounds sit at -30 to -39 dBFS RMS (peaks -6 to
 -10) against the percussion's -30 to -36: they are sparse by design. Stutter,

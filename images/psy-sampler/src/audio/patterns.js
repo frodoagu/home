@@ -68,6 +68,14 @@ export const TOM_LINE = [
   [3, A3], [7, E3], [11, A3], [14, G3], [19, A3], [23, E3],
   [27, C4], [28, A3], [29, G3], [30, E3], [31, C3],
 ];
+// Progressive lift over 2 bars: climbs to E5, answers from G4 and lands on D5.
+export const SOARING_LINE = [
+  [0, A4, 3], [3, C5, 3], [6, E5, 4], [10, D5, 2], [12, C5, 4],
+  [16, G4, 3], [19, C5, 3], [22, D5, 2], [24, E5, 6], [30, D5, 2],
+];
+// Every note answered by its own echo a dotted 8th later, written in.
+export const GRID_LINE = [[0, A3], [6, E4], [12, C4], [16, A3], [22, G4], [28, E4]];
+export const GRID_ECHO = 3;
 
 const steps = (fn) => Array.from({ length: LOOP_STEPS }, (_, s) => fn(s));
 const note = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
@@ -174,6 +182,22 @@ export const DEFAULTS = {
   "lead.chirp": notes(
     "chirp",
     every((s) => s % 4 >= 2 && note(s, s % 16 === 15 ? E5 : s % 8 === 3 ? C5 : A4, 1, s % 4 === 2)),
+    LEAD,
+  ),
+  "lead.soaring": notes("glide", SOARING_LINE.map(([s, m, len]) => note(s, m, len)), { ...LEAD, len: 2 }),
+  "lead.grid": notes(
+    "pluck",
+    GRID_LINE.flatMap(([s, m]) => [note(s, m, 1, true), note(s + GRID_ECHO, m)]),
+    LEAD,
+  ),
+  "lead.vowel": notes(
+    "vowel",
+    every((s) => [2, 3, 6, 10, 11, 14].includes(s % 16) && note(s, s % 16 === 11 ? Bb3 : s % 16 === 14 ? C4 : A3, 1, s % 8 === 2)),
+    { ...LEAD, scale: "phrygian" },
+  ),
+  "lead.rubber": notes(
+    "rubber",
+    every((s) => (s % 8 === 3 || s % 8 === 6) && note(s, s % 16 === 14 ? G3 : s % 16 === 11 ? C4 : A3, 1, s % 16 === 3)),
     LEAD,
   ),
 
