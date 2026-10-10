@@ -106,6 +106,15 @@ describe("lead", () => {
   it("stabs play a 3-note chord per hit", () => {
     expect(eventsAt("lead.stabs", 3)).toHaveLength(3);
   });
+
+  it("grid answers every accented note with the same note, unaccented, a dotted 8th later", () => {
+    const hits = stepsWith("lead.grid");
+    expect(hits).toEqual([0, 3, 6, 9, 12, 15, 16, 19, 22, 25, 28, 31]);
+    for (const s of hits.filter((_, i) => i % 2 === 0)) {
+      expect(first("lead.grid", s)).toMatchObject({ voice: "pluck", accent: true });
+      expect(first("lead.grid", s + 3)).toMatchObject({ freq: first("lead.grid", s).freq, accent: false });
+    }
+  });
 });
 
 describe("pad", () => {
@@ -237,7 +246,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(57);
+  expect(LOOP_VARIANTS).toHaveLength(61);
 });
 
 describe("copies", () => {

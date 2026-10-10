@@ -549,6 +549,64 @@ export function chirp(ctx, out, t, ev, stepDur) {
   play([carrier, mod], t, end);
 }
 
+// Soaring lead: 3 detuned saws that scoop up 3 semitones into every note,
+// a portamento without knowing the previous one, and a delayed vibrato.
+export function glide(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.95);
+  const lp = filter(ctx, "lowpass", cut(4000, ev), 1);
+  const lfo = osc(ctx, "sine", 5);
+  const depth = ctx.createGain();
+  depth.gain.setValueAtTime(0, t);
+  depth.gain.linearRampToValueAtTime(10, t + Math.max(0.3, dur * 0.5));
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.35 * vel(ev), 0.01, dur - 0.04, 0.08);
+  lp.connect(amp).connect(out);
+  const saws = [-12, 0, 12].map((c) => osc(ctx, "sawtooth", ev.freq * centsToRatio(c)));
+  for (const s of saws) {
+    s.detune.setValueAtTime(-300, t);
+    s.detune.linearRampToValueAtTime(0, t + Math.min(0.07, dur));
+    lfo.connect(depth).connect(s.detune);
+    s.connect(lp);
+  }
+  play([...saws, lfo], t, end);
+}
+
+// Talking lead: a saw through two band-passes that glide from the formants
+// of "o" to those of "a" on every note, a "wow".
+const VOWEL_O = [450, 800];
+const VOWEL_A = [800, 1200];
+export function vowel(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.9);
+  const saw = osc(ctx, "sawtooth", ev.freq);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 1.5 * vel(ev), 0.003, dur - 0.012, 0.01);
+  VOWEL_O.forEach((from, i) => {
+    const bp = filter(ctx, "bandpass", cut(from, ev), 5);
+    bp.frequency.setValueAtTime(cut(from, ev), t);
+    bp.frequency.exponentialRampToValueAtTime(cut(VOWEL_A[i], ev), t + Math.min(0.08, dur));
+    saw.connect(bp).connect(amp);
+  });
+  amp.connect(out);
+  play([saw], t, end);
+}
+
+// Rubber: a saw bending up an octave into the note while a resonant LP opens
+// with it, a "yoi" (the zapper backwards).
+export function rubber(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.9);
+  const bend = t + Math.min(0.05, dur);
+  const saw = osc(ctx, "sawtooth", ev.freq);
+  saw.frequency.setValueAtTime(ev.freq / 2, t);
+  saw.frequency.exponentialRampToValueAtTime(ev.freq, bend);
+  const lp = filter(ctx, "lowpass", cut(2500, ev), 8);
+  lp.frequency.setValueAtTime(cut(400, ev), t);
+  lp.frequency.exponentialRampToValueAtTime(cut(2500, ev), bend);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.5 * vel(ev), 0.002, dur - 0.01, 0.01);
+  saw.connect(lp).connect(amp).connect(out);
+  play([saw], t, end);
+}
+
 export function pad(ctx, out, t, ev, stepDur) {
   const dur = (ev.steps ?? 1) * stepDur;
   const lp = filter(ctx, "lowpass", cut(1400, ev), 0.5);
@@ -614,6 +672,9 @@ export const INSTRUMENTS = {
   zap,
   bitLead,
   chirp,
+  glide,
+  vowel,
+  rubber,
   pad,
   drone,
   air,
