@@ -886,6 +886,47 @@ describe("snapshots", () => {
     expect(saved().snapshots[0].active).toEqual({ kick: "kick.long" });
     expect(saved().snapshots[1].active).toEqual({ kick: "kick.long", "pad.air": "pad.air" });
   });
+
+  it("Exportar downloads them alone; Importar adds a file's to the ones there", async () => {
+    expect($('[data-action="export-snaps"]').disabled).toBe(true);
+    immediate();
+    openEditor("lead.arp");
+    editor("lead.arp").querySelector('[data-action="duplicate"]').click();
+    click("lead.arp~1");
+    snapBtn().click();
+    $('[data-action="export-snaps"]').click();
+    const blob = downloads.at(-1);
+    expect(blob.fileName).toBe("psy-layers-snapshots.json");
+    const text = await blob.text();
+    expect(JSON.parse(text)).toMatchObject({ kind: "snapshots", snapshots: [{ id: "snap-1" }] });
+
+    // Into a fresh workspace: the copy the snapshot plays comes along.
+    $('[data-action="reset-all"]').click();
+    expect(button("lead.arp~1")).toBeNull();
+    const input = $('[data-input="snaps"]');
+    Object.defineProperty(input, "files", { value: [new File([text], "s.json")], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect($('[data-snap="snap-1"]')).not.toBeNull();
+    expect(button("lead.arp~1")).not.toBeNull();
+    expect($(".status").textContent).toBe("1 snapshot importado.");
+    expect(saved().snapshots).toHaveLength(1);
+
+    const again = $('[data-input="snaps"]');
+    Object.defineProperty(again, "files", { value: [new File([text], "s.json")] });
+    again.dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect($(".status").textContent).toBe("Ya tenías esos snapshots.");
+    expect(saved().snapshots).toHaveLength(1);
+  });
+
+  it("Importar refuses a file without snapshots", async () => {
+    const input = $('[data-input="snaps"]');
+    Object.defineProperty(input, "files", { value: [new File(['{"app":"psy-sampler"}'], "x.json")] });
+    input.dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/no tiene snapshots/);
+  });
 });
 
 describe("BPM change", () => {

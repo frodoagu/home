@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { LAYERS } from "./catalog.js";
 import { defaultData } from "./audio/patterns.js";
-import { copyId, moveItem, normalize, parsePreset, toPreset } from "./workspace.js";
+import { SNAP_MAX } from "./snapshots.js";
+import { copyId, importSnapshots, moveItem, normalize, parsePreset, toPreset, toSnapshotFile } from "./workspace.js";
 
 describe("normalize", () => {
   it("fills a factory workspace from nothing", () => {
@@ -101,6 +102,82 @@ describe("presets", () => {
     expect(() => parsePreset("{}")).toThrow();
     expect(() => parsePreset("not json")).toThrow();
     expect(() => parsePreset('{"app":"other"}')).toThrow();
+  });
+});
+
+describe("snapshot files", () => {
+  const level = (id, v) => ({ ...defaultData(id), level: v });
+  const snap = (id, name, active, lvl = 0.5) => ({
+    id,
+    name,
+    section: "peak",
+    active,
+    data: Object.fromEntries(Object.values(active).map((v) => [v, level(v, lvl)])),
+  });
+  // A workspace whose snapshots play a named copy of the arp.
+  const source = normalize({
+    lists: { lead: ["lead.arp~1"] },
+    names: { "lead.arp~1": "Arp 2", "lead.acid": "Ácido" },
+    variants: { "lead.arp~1": level("lead.arp", 0.3) },
+    snapshots: [
+      snap("snap-1", "Pico", { kick: "kick.long", "lead.arp~1": "lead.arp~1" }),
+      snap("snap-4", "Break", { "pad.air": "pad.air" }),
+    ],
+  });
+  const file = JSON.stringify(toSnapshotFile(source));
+
+  it("carries the snapshots and the names of the copies they play", () => {
+    const out = JSON.parse(file);
+    expect(out).toMatchObject({ app: "psy-sampler", kind: "snapshots", names: { "lead.arp~1": "Arp 2" } });
+    expect(out.snapshots).toEqual(source.snapshots);
+    expect(out.bpm).toBeUndefined();
+  });
+
+  it("adds them after the ones there, renumbered, with their copies", () => {
+    const ws = normalize({ snapshots: [snap("snap-1", "Pico", { bass: "bass.gallop" })] });
+    const { ws: out, added, left } = importSnapshots(ws, file);
+    expect([added, left]).toEqual([2, 0]);
+    expect(out.snapshots.map((s) => [s.id, s.name])).toEqual([
+      ["snap-1", "Pico"],
+      ["snap-2", "Pico 2"],
+      ["snap-3", "Break"],
+    ]);
+    expect(out.snapshots[1].active).toEqual({ kick: "kick.long", "lead.arp~1": "lead.arp~1" });
+    expect(out.lists.lead).toContain("lead.arp~1");
+    expect(out.names["lead.arp~1"]).toBe("Arp 2");
+    expect(out.names["lead.acid"]).toBeUndefined(); // only copies' names come along
+    expect(out.variants["lead.arp~1"].level).toBe(0.5);
+  });
+
+  it("a copy id taken by another sound arrives as a fresh copy", () => {
+    const ws = normalize({ lists: { lead: ["lead.arp~1"] }, names: { "lead.arp~1": "Mío" } });
+    const { ws: out } = importSnapshots(ws, file);
+    expect(out.names["lead.arp~1"]).toBe("Mío");
+    expect(out.names["lead.arp~2"]).toBe("Arp 2");
+    expect(out.snapshots[0].active).toEqual({ kick: "kick.long", "lead.arp~2": "lead.arp~2" });
+  });
+
+  it("importing into the same workspace adds nothing", () => {
+    const { ws: out, added } = importSnapshots(source, file);
+    expect(added).toBe(0);
+    expect(out.snapshots).toEqual(source.snapshots);
+    expect(out.lists.lead.filter((id) => id.includes("~"))).toEqual(["lead.arp~1"]);
+  });
+
+  it("stops at SNAP_MAX and brings no copy for what stayed out", () => {
+    const full = Array.from({ length: SNAP_MAX - 1 }, (_, i) => snap(`snap-${i + 1}`, `S${i}`, { bass: "bass.gallop" }, i / 100));
+    const ws = normalize({ snapshots: full });
+    const { ws: out, added, left } = importSnapshots(ws, JSON.stringify({ ...JSON.parse(file), snapshots: [...JSON.parse(file).snapshots].reverse() }));
+    expect([added, left]).toEqual([1, 1]);
+    expect(out.snapshots).toHaveLength(SNAP_MAX);
+    expect(out.lists.lead).not.toContain("lead.arp~1");
+  });
+
+  it("takes a whole preset too, and refuses anything else", () => {
+    expect(importSnapshots(normalize({}), JSON.stringify(toPreset(source))).added).toBe(2);
+    expect(() => importSnapshots(normalize({}), "{}")).toThrow();
+    expect(() => importSnapshots(normalize({}), '{"app":"psy-sampler"}')).toThrow();
+    expect(() => importSnapshots(normalize({}), "nope")).toThrow();
   });
 });
 
