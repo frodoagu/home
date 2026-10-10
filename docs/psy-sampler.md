@@ -513,16 +513,17 @@ decides at every loop start what plays:
 | Section | Bars | Kick | Bass | Perc | Lead | Pad | Glitch | On entry |
 |---|---|---|---|---|---|---|---|---|
 | Intro | 8 | 1 | – | 1 | – | 1 | – | |
-| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 0-1 | sometimes a laser or siren; 25 % new bass |
-| Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 0-1 | 50 % new lead |
+| Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 1 | sometimes a laser or siren; 25 % new bass |
+| Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 1 | 50 % new lead |
 | Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | 1 | crash or impact |
-| Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | – | downlifter; 60 % new lead |
+| Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | 0-1 | downlifter; 60 % new lead |
 
-The glitch column only applies to the styles that have a glitch pool (techno,
-psytech, hi-tech, dark psy, and "anything goes"). A style without a pool for a
-layer leaves it out entirely and **draws nothing from the PRNG** for it, so the
-seeds of the other styles replay the same tracks they did before the layer
-existed.
+Every style has a glitch pool ("anything goes" picks from all of them), so the
+autopilot always plays one glitch from the groove to the peak. A style without a
+pool for a layer would leave it out entirely and **draw nothing from the PRNG**
+for it (`leftOut`), which is how a future layer can be added without shifting
+the seeds of the styles that skip it. Adding the glitch layer to every style did
+shift every seed: a seed shared before it plays a different track now.
 
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
 Build-up. Each section's length is drawn from its options (always whole 8-bar
@@ -559,11 +560,11 @@ comes from a Build-up or from a queued section.
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
 | Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
-| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4 |
-| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads |
+| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, Am → F → G, sus4; crackle, FM metal, bwip |
+| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, minor and Phrygian pads; zips, stutter, bwip, FM metal |
 | Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, dark pad; zips, bleeps, stutter, ring mod; stutter roll |
 | Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
-| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens |
+| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps |
 | Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
