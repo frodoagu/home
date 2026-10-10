@@ -87,3 +87,45 @@ export const slug = (text) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "sound";
+
+// A toggle that is a slider too: a drag along `axis` (once it travels a few
+// px) or the arrow keys set a 0-1 amount in 5 % steps, and a drag does not
+// click. `at(e, start)` maps the pointer to an amount, where `start` holds
+// the position (`at`) and the `amount` the drag began from.
+export function amountSlider(b, { axis = "x", get, set, at, onClick, onSlide = () => {} }) {
+  const put = (v) => set(Math.round(Math.min(1, Math.max(0, v)) * 20) / 20);
+  const pos = (e) => (axis === "y" ? e.clientY : e.clientX);
+  let drag = null; // { at, amount, moved } while a pointer is down
+  let swallow = false;
+  b.addEventListener("pointerdown", (e) => {
+    e.stopPropagation(); // the pointer is the slider's, not a reorder's
+    drag = { at: pos(e), amount: get(), moved: false };
+    b.setPointerCapture?.(e.pointerId);
+  });
+  b.addEventListener("pointermove", (e) => {
+    if (!drag || (!drag.moved && Math.abs(pos(e) - drag.at) < 6)) return;
+    if (!drag.moved) onSlide(true);
+    drag.moved = true;
+    const v = at(e, drag);
+    if (Number.isFinite(v)) put(v);
+  });
+  const release = () => {
+    if (drag?.moved) {
+      swallow = true;
+      onSlide(false);
+    }
+    drag = null;
+  };
+  b.addEventListener("pointerup", release);
+  b.addEventListener("pointercancel", release);
+  b.addEventListener("click", () => {
+    if (swallow) swallow = false;
+    else onClick();
+  });
+  b.addEventListener("keydown", (e) => {
+    const delta = { ArrowLeft: -0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowUp: 0.05 }[e.key];
+    if (delta === undefined || e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    put(get() + delta);
+  });
+}

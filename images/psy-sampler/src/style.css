@@ -1057,7 +1057,8 @@ html {
 }
 
 /* Loop sounds stack improvise over ▾ in one column. Improvise is dim while
-   off; on, it fills from the bottom up to how much it varies. */
+   off; on, it fills from the bottom up to how much it varies, and dragging
+   it up or down sets that. */
 .tile-side {
   display: flex;
   flex: 0 0 32px;
@@ -1080,7 +1081,9 @@ html {
   border: 1.5px solid var(--border);
   border-left: none;
   border-radius: 0 8px 0 0;
-  cursor: pointer;
+  cursor: ns-resize;
+  touch-action: none; /* up and down is the slider, not a scroll */
+  user-select: none;
 }
 
 .vary-tile[aria-pressed="false"] {
@@ -1099,6 +1102,21 @@ html {
 
 .vary-tile:hover {
   opacity: 1;
+  border-color: var(--layer);
+}
+
+/* While it slides it shows the fill and the amount, even when off. */
+.vary-tile.is-sliding {
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  filter: none;
+  opacity: 1;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--layer) 55%, var(--surface-2)) var(--amount),
+    var(--surface-2) var(--amount)
+  );
   border-color: var(--layer);
 }
 

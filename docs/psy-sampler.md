@@ -228,7 +228,11 @@ the voice's units (Hz, s, bars) and only format them for display.
   the part without drifting away; variations only go to the engine, never to
   storage, and switching it off brings your part back. Each loop tile has its
   own 🔀 (above the ▾) that shows the state, switches it on or off without
-  opening the editor, and fills up with the amount. **Reset** switches Improvise
+  opening the editor, and fills up with the amount. It's a slider too: dragging
+  it up or down (or the arrow keys) sets the amount without opening the editor,
+  relative to where the drag starts (`TILE_SLIDE_PX` covers the whole range,
+  since the button is tiny), and while it slides it shows the number in place
+  of 🔀. Both buttons share `amountSlider` (`ui/dom.js`). **Reset** switches Improvise
   off and puts the amount back to 50 %.
 - **×2 hits** (drums) adds a hit halfway between each hit and the next (wrapping
   around the loop): quarters → eighths → sixteenths. A one-step gap has no

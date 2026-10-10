@@ -53,13 +53,16 @@ import {
   toSnapshotFile,
 } from "../workspace.js";
 import { djCutoffs } from "../audio/insert.js";
-import { checkbox, download, el, select, slug } from "./dom.js";
+import { amountSlider, checkbox, download, el, select, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
+
+// Drag on a tile's 🔀 over the whole improvise range: the button is small.
+const TILE_SLIDE_PX = 120;
 
 const sameLanes = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
@@ -321,7 +324,24 @@ export function mountApp(root, engine, opts = {}) {
         title: tx.tile.varyTitle,
         text: "🔀",
       });
-      vary.addEventListener("click", () => setVarying(id, !state.varying.has(id)));
+      // Up and down it sets how much it varies, like the editor's ← →; while
+      // it slides it shows the amount instead of 🔀.
+      const shown = (v) => (vary.textContent = String(Math.round(v * 100)));
+      amountSlider(vary, {
+        axis: "y",
+        get: () => improvOf(id),
+        set: (v) => {
+          setImprov(id, v);
+          if (vary.classList.contains("is-sliding")) shown(v);
+        },
+        at: (e, start) => start.amount + (start.at - e.clientY) / TILE_SLIDE_PX,
+        onClick: () => setVarying(id, !state.varying.has(id)),
+        onSlide: (on) => {
+          vary.classList.toggle("is-sliding", on);
+          if (on) shown(improvOf(id));
+          else vary.textContent = "🔀";
+        },
+      });
     }
     const side = vary ? el("div", { class: "tile-side" }, vary, edit) : edit;
     const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, side);
@@ -814,6 +834,7 @@ export function mountApp(root, engine, opts = {}) {
     if (amount === IMPROV_DEFAULT) delete ws.improv[id];
     else ws.improv[id] = amount;
     persist();
+    if (open?.id === id) open.editor.showAmount(amount);
     renderButtons();
   }
 

@@ -15,7 +15,7 @@ import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js"
 import { LOOP_STEPS } from "../audio/timing.js";
 import { cycleNote, cycleStep, doubleSteps, placeNote } from "../editing.js";
 import { t } from "../i18n/index.js";
-import { checkbox, el, nextId, select, slider } from "./dom.js";
+import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
 const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
@@ -50,6 +50,7 @@ export function createEditor({
   let refreshGrid = () => {};
   let buildUpBtn = null;
   let varyBtn = null;
+  let paintAmount = () => {};
   let newPartBtn = null;
   const cleanups = [];
 
@@ -71,50 +72,29 @@ export function createEditor({
     );
     const b = varyBtn;
     b.title = tx.improviseTitle;
-    const paint = () => {
+    paintAmount = () => {
       const pct = Math.round(amount * 100);
       b.style.setProperty("--amount", `${pct}%`);
       text.textContent = tx.improviseAmount(pct);
     };
-    const setAmount = (v) => {
-      amount = Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
-      paint();
-      onAmount(amount);
-    };
-    let drag = null; // { x, moved } while a pointer is down
-    let swallow = false;
-    b.addEventListener("pointerdown", (e) => {
-      drag = { x: e.clientX, moved: false };
-      b.setPointerCapture?.(e.pointerId);
+    amountSlider(b, {
+      get: () => amount,
+      set: (v) => {
+        amount = v;
+        paintAmount();
+        onAmount(amount);
+      },
+      at: (e) => {
+        const r = b.getBoundingClientRect();
+        return (e.clientX - r.left) / r.width;
+      },
+      onClick: () => {
+        varying = !varying;
+        b.setAttribute("aria-pressed", String(varying));
+        onVary(varying);
+      },
     });
-    b.addEventListener("pointermove", (e) => {
-      if (!drag || (!drag.moved && Math.abs(e.clientX - drag.x) < 6)) return;
-      drag.moved = true;
-      const r = b.getBoundingClientRect();
-      if (r.width) setAmount((e.clientX - r.left) / r.width);
-    });
-    const release = () => {
-      if (drag?.moved) swallow = true;
-      drag = null;
-    };
-    b.addEventListener("pointerup", release);
-    b.addEventListener("pointercancel", release);
-    b.addEventListener("click", () => {
-      if (swallow) {
-        swallow = false;
-        return;
-      }
-      varying = !varying;
-      b.setAttribute("aria-pressed", String(varying));
-      onVary(varying);
-    });
-    b.addEventListener("keydown", (e) => {
-      const delta = { ArrowLeft: -0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowUp: 0.05 }[e.key];
-      if (delta === undefined) return;
-      e.preventDefault();
-      setAmount(amount + delta);
-    });
-    paint();
+    paintAmount();
     return b;
   }
 
@@ -510,6 +490,10 @@ export function createEditor({
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),
+    showAmount: (v) => {
+      amount = v;
+      paintAmount();
+    },
     showVarying: (on) => {
       varying = on;
       varyBtn?.setAttribute("aria-pressed", String(on));
