@@ -46,7 +46,7 @@ const PUBLIC = ["GET /api/health", "POST /api/session", "GET /api/session", "DEL
 const PRIVATE = new Set([...ROUTES].filter((r) => !PUBLIC.includes(r)));
 
 const MiB = 2 ** 20;
-export const SAMPLE_LIMITS = { bytes: 3 * MiB, count: 24, quota: 30 * MiB, total: 1024 * MiB };
+export const SAMPLE_LIMITS = { bytes: 3 * MiB, count: 24, quota: 100 * MiB, total: 1024 * MiB };
 
 // "/api/samples/<id>" counts as one route.
 const routeOf = (method, pathname) => `${method} ${SAMPLE_PATH.test(pathname) ? "/api/samples/:id" : pathname}`;

@@ -69,7 +69,7 @@ sync:
   samples:
     maxBytes: 3Mi
     maxCount: 24
-    quota: 30Mi
+    quota: 100Mi
     total: 1Gi
   # /metrics on :9787, scraped by a VMPodScrape (dashboard + alerts live in
   # charts/monitoring). `topUsers`: accounts listed by workspace size, labelled
