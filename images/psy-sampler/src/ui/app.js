@@ -275,7 +275,9 @@ export function mountApp(root, engine, opts = {}) {
   const exportBtn = el("button", { type: "button", class: "ghost", "data-action": "export", text: tx.tools.exportPreset });
   const importBtn = el("button", { type: "button", class: "ghost", "data-action": "import", text: tx.tools.importPreset });
   const importFile = el("input", { type: "file", accept: ".json,application/json", hidden: "" });
-  const resetBtn = el("button", { type: "button", class: "ghost danger", "data-action": "reset-all", text: tx.tools.resetAll });
+  const resetBtn = el("button", { type: "button", class: "ghost danger", "data-action": "reset", text: tx.tools.resetSounds });
+  const factoryCheck = checkbox("factory-reset", tx.tools.factory, false);
+  factoryCheck.node.title = tx.tools.factoryTitle;
   const statusLine = el("p", { class: "status", role: "status" });
   const status = (text) => {
     statusLine.textContent = text;
@@ -540,7 +542,7 @@ export function mountApp(root, engine, opts = {}) {
         el("div", { class: "phases", role: "group", "aria-label": tx.pilot.phases }, el("span", { text: tx.pilot.phases }), ...phaseBtns),
         changesBox,
       ),
-      el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn),
+      el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn, factoryCheck.node),
       statusLine,
     ),
     ...(samplesPanel ? [samplesPanel.node] : []),
@@ -1558,7 +1560,18 @@ export function mountApp(root, engine, opts = {}) {
     }
     remount({ ws: merged.ws, status: tx.snap.imported(merged.added, merged.left) });
   });
+  factoryCheck.input.addEventListener("change", () => {
+    resetBtn.textContent = factoryCheck.input.checked ? tx.tools.resetAll : tx.tools.resetSounds;
+  });
   resetBtn.addEventListener("click", () => {
+    if (!factoryCheck.input.checked) {
+      // Every sound back to its factory data, the way each editor's Reset does; the mix keeps playing.
+      if (!confirm(tx.tools.confirmSounds)) return;
+      const variants = {};
+      for (const id of allIds()) if (isCopy(id)) variants[id] = defaultData(id);
+      remount({ ws: { ...ws, variants, auto: [], improv: {} }, varying: new Map(), status: tx.tools.soundsReset });
+      return;
+    }
     if (!confirm(tx.tools.confirmReset)) return;
     engine.stop();
     remount({

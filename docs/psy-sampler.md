@@ -337,8 +337,12 @@ and whatever doesn't add up goes back to the factory value, so old, hand-edited
 or foreign data never breaks the loop. Without storage (private mode) it works
 the same, without remembering.
 
-**Reset everything** (with a confirmation) puts everything back to factory
-except the language.
+**Reset sounds** (with a confirmation) does what each editor's **Reset** does,
+for every sound at once: edits, melodies, improvise amounts and the autopilot's
+parts go back to factory, copies keep their place with their base's factory data,
+and the mix keeps playing. Snapshots carry their own data, so they are untouched;
+so are the layout and the settings. Ticking **Factory** next to it turns it into
+**Reset everything**, which puts everything back to factory except the language.
 
 ### Export
 

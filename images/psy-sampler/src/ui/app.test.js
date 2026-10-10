@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "../audio/engine.js";
+import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
 import { mountApp } from "./app.js";
 
@@ -926,7 +927,8 @@ describe("snapshots", () => {
     expect(JSON.parse(text)).toMatchObject({ kind: "snapshots", snapshots: [{ id: "snap-1" }] });
 
     // Into a fresh workspace: the copy the snapshot plays comes along.
-    $('[data-action="reset-all"]').click();
+    $("#factory-reset").click();
+    $('[data-action="reset"]').click();
     expect(button("lead.arp~1")).toBeNull();
     const input = $('[data-input="snaps"]');
     Object.defineProperty(input, "files", { value: [new File([text], "s.json")], configurable: true });
@@ -1326,12 +1328,33 @@ describe("export, import, reset", () => {
     });
   });
 
-  it("Restaurar todo goes back to factory", () => {
+  it("Restaurar sonidos takes the sounds back to factory and keeps the rest", () => {
+    immediate();
+    openEditor("perc.hat");
+    stepCell("perc.hat", 0).click();
+    editor("perc.hat").querySelector('[data-action="duplicate"]').click();
+    stepCell("perc.hat~1", 1).click();
+    $('[data-action="snapshot"]').click();
+    $('[data-layer="kick"] .grip').dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect($('[data-action="reset"]').textContent).toBe("Restaurar sonidos");
+    $('[data-action="reset"]').click();
+    expect(root.querySelectorAll(".is-edited")).toHaveLength(0);
+    expect(saved().variants).toEqual({ "perc.hat~1": defaultData("perc.hat~1") });
+    expect(button("perc.hat~1")).not.toBeNull();
+    expect(saved().snapshots).toHaveLength(1);
+    expect($("section.layer").dataset.layer).not.toBe("kick");
+    expect(engine.isRunning()).toBe(true);
+    expect($(".status").textContent).toBe("Sonidos de fábrica.");
+  });
+
+  it("Restaurar todo, with De fábrica ticked, goes back to factory", () => {
     openEditor("perc.hat");
     stepCell("perc.hat", 0).click();
     editor("perc.hat").querySelector('[data-action="duplicate"]').click();
     $('[data-layer="kick"] .grip').dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    $('[data-action="reset-all"]').click();
+    $("#factory-reset").click();
+    expect($('[data-action="reset"]').textContent).toBe("Restaurar todo");
+    $('[data-action="reset"]').click();
     expect(root.querySelectorAll(".is-edited, .is-copy")).toHaveLength(0);
     expect($("section.layer").dataset.layer).toBe("kick");
     expect(saved().variants).toEqual({});
