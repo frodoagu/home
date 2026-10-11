@@ -912,8 +912,13 @@ on phones.
 The **📖 Help** button in the top bar opens a page (`ui/help.js`, a
 modal `<dialog>`, full screen on a phone, upright or on its side) built from each dictionary's `help`:
 the hidden tricks first (double click, clicking a queued sound, Arm, dragging
-across 🔀, Alt + arrows…), then a reference per area. It is plain text, so a
-new gesture or control needs a line there too, in all three languages.
+across 🔀, Alt + arrows…), then a reference per area. Each section
+(`{icon, title, items}`) folds on its own and they all start closed, so the
+page opens as an index. The search box filters every section at once,
+ignoring case and accents, and marks the hits; Esc empties it before it can
+close the page. Ctrl, Shift, Alt, Enter, Esc, ⌘ and ← → render as keycaps
+wherever they appear. The text is plain, so a new gesture or control needs a
+line there too, in all three languages.
 
 The **first visit** gets a welcome instead (`ui/intro.js`, the dictionary's
 `intro`): what the sampler is, a big notice that it needs headphones (phone

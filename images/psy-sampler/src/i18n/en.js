@@ -10,8 +10,13 @@ export default {
     title: "How to use Psy Layers",
     close: "Close",
     intro: "First the tricks you won't spot at a glance; then everything each part does.",
+    search: "Search the help…",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
+    noMatch: (q) => `Nothing about “${q}”.`,
     sections: [
       {
+        icon: "💡",
         title: "Tricks",
         items: [
           ["Double-click a sound", "It comes in right now, without waiting for the next bar. Snapshots too."],
@@ -31,6 +36,7 @@ export default {
         ],
       },
       {
+        icon: "🎛️",
         title: "The basics",
         items: [
           ["Click a sound", "Switches it on; another click switches it off. Kick and Bass play one at a time (picking another replaces it; with Ctrl they add up); Percussion, Lead, Pad and Glitch stack."],
@@ -42,6 +48,7 @@ export default {
         ],
       },
       {
+        icon: "🤖",
         title: "Autopilot and seed",
         items: [
           ["🤖 Autopilot", "Builds the track by itself: switches layers on and off each phrase, fires FX, writes melodies and moves through the sections."],
@@ -56,6 +63,7 @@ export default {
         ],
       },
       {
+        icon: "🎚️",
         title: "Playing live",
         items: [
           ["BPM", "From 130 to 180; the slider changes the tempo at once."],
@@ -71,6 +79,7 @@ export default {
         ],
       },
       {
+        icon: "✏️",
         title: "Editing a sound (▾)",
         items: [
           ["▾", "Opens the editor under the layer; one is open at a time."],
@@ -79,15 +88,9 @@ export default {
           ["Synth, Scale, Octave", "Change the voice, the notes the piano roll shows and the pitch of the part."],
           ["🎲 New part", "Writes a new melody in the chosen scale. With the loop running it comes in on the next loop; another click cancels it."],
           ["×2 hits", "Doubles the marked hits: quarters → eighths → sixteenths."],
-          ["Click: ✏️ Write / 🎲 / 🔁 / ⚡", "Above the grid you pick what a click does. ✏️ Write is the plain click (hit → accent → empty). The others put a modifier on the hit or note you touch (or write a new one carrying it); a second click with the same value takes it off. \"Apply to all\" puts it on every one, \"Remove modifiers\" takes them all off and ↺ Reset goes back to ✏️ Write."],
-          ["Pattern: Speed, Iter, Echo", "Change how the part is read without rewriting it, as in Strudel: ×2 plays it twice per loop and ×½ stretches it over 4 bars (fast/slow); Iter starts each loop a stretch further in (iter); Echo repeats it a few steps later, transposed for notes (off)."],
-          ["Pattern: ◀ ▶, ⇆, Euclidean", "Rewrite the part: ◀ ▶ shift it a 16th; ⇆ turns it back to front without moving the beat; Euclidean (on hits) spreads k hits over n steps, Strudel's euclid: 3 over 8 is the tresillo, and an n that doesn't divide 32 runs against the bar."],
           ["Groove and space", "Swing (MPC style: 50 % straight, 66 % triplet), Nudge (a few ms early or late), Duck (the sound dips on every kick and comes back: the sidechain pump), Pan and Autopan in time. Each sound has its own."],
           ["Filter: vowel, LFO shape, envelope", "The filter can also be a vowel (A E I O U, Strudel's vowel). The LFO can be sine, triangle, saw, square or random (stepped or smooth). The Envelope opens (or closes) the filter on every note and lets it come back over its decay: the acid squelch."],
           ["Modulation", "Phaser and Tremolo in time, on every sound."],
-          ["Chance", "Strudel's: almost always (90 %), often (75 %), sometimes (50 %), rarely (25 %), almost never (10 %). The dice come from the sound, the loop and the step: a restart, an export or a share link sounds the same."],
-          ["Condition", "Which loops it plays on (1 loop = 2 bars, counted from ▶). 1:4 plays on the 1st of every 4; !4:4 on all but the 4th, to make room for a fill. Under the autopilot every section lasts 4, 8 or 12 loops: 4:4 usually lands right before the change."],
-          ["Ratchet", "Repeats the hit 2, 3 or 4 times inside its step (a note, inside its length): hi-tech rolls without writing 32nds."],
           ["⏫ Build-up", "Kicks only: on the next bar it plays quarters, eighths and a roll; the bar after, it goes back by itself."],
           ["Filter and distortion", "Every sound has its own filter (with a tempo-synced LFO) and its own distortion."],
           ["Source", "Swaps the synthesized voice for one of your samples."],
@@ -97,6 +100,19 @@ export default {
         ],
       },
       {
+        icon: "🧩",
+        title: "Modifiers and patterns",
+        items: [
+          ["Click: ✏️ Write / 🎲 / 🔁 / ⚡", "Above the grid you pick what a click does. ✏️ Write is the plain click (hit → accent → empty). The others put a modifier on the hit or note you touch (or write a new one carrying it); a second click with the same value takes it off. \"Apply to all\" puts it on every one, \"Remove modifiers\" takes them all off and ↺ Reset goes back to ✏️ Write."],
+          ["Pattern: Speed, Iter, Echo", "Change how the part is read without rewriting it, as in Strudel: ×2 plays it twice per loop and ×½ stretches it over 4 bars (fast/slow); Iter starts each loop a stretch further in (iter); Echo repeats it a few steps later, transposed for notes (off)."],
+          ["Pattern: ◀ ▶, ⇆, Euclidean", "Rewrite the part: ◀ ▶ shift it a 16th; ⇆ turns it back to front without moving the beat; Euclidean (on hits) spreads k hits over n steps, Strudel's euclid: 3 over 8 is the tresillo, and an n that doesn't divide 32 runs against the bar."],
+          ["Chance", "Strudel's: almost always (90 %), often (75 %), sometimes (50 %), rarely (25 %), almost never (10 %). The dice come from the sound, the loop and the step: a restart, an export or a share link sounds the same."],
+          ["Condition", "Which loops it plays on (1 loop = 2 bars, counted from ▶). 1:4 plays on the 1st of every 4; !4:4 on all but the 4th, to make room for a fill. Under the autopilot every section lasts 4, 8 or 12 loops: 4:4 usually lands right before the change."],
+          ["Ratchet", "Repeats the hit 2, 3 or 4 times inside its step (a note, inside its length): hi-tech rolls without writing 32nds."],
+        ],
+      },
+      {
+        icon: "📸",
         title: "Snapshots",
         items: [
           ["📸 Snapshot", "Saves what's playing, each sound as it's edited, as a moment of the track."],
@@ -105,6 +121,7 @@ export default {
         ],
       },
       {
+        icon: "⏺️",
         title: "Recording and export",
         items: [
           ["● Record", "Records what comes out of the speakers and downloads it as WAV when you stop. Up to 15 minutes."],
@@ -115,6 +132,7 @@ export default {
         ],
       },
       {
+        icon: "☁️",
         title: "Saving and samples",
         items: [
           ["It saves itself", "Everything stays in this browser. Signed in with Google, also in the cloud, to use on any device."],
@@ -122,6 +140,7 @@ export default {
         ],
       },
       {
+        icon: "🔎",
         title: "What each mark means",
         items: [
           ["Pulsing dashed outline", "Queued: comes in on the next bar. A pulsing fill is what's leaving."],
