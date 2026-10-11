@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { Blob as NodeBlob } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "../audio/engine.js";
@@ -1420,6 +1421,66 @@ describe("snapshots", () => {
     input.dispatchEvent(new Event("change"));
     await flushPromises();
     expect($(".status").textContent).toMatch(/no tiene snapshots/);
+  });
+
+  it("Compartir copies a link to that snapshot alone; opening it adds it after yours", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    vi.stubGlobal("Blob", NodeBlob); // jsdom's has no stream(), and the link is deflated
+    vi.useRealTimers(); // nor do (de)compression streams settle on fake ones
+    const until = (node, text) => vi.waitFor(() => expect(node.querySelector(".status").textContent).toBe(text));
+    const snaps = (node) => [...node.querySelectorAll("[data-snap] .variant-label")].map((l) => l.textContent);
+    // Opening a link is a page load: a fresh mount over what this browser saved.
+    const engines = [];
+    const visit = (path) => {
+      engines.forEach((e) => e.stop());
+      history.replaceState(null, "", path);
+      const node = document.createElement("div");
+      document.body.replaceChildren(node);
+      engines.push(newEngine());
+      mount(node, engines.at(-1));
+      return node;
+    };
+    immediate();
+    openEditor("lead.arp");
+    editor("lead.arp").querySelector('[data-action="duplicate"]').click();
+    click("lead.arp~1");
+    snapBtn().click();
+    typeName("Mi pico"); // unsaved: the link takes what the panel shows
+    act("snap-1", "share-snap").click();
+    await until(root, "Link a «Mi pico» copiado: quien lo abra lo suma a sus snapshots.");
+    const link = writeText.mock.calls[0][0].slice(location.origin.length);
+    expect(link).toMatch(/^\/#snap=[\w-]+$/);
+
+    // Where it already is (same moment, sounds and data), it adds nothing.
+    let page = visit(link);
+    await until(page, "Ya tenías ese snapshot.");
+    expect(location.hash).toBe("");
+    expect(snaps(page)).toHaveLength(1);
+
+    // In another browser, after the snapshots there, with the copy it plays.
+    localStorage.clear();
+    page = visit("/");
+    page.querySelector("#quantize").click();
+    page.querySelector('[data-variant="pad.air"]').click();
+    page.querySelector('[data-action="snapshot"]').click();
+    page = visit(link);
+    await until(page, "Snapshot «Mi pico» agregado: tocalo para escucharlo.");
+    expect(snaps(page)).toEqual(["Pico", "Mi pico"]);
+    expect(page.querySelector('[data-variant="lead.arp~1"]')).not.toBeNull();
+    expect(saved().snapshots[1]).toMatchObject({ id: "snap-2", name: "Mi pico", active: { "lead.arp~1": "lead.arp~1" } });
+
+    page = visit("/#snap=nope");
+    await until(page, "El link está roto: no se pudo leer el snapshot.");
+    expect(snaps(page)).toHaveLength(2);
+    engines.forEach((e) => e.stop());
+  });
+
+  it("Compartir is off for a draft with no sounds", () => {
+    click("kick.long");
+    snapBtn().click();
+    snapEditor().querySelector('[data-part="kick.long"]').click();
+    expect(act("snap-1", "share-snap").disabled).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { seeded } from "./editing.js";
-import { normalize } from "./workspace.js";
+import { importSnapshots, normalize } from "./workspace.js";
 import {
   SOUNDS_MAX,
   cleanSeed,
@@ -8,7 +8,10 @@ import {
   packSounds,
   randomSeed,
   readFragment,
+  readSnapFragment,
   shareFragment,
+  snapFragment,
+  unpackSnap,
   unpackSounds,
 } from "./share.js";
 
@@ -85,5 +88,42 @@ describe("share links", () => {
     expect(readFragment("")).toBeNull();
     expect(readFragment("#bpm=150")).toBeNull();
     expect(readFragment("#seed=x&bpm=nope").bpm).toBeNull();
+  });
+});
+
+describe("snapshot links", () => {
+  const ws = normalize({
+    lists: { lead: ["lead.acid~1"] },
+    names: { "lead.acid~1": "Mía", "lead.arp~1": "Otra" },
+    snapshots: [
+      { id: "snap-1", name: "Pico", section: "peak", active: { kick: "kick.long" }, data: { "kick.long": { level: 0.5 } } },
+      { id: "snap-2", name: "Break", section: "breakdown", active: { "lead.acid~1": "lead.acid~1" } },
+    ],
+  });
+
+  it("carry one snapshot and the names of the copies it plays, nothing else", async () => {
+    const fragment = await snapFragment(ws, ws.snapshots[1]);
+    expect(fragment).toMatch(/^#snap=[\w-]+$/);
+    expect(readFragment(fragment)).toBeNull(); // not a seed link
+    const file = JSON.parse(await unpackSnap(readSnapFragment(fragment)));
+    expect(file).toMatchObject({ app: "psy-sampler", kind: "snapshots", names: { "lead.acid~1": "Mía" } });
+    expect(file.snapshots).toEqual([ws.snapshots[1]]);
+  });
+
+  it("open as an import: added after the ones there, once", async () => {
+    const text = await unpackSnap(readSnapFragment(await snapFragment(ws, ws.snapshots[0])));
+    const into = normalize({ snapshots: [ws.snapshots[1]], lists: ws.lists, names: ws.names });
+    const once = importSnapshots(into, text);
+    expect(once.added).toBe(1);
+    expect(once.ws.snapshots.at(-1)).toMatchObject({ id: "snap-3", name: "Pico", data: { "kick.long": { level: 0.5 } } });
+    expect(importSnapshots(once.ws, text).added).toBe(0);
+  });
+
+  it("refuse one that inflates past the cap, and ignore other fragments", async () => {
+    const packed = readSnapFragment(await snapFragment(ws, ws.snapshots[0]));
+    await expect(unpackSnap(packed, 50)).rejects.toThrow("too big");
+    expect(readSnapFragment("#seed=x")).toBeNull();
+    expect(readSnapFragment("#snap=")).toBeNull();
+    expect(readSnapFragment(null)).toBeNull();
   });
 });

@@ -2,7 +2,8 @@
 // (drop one, add one with how it sounds now, or recapture the whole mix)
 // change nothing saved until Guardar; Descartar goes back to the saved
 // version. The app keeps the draft while the panel is closed, so nothing is
-// lost by folding it. "Probar" plays the draft on the next bar line.
+// lost by folding it. "Probar" plays the draft on the next bar line, and
+// "Compartir" copies a link to it: both take what the panel shows.
 import { LAYERS, layerOfVariant } from "../catalog.js";
 import { SECTIONS } from "../autopilot.js";
 import { addPart, partsOf, removePart, sameSnapshot } from "../snapshots.js";
@@ -19,6 +20,7 @@ export function createSnapshotEditor({
   onDraft, // (draft | null): null once it matches the saved version again
   onSave,
   onTry,
+  onShare,
   onRemove,
   onClose,
 }) {
@@ -49,6 +51,7 @@ export function createSnapshotEditor({
   const restoreBtn = button("restore", st.restore, st.restoreTitle);
   const tryBtn = button("try", st.try, st.tryTitle);
   const recaptureBtn = button("recapture", st.recapture, st.recaptureTitle);
+  const shareBtn = button("share-snap", st.share, st.shareTitle);
   const removeBtn = button("remove", st.remove);
   const closeBtn = button("close", tx.editor.close);
   saveBtn.addEventListener("click", save);
@@ -58,6 +61,7 @@ export function createSnapshotEditor({
     render({ name: true });
   });
   tryBtn.addEventListener("click", () => onTry(current));
+  shareBtn.addEventListener("click", () => onShare(current));
   recaptureBtn.addEventListener("click", () => {
     const parts = capture();
     if (parts) change(parts);
@@ -138,6 +142,7 @@ export function createSnapshotEditor({
     saveBtn.disabled = !dirty || empty;
     restoreBtn.disabled = !dirty;
     tryBtn.disabled = empty;
+    shareBtn.disabled = empty;
   }
 
   const node = el(
@@ -152,7 +157,7 @@ export function createSnapshotEditor({
     el("div", { class: "pickers" }, section, el("label", { class: "pick" }, add)),
     parts,
     emptyNote,
-    el("div", { class: "editor-actions" }, saveBtn, restoreBtn, dirtyNote, tryBtn, recaptureBtn),
+    el("div", { class: "editor-actions" }, saveBtn, restoreBtn, dirtyNote, tryBtn, recaptureBtn, shareBtn),
   );
   render({ name: true });
 
