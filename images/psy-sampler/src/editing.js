@@ -1,6 +1,6 @@
 // Pure edits behind the editors. Every function returns new data and never
 // mutates its input, so the UI can hand the result straight to the engine.
-import { ACCENT, HIT, OFF } from "./audio/patterns.js";
+import { ACCENT, HIT, MOD_DEFAULTS, OFF, cleanMod } from "./audio/patterns.js";
 import { isRoot } from "./audio/music.js";
 import { BAR_STEPS, LOOP_STEPS } from "./audio/timing.js";
 
@@ -34,13 +34,16 @@ export const BUILD_UP = [
   HIT, OFF, HIT, OFF, ACCENT, ACCENT, ACCENT, ACCENT,
 ];
 
-// `steps` with the bar starting at `from` replaced by the build-up.
-export function withBuildUp(steps, from) {
-  const out = steps.slice();
+// Drum data with the bar starting at `from` replaced by the build-up, mods
+// and all: a roll has no "sometimes".
+export function withBuildUp(data, from) {
+  const steps = data.steps.slice();
+  const mods = data.mods.slice();
   BUILD_UP.forEach((v, i) => {
-    out[(from + i) % out.length] = v;
+    steps[(from + i) % steps.length] = v;
+    mods[(from + i) % steps.length] = null;
   });
-  return out;
+  return { ...data, steps, mods };
 }
 
 export const noteAt = (notes, step, midi) =>
@@ -111,6 +114,84 @@ export function placeNote(notes, step, midi, len) {
   const end = Math.min(LOOP_STEPS, step + len);
   const kept = notes.filter((n) => n.midi !== midi || n.step + n.len <= step || n.step >= end);
   return [...kept, { step, midi, len: end - step, accent: false }];
+}
+
+/* ---------------------------------------------------------------- mods -- */
+
+// Mods only live on hits: whatever sits on an empty step goes.
+export const pruneMods = (steps, mods) => mods.map((m, s) => (steps[s] ? m : null));
+
+/**
+ * The mod brush: `key` set to `value` on `mod` (one hit's or one note's).
+ * Painting a value that is already there takes it off, so a second click
+ * undoes the first.
+ */
+export function brushMod(mod, key, value) {
+  const next = { ...cleanMod(mod) };
+  next[key] = mod?.[key] === value ? MOD_DEFAULTS[key] : value;
+  return cleanMod(next);
+}
+
+// A note with `mod` as its mod keys, in the shape sanitize() writes.
+const noteWith = (n, mod) => {
+  const { step, midi, len, accent } = n;
+  return { step, midi, len, accent, ...mod };
+};
+
+/**
+ * Brush click on the drum grid: an empty step gets a hit carrying the brush;
+ * a hit gets brushMod(). `echo` (Ctrl+click) puts the clicked step's result
+ * on the same 16th of every beat of its bar, or of both bars.
+ */
+export function brushStep(data, i, key, value, { echo = false, bothBars = false } = {}) {
+  const mod = data.steps[i] ? brushMod(data.mods[i], key, value) : brushMod(null, key, value);
+  const steps = data.steps.slice();
+  const mods = data.mods.slice();
+  for (const s of echo ? beatEchoes(i, bothBars) : [i]) {
+    steps[s] ||= HIT;
+    mods[s] = mod;
+  }
+  return { steps, mods };
+}
+
+/**
+ * The brush on every hit at once (Strudel's `.sometimes()` on a whole
+ * pattern). When they all carry it already, it comes off all of them.
+ */
+export function brushAllSteps(data, key, value) {
+  const hits = data.steps.flatMap((v, s) => (v ? [s] : []));
+  const off = hits.length > 0 && hits.every((s) => data.mods[s]?.[key] === value);
+  const mods = data.mods.map((m, s) => {
+    if (!data.steps[s]) return null;
+    return cleanMod({ ...m, [key]: off ? MOD_DEFAULTS[key] : value });
+  });
+  return { mods };
+}
+
+/**
+ * Brush click on the piano roll: the note under the cell gets brushMod();
+ * an empty cell gets a new `len` note carrying the brush. `echo` as in
+ * brushStep(), on the note's start; a cell inside a longer note is left alone.
+ */
+export function brushNote(notes, step, midi, len, key, value, { echo = false, bothBars = false } = {}) {
+  const hit = noteAt(notes, step, midi);
+  const mod = brushMod(hit ? cleanMod(hit) : null, key, value);
+  let out = notes;
+  for (const s of (echo ? beatEchoes(hit ? hit.step : step, bothBars) : [hit ? hit.step : step]).reverse()) {
+    const head = out.find((n) => n.midi === midi && n.step === s);
+    if (head) out = out.map((n) => (n === head ? noteWith(n, mod) : n));
+    else if (!noteAt(out, s, midi)) {
+      const added = addNote(out, s, midi, len, false);
+      out = [...out, noteWith(added.at(-1), mod)];
+    }
+  }
+  return out;
+}
+
+// brushAllSteps() for notes.
+export function brushAllNotes(notes, key, value) {
+  const off = notes.length > 0 && notes.every((n) => n[key] === value);
+  return notes.map((n) => noteWith(n, cleanMod({ ...n, [key]: off ? MOD_DEFAULTS[key] : value })));
 }
 
 /* ------------------------------------------------------- improvisation -- */

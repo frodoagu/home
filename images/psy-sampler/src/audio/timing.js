@@ -16,33 +16,35 @@ export const BPM_DEFAULT = 145;
 export const stepDuration = (bpm) => 60 / bpm / 4;
 
 /**
- * One scheduler tick. `cursor` is the next step still to be scheduled and its
- * start time; returns every step that starts before `now + lookahead` and the
- * cursor for the following tick.
+ * One scheduler tick. `cursor` is the next step still to be scheduled, its
+ * start time and its loop (2-bar loops since ▶, 0 first); returns every step
+ * that starts before `now + lookahead` and the cursor for the following tick.
  *
  * The next step's time is always previous time + the step duration in force
  * when that previous step was scheduled, so a BPM change only stretches steps
  * from the cursor on: nothing already queued moves and the grid never drifts.
  */
 export function collectSteps(cursor, now, lookahead, stepDur) {
-  let { step, time } = cursor;
+  let { step, time, loop = 0 } = cursor;
 
   // A throttled timer (background tab: >= 1 s per tick) leaves the cursor in
   // the past. Scheduling that backlog would fire it all at once; instead skip
   // whole steps so the next one lands back on the original grid phase.
   if (time < now + SAFETY) {
     const missed = Math.ceil((now + SAFETY - time) / stepDur);
+    loop += Math.floor((step + missed) / LOOP_STEPS);
     step = (step + missed) % LOOP_STEPS;
     time += missed * stepDur;
   }
 
   const due = [];
   while (time < now + lookahead) {
-    due.push({ step, time });
+    due.push({ step, time, loop });
     time += stepDur;
     step = (step + 1) % LOOP_STEPS;
+    if (step === 0) loop++;
   }
-  return { due, cursor: { step, time } };
+  return { due, cursor: { step, time, loop } };
 }
 
 // Start time of the first beat (quarter note) at or after the cursor, used to

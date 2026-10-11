@@ -11,19 +11,47 @@
 // or the whole sound), delete (copies).
 import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES } from "../audio/insert.js";
 import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
-import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs, sampleDefaults } from "../audio/patterns.js";
+import {
+  CHANCES,
+  COND_EVERY,
+  NOTE_LENGTHS,
+  PLIES,
+  TRANSPOSE,
+  cleanMod,
+  defOf,
+  isCopy,
+  paramSpecs,
+  sampleDefaults,
+} from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleNoteEcho, cycleStep, cycleStepEcho, placeNote } from "../editing.js";
+import {
+  brushAllNotes,
+  brushAllSteps,
+  brushNote,
+  brushStep,
+  cycleNote,
+  cycleNoteEcho,
+  cycleStep,
+  cycleStepEcho,
+  placeNote,
+  pruneMods,
+} from "../editing.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
 const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
+// What a click on a grid paints: "hit" writes hits and notes, the others put
+// that mod key, at its value here, on them.
+const BRUSHES = ["hit", "p", "cond", "ply"];
+export const BRUSH = { kind: "hit", p: 0.5, cond: "1:2", ply: 2 };
+
 export function createEditor({
   id,
   label,
   data,
+  brush = { ...BRUSH }, // the app's, mutated here so every editor shares it
   onChange,
   onAudition,
   onReset,
@@ -101,6 +129,64 @@ export function createEditor({
     paintAmount();
     return b;
   }
+
+  /* ---- the brush: what a click on the grid paints ---- */
+  // `legendText` is the grid's own help, shown while the brush writes;
+  // `applyAll` puts the brush's value on every hit or note.
+  function brushControls(legendText, applyAll) {
+    const help = legend("");
+    const value = (key, options) =>
+      select(tx.brushValue, options, brush[key], (v) => {
+        brush[key] = key === "cond" ? v : Number(v);
+      }, `brush-${key}`);
+    const values = {
+      p: value("p", CHANCES.filter((p) => p < 1).map((p) => ({ value: p, label: tx.chances[p] }))),
+      cond: value(
+        "cond",
+        COND_EVERY.flatMap((b) => {
+          const conds = Array.from({ length: b }, (_, i) => `${i + 1}:${b}`);
+          return [...conds, ...conds.map((c) => `!${c}`)].map((c) => ({ value: c, label: tx.cond(c), group: tx.condEvery(b) }));
+        }),
+      ),
+      ply: value("ply", PLIES.filter((n) => n > 1).map((n) => ({ value: n, label: tx.ply(n) }))),
+    };
+    const all = el("button", { type: "button", class: "ghost", "data-action": "brush-all", text: tx.applyAll });
+    all.title = tx.applyAllTitle;
+    all.addEventListener("click", () => {
+      applyAll(brush.kind, brush[brush.kind]);
+      refreshGrid();
+    });
+    const show = () => {
+      for (const [key, node] of Object.entries(values)) node.hidden = key !== brush.kind;
+      all.hidden = brush.kind === "hit";
+      help.textContent = brush.kind === "hit" ? legendText : tx.modLegend;
+    };
+    const kind = select(
+      tx.brush,
+      BRUSHES.map((k) => ({ value: k, label: tx.brushes[k] })),
+      brush.kind,
+      (v) => {
+        brush.kind = v;
+        show();
+      },
+      "brush",
+    );
+    show();
+    return [el("div", { class: "pickers brush" }, kind, ...Object.values(values), all), help];
+  }
+
+  // A hit's or note's mod on its cell: stripes when it may not play, and a
+  // short tag (condition, else ratchet, else chance); the title says it all.
+  function markMod(cell, mod, tag = true) {
+    const m = cleanMod(mod);
+    cell.toggleAttribute("data-chance", Boolean(m?.p));
+    const short = m && tag ? (m.cond ?? (m.ply ? `×${m.ply}` : m.p ? String(Math.round(m.p * 100)) : "")) : "";
+    if (short) cell.dataset.mod = short;
+    else delete cell.dataset.mod;
+    cell.title = m ? modParts(m).join(" · ") : "";
+    return m ? tx.modText(modParts(m)) : "";
+  }
+  const modParts = (m) => [m.p && tx.chances[m.p], m.cond && tx.cond(m.cond), m.ply && tx.ply(m.ply)].filter(Boolean);
 
   /* ---- header: name + actions ---- */
   const name = el("input", { type: "text", class: "name-input", "data-action": "name", maxlength: "40", value: label });
@@ -274,16 +360,21 @@ export function createEditor({
       const cell = e.target.closest("[data-step]");
       if (!cell) return;
       const s = Number(cell.dataset.step);
-      const steps = echoing(e) ? cycleStepEcho(current.steps, s, e.shiftKey) : cycleStep(current.steps, s);
-      set({ steps });
+      if (brush.kind === "hit") {
+        const steps = echoing(e) ? cycleStepEcho(current.steps, s, e.shiftKey) : cycleStep(current.steps, s);
+        set({ steps, mods: pruneMods(steps, current.mods) });
+      } else {
+        set(brushStep(current, s, brush.kind, brush[brush.kind], { echo: echoing(e), bothBars: e.shiftKey }));
+      }
       refreshGrid();
-      if (steps[s]) onAudition({ accent: steps[s] === 2 });
+      if (current.steps[s]) onAudition({ accent: current.steps[s] === 2 });
     });
     refreshGrid = () => {
       cells.forEach((cell, s) => {
         const v = current.steps[s];
         cell.dataset.state = ["", "hit", "accent"][v];
-        cell.setAttribute("aria-label", tx.step(s + 1, tx.states[v]));
+        const mod = markMod(cell, v ? current.mods[s] : null);
+        cell.setAttribute("aria-label", tx.step(s + 1, tx.states[v]) + mod);
       });
     };
     paintGrid = paintColumns(cells.map((c) => [c]));
@@ -293,11 +384,12 @@ export function createEditor({
     double.addEventListener("click", () => onDouble());
     const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
-      set({ steps: current.steps.map(() => 0) });
+      set({ steps: current.steps.map(() => 0), mods: current.mods.map(() => null) });
       refreshGrid();
     });
     const tools = [varyToggle(), ...(def.voice === "kick" ? [buildUpToggle()] : []), double, clear];
-    return [legend(tx.drumLegend), wrap(grid), el("div", { class: "editor-actions" }, ...tools)];
+    const brushRow = brushControls(tx.drumLegend, (key, value) => set(brushAllSteps(current, key, value)));
+    return [...brushRow, wrap(grid), el("div", { class: "editor-actions" }, ...tools)];
   }
 
   // Kicks: a build-up on the next bar line. Pressed while armed or playing;
@@ -411,8 +503,9 @@ export function createEditor({
         cell.dataset.state = n ? (n.accent ? "accent" : "hit") : "";
         cell.classList.toggle("head", Boolean(n) && n.step === s);
         cell.classList.toggle("tail", Boolean(n) && n.step + n.len - 1 === s);
+        const mod = markMod(cell, n, n?.step === s);
         const what = n ? (n.accent ? tx.accentNote : tx.note) : tx.empty;
-        cell.setAttribute("aria-label", tx.cell(cell.dataset.name, s + 1, what));
+        cell.setAttribute("aria-label", tx.cell(cell.dataset.name, s + 1, what) + mod);
       }
     };
 
@@ -424,9 +517,13 @@ export function createEditor({
     grid.addEventListener("click", (e) => {
       const hit = at(e.target);
       if (!hit) return; // a drag that ended on another cell clicks the grid, not a cell
-      const notes = echoing(e)
-        ? cycleNoteEcho(current.notes, hit.step, hit.midi, current.len, e.shiftKey)
-        : cycleNote(current.notes, hit.step, hit.midi, current.len);
+      const echo = { echo: echoing(e), bothBars: e.shiftKey };
+      const notes =
+        brush.kind !== "hit"
+          ? brushNote(current.notes, hit.step, hit.midi, current.len, brush.kind, brush[brush.kind], echo)
+          : echo.echo
+            ? cycleNoteEcho(current.notes, hit.step, hit.midi, current.len, e.shiftKey)
+            : cycleNote(current.notes, hit.step, hit.midi, current.len);
       set({ notes });
       refreshGrid();
       const now = notes.find((n) => n.midi === hit.midi && n.step <= hit.step && n.step + n.len > hit.step);
@@ -437,7 +534,7 @@ export function createEditor({
     // a tap is a click, so it adds a note of the "Nota nueva" length.
     grid.addEventListener("pointerdown", (e) => {
       const hit = at(e.target);
-      if (!hit || e.pointerType === "touch" || hit.cell.dataset.state) return;
+      if (!hit || e.pointerType === "touch" || hit.cell.dataset.state || brush.kind !== "hit") return;
       drag = { midi: hit.midi, start: hit.step, end: hit.step };
     });
     grid.addEventListener("pointerover", (e) => {
@@ -481,7 +578,7 @@ export function createEditor({
     });
     refreshGrid();
     return [
-      legend(tx.rollLegend),
+      ...brushControls(tx.rollLegend, (key, value) => set({ notes: brushAllNotes(current.notes, key, value) })),
       wrap(grid),
       el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, clear),
     ];

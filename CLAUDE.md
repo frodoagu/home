@@ -437,7 +437,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   are ids `<base>~n` resolved through the base (`defOf`/`baseOf`), not new
   DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
   reads pools sorted by id and consumes its PRNG even when it skips a user-owned
-  part — keep both when touching it. A seed also dresses each sound (params,
+  part — keep both when touching it. Hit/note mods (Strudel-style chance,
+  `a:b` condition, ratchet) follow the same rule: `passes()` draws from a hash
+  of id, loop and step, never `Math.random`. A seed also dresses each sound (params,
   synth) from `seed/id` (dress.js), NOT from that PRNG, so a sound stays the
   same while it comes and goes; every autopilot section must play a lead or a
   pad (a bare kick/bass/perc mix lives one bar at most). All UI text lives in `src/i18n/{es,en,pt}.js`

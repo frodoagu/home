@@ -4,6 +4,11 @@ import { ACCENT, HIT, OFF } from "./audio/patterns.js";
 import {
   BUILD_UP,
   beatEchoes,
+  brushAllNotes,
+  brushAllSteps,
+  brushMod,
+  brushNote,
+  brushStep,
   cycleNote,
   cycleNoteEcho,
   cycleStep,
@@ -14,6 +19,7 @@ import {
   newPart,
   noteAt,
   placeNote,
+  pruneMods,
   seeded,
   varyNotes,
   varySteps,
@@ -59,14 +65,90 @@ describe("doubleSteps", () => {
 
 describe("withBuildUp", () => {
   it("replaces one bar, wherever it starts, with a roll that doubles its rate", () => {
-    const steps = Array(32).fill(HIT);
+    const data = { steps: Array(32).fill(HIT), mods: Array(32).fill({ p: 0.5 }) };
     const hitsOf = (list) => list.flatMap((v, s) => (v ? [s] : []));
     expect(hitsOf(BUILD_UP)).toEqual([0, 4, 8, 10, 12, 13, 14, 15]);
-    const second = withBuildUp(steps, 16);
-    expect(second.slice(0, 16)).toEqual(steps.slice(0, 16));
-    expect(second.slice(16)).toEqual(BUILD_UP);
-    expect(withBuildUp(steps, 0).slice(0, 16)).toEqual(BUILD_UP);
-    expect(steps.every((v) => v === HIT)).toBe(true);
+    const second = withBuildUp(data, 16);
+    expect(second.steps.slice(0, 16)).toEqual(data.steps.slice(0, 16));
+    expect(second.steps.slice(16)).toEqual(BUILD_UP);
+    expect(withBuildUp(data, 0).steps.slice(0, 16)).toEqual(BUILD_UP);
+    expect(data.steps.every((v) => v === HIT)).toBe(true);
+  });
+
+  it("clears the mods of its bar only", () => {
+    const data = { steps: Array(32).fill(HIT), mods: Array(32).fill({ p: 0.5 }) };
+    const { mods } = withBuildUp(data, 16);
+    expect(mods.slice(0, 16).every((m) => m.p === 0.5)).toBe(true);
+    expect(mods.slice(16).every((m) => m === null)).toBe(true);
+  });
+});
+
+describe("mods", () => {
+  const empty = () => ({ steps: Array(32).fill(OFF), mods: Array(32).fill(null) });
+
+  it("brushMod sets a key, and the same value again takes it off", () => {
+    const a = brushMod(null, "p", 0.5);
+    expect(a).toEqual({ p: 0.5 });
+    const b = brushMod(a, "cond", "1:4");
+    expect(b).toEqual({ p: 0.5, cond: "1:4" });
+    expect(brushMod(b, "p", 0.25)).toEqual({ p: 0.25, cond: "1:4" });
+    expect(brushMod(brushMod(b, "p", 0.5), "cond", "1:4")).toBeNull();
+  });
+
+  it("brushStep puts a hit carrying the brush on an empty step", () => {
+    const out = brushStep(empty(), 5, "ply", 3);
+    expect(out.steps[5]).toBe(HIT);
+    expect(out.mods[5]).toEqual({ ply: 3 });
+  });
+
+  it("brushStep keeps an accent and echoes on every beat with Ctrl", () => {
+    const data = empty();
+    data.steps[2] = ACCENT;
+    const out = brushStep(data, 2, "p", 0.75, { echo: true });
+    expect(out.steps.flatMap((v, s) => (v ? [s] : []))).toEqual([2, 6, 10, 14]);
+    expect(out.steps[2]).toBe(ACCENT);
+    expect(out.mods.filter(Boolean)).toEqual(Array(4).fill({ p: 0.75 }));
+  });
+
+  it("brushAllSteps marks every hit, then unmarks them all", () => {
+    const data = empty();
+    data.steps[0] = HIT;
+    data.steps[8] = HIT;
+    data.mods[8] = { cond: "2:2" };
+    const on = brushAllSteps(data, "p", 0.5);
+    expect(on.mods[0]).toEqual({ p: 0.5 });
+    expect(on.mods[8]).toEqual({ p: 0.5, cond: "2:2" });
+    const off = brushAllSteps({ ...data, ...on }, "p", 0.5);
+    expect(off.mods[0]).toBeNull();
+    expect(off.mods[8]).toEqual({ cond: "2:2" });
+  });
+
+  it("pruneMods drops what sits on an empty step", () => {
+    const steps = [HIT, OFF];
+    expect(pruneMods(steps, [{ p: 0.5 }, { p: 0.5 }])).toEqual([{ p: 0.5 }, null]);
+  });
+
+  it("brushNote marks the note under the cell, or writes a new one", () => {
+    const notes = [n(0, 57, 4)];
+    const marked = brushNote(notes, 2, 57, 1, "cond", "!4:4");
+    expect(marked).toEqual([{ ...n(0, 57, 4), cond: "!4:4" }]);
+    const added = brushNote(notes, 8, 60, 2, "p", 0.25);
+    expect(added[1]).toEqual({ ...n(8, 60, 2), p: 0.25 });
+    expect(brushNote(marked, 0, 57, 1, "cond", "!4:4")).toEqual(notes);
+  });
+
+  it("brushNote with Ctrl echoes onto the beats and leaves longer notes alone", () => {
+    const notes = [n(4, 57, 2)];
+    const out = brushNote(notes, 0, 57, 1, "ply", 2, { echo: true });
+    expect(out.map((x) => x.step).sort((a, b) => a - b)).toEqual([0, 4, 8, 12]);
+    expect(out.every((x) => x.ply === 2)).toBe(true);
+  });
+
+  it("brushAllNotes marks every note, then unmarks them all", () => {
+    const notes = [n(0, 57), { ...n(4, 60), p: 0.5 }];
+    const on = brushAllNotes(notes, "p", 0.5);
+    expect(on.every((x) => x.p === 0.5)).toBe(true);
+    expect(brushAllNotes(on, "p", 0.5)).toEqual([n(0, 57), n(4, 60)]);
   });
 });
 

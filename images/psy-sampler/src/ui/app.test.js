@@ -581,6 +581,11 @@ describe("editors", () => {
     openEditor("perc.hat");
     expect(editor("perc.hat").querySelector('[data-action="reset-part"]').textContent).toBe("Restaurar golpes");
     stepCell("perc.hat", 0).click();
+    const brush = editor("perc.hat").querySelector('[data-control="brush"]');
+    brush.value = "p";
+    brush.dispatchEvent(new Event("change"));
+    editor("perc.hat").querySelector('[data-action="brush-all"]').click(); // the mods go with the hits
+    expect(saved().variants["perc.hat"].mods.filter(Boolean)).toHaveLength(9);
     editor("perc.hat").querySelector('[data-action="reset-part"]').click();
     advanceSeconds(BAR);
     expect(saved().variants["perc.hat"]).toBeUndefined();
@@ -697,6 +702,70 @@ describe("editors", () => {
     expect(on()).toEqual([1, 5, 9, 13]);
     ctrlClick(19, true);
     expect(on()).toEqual([1, 3, 5, 7, 9, 11, 13, 15, 19, 23, 27, 31]);
+  });
+});
+
+describe("brush (mods)", () => {
+  const pick = (variant, control, value) => {
+    const sel = editor(variant).querySelector(`[data-control="${control}"]`);
+    sel.value = String(value);
+    sel.dispatchEvent(new Event("change"));
+  };
+  const mods = (variant) => saved().variants[variant].mods;
+
+  it("paints a chance on a hit, shows it, and a second click takes it off", () => {
+    openEditor("perc.hat"); // offbeats: 2, 6, 10…
+    pick("perc.hat", "brush", "p");
+    pick("perc.hat", "brush-p", 0.25);
+    stepCell("perc.hat", 2).click();
+    expect(mods("perc.hat")[2]).toEqual({ p: 0.25 });
+    const cell = stepCell("perc.hat", 2);
+    expect(cell.hasAttribute("data-chance")).toBe(true);
+    expect(cell.dataset.mod).toBe("25");
+    expect(cell.getAttribute("aria-label")).toBe("Paso 3: golpe, Rara vez · 25 %");
+    stepCell("perc.hat", 2).click();
+    expect(stepCell("perc.hat", 2).hasAttribute("data-chance")).toBe(false);
+    expect(mods("perc.hat")[2]).toBeNull();
+  });
+
+  it("on an empty step it writes a hit carrying the brush; writing it away drops the mod", () => {
+    openEditor("perc.hat");
+    pick("perc.hat", "brush", "ply");
+    pick("perc.hat", "brush-ply", 3);
+    stepCell("perc.hat", 1).click();
+    expect(saved().variants["perc.hat"].steps[1]).toBe(1);
+    expect(mods("perc.hat")[1]).toEqual({ ply: 3 });
+    expect(stepCell("perc.hat", 1).dataset.mod).toBe("×3");
+    pick("perc.hat", "brush", "hit");
+    stepCell("perc.hat", 1).click(); // accent
+    stepCell("perc.hat", 1).click(); // empty
+    expect(mods("perc.hat")[1]).toBeNull();
+  });
+
+  it("Aplicar a todo puts a condition on every hit, and again takes it off", () => {
+    openEditor("perc.clap"); // beats 2 and 4
+    pick("perc.clap", "brush", "cond");
+    pick("perc.clap", "brush-cond", "!4:4");
+    const all = editor("perc.clap").querySelector('[data-action="brush-all"]');
+    expect(all.hidden).toBe(false);
+    all.click();
+    expect(mods("perc.clap").filter(Boolean)).toEqual(Array(4).fill({ cond: "!4:4" }));
+    expect(stepCell("perc.clap", 4).dataset.mod).toBe("!4:4");
+    all.click();
+    expect(mods("perc.clap").every((m) => m === null)).toBe(true);
+  });
+
+  it("marks a note in the piano roll, and every editor shares the brush", () => {
+    openEditor("lead.melodic"); // A4 (69) over steps 0-7
+    pick("lead.melodic", "brush", "cond");
+    pick("lead.melodic", "brush-cond", "1:4");
+    rollCell("lead.melodic", 69, 3).click();
+    expect(saved().variants["lead.melodic"].notes[0]).toMatchObject({ step: 0, midi: 69, len: 8, cond: "1:4" });
+    expect(rollCell("lead.melodic", 69, 0).dataset.mod).toBe("1:4");
+    expect(rollCell("lead.melodic", 69, 3).dataset.mod).toBeUndefined();
+    openEditor("perc.hat");
+    expect(editor("perc.hat").querySelector('[data-control="brush"]').value).toBe("cond");
+    expect(editor("perc.hat").querySelector('[data-control="brush-cond"]').value).toBe("1:4");
   });
 });
 

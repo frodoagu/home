@@ -79,6 +79,10 @@ export default {
           ["Synth, Scale, Octave", "Change the voice, the notes the piano roll shows and the pitch of the part."],
           ["🎲 New part", "Writes a new melody in the chosen scale. With the loop running it comes in on the next loop; another click cancels it."],
           ["×2 hits", "Doubles the marked hits: quarters → eighths → sixteenths."],
+          ["Brush", "Picks what a click on the grid does. \"Write\" places hits and notes; the others put a modifier on the hit or note you touch (or write a new one carrying it), and a second click with the same value takes it off. \"Apply to all\" puts it on every one. Ctrl + click, as always, on every beat."],
+          ["Chance", "Strudel's: almost always (90 %), often (75 %), sometimes (50 %), rarely (25 %), almost never (10 %). The dice come from the sound, the loop and the step: a restart, an export or a share link sounds the same."],
+          ["Condition", "Which loops it plays on (1 loop = 2 bars, counted from ▶). 1:4 plays on the 1st of every 4; !4:4 on all but the 4th, to make room for a fill. Under the autopilot every section lasts 4, 8 or 12 loops: 4:4 usually lands right before the change."],
+          ["Ratchet", "Repeats the hit 2, 3 or 4 times inside its step (a note, inside its length): hi-tech rolls without writing 32nds."],
           ["⏫ Build-up", "Kicks only: on the next bar it plays quarters, eighths and a roll; the bar after, it goes back by itself."],
           ["Filter and distortion", "Every sound has its own filter (with a tempo-synced LFO) and its own distortion."],
           ["Source", "Swaps the synthesized voice for one of your samples."],
@@ -122,6 +126,7 @@ export default {
           ["🎲", "Written or dressed by the autopilot from the seed."],
           ["⏫", "Build-up armed or playing."],
           ["•", "A snapshot with unsaved changes."],
+          ["Stripes, 50, 1:4, ×3 on a step", "That hit or note carries a modifier: striped when it doesn't always play; the number is the chance, a:b the condition, ×n the ratchet. Hover it to see them all."],
           ["A flash on a sound", "A hit or a note of that sound is playing; brighter on an accent."],
           ["The beating BPM", "Marks every beat; harder at the start of the bar."],
           ["● Record blinking", "It is recording."],
@@ -522,6 +527,21 @@ export default {
     sampleMissing: (name) => `${name || "Sample"} (unavailable)`,
     sampleHint: "Signed in, upload your samples in 🎵 Samples and pick them here.",
     reverse: "Reverse",
+    brush: "Brush",
+    brushes: { hit: "Write", p: "Chance", cond: "Condition", ply: "Ratchet" },
+    brushValue: "Value",
+    chances: { 0.9: "Almost always · 90 %", 0.75: "Often · 75 %", 0.5: "Sometimes · 50 %", 0.25: "Rarely · 25 %", 0.1: "Almost never · 10 %" },
+    condEvery: (b) => `Every ${b} loops (${2 * b} bars)`,
+    cond: (c) => {
+      const [a, b] = c.replace("!", "").split(":");
+      const nth = `${a}${{ 1: "st", 2: "nd", 3: "rd" }[a] ?? "th"}`;
+      return c.startsWith("!") ? `${c} · all but the ${nth} of ${b}` : `${c} · the ${nth} of every ${b}`;
+    },
+    ply: (n) => `×${n} · ${n} times per step`,
+    applyAll: "Apply to all",
+    applyAllTitle: "Puts this value on every hit or note; if they all have it already, takes it off",
+    modLegend: "Click: puts the value on the hit or note (or writes a new one carrying it); a second click with the same value takes it off. Ctrl + click: on every beat of the bar; Ctrl + Shift: of both bars. Loops (2 bars) count from ▶.",
+    modText: (parts) => `, ${parts.join(", ")}`,
   },
   params: {
     startPitch: "Start pitch",

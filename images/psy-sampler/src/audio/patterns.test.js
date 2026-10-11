@@ -17,7 +17,9 @@ import {
   sampleDefaults,
   sanitize,
   cleanInsert,
+  cleanMod,
   cleanSample,
+  passes,
 } from "./patterns.js";
 import { INSERT_DEFAULT } from "./insert.js";
 
@@ -305,5 +307,77 @@ describe("insert and sample data", () => {
     expect(sanitize("perc.hat", { insert: "nope" }).insert).toEqual(INSERT_DEFAULT);
     expect(cleanSample({ id, reverse: true })).toMatchObject({ reverse: true, pitch: 0, length: 1 });
     expect(cleanInsert(undefined)).toEqual(INSERT_DEFAULT);
+  });
+});
+
+describe("mods", () => {
+  const hat = () => defaultData("perc.hat"); // offbeats: 2, 6, 10…
+
+  it("a condition plays on loop a of every b, or never there with !", () => {
+    const loops = Array.from({ length: 8 }, (_, l) => l);
+    expect(loops.filter((l) => passes({ cond: "1:4" }, "x", 0, l))).toEqual([0, 4]);
+    expect(loops.filter((l) => passes({ cond: "2:2" }, "x", 0, l))).toEqual([1, 3, 5, 7]);
+    expect(loops.filter((l) => passes({ cond: "!4:4" }, "x", 0, l))).toEqual([0, 1, 2, 4, 5, 6]);
+    // A WAV render's warm-up pass is loop -1: the last of every b.
+    expect(passes({ cond: "4:4" }, "x", 0, -1)).toBe(true);
+  });
+
+  it("a chance is a fixed draw per id, loop and step, near its rate", () => {
+    const plays = (p, id = "perc.hat") =>
+      Array.from({ length: 400 }, (_, l) => passes({ p }, id, 2, l));
+    expect(plays(0.5)).toEqual(plays(0.5));
+    const rate = (p) => plays(p).filter(Boolean).length / 400;
+    for (const p of [0.9, 0.75, 0.5, 0.25, 0.1]) expect(Math.abs(rate(p) - p)).toBeLessThan(0.08);
+    expect(plays(0.5, "perc.hat~2")).not.toEqual(plays(0.5));
+  });
+
+  it("a drum hit is skipped by its mod and ratcheted by ply", () => {
+    const d = hat();
+    d.mods[2] = { cond: "2:2", ply: 3 };
+    expect(eventsAt("perc.hat", 2, false, d, 0)).toEqual([]);
+    const evs = eventsAt("perc.hat", 2, false, d, 1);
+    expect(evs.map((e) => e.offset)).toEqual([0, 1 / 3, 2 / 3]);
+    expect(eventsAt("perc.hat", 6, false, d, 0)).toHaveLength(1);
+  });
+
+  it("a note ratchets over its length and joins mid-note as one", () => {
+    const d = defaultData("lead.melodic"); // 8-step notes on 0, 8, 16, 24
+    d.notes[0] = { ...d.notes[0], ply: 4 };
+    const evs = eventsAt("lead.melodic", 0, false, d);
+    expect(evs.map((e) => [e.offset, e.steps])).toEqual([[0, 2], [2, 2], [4, 2], [6, 2]]);
+    const joined = eventsAt("lead.melodic", 3, true, d);
+    expect(joined).toHaveLength(1);
+    expect(joined[0].steps).toBe(5);
+    expect(joined[0].offset).toBeUndefined();
+  });
+
+  it("a note's chance and condition hold for its whole length", () => {
+    const d = defaultData("lead.melodic");
+    d.notes[0] = { ...d.notes[0], cond: "1:2" };
+    expect(eventsAt("lead.melodic", 3, true, d, 1)).toEqual([]);
+    expect(eventsAt("lead.melodic", 3, true, d, 0)).toHaveLength(1);
+  });
+
+  it("cleanMod keeps valid, non-default keys only", () => {
+    expect(cleanMod({ p: 1, cond: null, ply: 1 })).toBeNull();
+    expect(cleanMod({ p: 0.33, cond: "5:4", ply: 9 })).toBeNull();
+    expect(cleanMod({ ply: 2, cond: "!3:8", p: 0.1, x: 1 })).toEqual({ p: 0.1, cond: "!3:8", ply: 2 });
+    expect(Object.keys(cleanMod({ ply: 2, p: 0.5 }))).toEqual(["p", "ply"]);
+  });
+
+  it("sanitize keeps mods on hits and notes, and drops them elsewhere", () => {
+    const d = defaultData("perc.hat");
+    const mods = Array(32).fill(null);
+    mods[2] = { p: 0.5 };
+    mods[3] = { p: 0.5 }; // empty step
+    const out = sanitize("perc.hat", { ...d, mods });
+    expect(out.mods[2]).toEqual({ p: 0.5 });
+    expect(out.mods[3]).toBeNull();
+    expect(sanitize("perc.hat", { ...d, mods: "x" }).mods).toEqual(Array(32).fill(null));
+    // Old saved data has no mods at all: it sanitizes back to the factory shape.
+    const { mods: _, ...old } = d;
+    expect(JSON.stringify(sanitize("perc.hat", old))).toBe(JSON.stringify(d));
+    const notes = sanitize("lead.melodic", { ...defaultData("lead.melodic"), notes: [{ step: 0, midi: 69, len: 2, accent: false, ply: 2, p: 7 }] });
+    expect(notes.notes).toEqual([{ step: 0, midi: 69, len: 2, accent: false, ply: 2 }]);
   });
 });
