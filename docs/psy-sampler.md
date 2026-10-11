@@ -89,6 +89,8 @@ goes through it:
 - **Autopilot** (see below), at every loop start.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
+- The editors' **×2 hits**, **Reset** and **Reset hits / notes**, at the next
+  bar line (see below).
 - The kicks' **⏫ Build-up**: takes over the next bar and hands it back on the
   one after (see below).
 - **Snapshots** (see below): a click plays the saved moment from the next bar,
@@ -258,7 +260,10 @@ the voice's units (Hz, s, bars) and only format them for display.
 Drums and notes also have **Reset hits** / **Reset notes**: only `steps` or
 `notes` go back to factory, and the voice, knobs, insert, scale and volume stay.
 A queued 🎲 New part is cancelled. If nothing else differed from factory, the
-edit is forgotten (no ✎), the same as a full **Reset**.
+edit is forgotten (no ✎), the same as a full **Reset**. Both resets, like ×2
+hits, land on the grid: while the loop runs they're queued (the button pulses)
+and come in at the next bar line, another click before then cancels, and with
+the loop stopped they apply right away. ■ Stop drops whatever was queued.
 
 - **Click** on a step or cell: empty → hit/note → accent → empty. New notes are
   as long as "New note" says (shortened so they don't overlap the next one in
@@ -294,7 +299,9 @@ edit is forgotten (no ✎), the same as a full **Reset**.
   off and puts the amount back to 50 %.
 - **×2 hits** (drums) adds a hit halfway between each hit and the next (wrapping
   around the loop): quarters → eighths → sixteenths. A one-step gap has no
-  middle and stays as it is. It's an edit: it gets saved.
+  middle and stays as it is. It's an edit: it gets saved. While the loop runs
+  it waits for the next bar line, like the resets above, and then doubles what
+  is playing at that moment (an improvised variation included).
 - **⏫ Build-up** (kicks only) sets up a roll for the next bar that keeps
   doubling the density: half a bar of quarters, a quarter of eighths and four
   accented sixteenths (`BUILD_UP` in `editing.js`). The toggle arms it (it
@@ -314,7 +321,9 @@ edit is forgotten (no ✎), the same as a full **Reset**.
   and chromatic. Notes outside the chosen scale stay visible (in italics) so
   they can be deleted.
 - **One editor open at a time**: opening one folds whichever was open, in any
-  layer. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
+  layer. It floats over the page like a context menu, as wide as its layer and
+  just under its tile (`placeEditor`), so the rows below don't move; a press
+  anywhere outside it or Esc closes it. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
   4 shaded, and a rule between the two bars.
 
 ### Custom sounds: duplicate and rename

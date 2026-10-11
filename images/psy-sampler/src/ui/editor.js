@@ -14,7 +14,7 @@ import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js"
 import { NOTE_LENGTHS, TRANSPOSE, defOf, isCopy, paramSpecs, sampleDefaults } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
 import { LOOP_STEPS } from "../audio/timing.js";
-import { cycleNote, cycleNoteEcho, cycleStep, cycleStepEcho, doubleSteps, placeNote } from "../editing.js";
+import { cycleNote, cycleNoteEcho, cycleStep, cycleStepEcho, placeNote } from "../editing.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
@@ -28,6 +28,8 @@ export function createEditor({
   onAudition,
   onReset,
   onResetPart,
+  onDouble,
+  queued = new Set(), // the actions among ×2 and the resets waiting for the bar line
   onClose,
   onTrigger,
   onRename,
@@ -126,6 +128,11 @@ export function createEditor({
     [button("close", tx.close), onClose],
   ];
   for (const [b, fn] of actions) b.addEventListener("click", () => fn());
+  const waits = (b) => {
+    b.setAttribute("aria-pressed", String(queued.has(b.dataset.action)));
+    return b;
+  };
+  for (const [b] of actions) if (["reset", "reset-part"].includes(b.dataset.action)) waits(b);
   const head = el(
     "div",
     { class: "editor-head" },
@@ -281,12 +288,9 @@ export function createEditor({
     };
     paintGrid = paintColumns(cells.map((c) => [c]));
     refreshGrid();
-    const double = el("button", { type: "button", class: "ghost", "data-action": "double", text: tx.doubleHits });
+    const double = waits(el("button", { type: "button", class: "ghost", "data-action": "double", text: tx.doubleHits }));
     double.title = tx.doubleHitsTitle;
-    double.addEventListener("click", () => {
-      set({ steps: doubleSteps(current.steps) });
-      refreshGrid();
-    });
+    double.addEventListener("click", () => onDouble());
     const clear = el("button", { type: "button", class: "ghost", text: tx.clearAll });
     clear.addEventListener("click", () => {
       set({ steps: current.steps.map(() => 0) });
@@ -504,6 +508,7 @@ export function createEditor({
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),
+    showQueued: (action, on) => node.querySelector(`[data-action="${action}"]`)?.setAttribute("aria-pressed", String(on)),
     showAmount: (v) => {
       amount = v;
       paintAmount();

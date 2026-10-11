@@ -447,6 +447,21 @@ describe("editors", () => {
     expect(editor("pad.chord")).toBeNull();
   });
 
+  it("floats like a context menu: a press elsewhere or Esc closes it, a press inside does not", () => {
+    const down = (target) => target.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    openEditor("lead.acid");
+    down(editor("lead.acid"));
+    expect(editor("lead.acid")).not.toBeNull();
+    down($('[data-edit="lead.acid"]')); // its own toggle: the click that follows closes it
+    expect(editor("lead.acid")).not.toBeNull();
+    down($('[data-variant="bass.rolling"]'));
+    expect(editor("lead.acid")).toBeNull();
+    openEditor("lead.acid");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(editor("lead.acid")).toBeNull();
+    expect(document.activeElement).toBe($('[data-edit="lead.acid"]'));
+  });
+
   it("a piano-roll click adds a note and switches the variant on, without a preview over the loop", () => {
     const audition = vi.spyOn(engine, "audition");
     openEditor("lead.melodic");
@@ -536,8 +551,13 @@ describe("editors", () => {
     openEditor("perc.hat");
     stepCell("perc.hat", 0).click();
     expect(saved().variants["perc.hat"]).toBeDefined();
-    editor("perc.hat").querySelector('[data-action="reset"]').click();
+    const reset = () => editor("perc.hat").querySelector('[data-action="reset"]');
+    reset().click();
+    expect(reset().getAttribute("aria-pressed")).toBe("true"); // it plays: waits for the bar line
+    expect(saved().variants["perc.hat"]).toBeDefined();
+    advanceSeconds(BAR);
     expect(saved().variants["perc.hat"]).toBeUndefined();
+    expect(reset().getAttribute("aria-pressed")).toBe("false");
     expect(stepCell("perc.hat", 0).dataset.state).toBe("");
     expect(stepCell("perc.hat", 2).dataset.state).toBe("hit");
   });
@@ -550,6 +570,7 @@ describe("editors", () => {
     editor("bass.offbeat").querySelector(".editor-actions button:last-child").click(); // clear all
     expect(saved().variants["bass.offbeat"].notes).toEqual([]);
     editor("bass.offbeat").querySelector('[data-action="reset-part"]').click();
+    advanceSeconds(BAR);
     const stored = saved().variants["bass.offbeat"];
     expect(stored.notes).toEqual(defaultData("bass.offbeat").notes);
     expect(stored.params.bright).toBe(2);
@@ -561,6 +582,7 @@ describe("editors", () => {
     expect(editor("perc.hat").querySelector('[data-action="reset-part"]').textContent).toBe("Restaurar golpes");
     stepCell("perc.hat", 0).click();
     editor("perc.hat").querySelector('[data-action="reset-part"]').click();
+    advanceSeconds(BAR);
     expect(saved().variants["perc.hat"]).toBeUndefined();
     expect(stepCell("perc.hat", 0).dataset.state).toBe("");
     expect(button("perc.hat").parentElement.classList.contains("is-edited")).toBe(false);
@@ -792,10 +814,39 @@ describe("drum tools", () => {
     const double = editor("kick.long").querySelector('[data-action="double"]');
     expect(hits("kick.long")).toHaveLength(8);
     double.click();
+    advanceSeconds(BAR);
     expect(hits("kick.long")).toHaveLength(16);
     double.click();
+    advanceSeconds(BAR);
     expect(hits("kick.long")).toHaveLength(32);
     expect(saved().variants["kick.long"].steps.every(Boolean)).toBe(true);
+  });
+
+  it("×2 waits for the bar line while it plays; a second click cancels it", () => {
+    click("perc.clap");
+    advanceSeconds(BAR / 2);
+    openEditor("perc.clap");
+    const double = () => editor("perc.clap").querySelector('[data-action="double"]');
+    const before = hits("perc.clap").length;
+    double().click();
+    expect(double().getAttribute("aria-pressed")).toBe("true");
+    expect(hits("perc.clap")).toHaveLength(before);
+    double().click();
+    expect(double().getAttribute("aria-pressed")).toBe("false");
+    advanceSeconds(BAR);
+    expect(hits("perc.clap")).toHaveLength(before);
+    double().click();
+    advanceSeconds(BAR); // any bar line, not only the loop's start
+    expect(hits("perc.clap")).toHaveLength(before * 2);
+    expect(double().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("×2 applies at once while stopped", () => {
+    openEditor("perc.clap");
+    const before = hits("perc.clap").length;
+    expect(engine.isRunning()).toBe(false);
+    editor("perc.clap").querySelector('[data-action="double"]').click();
+    expect(hits("perc.clap")).toHaveLength(before * 2);
   });
 
   it("only kicks have a build-up", () => {
