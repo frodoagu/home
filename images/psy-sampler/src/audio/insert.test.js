@@ -9,7 +9,10 @@ import {
   driveCurve,
   driveGains,
   ENV_CENTS,
+  HP_OPEN,
+  LP_OPEN,
   VOWELS,
+  isBypass,
   kindOf,
   lfoHz,
   noiseValues,
@@ -22,8 +25,10 @@ const chainOf = (ins) => {
   const pre = filter.outputs[0];
   const shaper = pre.outputs[0];
   const post = shaper.outputs[0];
-  const panner = post.outputs[0].kind === "panner" ? post.outputs[0] : null;
-  return { filter, pre, shaper, post, panner };
+  const hp = post.outputs[0];
+  const lp = hp.outputs[0];
+  const panner = lp.outputs[0].kind === "panner" ? lp.outputs[0] : null;
+  return { filter, pre, shaper, post, hp, lp, panner };
 };
 
 describe("driveCurve", () => {
@@ -65,17 +70,56 @@ describe("driveGains", () => {
   });
 });
 
+describe("tone: the sound's own highpass and lowpass", () => {
+  const tone = (insert) => chainOf(buildInsert(new FakeAudioContext(), { ...INSERT_DEFAULT, ...insert }, { stepDur: STEP }));
+
+  it("runs at its cutoffs once closed, and stays out of kindOf and bypass only when open", () => {
+    const { hp, lp } = tone({ hp: 300, lp: 5000 });
+    expect([hp.frequency.value, lp.frequency.value]).toEqual([300, 5000]);
+    expect([hp.Q.value, lp.Q.value]).toEqual([0, 0]);
+    expect(kindOf({ ...INSERT_DEFAULT, hp: 300, lp: 5000 })).toBe(kindOf(INSERT_DEFAULT)); // a ride never swaps the chain
+    expect(isBypass(INSERT_DEFAULT)).toBe(true);
+    expect(isBypass({ ...INSERT_DEFAULT, lp: 5000 })).toBe(false);
+    expect([HP_OPEN, LP_OPEN]).toEqual([INSERT_DEFAULT.hp, INSERT_DEFAULT.lp]);
+  });
+
+  it("a knob glides; a ride runs an exponential line over the ramp, landing the identity when it opens", () => {
+    const ctx = new FakeAudioContext();
+    const ins = buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
+    const { hp, lp } = chainOf(ins);
+    ins.update({ ...INSERT_DEFAULT, lp: 2000 }, 0);
+    expect(lp.frequency.events).toEqual([["target", 2000, 0, 0.02]]);
+    expect(hp.frequency.events).toEqual([]); // untouched: it did not move
+    lp.frequency.events = [];
+    lp.frequency.value = 2000;
+    ins.update({ ...INSERT_DEFAULT, lp: 2000, hp: 400 }, 1, 3);
+    expect(hp.frequency.events).toEqual([
+      ["cancel", 1],
+      ["set", 20, 1], // from 0 Hz an exponential line starts at the floor
+      ["exp", 400, 4],
+    ]);
+    expect(lp.frequency.events).toEqual([]);
+    hp.frequency.events = [];
+    hp.frequency.value = 400;
+    ins.update({ ...INSERT_DEFAULT, lp: 20000, hp: 20 }, 4, 3);
+    expect(hp.frequency.events).toEqual([["cancel", 4], ["set", 400, 4], ["exp", 20, 7], ["set", 0, 7]]);
+    expect(lp.frequency.events).toEqual([["cancel", 4], ["set", 2000, 4], ["exp", 24000, 7]]);
+  });
+});
+
 describe("buildInsert", () => {
   it("bypassed: a lowpass at Nyquist, no curve, unity gains, no LFO", () => {
     const ctx = new FakeAudioContext();
     const ins = buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
-    const { filter, pre, shaper, post, panner } = chainOf(ins);
+    const { filter, pre, shaper, post, hp, lp, panner } = chainOf(ins);
     expect(filter.type).toBe("lowpass");
     expect(filter.frequency.value).toBe(24000);
     expect(shaper.curve).toBeNull();
     expect([pre.gain.value, post.gain.value]).toEqual([1, 1]);
+    // The open tone: a highpass at 0 Hz and a lowpass at Nyquist, both identities.
+    expect([hp.type, hp.frequency.value, lp.type, lp.frequency.value]).toEqual(["highpass", 0, "lowpass", 24000]);
     expect(panner).toBeNull(); // a StereoPannerNode at 0 is -3 dB on a mono input, not an identity
-    expect(post.outputs[0]).toBe(ins.output);
+    expect(lp.outputs[0]).toBe(ins.output);
     expect(ctx.sources()).toHaveLength(0);
   });
 

@@ -127,6 +127,9 @@ export const INSERT_PARAMS = [
   { key: "envDecay", label: "envDecay", min: 0.02, max: 1, step: 0.01, def: 0.2, fmt: ms },
   { key: "phaser", label: "phaser", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
   { key: "trem", label: "tremolo", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  // The tone: open at either end (insert.js HP_OPEN / LP_OPEN).
+  { key: "hp", label: "hp", min: 20, max: 20000, step: 1, def: 20, fmt: (v) => (v <= 20 ? "–" : hz(v)), log: true },
+  { key: "lp", label: "lp", min: 20, max: 20000, step: 1, def: 20000, fmt: (v) => (v >= 20000 ? "–" : hz(v)), log: true },
 ];
 
 // How a sound sits in time and under the kick (patterns.js GROOVE).

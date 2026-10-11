@@ -29,11 +29,14 @@ function run(seconds) {
   }
 }
 
-// master -> DJ lowpass -> DJ highpass -> compressor; the master is the first
-// gain into the DJ filter (the effect returns join it there too).
-function masterGain() {
+// master -> DJ lowpass -> DJ highpass -> sweep -> compressor; the master is
+// the first gain into the DJ filter (the effect returns join it there too).
+const sweepFilter = () => {
   const comp = ctx.nodes.find((n) => n.kind === "compressor");
-  const high = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
+  return ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
+};
+function masterGain() {
+  const high = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === sweepFilter());
   const low = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === high);
   return ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === low);
 }
@@ -58,7 +61,7 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> DJ filter -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
@@ -70,7 +73,9 @@ describe("context lifecycle", () => {
     const [low] = master.outputs;
     const [high] = low.outputs;
     expect([low.type, low.frequency.value, high.type, high.frequency.value]).toEqual(["lowpass", 24000, "highpass", 0]);
-    const comp = high.outputs[0];
+    const [sweep] = high.outputs;
+    expect([sweep.type, sweep.frequency.value, sweep.Q.value]).toEqual(["highpass", 0, 0]); // an identity until a drop
+    const comp = sweep.outputs[0];
     expect(comp.kind).toBe("compressor");
     const limiter = comp.outputs[0];
     expect(limiter.kind).toBe("compressor");
@@ -643,12 +648,13 @@ describe("audition", () => {
 describe("insert", () => {
   const duckerOf = (lane) => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(lane));
   const insertOf = (lane) => {
-    // lane gain <- ducker <- chain output <- post <- shaper <- pre <- filter <- chain input <- lane input
+    // lane gain <- ducker <- chain output <- tone lp <- tone hp <- post <- shaper <- pre <- filter <- chain input <- lane input
     // (an unpanned sound has no panner)
     const ducker = duckerOf(lane);
     const output = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ducker));
-    const input = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0]?.kind === "filter" && n.outputs[0].outputs[0]?.outputs[0]?.kind === "waveshaper"
-      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
+    const hops = (n, k) => (k ? hops(n?.outputs[0], k - 1) : n);
+    const input = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0]?.kind === "filter" && hops(n, 3)?.kind === "waveshaper"
+      && hops(n, 7) === output);
     return { ducker, output, input, filter: input.outputs[0] };
   };
 
@@ -748,6 +754,86 @@ describe("DJ filter", () => {
     const high = low.outputs[0];
     expect(low.frequency.events.at(-1)).toEqual(["target", 24000, ctx.currentTime, 0.03]);
     expect(high.frequency.events.at(-1)[1]).toBeCloseTo(6000, 6);
+  });
+});
+
+describe("the drop's sweep", () => {
+  it("rises exponentially from `at` and holds; sweepOff glides down onto the drop and opens there", () => {
+    engine.setLanes({ lead: "lead.acid" });
+    const f = sweepFilter().frequency;
+    engine.sweep(1, 4);
+    expect(f.events).toEqual([
+      ["cancel", 1],
+      ["set", 30, 1],
+      ["exp", 900, 4],
+    ]);
+    ctx.currentTime = 4.5; // up and holding: the drop lands on 5
+    f.events = [];
+    engine.sweepOff(5);
+    expect(f.events).toEqual([
+      ["cancel", 4.5],
+      ["set", 900, 4.5],
+      ["exp", 900, 5 - 0.015],
+      ["exp", 30, 5],
+      ["set", 0, 5],
+    ]);
+  });
+
+  it("an early drop cuts the rise where it is", () => {
+    engine.setLanes({ lead: "lead.acid" });
+    const f = sweepFilter().frequency;
+    engine.sweep(0, 4, 480);
+    ctx.currentTime = 2; // halfway: sqrt(30 * 480) = 120 Hz
+    f.events = [];
+    engine.sweepOff(3);
+    const [, [, now, at]] = f.events;
+    expect([now, at]).toEqual([expect.closeTo(120, 6), 2]);
+    expect(f.events.at(-1)).toEqual(["set", 0, 3]);
+  });
+
+  it("a sweep that had not started just clears; Stop opens it as the lanes fade", async () => {
+    engine.setLanes({ lead: "lead.acid" });
+    const f = sweepFilter().frequency;
+    engine.sweep(2, 4);
+    f.events = [];
+    engine.sweepOff(4);
+    expect(f.events).toEqual([["cancel", 0], ["set", 0, 0]]);
+    engine.sweep(0, 4);
+    ctx.currentTime = 1;
+    engine.stop();
+    expect(f.events.at(-1)).toEqual(["set", 0, 1.03]);
+    engine.sweepOff(9); // nothing up: nothing to do
+    expect(f.events.at(-1)).toEqual(["set", 0, 1.03]);
+  });
+});
+
+describe("pump", () => {
+  const sidechain = () => {
+    const shaper = ctx.nodes.find((n) => n.kind === "waveshaper" && n.curve?.length === 1025);
+    return { env: shaper.outputs[0] };
+  };
+
+  it("gives a layer's lanes at least that duck from the bar line, never the kick, and back to their own", () => {
+    engine.setData("lead.acid", { ...defaultData("lead.acid"), duck: 0.5 });
+    engine.setLanes({ kick: "kick.punchy", pad: "pad.chord", lead: "lead.acid" });
+    run(0.2);
+    const { env } = sidechain();
+    expect(env.outputs).toHaveLength(1); // only the lead ducks
+    engine.setPump({ pad: 0.6, lead: 0.3, kick: 1 }, 1);
+    expect(env.outputs).toHaveLength(2); // the pad joins; the kick never ducks
+    const [lead, pad] = env.outputs;
+    expect(pad.gain.events.at(-1)).toEqual(["target", -0.6, 1, 0.02]);
+    expect(lead.gain.events.at(-1)).toEqual(["target", -0.5, 1, 0.02]); // its own is deeper
+    engine.setPump({}, 2);
+    expect(pad.gain.events.at(-1)).toEqual(["target", -0, 2, 0.02]);
+  });
+
+  it("a lane that opens under it ducks too", () => {
+    engine.setPump({ pad: 0.6 });
+    engine.setLanes({ kick: "kick.punchy", pad: "pad.chord" });
+    run(0.2);
+    const [depth] = sidechain().env.outputs;
+    expect(depth.gain.value).toBe(-0.6);
   });
 });
 

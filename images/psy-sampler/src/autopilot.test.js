@@ -1,23 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_BARS,
+  IMPROVISE,
+  PHRASE_LOOPS,
+  PUMP,
   SECTIONS,
   STYLES,
   STYLE_IDS,
+  TONE,
+  TONE_LAYERS,
   advance,
   arrange,
   dequeue,
+  dropNext,
+  dropping,
   enqueue,
   fillMelodic,
   guessSection,
+  improvises,
   isBare,
   joinPilot,
   mixOf,
+  phraseEnd,
   poolOf,
   rearrange,
   skip,
   startPilot,
+  toneOf,
 } from "./autopilot.js";
+import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
 import { baseOf } from "./audio/patterns.js";
 import { seeded } from "./editing.js";
 import { normalize, layerOfVariant } from "./workspace.js";
@@ -159,6 +170,100 @@ describe("autopilot", () => {
     }
   });
 
+  it("every build ends in a drop loop with a riser; one in ten is a tease into a breakdown", () => {
+    let builds = 0;
+    let teases = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const log = run(seed, 300);
+      for (let i = 1; i < log.length; i++) {
+        const { pilot, fx } = log[i];
+        if (pilot.section !== "build" || pilot.left !== 1) continue;
+        builds++;
+        expect(dropping(pilot)).toBe(true);
+        expect(fx[0]).toMatch(/^fx\.(riser|reverse)/);
+        if (pilot.next === "breakdown") teases++;
+        else expect(pilot.next).toBe("peak");
+        expect(log[i + 1]?.pilot.section ?? pilot.next).toBe(pilot.next);
+      }
+    }
+    expect(builds).toBeGreaterThan(30);
+    expect(teases).toBeGreaterThan(0);
+    expect(teases / builds).toBeLessThan(0.25);
+  });
+
+  it("a build's odds draw once, like a plain pick: the same draw lands on a peak below 0.9", () => {
+    const at = (r) => {
+      const draws = [r, 0.5];
+      const rng = () => draws.shift() ?? 0.5;
+      const move = advance({ section: "build", left: 2, length: 4, queue: [] }, { kick: "kick.punchy" }, lists, rng);
+      return [move.pilot.next, draws.length];
+    };
+    expect(at(0.89)).toEqual(["peak", 0]); // the odds and the riser: two draws
+    expect(at(0.91)).toEqual(["breakdown", 0]);
+  });
+
+  it("only a loop advance() marked is a drop: ⏭ moves on without one", () => {
+    expect(dropping({ section: "groove", left: 1, length: 4, queue: [], next: "peak" })).toBe(true);
+    expect(dropping({ section: "groove", left: 1, length: 4, queue: [], next: "build" })).toBe(false);
+    expect(dropping(skip({ section: "build", left: 3, length: 4, queue: [] }))).toBe(false);
+    expect(dropping(null)).toBe(false);
+  });
+
+  it("the breakdown's lead is the theme: held through the build and into the peak, never rewritten", () => {
+    let checked = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const log = run(seed, 300, { changeBars: 2 });
+      for (let i = 1; i < log.length; i++) {
+        const [prev, cur] = [log[i - 1], log[i]];
+        if (prev.pilot.section !== "breakdown" || cur.pilot.section !== "build") continue;
+        const theme = Object.values(prev.active).filter((id) => layerOfVariant(id) === "lead");
+        expect(cur.pilot.theme).toEqual(theme);
+        let j = i;
+        for (; log[j] && ["build", "peak"].includes(log[j].pilot.section); j++) {
+          if (log[j].pilot.section === "peak" && log[j - 1].pilot.section === "peak") break;
+          for (const id of theme) {
+            expect(Object.values(log[j].active)).toContain(id);
+            expect(log[j].rewrite).not.toContain(id);
+          }
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+  });
+
+  it("phrases are 8 bars: their last loop ends in a fill, unless it is a drop", () => {
+    expect(PHRASE_LOOPS * 2).toBe(8);
+    for (const { loops } of Object.values(SECTIONS)) for (const n of loops) expect(n % PHRASE_LOOPS).toBe(0);
+    const peak = { section: "peak", left: 8, length: 8, queue: [] };
+    const ends = [8, 7, 6, 5, 4, 3, 2, 1].map((left) => phraseEnd({ ...peak, left }));
+    expect(ends).toEqual([0, 0, 0, 4, 0, 0, 0, 8]);
+    expect(phraseEnd({ ...peak, left: 1, next: "peak" })).toBe(0); // a drop instead
+    expect(phraseEnd({ section: "build", left: 1, length: 4, queue: [], next: "peak" })).toBe(0);
+    expect(phraseEnd(null)).toBe(0);
+  });
+
+  it("the peak pumps its pads and leads", () => {
+    expect(PUMP.peak).toEqual({ pad: 0.6, lead: 0.35 });
+    expect(Object.keys(PUMP)).toEqual(["peak"]);
+  });
+
+  it("dropNext: the next loop is a drop into a peak, from anywhere", () => {
+    const rng = seeded(4);
+    const { pilot, active } = startPilot(lists, rng);
+    const armed = dropNext({ ...pilot, queue: ["breakdown"] });
+    expect(armed).toMatchObject({ section: "intro", left: 2, queue: ["peak", "breakdown"] });
+    expect(dropNext(armed)).toEqual(armed); // a second click queues no second peak
+    const drop = advance(armed, active, lists, rng);
+    expect(dropping(drop.pilot)).toBe(true);
+    expect(drop.fx[0]).toMatch(/^fx\.(riser|reverse)/);
+    expect(dropNext(drop.pilot)).toBe(drop.pilot); // already dropping
+    const peak = advance(drop.pilot, drop.active, lists, rng);
+    expect(peak.pilot).toMatchObject({ section: "peak", queue: ["breakdown"] });
+    const last = { section: "groove", left: 1, length: 4, queue: [], next: "build" };
+    expect(dropNext(last)).toMatchObject({ left: 2, queue: ["peak"] }); // one more loop for the drop
+  });
+
   it("inside a section one sound changes every `changeBars` bars, and only then", () => {
     for (const changeBars of CHANGE_BARS) {
       let swaps = 0;
@@ -246,6 +351,44 @@ describe("autopilot", () => {
     const seen = new Set();
     for (let seed = 1; seed < 40; seed++) seen.add(arrange("groove", {}, lists, seeded(seed)).kick);
     expect(seen).toContain("kick.punchy~1");
+  });
+
+  describe("tone", () => {
+    const pilot = (section, left, length = 4) => ({ section, left, length, queue: [] });
+    const mix = { kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid", "pad.chord": "pad.chord" };
+
+    it("a build opens the lead's lowpass in octaves, landing open on its last loop; the pad's highpass rises", () => {
+      const lps = [4, 3, 2, 1].map((left) => toneOf(pilot("build", left), mix)["lead.acid"].lp);
+      expect(lps).toEqual([2866, 5477, 10466, LP_OPEN]); // 1500 · (20000/1500)^(n/4)
+      expect(toneOf(pilot("build", 1), mix)["pad.chord"]).toEqual({ hp: 600, lp: LP_OPEN });
+    });
+
+    it("never rides kick or bass, and an absent entry is open", () => {
+      const peak = toneOf(pilot("peak", 8, 8), mix);
+      expect(Object.keys(peak).sort()).toEqual(["lead.acid", "pad.chord"]);
+      expect(peak["lead.acid"]).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
+      expect(peak["pad.chord"].hp).toBe(220);
+      for (const section of Object.keys(TONE)) {
+        for (const layer of Object.keys(TONE[section])) expect(TONE_LAYERS).toContain(layer);
+      }
+    });
+
+    it("the breakdown muffles the lead and opens it as it goes", () => {
+      const lps = [4, 1].map((left) => toneOf(pilot("breakdown", left), mix)["lead.acid"].lp);
+      expect(lps[0]).toBeLessThan(2000);
+      expect(lps[1]).toBe(6000);
+    });
+  });
+
+  describe("improvise", () => {
+    it("never in the intro nor on a kick; a sound improvises when its coin falls under its layer's chance", () => {
+      expect(improvises("intro", "lead.acid", 0)).toBe(false);
+      expect(improvises("peak", "kick.punchy", 0)).toBe(false);
+      expect(improvises("build", "lead.acid", 0.49)).toBe(true);
+      expect(improvises("build", "lead.acid", 0.5)).toBe(false);
+      expect(improvises("breakdown", "lead.acid", 0)).toBe(false); // the theme as written
+      for (const chances of Object.values(IMPROVISE)) expect(chances.kick).toBeUndefined();
+    });
   });
 
   describe("the mix", () => {
