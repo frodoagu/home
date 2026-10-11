@@ -18,7 +18,7 @@
 //
 // DEFAULTS holds the factory data; the UI keeps edited copies and hands them
 // to the engine, which passes them back into eventsAt() on every step.
-import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES } from "./insert.js";
+import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "./insert.js";
 import { NOTE, SCALES, midiToFreq } from "./music.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
 import { LOOP_STEPS } from "./timing.js";
@@ -490,6 +490,10 @@ export function cleanInsert(saved, base = INSERT_DEFAULT) {
   if (DRIVE_TYPES.includes(saved.drive)) out.drive = saved.drive;
   if (LFO_RATES.includes(saved.rate)) out.rate = saved.rate;
   if (LFO_RATES.includes(saved.panRate)) out.panRate = saved.panRate;
+  if (LFO_RATES.includes(saved.phaserRate)) out.phaserRate = saved.phaserRate;
+  if (TREM_RATES.includes(saved.tremRate)) out.tremRate = saved.tremRate;
+  if (LFO_SHAPES.includes(saved.shape)) out.shape = saved.shape;
+  if (Object.hasOwn(VOWELS, saved.vowel)) out.vowel = saved.vowel;
   return out;
 }
 

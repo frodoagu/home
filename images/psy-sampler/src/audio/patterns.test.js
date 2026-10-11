@@ -468,3 +468,12 @@ describe("groove", () => {
     expect(cleanInsert({ panRate: 5 }).panRate).toBe(32);
   });
 });
+
+describe("insert extras", () => {
+  it("cleanInsert keeps a known shape, vowel and rates, and clamps the new knobs", () => {
+    const ins = cleanInsert({ shape: "smooth", vowel: "u", env: -3, envDecay: 9, phaser: 0.5, phaserRate: 8, trem: 0.3, tremRate: 1 });
+    expect(ins).toMatchObject({ shape: "smooth", vowel: "u", env: -1, envDecay: 1, phaser: 0.5, phaserRate: 8, trem: 0.3, tremRate: 1 });
+    const bad = cleanInsert({ shape: "noise", vowel: "y", phaserRate: 3, tremRate: 16, filter: "vowel" });
+    expect(bad).toMatchObject({ shape: "sine", vowel: "a", phaserRate: 16, tremRate: 2, filter: "vowel" });
+  });
+});

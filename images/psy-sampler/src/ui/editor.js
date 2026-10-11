@@ -9,7 +9,7 @@
 // never talks to the engine itself. The header names the variant (editable)
 // and carries the per-sound actions: duplicate, WAV, reset (the part alone,
 // or the whole sound), delete (copies).
-import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES } from "../audio/insert.js";
+import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "../audio/insert.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
 import {
   CHANCES,
@@ -405,50 +405,76 @@ export function createEditor({
   function insertControls() {
     const ins = () => current.insert;
     const setInsert = (patch) => set({ insert: { ...current.insert, ...patch } });
-    const knob = (key) => {
+    const knob = (key, after = () => {}) => {
       const spec = INSERT_PARAMS.find((p) => p.key === key);
-      return slider(localized(spec), ins()[key], (v) => setInsert({ [key]: v }));
+      return slider(localized(spec), ins()[key], (v) => {
+        setInsert({ [key]: v });
+        after();
+      });
     };
-    const filterKnobs = [knob("cutoff"), knob("res"), knob("lfo")];
-    const rate = select(
-      tx.lfoRate,
-      LFO_RATES.map((n) => ({ value: n, label: tx.lfoRates[n] })),
-      ins().rate,
-      (v) => setInsert({ rate: Number(v) }),
-      "lfo-rate",
-    );
+    const pick = (label, list, key, labels, name, after = () => {}) =>
+      select(
+        label,
+        list.map((v) => ({ value: v, label: labels[v] })),
+        ins()[key],
+        (v) => {
+          setInsert({ [key]: typeof list[0] === "number" ? Number(v) : v });
+          after();
+        },
+        name,
+      );
+    const cutoff = knob("cutoff");
+    const filterKnobs = [knob("res"), knob("lfo"), knob("env", () => show())];
+    const envDecay = knob("envDecay");
+    const rate = pick(tx.lfoRate, LFO_RATES, "rate", tx.lfoRates, "lfo-rate");
+    const shape = pick(tx.lfoShape, LFO_SHAPES, "shape", tx.lfoShapes, "lfo-shape");
+    const vowel = pick(tx.vowel, Object.keys(VOWELS), "vowel", Object.fromEntries(Object.keys(VOWELS).map((v) => [v, v.toUpperCase()])), "vowel");
     const drive = knob("amount");
     const show = () => {
-      for (const n of [...filterKnobs, rate]) n.hidden = ins().filter === "off";
+      const off = ins().filter === "off";
+      for (const n of [...filterKnobs, rate, shape]) n.hidden = off;
+      cutoff.hidden = off || ins().filter === "vowel";
+      vowel.hidden = ins().filter !== "vowel";
+      envDecay.hidden = off || !ins().env;
       drive.hidden = ins().drive === "off";
     };
-    const filterType = select(
-      tx.filter,
-      FILTER_TYPES.map((v) => ({ value: v, label: tx.filterTypes[v] })),
-      ins().filter,
-      (v) => {
-        setInsert({ filter: v });
-        show();
-      },
-      "filter",
-    );
-    const driveType = select(
-      tx.drive,
-      DRIVE_TYPES.map((v) => ({ value: v, label: tx.driveTypes[v] })),
-      ins().drive,
-      (v) => {
-        setInsert({ drive: v });
-        show();
-      },
-      "drive",
-    );
+    const filterType = pick(tx.filter, FILTER_TYPES, "filter", tx.filterTypes, "filter", () => show());
+    const driveType = pick(tx.drive, DRIVE_TYPES, "drive", tx.driveTypes, "drive", () => show());
     show();
     return el(
       "fieldset",
       { class: "insert" },
       el("legend", { text: tx.insert }),
-      el("div", { class: "pickers" }, filterType, rate, driveType),
-      el("div", { class: "knobs" }, ...filterKnobs, drive),
+      el("div", { class: "pickers" }, filterType, vowel, rate, shape, driveType),
+      el("div", { class: "knobs" }, cutoff, ...filterKnobs, envDecay, drive),
+    );
+  }
+
+  /* ---- modulation: phaser and tremolo, in time ---- */
+  function modulationControls() {
+    const setInsert = (patch) => set({ insert: { ...current.insert, ...patch } });
+    const pair = (key, rateKey, rates, labels) => {
+      const spec = INSERT_PARAMS.find((p) => p.key === key);
+      const rate = select(
+        tx.every,
+        rates.map((n) => ({ value: n, label: labels[n] })),
+        current.insert[rateKey],
+        (v) => setInsert({ [rateKey]: Number(v) }),
+        `${key}-rate`,
+      );
+      const amount = slider(localized(spec), current.insert[key], (v) => {
+        setInsert({ [key]: v });
+        rate.hidden = !v;
+      });
+      rate.hidden = !current.insert[key];
+      return el("div", { class: "mod-pair" }, amount, rate);
+    };
+    return el(
+      "fieldset",
+      { class: "insert modulation" },
+      el("legend", { text: tx.modulation }),
+      el("div", { class: "knobs" }, pair("phaser", "phaserRate", LFO_RATES, tx.lfoRates), pair("trem", "tremRate", TREM_RATES, tx.tremRates)),
+      legend(tx.modulationLegend),
     );
   }
 
@@ -496,11 +522,11 @@ export function createEditor({
   if (def.kind === "fx") {
     const fire = el("button", { type: "button", class: "action", text: tx.fire });
     fire.addEventListener("click", onTrigger);
-    node.append(source, knobs, insertControls(), spaceControls(), el("div", { class: "editor-actions" }, fire));
+    node.append(source, knobs, insertControls(), modulationControls(), spaceControls(), el("div", { class: "editor-actions" }, fire));
   } else if (def.kind === "drum") {
-    node.append(source, knobs, insertControls(), spaceControls(), ...drumGrid());
+    node.append(source, knobs, insertControls(), modulationControls(), spaceControls(), ...drumGrid());
   } else {
-    node.append(...noteControls(), knobs, insertControls(), spaceControls(), ...pianoRoll());
+    node.append(...noteControls(), knobs, insertControls(), modulationControls(), spaceControls(), ...pianoRoll());
   }
   renderVoiceKnobs();
 

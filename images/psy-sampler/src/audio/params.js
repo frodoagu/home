@@ -123,6 +123,10 @@ export const INSERT_PARAMS = [
   { key: "amount", label: "drive", min: 0, max: 1, step: 0.05, def: 0.4, fmt: pct },
   { key: "pan", label: "pan", min: -1, max: 1, step: 0.05, def: 0, fmt: panFmt },
   { key: "width", label: "autopan", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  { key: "env", label: "envelope", min: -1, max: 1, step: 0.05, def: 0, fmt: (v) => `${v > 0 ? "+" : ""}${Math.round(v * 400) / 100} oct` },
+  { key: "envDecay", label: "envDecay", min: 0.02, max: 1, step: 0.01, def: 0.2, fmt: ms },
+  { key: "phaser", label: "phaser", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  { key: "trem", label: "tremolo", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
 ];
 
 // How a sound sits in time and under the kick (patterns.js GROOVE).

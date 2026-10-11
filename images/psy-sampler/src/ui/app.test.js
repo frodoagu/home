@@ -900,6 +900,44 @@ describe("groove and space", () => {
   });
 });
 
+describe("insert extras", () => {
+  const pick = (variant, control, value) => {
+    const sel = editor(variant).querySelector(`[data-control="${control}"]`);
+    sel.value = String(value);
+    sel.dispatchEvent(new Event("change"));
+  };
+  const slide = (variant, key, value) => {
+    const input = editor(variant).querySelector(`input[data-param="${key}"]`);
+    input.value = String(value);
+    input.dispatchEvent(new Event("input"));
+  };
+  const shown = (variant, sel) => !editor(variant).querySelector(sel).closest("label").hidden;
+
+  it("a vowel filter swaps the cutoff for a vowel picker; the envelope's decay shows once it moves", () => {
+    openEditor("lead.acid");
+    pick("lead.acid", "filter", "vowel");
+    expect(shown("lead.acid", '[data-control="vowel"]')).toBe(true);
+    expect(shown("lead.acid", 'input[data-param="cutoff"]')).toBe(false);
+    expect(shown("lead.acid", '[data-control="lfo-shape"]')).toBe(true);
+    pick("lead.acid", "vowel", "i");
+    pick("lead.acid", "lfo-shape", "random");
+    expect(shown("lead.acid", 'input[data-param="envDecay"]')).toBe(false);
+    slide("lead.acid", "env", 0.5);
+    expect(shown("lead.acid", 'input[data-param="envDecay"]')).toBe(true);
+    expect(saved().variants["lead.acid"].insert).toMatchObject({ filter: "vowel", vowel: "i", shape: "random", env: 0.5 });
+  });
+
+  it("phaser and tremolo show their rate once they are on", () => {
+    openEditor("pad.chord");
+    expect(shown("pad.chord", '[data-control="trem-rate"]')).toBe(false);
+    slide("pad.chord", "trem", 0.5);
+    expect(shown("pad.chord", '[data-control="trem-rate"]')).toBe(true);
+    pick("pad.chord", "trem-rate", 1);
+    slide("pad.chord", "phaser", 0.4);
+    expect(saved().variants["pad.chord"].insert).toMatchObject({ trem: 0.5, tremRate: 1, phaser: 0.4 });
+  });
+});
+
 describe("editor focus", () => {
   it("dims the page around the open editor and marks its tile", () => {
     const veil = $(".editor-veil");

@@ -554,11 +554,12 @@ describe("audition", () => {
 describe("insert", () => {
   const duckerOf = (lane) => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(lane));
   const insertOf = (lane) => {
-    // lane gain <- ducker <- chain output <- panner <- post <- shaper <- pre <- filter <- chain input <- lane input
+    // lane gain <- ducker <- chain output <- post <- shaper <- pre <- filter <- chain input <- lane input
+    // (an unpanned sound has no panner)
     const ducker = duckerOf(lane);
     const output = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ducker));
     const input = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0]?.kind === "filter" && n.outputs[0].outputs[0]?.outputs[0]?.kind === "waveshaper"
-      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
+      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
     return { ducker, output, input, filter: input.outputs[0] };
   };
 
@@ -731,5 +732,19 @@ describe("groove: sidechain and nudge", () => {
     run(1);
     const step = stepDuration(145);
     startTimes("oscillator").forEach((t, i) => expect(t).toBeCloseTo(0.06 + (2 + 4 * i) * step + 0.01, 9));
+  });
+});
+
+describe("filter envelope", () => {
+  it("every note the lane plays triggers its insert's envelope at the note's time", () => {
+    const base = defaultData("bass.offbeat");
+    engine.setData("bass.offbeat", { ...base, insert: { ...base.insert, filter: "lowpass", env: 0.5 } });
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(1);
+    const filter = ctx.nodes.find((n) => n.kind === "filter" && n.detune.events.length);
+    const opens = filter.detune.events.filter((e) => e[1] !== 0).map((e) => e[2]);
+    const notes = ctx.sources().filter((src) => src.type === "sawtooth").map((src) => src.startTime).sort((a, b) => a - b);
+    expect(opens.length).toBeGreaterThan(2);
+    opens.forEach((t, i) => expect(t).toBeCloseTo(notes[i], 9));
   });
 });
