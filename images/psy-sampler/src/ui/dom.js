@@ -45,7 +45,13 @@ export function slider(spec, value, onInput) {
     out.textContent = spec.fmt(v);
     onInput(v);
   });
-  return el("label", { class: "knob", for: id }, el("span", { text: spec.label }), input, out);
+  const node = el("label", { class: "knob", for: id }, el("span", { text: spec.label }), input, out);
+  // From outside (the autopilot): moves without reporting an input.
+  node.setValue = (v) => {
+    input.value = String(toPos(v));
+    out.textContent = spec.fmt(v);
+  };
+  return node;
 }
 
 // <select> over [{ value, label, group? }]; groups become <optgroup>s.

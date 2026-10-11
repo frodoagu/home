@@ -46,6 +46,39 @@ export function withBuildUp(data, from) {
   return { ...data, steps, mods, speed: 1, iter: 1, echo: null };
 }
 
+// Bar overlays: what a sound plays for one bar (a drop's gap, a phrase-end
+// fill), laid over its data and taken off on the next bar line. Like the
+// build-up they read their bar in place: no speed, iter or echo.
+const inPlace = (data, steps, mods) => ({ ...data, steps, mods, speed: 1, iter: 1, echo: null });
+
+/** Nothing at all, drums and notes alike: kick and bass in the bar before a drop. */
+export function silenced(data) {
+  if (data.notes) return { ...data, notes: [], echo: null };
+  return inPlace(data, data.steps.map(() => OFF), data.mods.map(() => null));
+}
+
+// A fill takes the last two beats of the bar before a new phrase.
+export const FILL_STEPS = BAR_STEPS / 2;
+// The percussion's fill: 8ths, then 16ths, the last two accented.
+export const ROLL = [HIT, OFF, HIT, OFF, HIT, HIT, ACCENT, ACCENT];
+
+function fillBar(data, from, pattern) {
+  const steps = data.steps.slice();
+  const mods = data.mods.slice();
+  pattern.forEach((v, i) => {
+    const at = (from + BAR_STEPS - FILL_STEPS + i) % steps.length;
+    steps[at] = v;
+    mods[at] = null;
+  });
+  return inPlace(data, steps, mods);
+}
+
+/** A break: the bar starting at `from` loses its last two beats (a kick's fill). */
+export const withBreak = (data, from) => fillBar(data, from, Array(FILL_STEPS).fill(OFF));
+
+/** A roll over the last two beats of the bar starting at `from` (a drum's fill). */
+export const withRoll = (data, from) => fillBar(data, from, ROLL);
+
 export const noteAt = (notes, step, midi) =>
   notes.find((n) => n.midi === midi && n.step <= step && n.step + n.len > step);
 

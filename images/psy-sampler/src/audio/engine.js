@@ -1,7 +1,7 @@
 // Audio engine: owns the AudioContext, the output chain, the lookahead
 // scheduler and one gain "lane" per playing variant.
 //
-//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> compressor ─> limiter ─> trim ─> destination
+//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> compressor ─> limiter ─> trim ─> destination
 //                                   fx gain  ───┤                      ▲
 //                                               ├─ delay send ─> delay 3/16 ─> return ─┤
 //                                               └─ reverb send ─> convolver ─> return ─┘
@@ -29,6 +29,10 @@
 // align() moves the grid onto the beat the taps lay down (tempo.js).
 //
 // tap() hands out what the trim sends to the destination, for recording.
+//
+// The arrangement has two moves of its own, never stored: sweep() runs a
+// highpass up the whole mix into a drop and sweepOff() snaps it open on the
+// drop; setPump() gives every lane of a layer at least that much sidechain.
 import {
   alignCursor,
   collectSteps,
@@ -81,6 +85,18 @@ const FX_RENDER_SECONDS = Math.ceil(FX_MAX_BARS * BAR_STEPS * stepDuration(BPM_M
 const DUCK_DRIVE = 8;
 const DUCK_HZ = 8;
 const DUCK_CURVE = Float32Array.from({ length: 1025 }, (_, i) => Math.min(1, DUCK_DRIVE * Math.abs(i / 512 - 1)));
+// The drop's sweep: a highpass after the DJ filter, an identity at 0 Hz like
+// the DJ's. It rises exponentially from SWEEP_FROM (an exponential ramp can't
+// start at 0) to SWEEP_TO, the low end draining out of the mix, and on the
+// drop glides back to SWEEP_FROM over SWEEP_SNAP before the identity: a jump
+// in a biquad's coefficients under a full mix can click. Q is in dB for a
+// highpass: 0 dB is a linear Q of 1, a ~1.25 dB bump that rides up with the
+// cutoff (the sweep you hear) and passes the kick's fundamental early on, so
+// no more than that, or the limiter eats the roll.
+const SWEEP_FROM = 30;
+const SWEEP_TO = 900;
+const SWEEP_Q = 0;
+const SWEEP_SNAP = 0.015;
 
 const layerOf = (variant) => variant.split(".")[0];
 
@@ -95,9 +111,10 @@ function impulse(ctx, seconds) {
   return buf;
 }
 
-// Output chain: master -> DJ filter -> compressor -> limiter -> trim ->
-// destination, plus the shared delay and reverb buses (their returns go
-// through the DJ filter too). Built once per context, live or offline.
+// Output chain: master -> DJ filter -> sweep -> compressor -> limiter -> trim
+// -> destination, plus the shared delay and reverb buses (their returns go
+// through the DJ filter and the sweep too). Built once per context, live or
+// offline; a render keeps the sweep open.
 function buildChain(ctx, bpm, effects, djValue = 0) {
   // Gentle settings: it only catches peaks when layers stack up. The
   // defaults (-24 dB, 12:1) would flatten exactly the dynamics a solo
@@ -130,8 +147,12 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   dj.high.frequency.value = high;
   dj.low.Q.value = DJ_Q;
   dj.high.Q.value = DJ_Q;
-  master.connect(dj.low).connect(dj.high).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
-  return { master, dj, out: trim, bus: buildBus(ctx, dj.low, bpm, effects), side: buildSidechain(ctx) };
+  const sweep = ctx.createBiquadFilter();
+  sweep.type = "highpass";
+  sweep.frequency.value = 0;
+  sweep.Q.value = SWEEP_Q;
+  master.connect(dj.low).connect(dj.high).connect(sweep).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
+  return { master, dj, sweep, out: trim, bus: buildBus(ctx, dj.low, bpm, effects), side: buildSidechain(ctx) };
 }
 
 // The kick lanes' sum in `input`, its envelope out of `env` (never heard).
@@ -229,6 +250,9 @@ export function createEngine({
   let tapModule = null; // addModule()'s promise, once per context
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
+  let sweepFilter = null; // the drop's highpass
+  let sweepLine = null; // { start, end, to }: the sweep on its way up, or holding at `to`
+  let pump = {}; // layer -> the least duck its lanes get (the arrangement's sidechain)
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
   let side = null; // the kick sidechain: { input, env }
   let bpm = BPM_DEFAULT;
@@ -262,7 +286,7 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
+      ({ master, dj, sweep: sweepFilter, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -322,7 +346,8 @@ export function createEngine({
   }
 
   const openGain = (level, layer) => connectGain(ctx, { master, bus, side }, level, layer);
-  const duckOf = (variant) => (layerOf(variant) === "kick" ? 0 : (dataOf(variant).duck ?? 0));
+  const duckOf = (variant) =>
+    layerOf(variant) === "kick" ? 0 : Math.max(dataOf(variant).duck ?? 0, pump[layerOf(variant)] ?? 0);
 
   // Gain + input + insert, the insert's LFO starting at `at`.
   const openVoice = (level, layer, insert, at) =>
@@ -494,6 +519,7 @@ export function createEngine({
     stopAt = null;
     for (const lane of lanes.values()) fadeOut(lane);
     lanes.clear();
+    if (ctx) sweepOff(ctx.currentTime + FADE); // open again as the lanes fade
   }
 
   /**
@@ -529,14 +555,15 @@ export function createEngine({
    * Swap the data a variant plays. Notes and params apply from the next
    * scheduled step; a volume change glides the lanes playing it (20 ms, or
    * in a straight line over `ramp` seconds) so the slider never zips, and so
-   * do the insert's knobs.
+   * do the insert's knobs (its tone filters in an exponential line over
+   * `ramp`).
    */
   function setData(id, next, ramp = 0) {
     data.set(id, next);
     if (!ctx) return;
     for (const [key, lane] of lanes) {
       if (lane.variant !== id) continue;
-      if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime);
+      if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime, ramp);
       else swapInsert(lane, next.insert);
       duckWith(ctx, lane, side, duckOf(id), ctx.currentTime);
       const level = liveLane(key, id);
@@ -599,6 +626,59 @@ export function createEngine({
     const { low, high } = djCutoffs(value, ctx.sampleRate / 2);
     dj.low.frequency.setTargetAtTime(low, ctx.currentTime, 0.03);
     dj.high.frequency.setTargetAtTime(high, ctx.currentTime, 0.03);
+  }
+
+  /**
+   * The drop's sweep: from `at` the whole mix goes through a highpass rising
+   * exponentially to `to` Hz at `end`, where it holds until sweepOff(). Only
+   * while the loop runs: a render never has it.
+   */
+  function sweep(at, end, to = SWEEP_TO) {
+    if (!ctx) return;
+    const f = sweepFilter.frequency;
+    const start = Math.max(at, ctx.currentTime);
+    if (sweepLine) sweepOff(start); // one still up comes down first, landing where this one starts
+    else f.cancelScheduledValues(start);
+    f.setValueAtTime(SWEEP_FROM, start);
+    f.exponentialRampToValueAtTime(to, Math.max(end, start + SWEEP_SNAP));
+    sweepLine = { start, end: Math.max(end, start + SWEEP_SNAP), to };
+  }
+
+  /**
+   * The drop: the sweep glides from wherever it is down to SWEEP_FROM, landing
+   * on `at`, and opens to an identity there. A drop that comes early (a BPM
+   * ramp) cuts the rise where it is, the way pin() cuts a volume line.
+   */
+  function sweepOff(at) {
+    const line = sweepLine;
+    sweepLine = null;
+    if (!ctx || !line) return;
+    const f = sweepFilter.frequency;
+    const now = ctx.currentTime;
+    const t = Math.max(at ?? now, now);
+    f.cancelScheduledValues(now);
+    if (now < line.start) {
+      f.setValueAtTime(0, now); // it had not started rising: nothing to glide
+      return;
+    }
+    const valueAt = (x) => SWEEP_FROM * (line.to / SWEEP_FROM) ** Math.min(1, (x - line.start) / (line.end - line.start));
+    f.setValueAtTime(valueAt(now), now);
+    const glide = t - SWEEP_SNAP;
+    if (glide > now) f.exponentialRampToValueAtTime(valueAt(glide), glide);
+    f.exponentialRampToValueAtTime(SWEEP_FROM, t);
+    f.setValueAtTime(0, t);
+  }
+
+  /**
+   * The arrangement's pump: per layer, the least duck every lane of it gets
+   * from `at` on (its own duck when that is deeper). Kicks never duck. Renders
+   * use it too, like any duck.
+   */
+  function setPump(next, at) {
+    pump = { ...next };
+    if (!ctx) return;
+    const t = Math.max(at ?? ctx.currentTime, ctx.currentTime);
+    for (const lane of lanes.values()) duckWith(ctx, lane, side, duckOf(lane.variant), t);
   }
 
   // One-shot FX: at `at` if given (a bar hook passes its bar line), else on
@@ -765,6 +845,9 @@ export function createEngine({
     restart,
     align,
     setMasterFilter,
+    sweep,
+    sweepOff,
+    setPump,
     triggerFx,
     audition,
     previewSample,

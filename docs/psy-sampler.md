@@ -32,7 +32,7 @@ flowchart LR
     K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n]
   end
   FX[one insert + GainNode per playing FX]
-  lanes --> M[master 0.7] --> DJ[DJ filter] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
+  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
   FX --> M
   lanes -. send .-> DL[delay 3/16] -.-> DJ
   lanes -. send .-> RV[reverb] -.-> DJ
@@ -95,6 +95,13 @@ goes through it:
   one after (see below).
 - **Snapshots** (see below): a click plays the saved moment from the next bar,
   always, even with "On the beat" off.
+- **💥 Drop** (top bar, next to Snapshot; only while the loop runs): armed, the
+  next bar line starts a drop, the same one the autopilot plays into its peaks
+  (see *Drops* below), with a riser fired on its first bar and an impact on
+  the drop. A second click before that bar line disarms it. Under the
+  autopilot it doesn't run on its own: it queues a Peak first and makes the
+  section end after the next loop (`dropNext`), so that loop is the pilot's
+  drop; ✕ on the queued Peak takes it back.
 - **BPM change** (in the top bar, next to the BPM slider): "BPM change [N]
   over [1-32 bars] ▶ Go" moves one linear stretch on each bar line (`rampAt`
   in `tempo.js`) and lands exactly on N on the last one. The in-between BPM goes to the engine with decimals, and rounded to the
@@ -206,6 +213,7 @@ distortion":
 | Filter | off, lowpass, highpass, bandpass, vowel | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars, LFO shape, envelope (±4 octaves) and its decay |
 | Distortion | off, saturation (tanh), hard clip, wavefold, bitcrush | drive |
 | Modulation | phaser, tremolo | mix / depth, each with its rate (phaser 1/8 … 4 bars, tremolo 1/16 … 1/2) |
+| Tone | always there | High-pass and Low-pass (log sliders, 20 Hz-20 kHz), open at either end |
 
 - **Live**: knob moves glide (20 ms) on the playing lane. Switching a *type*
   needs other nodes, so the engine builds a fresh chain and crossfades it in
@@ -241,6 +249,18 @@ distortion":
   so switching either on or off builds a fresh chain.
 - FX shots and the editor's previews get an insert too, and WAV exports render it.
 
+- **Tone**: a highpass and a lowpass of the sound's own (`insert.hp` /
+  `insert.lp`, Hz), after the distortion and before the modulation, apart from
+  the creative filter above, so the autopilot can ride them without touching
+  a filter you set. Unlike the rest of the insert they are always in the
+  chain: open (hp at 20 Hz, lp at 20 kHz) they run at 0 Hz and at Nyquist,
+  where the spec makes them identities, so a ride never swaps the chain (a
+  crossfade every loop would smear it). Q 0 dB, which Web Audio reads as a
+  linear Q of 1: a ~1.25 dB bump at the cutoff, no whistle. A knob glides
+  (20 ms); the autopilot's ride is an exponential line over the loop
+  (`update(insert, now, ramp)`), which can't touch 0 Hz, so it runs from and
+  to 20 Hz and the identity is set at its end.
+
 `lead.bits` ships with a resonant lowpass wobbling over 2 bars, to show it off;
 every other factory sound starts with the insert off.
 
@@ -250,6 +270,18 @@ compressor and after the effect returns: left closes a lowpass from Nyquist to
 the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
+
+After it sits the **drop sweep**, a highpass of its own that only a drop
+moves (`engine.sweep(at, end)` / `sweepOff(at)`), so it never fights your hand
+on the DJ knob. At 0 Hz it is an identity. A drop runs it exponentially from
+30 Hz to 900 Hz over its two bars, the low end draining out of the whole mix,
+returns included. On the drop it glides back to 30 Hz over the last 15 ms
+(a jump in a biquad's coefficients under a full mix can click) and opens to
+0 Hz on the bar line. A drop that lands early (a BPM change) cuts the rise
+where it is, as `pin()` does for a volume line. Q 0 dB: the bump passes the
+kick's fundamental early in the rise, and more would feed the limiter. Stop
+(or the loop running out) opens it as the lanes fade. Renders never have it;
+a recording does.
 
 A playing loop sound's **tile fill is its volume**: the fill covers `level /
 1.5` of the tile (a tick marks 100 %), and dragging across it (or ← → on the
@@ -819,10 +851,12 @@ the seeds of the styles that skip it. Adding the glitch layer to every style did
 shift every seed: a seed shared before it plays a different track now.
 
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
-Build-up. Each section's length is drawn from its options (always whole 8-bar
-phrases); none is longer than 24 bars. The last loop before a Peak fires a
-2-bar riser, riser + impact or reverse cymbal that lands right on it, whether it
-comes from a Build-up or from a queued section.
+Build-up. A Build-up lands on a Peak 9 times in 10; the tenth is a **tease**
+into a Breakdown (`odds`, see *Drops*). Each section's length is drawn from
+its options (always whole 8-bar phrases); none is longer than 24 bars. The
+last loop of a Build-up, and of anything else going into a Peak, fires a 2-bar
+riser, riser + impact or reverse cymbal that lands right on the next section,
+whether it comes from a Build-up or from a queued section, and is a drop.
 
 - **Never just kick, bass and percussion.** Every section plays at least one
   lead or pad (if the form draws zero of both, one is added, preferably from the
@@ -895,6 +929,95 @@ It uses copies too. While it runs the background kick doesn't play (the
 Breakdown has no kick). Clicking during the autopilot is fine: it carries on from
 what you picked.
 
+### Drops, the theme, fills, filters, pump and improvise
+
+What makes a peak land: tension the listener can see coming, then the
+release. Everything here is arrangement, decided on the bar line; nothing in
+it is stored, and none of it draws from the track's PRNG except the tease
+(below).
+
+**Drops.** A loop is a drop (`dropping(pilot)`) when it is the last of a
+Build-up, or the last before a Peak (only `advance()` marks it, so ⏭ moves on
+without one). The UI plays it over its two bars (`stepDrop` in `app.js`):
+
+| Bar | What happens |
+|---|---|
+| 1 | the playing kick rolls (the ⏫ Build-up bar: quarters → 8ths → accented 16ths); the drop sweep starts rising |
+| 2 | kick and bass drop out (their parts silenced for the bar); the sweep keeps rising under the riser |
+| the 1 after | everything back on the downbeat, the sweep snaps open, the next section's FX |
+
+Bar 2 is silenced as data, not by muting the lane: the scheduler just finds
+nothing to play there. The tails of the roll ring out naturally, the kick
+stops feeding the sidechain (so whatever ducks opens up), and the bass's long
+notes don't get cut. One bar, not the classic one beat, because the bar hook
+only runs on bar lines; a shorter gap would need a hook on every beat in the
+scheduler.
+
+**The tease.** `SECTIONS.build.odds` is `[0.9, 0.1]` over `["peak",
+"breakdown"]`: one Build-up in ten plays every cue of a drop and lands in a
+Breakdown, with its downlifter. `nextOf` draws once, exactly as `pick()` did
+on the old one-entry list, so the odds only change seeds whose draw lands on
+the tease.
+
+**The theme.** The lead a Breakdown plays is the track's theme (`pilot.theme`):
+in the Build-up after it and in the Peak after that, `arrange()` always keeps
+it, `vary()` never swaps it out and the Build-up's 50 % rewrite skips it. It
+does all of that after the same draws, so only what gets rewritten changes
+(and with it, the draws that rewrite consumes). The drop delivers the melody
+the breakdown taught instead of a new one. The first Build-up comes from a
+Groove and has no theme.
+
+**Fills.** The last loop of every 8-bar phrase (`phraseEnd`: every 4th loop of
+a section; sections are 4, 8 or 12 loops, so phrases line up) gets a fill on
+its second bar, unless it is a drop. `fillOf(seed, section, loop)` in
+`dress.js` picks nothing, a **break** (the kick drops its last two beats), a
+**roll** (every drum percussion plays 8ths then accented 16ths over them) or
+both. Like a sound's dress it hashes the seed and not the track's PRNG, so a
+section's fills come back with it.
+
+The roll bar, the gap and the fills are **bar overlays**: `feed()` lays them on
+a sound's data for one bar (`state.bar`, `silenced` / `withBreak` / `withRoll`
+in `editing.js`, read in place like the build-up) and the next bar line takes
+them off. They never reach storage, snapshots or exports, and the tiles flash
+what the engine actually got.
+
+**Filters** (`toneOf`, `TONE` in `autopilot.js`): the pilot rides every perc,
+lead, pad and glitch sound's tone filters, like the faders and with the same
+timing: the target is where the section wants them as the loop ends, reached
+in one exponential line over the loop, so a section is a curve in octaves.
+Kick and bass are never touched: they are the groove. The Hz values in the
+middle of a section are rounded to whole Hz.
+
+| Section | Perc | Lead | Pad | Glitch |
+|---|---|---|---|---|
+| Intro | LP 3 → 9 kHz | | LP 900 Hz → 3 kHz | |
+| Groove | | LP 5 kHz | HP 180 Hz | |
+| Build-up | | LP 1.5 kHz → open | HP 180 → 600 Hz | |
+| Peak | | | HP 220 Hz | |
+| Breakdown | LP 2.5 kHz | LP 1.2 → 6 kHz | | LP 3 kHz |
+
+Blank is open. The section change is the first loop's line, so a Build-up
+first dips the lead (from the Groove's 5 kHz down toward 2.9 kHz) and then
+opens it over the other three loops, the classic filter-opening build. Like
+the volumes, it rides your sounds too and leaves the rest of your edit
+alone. A sound it touches for the first time joins `ws.auto`, and turning the
+autopilot off leaves the filters where they were.
+
+**Pump** (`PUMP`): in the Peak, pads and leads duck under the kick at 0.6 and
+0.35 at least (`engine.setPump`, the deeper of that and the sound's own
+`duck`), set on the Peak's first bar line and released on the next section's.
+Renders use it too, like any duck.
+
+**Improvise** (`IMPROVISE`): on every section's first loop the pilot decides
+which of the sounds it plays improvise (🔀), from `coin(seed,
+"improv/<section>/<id>")` against a chance per layer. None in the intro, and
+none on a kick ever. The Build-up improvises the most (perc 60 %, lead 50 %,
+glitch 70 %), the Peak a little less, and the Breakdown only its glitch, so
+the theme plays as written. Mid-section it decides only for what comes in, so
+a 🔀 you switch by hand holds until the section changes. A sound it switched
+on stops improvising when it leaves (`state.autoVary`). The amount stays
+yours (`ws.improv`).
+
 **Seed**: every decision comes from a PRNG (`seeded(hashSeed(seed))`), so **the
 same seed and the same style make the same track in any browser**. The seed also
 decides how the track sounds:
@@ -930,6 +1053,11 @@ For the replay to hold:
   not the sequence.
 - The lead or pad that the "one bare bar" guard adds comes from `Math.random`:
   it only happens if you touched the mix, and it doesn't shift the sequence.
+- Drops, fills, filters, the pump and the pilot's 🔀 draw nothing from the
+  PRNG (rules, or `coin()` from the seed). Two things did change the tracks
+  seeds make, both on purpose: the tease, and the theme from the first
+  Breakdown on. A seed shared before them plays the same track up to its
+  first tease or its first Breakdown → Build-up.
 
 **🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited or
 duplicated sounds, `&s=…`: those sounds as a JSON preset, `deflate-raw` and
@@ -1126,6 +1254,11 @@ At the real output (every node, taken from the destination):
 |---|---|
 | one layer alone (kick / bass / acid / pad) | -3.4 / -3.6 / -3.1 / -3.7 |
 | **everything stacked**: 18 loops + riser+impact + crash + impact + siren, with delay and reverb | -1.8 (0 samples over 1.0) |
+
+The drop sweep and the tone filters were not measured this way: only their
+automation is tested (against the fake context). Each has a ~1.25 dB bump at
+its cutoff, so a sweep crossing the kick's fundamental can lift it by about
+that much for a beat, which the limiter takes.
 
 Without the limiter, everything stacked went to +1.5 dBFS. The compressor is
 gentle on purpose (-10 dB, 4:1, knee 6, 3 ms / 150 ms: Web Audio's defaults,

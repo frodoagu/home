@@ -1189,6 +1189,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .topbar-transport {
   display: flex;
+  flex-wrap: wrap; /* five buttons on a phone's row */
   gap: 8px;
 }
 
@@ -1221,6 +1222,34 @@ html:has(dialog.help[open], dialog.intro[open]) {
 .snap-btn:hover {
   color: var(--on-current);
   background: var(--current);
+}
+
+/* 💥 Drop: like the snapshot button; lit and pulsing while a drop is on its
+   way (armed, rolling, in its gap, or the pilot's next loop). */
+.drop-btn {
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.drop-btn:hover:not(:disabled),
+.drop-btn[aria-pressed="true"] {
+  color: var(--on-current);
+  background: var(--current);
+}
+
+.drop-btn[aria-pressed="true"] {
+  animation: pulse 0.45s ease-in-out infinite alternate;
+}
+
+.drop-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* BPM change: target, length, go. */
@@ -2524,6 +2553,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
   .variant::after,
   .bpm-value,
   .cue.is-armed,
+  .drop-btn,
   .rec.is-waiting,
   .rec.is-recording,
   .editor-slot,

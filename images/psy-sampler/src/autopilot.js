@@ -13,6 +13,20 @@
 // fires a 2-bar riser so it lands on it; entering a section can fire an FX and
 // ask for parts to be rewritten (every lead that comes in gets a new melody).
 //
+// That loop is a drop (`dropping`): the UI rolls the kick on its first bar,
+// takes kick and bass out on its second and sweeps a highpass up the mix
+// across both. Every build ends in one, and one build in ten is a tease that
+// lands in a breakdown instead (`odds`, one draw like any pick). The lead a
+// breakdown plays is the track's theme: it stays through the build and the
+// peak after it (`theme`), so the drop delivers the melody the breakdown
+// taught. The last loop of every 8-bar phrase ends in a fill (`phraseEnd`),
+// and the peak pumps (`PUMP`). Besides the faders it rides each sound's tone
+// filters (`toneOf`): a muffled lead opens across a build, a pad steps out
+// of the bass's way. And it decides which sounds improvise (`improvises`),
+// from the seed per section and sound. None of it draws from `rng` beyond what the
+// arrangement already drew, so a seed only plays differently from the first
+// tease or the first breakdown on.
+//
 // A style narrows each layer to the variants that fit it (copies follow their
 // base) and sets the BPM and the scale new melodies use; a style with no pool
 // for a layer leaves it out. Every choice comes
@@ -27,6 +41,7 @@
 // needs no rng, so it never shifts a seed.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { LEVEL } from "./audio/params.js";
+import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
 import { baseOf } from "./audio/patterns.js";
 import { laneKey } from "./selection.js";
 
@@ -37,7 +52,12 @@ export const SECTIONS = {
     next: ["build"],
     shape: { kick: 1, bass: 1, perc: [1, 2], lead: [0, 1], pad: [0, 1], glitch: 1 },
   },
-  build: { loops: [4], next: ["peak"], shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: 1 } },
+  build: {
+    loops: [4],
+    next: ["peak", "breakdown"],
+    odds: [0.9, 0.1], // a tease now and then: the drop's cues, then a breakdown
+    shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: 1 },
+  },
   peak: {
     loops: [8, 12],
     next: ["breakdown", "groove"],
@@ -167,11 +187,54 @@ export const MIX = {
   peak: { lead: 1.1, pad: 0.95 },
   breakdown: { perc: 0.75, lead: [0.9, 1.1], pad: 1.3, glitch: 0.8 },
 };
+// The tone each layer gets per section, in Hz (insert.js hp / lp): [as the
+// section starts, as it ends] or one value; absent is open. It moves in
+// exponential lines, so a lowpass opens evenly in octaves. Kick and bass
+// are never touched: they are the groove.
+export const TONE = {
+  intro: { perc: { lp: [3000, 9000] }, pad: { lp: [900, 3000] } },
+  groove: { lead: { lp: 5000 }, pad: { hp: 180 } },
+  build: { lead: { lp: [1500, LP_OPEN] }, pad: { hp: [180, 600] } },
+  peak: { pad: { hp: 220 } },
+  breakdown: { lead: { lp: [1200, 6000] }, perc: { lp: 2500 }, glitch: { lp: 3000 } },
+};
+export const TONE_LAYERS = ["perc", "lead", "pad", "glitch"];
+
+// The chance a sound improvises (🔀) in each section, per layer, drawn per
+// seed, section and sound (dress.js coin), never from rng. None in the
+// intro, the most in the build; the breakdown lays its theme out as written.
+export const IMPROVISE = {
+  intro: {},
+  groove: { perc: 0.3, lead: 0.3, glitch: 0.5 },
+  build: { perc: 0.6, lead: 0.5, glitch: 0.7 },
+  peak: { bass: 0.25, perc: 0.5, lead: 0.4, glitch: 0.7 },
+  breakdown: { glitch: 0.3 },
+};
+
+/** Whether `id` improvises in `section`, for its coin in [0, 1). */
+export const improvises = (section, id, coin) => coin < (IMPROVISE[section]?.[layerOfVariant(id)] ?? 0);
+
 const STACK = 0.3; // n sounds in a layer play at n^-STACK each
 const DUCK = 0.85; // a pad under a lead
 
+// The sidechain a section asks for on top of each sound's own duck (the
+// engine takes the deeper of the two): the peak pumps its pads and leads.
+export const PUMP = { peak: { pad: 0.6, lead: 0.35 } };
+
+// A phrase is 8 bars: 4 loops. Sections are 4, 8 or 12 loops, so phrases
+// line up with them.
+export const PHRASE_LOOPS = 4;
+
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
+// The section after `section`: one draw, like pick(), whatever its odds, so
+// odds only change the seeds that land on them.
+function nextOf(section, rng) {
+  const { next, odds } = SECTIONS[section];
+  if (!odds) return pick(next, rng);
+  let r = rng();
+  return next.find((_, i) => (r -= odds[i]) < 0) ?? next.at(-1);
+}
 const playingOf = (active, layerId) =>
   Object.values(active)
     .filter((id) => layerOfVariant(id) === layerId)
@@ -195,8 +258,11 @@ function shuffle(list, rng) {
   return out;
 }
 
-/** The variants a section plays, built from what plays now. */
-export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
+/**
+ * The variants a section plays, built from what plays now. A playing variant
+ * in `hold` (the theme) is always kept, after the same draws as any other.
+ */
+export function arrange(section, active, lists, rng, style = STYLE_DEFAULT, hold = []) {
   const { shape } = SECTIONS[section];
   const wants = {};
   for (const layer of LOOP_LAYERS) {
@@ -213,7 +279,9 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
     if (leftOut(style, layer.id)) continue; // draws nothing: older layers replay as before
     const pool = poolOf(lists, layer.id, style);
     const playing = playingOf(active, layer.id).filter((id) => pool.includes(id));
-    const kept = shuffle(playing, rng).filter(() => rng() < KEEP);
+    const kept = shuffle(playing, rng)
+      .filter((id) => rng() < KEEP || hold.includes(id))
+      .sort((a, b) => hold.includes(b) - hold.includes(a));
     const fresh = shuffle(pool.filter((id) => !playing.includes(id)), rng);
     const chosen = [...kept, ...fresh, ...playing.filter((id) => !kept.includes(id))].slice(0, wants[layer.id]);
     for (const id of chosen) out[laneKey(layer, id)] = id;
@@ -222,7 +290,8 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
 }
 
 // One swap: a playing variant (never the kick) for one of its layer's others.
-function vary(active, lists, rng, style) {
+// A held one (the theme) stays, after the same draws.
+function vary(active, lists, rng, style, hold = []) {
   const layers = LOOP_LAYERS.filter((l) => l.id !== "kick" && playingOf(active, l.id).length);
   if (!layers.length) return active;
   const layer = pick(layers, rng);
@@ -234,6 +303,7 @@ function vary(active, lists, rng, style) {
   const lane = Object.keys(active).find((k) => active[k] === out);
   delete next[lane];
   const id = pick(pool, rng);
+  if (hold.includes(out)) return active;
   next[lane === out ? id : laneKey(layer, id)] = id; // a stacked kick or bass keeps its own lane
   return next;
 }
@@ -288,6 +358,28 @@ export const skip = (pilot) => ({ ...pilot, left: 1, next: undefined });
 // The next loop rearranges the section with the new style's sounds.
 export const rearrange = (pilot) => ({ ...pilot, rearrange: true });
 
+/** By hand: a drop on the next loop. The section ends there and a peak comes in after it. */
+export function dropNext(pilot) {
+  if (dropping(pilot)) return pilot;
+  const queue = pilot.queue[0] === "peak" ? pilot.queue : ["peak", ...pilot.queue];
+  return { ...pilot, left: 2, next: undefined, queue };
+}
+
+/**
+ * This loop leads into a drop: the last of a build, or of anything going
+ * into a peak. Only advance() sets `next`, so a section cut short by ⏭
+ * moves on without one.
+ */
+export const dropping = (pilot) =>
+  Boolean(pilot) && pilot.left === 1 && pilot.next !== undefined && (pilot.next === "peak" || pilot.section === "build");
+
+/** This loop's number in its section (from 1) when it ends a phrase and is not a drop; else 0. */
+export function phraseEnd(pilot) {
+  if (!pilot || dropping(pilot)) return 0;
+  const at = pilot.length - pilot.left + 1;
+  return at % PHRASE_LOOPS === 0 ? at : 0;
+}
+
 /** Kick, bass or percussion with no lead and no pad. */
 export function isBare(active) {
   const layers = Object.values(active).map(layerOfVariant);
@@ -307,38 +399,63 @@ export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
  */
 export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, changeBars = CHANGE_DEFAULT } = {}) {
   const queue = pilot.queue ?? [];
+  const hold = pilot.theme ?? [];
   if (pilot.left > 1) {
     const left = pilot.left - 1;
     const done = pilot.length - left;
     let next = active;
-    if (pilot.rearrange) next = arrange(pilot.section, active, lists, rng, style);
-    else if ((done * 2) % changeBars === 0) next = vary(active, lists, rng, style);
+    if (pilot.rearrange) next = arrange(pilot.section, active, lists, rng, style, hold);
+    else if ((done * 2) % changeBars === 0) next = vary(active, lists, rng, style, hold);
     const fx = [];
     let upcoming;
     if (left === 1) {
-      upcoming = queue[0] ?? pick(SECTIONS[pilot.section].next, rng);
-      if (upcoming === "peak") fx.push(pick(BUILD_FX, rng));
+      upcoming = queue[0] ?? nextOf(pilot.section, rng);
+      if (upcoming === "peak" || pilot.section === "build") fx.push(pick(BUILD_FX, rng));
     }
     return {
-      pilot: { section: pilot.section, left, length: pilot.length, queue, ...(upcoming ? { next: upcoming } : {}) },
+      pilot: {
+        section: pilot.section,
+        left,
+        length: pilot.length,
+        queue,
+        ...(upcoming ? { next: upcoming } : {}),
+        ...(pilot.theme ? { theme: pilot.theme } : {}),
+      },
       active: next,
       fx,
       rewrite: newLeads(active, next),
     };
   }
-  const section = queue[0] ?? pilot.next ?? pick(SECTIONS[pilot.section].next, rng);
-  const next = arrange(section, active, lists, rng, style);
+  const section = queue[0] ?? pilot.next ?? nextOf(pilot.section, rng);
+  const theme = themeOf(pilot, section, active);
+  const next = arrange(section, active, lists, rng, style, theme);
   const entryFx = { ...ENTRY_FX, ...STYLES[style]?.entryFx }[section];
   const entry = entryFx ? pick(entryFx, rng) : null;
   const rewrite = new Set(newLeads(active, next));
   const [layerId, chance] = REWRITE[section] ?? [];
-  if (layerId && rng() < chance) playingOf(next, layerId).slice(0, 1).forEach((id) => rewrite.add(id));
+  if (layerId && rng() < chance) {
+    playingOf(next, layerId)
+      .slice(0, 1)
+      .filter((id) => !theme.includes(id))
+      .forEach((id) => rewrite.add(id));
+  }
   return {
-    pilot: fresh(section, lengthOf(section, rng), queue[0] ? queue.slice(1) : queue),
+    pilot: {
+      ...fresh(section, lengthOf(section, rng), queue[0] ? queue.slice(1) : queue),
+      ...(theme.length ? { theme } : {}),
+    },
     active: next,
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),
   };
+}
+
+// The theme: the lead a breakdown plays, held through the build after it
+// and the peak after that.
+function themeOf(pilot, section, active) {
+  if (pilot.section === "breakdown" && section === "build") return playingOf(active, "lead");
+  if (pilot.section === "build" && section === "peak") return pilot.theme ?? [];
+  return [];
 }
 
 /** { variant id: volume } for every sound in `active`, as the pilot's current loop ends. */
@@ -354,6 +471,25 @@ export function mixOf(pilot, active) {
     let level = (from + (to - from) * at) * count[layer] ** -STACK;
     if (layer === "pad" && count.lead) level *= DUCK;
     out[id] = Number(Math.min(LEVEL.max, Math.round(level / LEVEL.step) * LEVEL.step).toFixed(2));
+  }
+  return out;
+}
+
+// [from, to] at `at` of the way, in ratios (octaves).
+const along = (spec, open, at) => {
+  const [from, to] = range(spec ?? open);
+  return Math.round(from * (to / from) ** at);
+};
+
+/** { variant id: { hp, lp } } for the sounds whose tone the pilot rides, as its current loop ends. */
+export function toneOf(pilot, active) {
+  const at = (pilot.length - pilot.left + 1) / pilot.length;
+  const out = {};
+  for (const id of new Set(Object.values(active))) {
+    const layer = layerOfVariant(id);
+    if (!TONE_LAYERS.includes(layer)) continue;
+    const spec = TONE[pilot.section][layer] ?? {};
+    out[id] = { hp: along(spec.hp, HP_OPEN, at), lp: along(spec.lp, LP_OPEN, at) };
   }
   return out;
 }

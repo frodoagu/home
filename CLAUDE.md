@@ -479,8 +479,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `a:b` condition, ratchet) follow the same rule: `passes()` draws from a hash
   of id, loop and step, never `Math.random`. A seed also dresses each sound (params,
   synth) from `seed/id` (dress.js), NOT from that PRNG, so a sound stays the
-  same while it comes and goes; every autopilot section must play a lead or a
-  pad (a bare kick/bass/perc mix lives one bar at most). All UI text lives in `src/i18n/{es,en,pt}.js`
+  same while it comes and goes; so do drops, phrase fills, tone (hp/lp) rides,
+  the peak pump and the pilot's 🔀 (rules or dress.js `coin(seed, key)`), and
+  the build's tease odds reuse pick()'s single draw; every autopilot section must play a lead or a
+  pad (a bare kick/bass/perc mix lives one bar at most). Bar overlays (the
+  build-up roll, a drop's silenced kick/bass bar, fills) live in `feed()` for
+  one bar and never reach storage. The tone hp/lp pair is always in the insert
+  chain (an identity when open) so an autopilot ride never swaps chains. All UI text lives in `src/i18n/{es,en,pt}.js`
   (same shape, enforced by a test). Cloud save is deliberately NOT behind
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through

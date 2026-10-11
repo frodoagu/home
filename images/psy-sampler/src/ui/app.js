@@ -4,7 +4,10 @@
 // clicks, the autopilot, improvise variations) run in the engine's bar hook.
 // Snapshots recall a saved mix (and the data it played) on the next bar line;
 // a BPM change ramps there too, one slice per bar. The autopilot dresses each
-// sound it brings in from the seed (dress.js) and writes new melodies.
+// sound it brings in from the seed (dress.js) and writes new melodies; it
+// also rides each sound's volume and tone filters, decides which sounds
+// improvise, and drops into its peaks (a kick roll, a bar without kick and
+// bass under a sweep, then everything). 💥 does that drop by hand.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 // The signed-in user's samples (samples.js) load as the sounds using them
@@ -19,24 +22,30 @@ import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
+  PUMP,
   SECTION_IDS,
   STYLES,
   STYLE_IDS,
   advance,
   dequeue,
+  dropNext,
+  dropping,
   enqueue,
   entering,
   fillMelodic,
   guessSection,
+  improvises,
   isBare,
   joinPilot,
   mixOf,
   moveTo,
+  phraseEnd,
   rearrange,
   skip,
   startPilot,
+  toneOf,
 } from "../autopilot.js";
-import { dress } from "../dress.js";
+import { coin, dress, fillOf } from "../dress.js";
 import {
   IMPROV_DEFAULT,
   doubleSteps,
@@ -45,10 +54,13 @@ import {
   newPart,
   reversePart,
   seeded,
+  silenced,
   styleOf,
   varyNotes,
   varySteps,
+  withBreak,
   withBuildUp,
+  withRoll,
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
@@ -90,6 +102,11 @@ const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
 
 // Drag on a tile's 🔀 over the whole improvise range: the button is small.
 const TILE_SLIDE_PX = 120;
+// The drop by hand: the riser into it, the hit on it, and the layers its
+// second bar takes out.
+const DROP_RISER = "fx.riser";
+const DROP_HIT = "fx.impact";
+const GAP_LAYERS = ["kick", "bass"];
 
 const sameLanes = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
@@ -134,6 +151,9 @@ export function mountApp(root, engine, opts = {}) {
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
+    drop: resume?.drop ?? null, // { phase: "armed" | "roll" | "gap", hand }: a drop on its way (see stepDrop)
+    bar: resume?.bar ?? null, // { from, kinds: { variant: "gap" | "break" | "roll" } }: this bar's overlays
+    autoVary: resume?.autoVary ?? new Set(), // sounds whose 🔀 the autopilot switched on
     queuedSnap: resume?.queuedSnap ?? null, // a snapshot entering with `pending` on the next bar line
     applied: resume?.applied ?? null, // the snapshot last recalled: lit while its mix plays
     drafts: resume?.drafts ?? new Map(), // snapshot id -> its unsaved edits
@@ -165,13 +185,21 @@ export function mountApp(root, engine, opts = {}) {
   const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
   const owned = (id) => id in ws.variants && !ws.auto.includes(id);
 
-  // What each variant plays apart from a build-up, which feed() lays on top.
+  // What each variant plays apart from what a bar lays on top of it: a
+  // build-up, or the bar's overlay (a drop's gap, a phrase-end fill), which
+  // feed() lays on. `live` is what the engine got, for the tiles' flashes.
   const fed = new Map();
+  const live = new Map();
+  const OVERLAYS = { gap: silenced, break: withBreak, roll: withRoll };
   function feed(id, data, glide) {
     fed.set(id, data);
     const b = state.buildUp;
-    const live = b?.id === id && b.from !== null ? withBuildUp(data, b.from) : data;
-    engine.setData(id, live, glide);
+    const kind = state.bar?.kinds[id];
+    let next = data;
+    if (b?.id === id && b.from !== null) next = withBuildUp(data, b.from);
+    else if (kind) next = OVERLAYS[kind](data, state.bar.from);
+    live.set(id, next);
+    engine.setData(id, next, glide);
   }
   const dataNow = (id) => fed.get(id) ?? dataOf(id);
 
@@ -218,6 +246,8 @@ export function mountApp(root, engine, opts = {}) {
   const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
   snapBtn.title = tx.transport.snapshotTitle;
   const recBtn = el("button", { type: "button", class: "rec", "data-action": "record" });
+  const dropBtn = el("button", { type: "button", class: "drop-btn", "data-action": "drop", "aria-pressed": "false", text: tx.transport.drop });
+  dropBtn.title = tx.transport.dropTitle;
 
   /* ---- BPM change: a ramp, bar by bar ---- */
   const rampTo = el("input", {
@@ -646,7 +676,7 @@ export function mountApp(root, engine, opts = {}) {
     "nav",
     { class: "topbar" },
     back,
-    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
+    el("div", { class: "topbar-transport" }, snapBtn, dropBtn, cueBtn, stopBtn, recBtn),
     el(
       "div",
       { class: "topbar-tempo" },
@@ -758,6 +788,7 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-dirty", state.drafts.has(id));
     }
     showCue();
+    showDrop();
   }
 
   // Running, the slot holds Parar; stopped, the cue button arms, and armed it
@@ -794,6 +825,16 @@ export function mountApp(root, engine, opts = {}) {
     queueList.replaceChildren(...chips);
     queueList.hidden = !chips.length;
     nextBtn.disabled = !p || p.left === 1;
+    showDrop();
+  }
+
+  // 💥 is lit while a drop is on its way: armed, rolling, in its gap, or the
+  // pilot's next loop.
+  function showDrop() {
+    const p = state.auto ? state.pilot : null;
+    const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (p.queue[0] === "peak" && p.left <= 2)));
+    dropBtn.setAttribute("aria-pressed", String(coming));
+    dropBtn.disabled = !engine.isRunning();
   }
 
   let shownStep = null;
@@ -825,7 +866,7 @@ export function mountApp(root, engine, opts = {}) {
     if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
     const loop = engine.visibleLoop() ?? 0;
     for (const id of Object.values(lanes)) {
-      const events = eventsAt(id, step, false, dataNow(id), loop);
+      const events = eventsAt(id, step, false, live.get(id) ?? dataNow(id), loop);
       const t = tiles.get(id);
       if (events.length && t) strike(t.node, events.some((ev) => ev.accent));
     }
@@ -908,6 +949,7 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- the bar hook: everything that must land on the grid ---- */
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
+    if (bar === 0 && state.drop?.phase !== "armed") state.drop = null; // a fresh run: no drop left halfway
     if (loopStart) {
       for (const id of state.newParts) writeNewPart(id);
       state.newParts.clear();
@@ -928,11 +970,14 @@ export function mountApp(root, engine, opts = {}) {
         style: ws.style,
         changeBars: ws.changeBars,
       });
+      const was = state.active;
       state.pilot = move.pilot;
       dressIn([...entering(state.active, move.active), ...move.fx]);
       for (const id of move.rewrite) rewrite(id);
       for (const id of move.fx) fire(id, time);
       state.active = move.active;
+      const sectionStart = move.pilot.left === move.pilot.length;
+      improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
       showSection();
       changed = true;
     }
@@ -947,12 +992,87 @@ export function mountApp(root, engine, opts = {}) {
         changed = true;
       }
     }
+    if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
+    setBar(step, stepDrop(time, step, loopStart) ?? fillKinds(step));
     if (!changed) return undefined;
-    if (state.auto) mixIn();
+    if (state.auto) {
+      mixIn();
+      toneIn();
+    }
     lanes = laneMap();
     renderButtons();
     return lanes;
   });
+
+  /* ---- the drop: a roll, a bar without kick and bass, then everything ---- */
+  // Two bars. The first rolls the kick (the build-up) and starts the sweep up
+  // the mix; the second takes kick and bass out (their parts, silenced for
+  // the bar); the bar line after it is the drop: they come back on the 1 and
+  // the sweep snaps open. The pilot starts one on its drop loops (it fires
+  // the riser and the peak's FX itself); 💥 by hand starts one on the next
+  // bar line, with a riser into it and an impact on it. Returns this bar's
+  // overlays while the drop owns the bar, else null.
+  function stepDrop(time, step, loopStart) {
+    const d = state.drop;
+    if (d?.phase === "gap") {
+      state.drop = null;
+      engine.sweepOff(time);
+      if (d.hand) fire(DROP_HIT, time);
+      showDrop();
+      return {};
+    }
+    if (d?.phase === "roll") {
+      state.drop = { ...d, phase: "gap" };
+      const out = {};
+      for (const id of Object.values(laneMap())) if (GAP_LAYERS.includes(layerOf(id).id)) out[id] = "gap";
+      return out;
+    }
+    const byPilot = state.auto && loopStart && dropping(state.pilot);
+    if (!byPilot && !(d?.phase === "armed" && !state.auto)) return null;
+    state.drop = { phase: "roll", hand: !byPilot };
+    const kick = Object.values(laneMap()).find((id) => layerOf(id).id === "kick");
+    if (kick) {
+      setBuildUp(kick, true);
+      state.buildUp.from = step; // this bar, not the next
+      feed(kick, dataNow(kick));
+    }
+    engine.sweep(time, time + LOOP_STEPS * stepDuration(state.tempo));
+    if (!byPilot) fire(DROP_RISER, time);
+    showDrop();
+    return null;
+  }
+
+  // The pilot's phrase-end fill, on the second bar of a loop that ends a
+  // phrase: the kick breaks, the percussion rolls, or both (dress.js fillOf).
+  function fillKinds(step) {
+    const out = {};
+    if (!state.auto || step !== BAR_STEPS || state.drop) return out;
+    const at = phraseEnd(state.pilot);
+    const fill = at ? fillOf(ws.seed, state.pilot.section, at) : null;
+    if (!fill) return out;
+    for (const id of Object.values(laneMap())) {
+      const layer = layerOf(id).id;
+      if (fill !== "roll" && layer === "kick") out[id] = "break";
+      else if (fill !== "break" && layer === "perc" && defOf(id).kind === "drum") out[id] = "roll";
+    }
+    return out;
+  }
+
+  // This bar's overlays, from its bar line to the next: the last bar's come
+  // off, the new ones go on.
+  function setBar(from, kinds) {
+    const was = state.bar?.kinds ?? {};
+    if (!Object.keys(was).length && !Object.keys(kinds).length) return;
+    state.bar = Object.keys(kinds).length ? { from, kinds } : null;
+    for (const id of new Set([...Object.keys(was), ...Object.keys(kinds)])) feed(id, dataNow(id));
+  }
+
+  // A drop armed by hand becomes the pilot's: its next loop.
+  function adoptDrop() {
+    if (state.drop?.phase !== "armed") return;
+    state.drop = null;
+    state.pilot = dropNext(state.pilot);
+  }
 
   /* ---- variant data ---- */
   function setVariant(id, data, { generated = false } = {}) {
@@ -1008,7 +1128,9 @@ export function mountApp(root, engine, opts = {}) {
     }
   }
 
-  function setVarying(id, on) {
+  function setVarying(id, on, { pilot = false } = {}) {
+    if (pilot && on) state.autoVary.add(id);
+    else state.autoVary.delete(id); // by hand it is yours
     if (on) {
       state.varying.set(id, dataOf(id));
       // The first variation waits for the next loop: nothing jumps on click.
@@ -1141,6 +1263,43 @@ export function mountApp(root, engine, opts = {}) {
       moved = true;
     }
     if (moved) persist();
+  }
+
+  // The autopilot's tone filters on every sound it rides (autopilot.js
+  // toneOf): an exponential line over the loop, like the faders. Yours too:
+  // the rest of your edit stays.
+  function toneIn(active = state.active) {
+    let moved = false;
+    for (const [id, tone] of Object.entries(toneOf(state.pilot, active))) {
+      const ins = dataOf(id).insert;
+      if (!tiles.has(id) || (ins.hp === tone.hp && ins.lp === tone.lp)) continue;
+      setTone(id, tone, stepDuration(state.tempo) * LOOP_STEPS);
+      moved = true;
+    }
+    if (moved) persist();
+  }
+
+  function setTone(id, { hp, lp }, glide) {
+    if (!(id in ws.variants)) ws.auto.push(id);
+    const toned = (data) => ({ ...data, insert: { ...data.insert, hp, lp } });
+    ws.variants[id] = toned(dataOf(id));
+    if (state.varying.has(id)) state.varying.set(id, toned(state.varying.get(id)));
+    feed(id, toned(dataNow(id)), glide);
+    open?.id === id && open.editor.showTone(ws.variants[id].insert);
+  }
+
+  // The autopilot's 🔀: on a section's first loop it decides for everything
+  // it plays, mid-section only for what comes in, so a hand toggle holds
+  // until the section changes. From the seed, per section and sound. What
+  // it switched on stops when the sound `left`.
+  function improviseIn(ids, left = []) {
+    const section = state.pilot.section;
+    for (const id of new Set(ids)) {
+      if (!tiles.has(id) || layerOf(id).oneShot) continue;
+      const on = improvises(section, id, coin(ws.seed, `improv/${section}/${id}`));
+      if (on !== state.varying.has(id)) setVarying(id, on, { pilot: true });
+    }
+    for (const id of left) if (state.autoVary.has(id) && tiles.has(id)) setVarying(id, false, { pilot: true });
   }
 
   function setImprov(id, amount) {
@@ -1656,8 +1815,9 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
+    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary } =
+      state;
+    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });
@@ -1717,8 +1877,10 @@ export function mountApp(root, engine, opts = {}) {
     if (Object.keys(playing).length) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
+      adoptDrop();
       dressIn(Object.values(playing).sort());
       mixIn(playing);
+      toneIn(playing);
       commit(playing);
       showSection();
       return;
@@ -1738,6 +1900,8 @@ export function mountApp(root, engine, opts = {}) {
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
+    toneIn(start.active);
+    improviseIn(Object.values(start.active));
     commit(start.active);
     showSection();
   }
@@ -1871,6 +2035,9 @@ export function mountApp(root, engine, opts = {}) {
     state.queued.clear();
     showRamp();
     if (state.buildUp) setBuildUp(state.buildUp.id, false);
+    state.drop = null;
+    setBar(0, {});
+    engine.setPump({});
     lanes = {};
     engine.stop();
     if (frame) cancelAnimationFrame(frame);
@@ -1903,7 +2070,17 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.auto = false;
     state.pilot = null;
+    engine.setPump({}); // a drop on its way finishes by hand
     sync(); // the background kick may come back
+    showSection();
+  });
+  // 💥 Drop: by hand it arms for the next bar line (a second click takes it
+  // back); under the pilot it makes the next loop its drop into a peak.
+  dropBtn.addEventListener("click", () => {
+    if (!engine.isRunning()) return;
+    if (state.auto && state.pilot) state.pilot = dropNext(state.pilot);
+    else if (!state.drop) state.drop = { phase: "armed" };
+    else if (state.drop.phase === "armed") state.drop = null;
     showSection();
   });
   seedInput.addEventListener("change", () => setSeed(seedInput.value));
