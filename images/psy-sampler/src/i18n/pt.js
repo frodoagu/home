@@ -67,7 +67,7 @@ export default {
         title: "Tocar ao vivo",
         items: [
           ["BPM", "De 60 a 180; o slider muda o tempo na hora."],
-          ["Tap", "Ao lado do BPM: toque no ritmo (dois toques já bastam, mais é mais preciso) e o BPM segue seus toques. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
+          ["Tap", "À esquerda do BPM, para se sincronizar com outra faixa ou outra aba: o primeiro toque volta o loop ao 1 do compasso ali mesmo (comece no 1 do que você segue) e cada toque seguinte ajusta o BPM e a fase ao vivo. Mais toques, mais preciso: com uns 20 acerta o BPM exato. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
           ["Mudança de BPM", "Escolha o destino e em quantos compassos: ▶ Ir move um passo por compasso. ■ Cortar para ali; mexer no slider também."],
           ["Filtro DJ", "À esquerda fecha um passa-baixas, à direita abre um passa-altas, sobre a mixagem toda."],
           ["Delay 3/16 e Reverb", "Os efeitos da mixagem: ligue e desligue quando quiser."],
@@ -162,7 +162,7 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
-    tapTitle: "Toque no ritmo, tap tap tap tap: define o BPM com a média dos seus toques",
+    tapTitle: "Toque no ritmo, tap tap tap tap: o primeiro volta ao 1 do compasso, os seguintes trazem o BPM e a fase para os seus toques",
     bgKick: "Kick de fundo",
     delay: "Delay 3/16",
     reverb: "Reverb",

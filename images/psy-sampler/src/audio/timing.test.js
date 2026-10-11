@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectSteps, LOOP_STEPS, nextBeatTime, SAFETY, stepDuration } from "./timing.js";
+import { alignCursor, collectSteps, LOOP_STEPS, nextBeatTime, SAFETY, stepDuration } from "./timing.js";
 
 describe("stepDuration", () => {
   it("is a 16th note", () => {
@@ -60,5 +60,29 @@ describe("nextBeatTime", () => {
     expect(nextBeatTime({ step: 5, time: 1 }, 0.1)).toBeCloseTo(1.3, 12);
     expect(nextBeatTime({ step: 8, time: 1 }, 0.1)).toBe(1);
     expect(nextBeatTime({ step: 31, time: 2 }, 0.1)).toBeCloseTo(2.1, 12);
+  });
+});
+
+describe("alignCursor", () => {
+  it("moves the cursor to the closest step of the new grid, at its time there", () => {
+    // Step 4 at 1 s; on a grid from 0.47 s it sits at 5.3 steps: step 5, 0.97 s.
+    const next = alignCursor({ step: 4, time: 1, loop: 0 }, 0.47, 0.1);
+    expect(next.step).toBe(5);
+    expect(next.time).toBeCloseTo(0.97, 12);
+    expect(next.loop).toBe(0);
+  });
+
+  it("never goes back past the cursor: a grid behind it waits instead", () => {
+    // 3.2 steps on the new grid, but step 4 is the next one not queued yet.
+    const next = alignCursor({ step: 4, time: 1, loop: 0 }, 0.68, 0.1);
+    expect(next.step).toBe(4);
+    expect(next.time).toBeCloseTo(1.08, 12);
+  });
+
+  it("counts steps across loops", () => {
+    // Step 30 of loop 0 sits at 33 steps on the new grid: step 1 of loop 1.
+    const next = alignCursor({ step: 30, time: 10, loop: 0 }, 6.7, 0.1);
+    expect([next.step, next.loop]).toEqual([1, 1]);
+    expect(next.time).toBeCloseTo(10, 12);
   });
 });

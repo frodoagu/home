@@ -468,9 +468,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   layer did shift them). Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
   compressors add makeup gain, so re-measure at the destination before touching
   them. Anything that must land on the grid (queued clicks, autopilot, improvise
-  variations) goes through `engine.onBar()`, never a UI timer. Duplicated sounds
-  are ids `<base>~n` resolved through the base (`defOf`/`baseOf`), not new
-  DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
+  variations) goes through `engine.onBar()`, never a UI timer; Tap is the one
+  thing that moves the grid itself (`engine.restart()` on the first tap of a count,
+  `engine.align()` after), timed by the event's `timeStamp` and mapped through
+  `getOutputTimestamp()` — `Date.now()` in the handler jitters by main-thread load.
+  Duplicated sounds are ids `<base>~n` resolved through the base
+  (`defOf`/`baseOf`), not new DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
   reads pools sorted by id and consumes its PRNG even when it skips a user-owned
   part — keep both when touching it. Hit/note mods (Strudel-style chance,
   `a:b` condition, ratchet) follow the same rule: `passes()` draws from a hash
