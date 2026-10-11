@@ -13,7 +13,7 @@
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
-import { BAR_STEPS, BPM_MAX, BPM_MIN } from "../audio/timing.js";
+import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
 import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
@@ -30,6 +30,7 @@ import {
   guessSection,
   isBare,
   joinPilot,
+  mixOf,
   moveTo,
   rearrange,
   skip,
@@ -139,11 +140,11 @@ export function mountApp(root, engine, opts = {}) {
 
   // What each variant plays apart from a build-up, which feed() lays on top.
   const fed = new Map();
-  function feed(id, data) {
+  function feed(id, data, glide) {
     fed.set(id, data);
     const b = state.buildUp;
     const live = b?.id === id && b.from !== null ? { ...data, steps: withBuildUp(data.steps, b.from) } : data;
-    engine.setData(id, live);
+    engine.setData(id, live, glide);
   }
   const dataNow = (id) => fed.get(id) ?? dataOf(id);
 
@@ -912,6 +913,7 @@ export function mountApp(root, engine, opts = {}) {
       }
     }
     if (!changed) return undefined;
+    if (state.auto) mixIn();
     lanes = laneMap();
     renderButtons();
     return lanes;
@@ -1008,17 +1010,35 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // The tile's fill: only the sound's volume changes, an improvised part
-  // keeps its variation.
-  function setLevel(id, level) {
+  // keeps its variation. By hand the sound becomes yours; the autopilot's
+  // fader leaves a sound yours if it was, and moves over `glide` seconds,
+  // the fill too.
+  function setLevel(id, level, { pilot = false, glide } = {}) {
+    if (pilot && !(id in ws.variants)) ws.auto.push(id);
+    if (!pilot) ws.auto = ws.auto.filter((x) => x !== id);
     ws.variants[id] = { ...dataOf(id), level };
-    ws.auto = ws.auto.filter((x) => x !== id);
     if (state.varying.has(id)) state.varying.set(id, { ...state.varying.get(id), level });
-    feed(id, { ...dataNow(id), level });
+    feed(id, { ...dataNow(id), level }, glide);
     const t = tiles.get(id);
+    t.node.style.setProperty("--glide", `${glide ?? 0}s`);
     if (t.node.classList.contains("is-sliding")) t.detailEl.textContent = tx.tile.level(LEVEL.fmt(level));
     open?.id === id && open.editor.showLevel(level);
+    if (pilot) return;
     persist();
     renderButtons();
+  }
+
+  // The autopilot's balance on every sound it plays, yours too: a level that
+  // moves goes there in a straight line over the loop, one that enters
+  // starts there.
+  function mixIn(active = state.active) {
+    let moved = false;
+    for (const [id, level] of Object.entries(mixOf(state.pilot, active))) {
+      if (!tiles.has(id) || dataOf(id).level === level) continue;
+      setLevel(id, level, { pilot: true, glide: stepDuration(state.tempo) * LOOP_STEPS });
+      moved = true;
+    }
+    if (moved) persist();
   }
 
   function setImprov(id, amount) {
@@ -1545,6 +1565,7 @@ export function mountApp(root, engine, opts = {}) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
       dressIn(Object.values(playing).sort());
+      mixIn(playing);
       commit(playing);
       showSection();
       return;
@@ -1563,6 +1584,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pilot = start.pilot;
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
+    mixIn(start.active);
     commit(start.active);
     showSection();
   }

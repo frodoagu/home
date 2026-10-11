@@ -1404,7 +1404,18 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 /* A playing loop sound's fill is its volume (--level of the 0-150 % range,
-   the tick at 100 %) and a drag across it sets it. */
+   the tick at 100 %) and a drag across it sets it. The autopilot's moves
+   slide it over --glide; a hand on it moves it at once. */
+@property --level {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 66.7%;
+}
+
+.variant.has-level {
+  transition: background-color 80ms, border-color 80ms, --level var(--glide, 0s) linear;
+}
+
 .variant.has-level.is-active {
   --level: 66.7%;
   background:

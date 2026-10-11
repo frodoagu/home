@@ -12,6 +12,7 @@ import {
   guessSection,
   isBare,
   joinPilot,
+  mixOf,
   poolOf,
   rearrange,
   skip,
@@ -245,5 +246,45 @@ describe("autopilot", () => {
     const seen = new Set();
     for (let seed = 1; seed < 40; seed++) seen.add(arrange("groove", {}, lists, seeded(seed)).kick);
     expect(seen).toContain("kick.punchy~1");
+  });
+
+  describe("the mix", () => {
+    const at = (section, loop, length = 4) => ({ section, length, left: length - loop, queue: [] });
+
+    it("a build swells the lead into the peak, landing on the section's end value", () => {
+      const mix = { kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid" };
+      const levels = [0, 1, 2, 3].map((loop) => mixOf(at("build", loop), mix)["lead.acid"]);
+      expect(levels).toEqual([...levels].sort((a, b) => a - b));
+      expect(levels[0]).toBeLessThan(1);
+      expect(levels[3]).toBe(1.15);
+      expect(mixOf(at("groove", 2), mix)).toEqual({ "kick.punchy": 1, "bass.rolling": 1, "lead.acid": 1 });
+    });
+
+    it("stacked sounds share their layer's room and a pad steps back under a lead", () => {
+      const one = mixOf(at("peak", 0), { "perc.hat": "perc.hat" })["perc.hat"];
+      const three = mixOf(at("peak", 0), { "perc.hat": "perc.hat", "perc.clap": "perc.clap", "perc.ride": "perc.ride" });
+      expect(three["perc.hat"]).toBeLessThan(one);
+      expect(three["perc.hat"]).toBe(three["perc.clap"]);
+      const pad = (mix) => mixOf(at("groove", 0), mix)["pad.air"];
+      expect(pad({ "pad.air": "pad.air", "lead.acid": "lead.acid" })).toBeLessThan(pad({ "pad.air": "pad.air" }));
+    });
+
+    it("the breakdown opens the pad up and pulls the percussion back", () => {
+      const mix = { "pad.air": "pad.air", "lead.acid": "lead.acid", "perc.hat": "perc.hat" };
+      const breakdown = mixOf(at("breakdown", 0), mix);
+      const peak = mixOf(at("peak", 0), mix);
+      expect(breakdown["pad.air"]).toBeGreaterThan(peak["pad.air"]);
+      expect(breakdown["perc.hat"]).toBeLessThan(peak["perc.hat"]);
+    });
+
+    it("every level is on the volume slider's grid and in range, in every section", () => {
+      for (const { pilot, active } of run(3, 200)) {
+        for (const level of Object.values(mixOf(pilot, active))) {
+          expect(level).toBeGreaterThan(0);
+          expect(level).toBeLessThanOrEqual(1.5);
+          expect(Math.abs(level * 20 - Math.round(level * 20))).toBeLessThan(1e-9);
+        }
+      }
+    });
   });
 });

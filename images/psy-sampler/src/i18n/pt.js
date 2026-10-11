@@ -49,9 +49,10 @@ export default {
           ["⏭ Próxima", "Termina a fase que está tocando no próximo loop."],
           ["Estilo", "Quais sons o piloto usa. Mudar leva o BPM ao do estilo, aos poucos."],
           ["Mudanças", "A cada quantos compassos o piloto troca um som dentro de uma fase."],
+          ["Volumes", "O piloto mixa: cada fase tem seu equilíbrio, a subida cresce até o pico, os sons empilhados dividem o espaço e o pad recua sob o lead. Mexe no preenchimento de tudo o que toca aos poucos, em curvas suaves, o seu também."],
           ["Semente", "A mesma semente monta a mesma faixa em qualquer navegador. Escreva a sua ou jogue 🎲 por uma nova; com o piloto rodando, mudar reinicia ele."],
           ["🔗 Compartilhar", "Copia um link com a semente, o estilo, o BPM e seus sons editados: quem abrir e tocar 🤖 ouve o mesmo."],
-          ["Suas edições mandam", "O piloto não sobrescreve o que você editou à mão."],
+          ["Suas edições mandam", "O piloto não sobrescreve o que você editou à mão, exceto o volume."],
         ],
       },
       {

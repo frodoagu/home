@@ -377,6 +377,50 @@ describe("edits (setData)", () => {
     expect(lane.gain.events).toHaveLength(1);
   });
 
+  it("a ramped volume change draws a straight line, and anything after it cuts the line where it is", () => {
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.2);
+    const [lane] = laneGains();
+    const t0 = ctx.currentTime;
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 }, 2);
+    expect(lane.gain.events).toEqual([
+      ["cancel", t0],
+      ["set", lane.gain.value, t0],
+      ["linear", 0.3, t0 + 2],
+    ]);
+    const from = lane.gain.value;
+    ctx.currentTime = t0 + 1; // halfway
+    engine.setLayerVolume("bass", 0.5);
+    expect(lane.gain.events.slice(3, 5)).toEqual([
+      ["cancel", t0 + 1],
+      ["set", from + (0.3 - from) / 2, t0 + 1],
+    ]);
+    expect(lane.gain.events.at(-1)).toEqual(["target", 0.15, t0 + 1, 0.02]);
+  });
+
+  it("a lane leaving mid-ramp fades from where the line is", () => {
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(0.2);
+    const [lane] = laneGains();
+    const t0 = ctx.currentTime;
+    const from = lane.gain.value;
+    const line = (t) => from + ((0.3 - from) * (t - t0)) / 2;
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 }, 2);
+    ctx.currentTime = t0 + 0.5;
+    engine.setLanes({});
+    const [cancel, hold, ...rest] = lane.gain.events.slice(3);
+    expect(cancel).toEqual(["cancel", t0 + 0.5]);
+    expect(hold[0]).toBe("set");
+    expect(hold[1]).toBeCloseTo(line(t0 + 0.5), 9);
+    const fade = rest.pop();
+    expect(fade[0]).toBe("linear");
+    expect(fade[1]).toBe(0);
+    for (const [kind, value, t] of rest) {
+      expect(kind).toBe("linear");
+      expect(value).toBeCloseTo(line(t), 9);
+    }
+  });
+
   it("a new lane opens at its edited volume", () => {
     engine.setData("lead.arp", { ...defaultData("lead.arp"), level: 1.5 });
     engine.setLanes({ "lead.arp": "lead.arp" });

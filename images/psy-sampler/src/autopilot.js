@@ -19,7 +19,14 @@
 // from `rng`, so a seeded rng replays the same track: pools are read in id
 // order (never in the user's tile order). A run from silence starts an intro;
 // over a playing mix it carries on from that mix.
+//
+// It also rides the faders (`mixOf`): each section has its own balance, a
+// build swells into the peak, stacked sounds share their layer's room and a
+// pad steps back under a lead. The UI draws each loop's move as a straight
+// line over the loop, so a section's volumes are one continuous curve. That
+// needs no rng, so it never shifts a seed.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
+import { LEVEL } from "./audio/params.js";
 import { baseOf } from "./audio/patterns.js";
 import { laneKey } from "./selection.js";
 
@@ -150,6 +157,18 @@ const REWRITE = { build: ["lead", 0.5], breakdown: ["lead", 0.6], groove: ["bass
 const KEEP = 0.75; // a playing variant survives a section change
 const MELODIC = ["lead", "pad"]; // every section plays at least one
 const BEAT = ["kick", "bass", "perc"];
+
+// A sound's volume per section and layer (1 when absent): [as the section
+// starts, as it ends], or one value that holds.
+export const MIX = {
+  intro: { kick: 0.85, perc: 0.8, pad: 1.1 },
+  groove: {},
+  build: { perc: [0.9, 1.15], lead: [0.8, 1.15], pad: [1, 0.8], glitch: [0.8, 1.1] },
+  peak: { lead: 1.1, pad: 0.95 },
+  breakdown: { perc: 0.75, lead: [0.9, 1.1], pad: 1.3, glitch: 0.8 },
+};
+const STACK = 0.3; // n sounds in a layer play at n^-STACK each
+const DUCK = 0.85; // a pad under a lead
 
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
@@ -320,4 +339,21 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),
   };
+}
+
+/** { variant id: volume } for every sound in `active`, as the pilot's current loop ends. */
+export function mixOf(pilot, active) {
+  const at = (pilot.length - pilot.left + 1) / pilot.length;
+  const ids = [...new Set(Object.values(active))];
+  const count = {};
+  for (const id of ids) count[layerOfVariant(id)] = (count[layerOfVariant(id)] ?? 0) + 1;
+  const out = {};
+  for (const id of ids) {
+    const layer = layerOfVariant(id);
+    const [from, to] = range(MIX[pilot.section][layer] ?? 1);
+    let level = (from + (to - from) * at) * count[layer] ** -STACK;
+    if (layer === "pad" && count.lead) level *= DUCK;
+    out[id] = Number(Math.min(LEVEL.max, Math.round(level / LEVEL.step) * LEVEL.step).toFixed(2));
+  }
+  return out;
 }

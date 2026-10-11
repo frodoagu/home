@@ -51,9 +51,10 @@ export default {
           ["⏭ Siguiente", "Termina la fase que suena en el próximo loop."],
           ["Estilo", "Qué sonidos usa el piloto. Cambiarlo lleva el BPM al del estilo, de a poco."],
           ["Cambios", "Cada cuántos compases el piloto cambia un sonido dentro de una fase."],
+          ["Volúmenes", "El piloto mezcla: cada fase tiene su balance, la subida crece hacia el pico, los sonidos apilados se reparten el lugar y el pad se corre bajo el lead. Mueve los rellenos de todo lo que suena de a poco, en curvas suaves, también lo tuyo."],
           ["Semilla", "La misma semilla arma el mismo tema en cualquier browser. Escribí la tuya o tirá 🎲 por una nueva; con el piloto andando, cambiarla lo reinicia."],
           ["🔗 Compartir", "Copia un link con la semilla, el estilo, el BPM y tus sonidos editados: quien lo abra y toque 🤖 escucha lo mismo."],
-          ["Tus ediciones mandan", "El piloto no pisa lo que editaste a mano."],
+          ["Tus ediciones mandan", "El piloto no pisa lo que editaste a mano, salvo el volumen."],
         ],
       },
       {

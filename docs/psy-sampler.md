@@ -681,6 +681,36 @@ comes from a Build-up or from a queued section.
 | Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, talking, rubber, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
+**Volumes** (`mixOf`): on every loop the autopilot also sets the volume of each
+sound it plays, so the fills move with the track:
+
+| Section | Kick | Perc | Lead | Pad | Glitch |
+|---|---|---|---|---|---|
+| Intro | 85 % | 80 % | | 110 % | |
+| Groove | | | | | |
+| Build-up | | 90 → 115 % | 80 → 115 % | 100 → 80 % | 80 → 110 % |
+| Peak | | | 110 % | 95 % | |
+| Breakdown | | 75 % | 90 → 110 % | 130 % | 80 % |
+
+Blank is 100 %; `a → b` goes from the section's start to its end, so a build
+swells into the peak. On top of that, n sounds stacked in one layer play at
+n^-0.3 each (2 → 81 %, 3 → 72 %) and a pad under a lead at 85 %. Levels are
+rounded to the volume slider's 5 % steps.
+
+The moves are never set hard: on every loop start `mixOf` gives the level each
+sound should reach as that loop **ends**, and the engine draws a straight line
+to it over the loop (`engine.setData(id, data, ramp)`, `linearRampToValueAtTime`).
+Loop after loop the lines join, so a section is one continuous curve, and a
+section change is a 2-bar crossfade of levels; the tile's fill slides along
+(`@property --level` with a `--glide` transition). A sound that enters starts at
+its level. Anything that touches a lane mid-line (your fill, a layer fader, a
+solo, the lane leaving) cuts the line where it is (`pin`) instead of jumping
+back to where it started, so nothing clicks. It draws
+nothing from the PRNG, so it shifts no seed. It rides **every** sound it plays,
+including the ones you edited: they stay yours (the rest of your edit is
+untouched), only their volume follows the mix. The layer faders are never
+touched. Turning the autopilot off leaves the volumes where they were.
+
 It uses copies too. While it runs the background kick doesn't play (the
 Breakdown has no kick). Clicking during the autopilot is fine: it carries on from
 what you picked.
@@ -713,7 +743,7 @@ For the replay to hold:
 - The parts the autopilot wrote or dressed (`ws.auto`) go back to factory when
   it's switched on from silence (over a playing mix they stay, so what plays
   doesn't change). Editing one by hand makes it yours and the autopilot leaves
-  it alone.
+  it alone, except its volume.
 - Pools are read sorted by id, never in tile order.
 - A new part is computed (and consumes the PRNG) from the factory part, even
   when it isn't applied because you edited it: your edits change how it sounds,
