@@ -97,7 +97,7 @@ const flushPromises = async () => {
 describe("layout", () => {
   it("renders the controls with their defaults", () => {
     const bpm = $("#bpm");
-    expect([bpm.min, bpm.max, bpm.value]).toEqual(["130", "180", "145"]);
+    expect([bpm.min, bpm.max, bpm.value]).toEqual(["60", "180", "145"]);
     expect($("#bgkick").checked).toBe(true);
     expect($("#quantize").checked).toBe(true);
     expect($("#delay").checked).toBe(true);

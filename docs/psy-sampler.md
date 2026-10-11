@@ -104,7 +104,7 @@ goes through it:
   cut it short.
 - **Tap** (next to the BPM): tapping it to the beat sets the BPM to the average
   interval of the last eight taps (`addTap` / `tapBpm` in `tempo.js`), from the
-  second tap on, at once, like the slider. A tempo far outside 130-180 moves by
+  second tap on, at once, like the slider. A tempo far outside 60-180 moves by
   octaves first, so tapping half or double time lands in range; a 2 s pause
   starts a new count. It counts on `pointerdown`, not the click, to follow the
   hand; Enter and Space tap too.
@@ -541,7 +541,8 @@ so are the layout and the settings. Ticking **Factory** next to it turns it into
   same output chain in an `OfflineAudioContext` at 48 kHz; a loop is rendered
   **twice, keeping the second pass**, so the tails from the end are already
   wrapped into the start and the file loops seamlessly in any DAW. An FX renders
-  12 s and is trimmed at silence (-80 dBFS). 24-bit stereo (`audio/wav.js`).
+  its longest length at the slowest BPM plus a tail (21 s:
+  `FX_RENDER_SECONDS`) and is trimmed at silence (-80 dBFS). 24-bit stereo (`audio/wav.js`).
 - **● Record** (top bar): records what reaches the speakers, live, and downloads
   `psy-layers-<date>-<time>.wav` on stop. Pressed, it waits for sound and the
   take starts on the first sample above -80 dBFS; the silence after the last

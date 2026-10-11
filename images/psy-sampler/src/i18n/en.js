@@ -66,7 +66,7 @@ export default {
         icon: "🎚️",
         title: "Playing live",
         items: [
-          ["BPM", "From 130 to 180; the slider changes the tempo at once."],
+          ["BPM", "From 60 to 180; the slider changes the tempo at once."],
           ["Tap", "Next to the BPM: tap it to the beat (two taps are enough, more is more precise) and the BPM follows your taps. Half or double time works too; a 2 s pause starts over."],
           ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
           ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],

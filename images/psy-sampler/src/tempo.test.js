@@ -11,7 +11,7 @@ describe("rampAt", () => {
 
 describe("clampBpm", () => {
   it("rounds into the slider's range", () => {
-    expect([clampBpm(149.6), clampBpm(10), clampBpm(999), clampBpm(NaN)]).toEqual([150, 130, 180, 145]);
+    expect([clampBpm(149.6), clampBpm(10), clampBpm(999), clampBpm(NaN)]).toEqual([150, 60, 180, 145]);
   });
 });
 
@@ -26,9 +26,11 @@ describe("tap tempo", () => {
   });
 
   it("brings half and double time into range by octaves, and clamps the rest", () => {
-    expect(tapBpm(tap(0, 800, 1600))).toBe(150); // 75 BPM
+    expect(tapBpm(tap(0, 800, 1600))).toBe(75); // in range: no octave move
+    expect(tapBpm(tap(0, 2000, 4000))).toBe(60); // 30 BPM
     expect(tapBpm(tap(0, 200, 400))).toBe(150); // 300 BPM
-    expect(tapBpm(tap(0, 600))).toBe(130); // 100: no octave fits
+    expect(tapBpm(tap(0, 1200))).toBe(60); // 50: no octave fits
+    expect(tapBpm(tap(0, 300))).toBe(180); // 200: no octave fits
     expect(tapBpm(tap(0, 0))).toBeNull();
   });
 });
