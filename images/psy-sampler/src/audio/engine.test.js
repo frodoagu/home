@@ -114,6 +114,22 @@ describe("scheduler", () => {
     times.forEach((t, i) => expect(t).toBeCloseTo(t0 + (2 + 4 * i) * step, 9));
   });
 
+  it("ratchets a note inside its step and skips it on the loops its condition leaves out", () => {
+    const data = defaultData("bass.offbeat");
+    data.notes = [{ step: 2, midi: 33, len: 1, accent: false, ply: 2, cond: "1:2" }];
+    engine.setData("bass.offbeat", data);
+    engine.setLanes({ bass: "bass.offbeat" });
+    const step = stepDuration(145);
+    const loop = 32 * step;
+    run(3 * loop);
+    const t0 = 0.06 + 2 * step;
+    // Loops 0 and 2 play two halves of step 2; loop 1 is silent.
+    const want = [0, 2].flatMap((l) => [t0 + l * loop, t0 + l * loop + step / 2]);
+    const times = startTimes("oscillator");
+    expect(times).toHaveLength(want.length);
+    times.forEach((t, i) => expect(t).toBeCloseTo(want[i], 9));
+  });
+
   it("applies a BPM change live without gaps, overlaps or grid shifts", () => {
     engine.setLanes({ perc: "perc.shaker" }); // one hit per step = the grid itself
     run(0.6);

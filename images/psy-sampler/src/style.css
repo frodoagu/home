@@ -2165,6 +2165,38 @@ html:has(dialog.help[open], dialog.intro[open]) {
   border-bottom-left-radius: 0;
 }
 
+/* A hit or note with a mod: stripes when it may not play, and its tag. */
+.step[data-chance] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--surface) 55%, transparent) 3px 5px
+  );
+}
+
+.step.is-current[data-chance] {
+  background-image:
+    linear-gradient(var(--current-tint), var(--current-tint)),
+    repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--surface) 55%, transparent) 3px 5px);
+}
+
+.step[data-mod] {
+  overflow: hidden;
+}
+
+.step[data-mod]::after {
+  content: attr(data-mod);
+  display: block;
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--on-layer);
+  text-shadow: 0 0 2px var(--layer), 0 0 1px var(--layer);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .step.preview {
   outline: 2px solid var(--layer);
   outline-offset: -2px;

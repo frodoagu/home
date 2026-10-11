@@ -188,7 +188,7 @@ export function createEngine({
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
   let bpm = BPM_DEFAULT;
   let timer = null;
-  let cursor = null; // { step, time } of the next step to schedule; null when stopped
+  let cursor = null; // { step, time, loop } of the next step to schedule; null when stopped
   let queued = []; // steps already scheduled, oldest first: step bar + lane backfill
   let effects = { delay: true, reverb: true };
   let barHook = null; // (time, step, bar) -> desired lanes | undefined
@@ -237,9 +237,10 @@ export function createEngine({
     return buffer ? sample(c, out, t, { sample: s, buffer }, stepDur) : FX[baseOf(id)](c, out, t, stepDur, params);
   }
 
-  function scheduleLane(lane, step, time, stepDur) {
-    for (const ev of eventsAt(lane.variant, step, !lane.entered, dataOf(lane.variant))) {
-      voice(ctx, lane.input, time, ev, stepDur);
+  // A ratchet's repeats land `offset` steps after their step.
+  function scheduleLane(lane, { step, time, loop }, stepDur) {
+    for (const ev of eventsAt(lane.variant, step, !lane.entered, dataOf(lane.variant), loop)) {
+      voice(ctx, lane.input, time + (ev.offset ?? 0) * stepDur, ev, stepDur);
     }
     lane.entered = true;
   }
@@ -250,7 +251,7 @@ export function createEngine({
     cursor = next;
     for (const s of due) {
       if (s.step % BAR_STEPS === 0) atBar(s);
-      for (const lane of lanes.values()) scheduleLane(lane, s.step, s.time, stepDur);
+      for (const lane of lanes.values()) scheduleLane(lane, s, stepDur);
       queued.push(s);
     }
     const horizon = ctx.currentTime - 1;
@@ -283,7 +284,7 @@ export function createEngine({
     if (cursor && backfill) {
       const stepDur = stepDuration(bpm);
       const earliest = ctx.currentTime + SAFETY;
-      for (const s of queued) if (s.time >= earliest) scheduleLane(lane, s.step, s.time, stepDur);
+      for (const s of queued) if (s.time >= earliest) scheduleLane(lane, s, stepDur);
     }
     return lane;
   }
@@ -372,7 +373,7 @@ export function createEngine({
 
   function start() {
     runFrom = ctx.currentTime;
-    cursor = { step: 0, time: ctx.currentTime + START_DELAY };
+    cursor = { step: 0, time: ctx.currentTime + START_DELAY, loop: 0 };
     queued = [];
     bars = 0;
     stopAt = null;
@@ -551,15 +552,15 @@ export function createEngine({
     return ids;
   }
 
-  // Step currently audible (0..31), or null. Scheduled time + output latency
+  // The queued step audible now, or null. Scheduled time + output latency
   // is when a step actually leaves the speakers.
-  function visibleStep() {
+  function visible() {
     if (!ctx || !cursor) return null;
     const heard = ctx.currentTime - (ctx.outputLatency || 0);
     let current = null;
     for (const s of queued) {
       if (s.time > heard) break;
-      current = s.step;
+      current = s;
     }
     return current;
   }
@@ -585,8 +586,12 @@ export function createEngine({
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
         const input = into(laneLevel(key, variant), layerOf(variant), d.insert);
+        // The kept pass is loop 0, so mods sound as on the first loop after ▶.
         for (let i = 0; i < 2 * LOOP_STEPS; i++) {
-          for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d)) voice(off, input, i * stepDur, ev, stepDur);
+          const loop = Math.floor(i / LOOP_STEPS) - 1;
+          for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
+            voice(off, input, (i + (ev.offset ?? 0)) * stepDur, ev, stepDur);
+          }
         }
       }
     }
@@ -648,7 +653,9 @@ export function createEngine({
     audition,
     previewSample,
     activeFx,
-    visibleStep,
+    // Step (0..31) and loop audible now, or null.
+    visibleStep: () => visible()?.step ?? null,
+    visibleLoop: () => visible()?.loop ?? null,
     stop,
     render,
     tap,

@@ -1,15 +1,20 @@
 // Every variant as editable data, plus the lookup that turns that data into
 // the events voices.js plays. Three kinds:
 //
-//   drum   { steps: [32 × OFF|HIT|ACCENT], params, level }       one voice
-//   notes  { notes: [{step, midi, len, accent}], synth, params,
-//            level, scale, transpose, len }                       piano roll
+//   drum   { steps: [32 × OFF|HIT|ACCENT], mods: [32 × mod|null],
+//            params, level }                                      one voice
+//   notes  { notes: [{step, midi, len, accent, ...mod}], synth,
+//            params, level, scale, transpose, len }               piano roll
 //   fx     { params, level }                                      one-shot
 //
 // All three also carry `insert` (its filter and distortion, insert.js) and
 // `sample`: null, or a user's sample { id, name, pitch, start, length,
 // reverse } that plays instead of the voice. A sample event names the voice
 // it replaces as `fallback`, which plays whenever the sample is not loaded.
+//
+// A mod (Strudel's sometimes / every / ply, Elektron's trig conditions) rides
+// on one hit or note: { p, cond, ply }, each key only when it is not the
+// default. See passes() below.
 //
 // DEFAULTS holds the factory data; the UI keeps edited copies and hands them
 // to the engine, which passes them back into eventsAt() on every step.
@@ -78,7 +83,7 @@ export const GRID_LINE = [[0, A3], [6, E4], [12, C4], [16, A3], [22, G4], [28, E
 export const GRID_ECHO = 3;
 
 const steps = (fn) => Array.from({ length: LOOP_STEPS }, (_, s) => fn(s));
-const note = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
+const note = (step, midi, len = 1, accent = false, mod = null) => ({ step, midi, len, accent, ...mod });
 const every = (fn) => steps(fn).filter(Boolean);
 
 // What every variant starts with on top of its own data.
@@ -88,7 +93,13 @@ function drum(voice, pattern, params = {}) {
   return {
     kind: "drum",
     voice,
-    data: { steps: pattern, params: { ...paramDefaults(voice), ...params }, level: 1, ...extras() },
+    data: {
+      steps: pattern,
+      mods: Array(LOOP_STEPS).fill(null),
+      params: { ...paramDefaults(voice), ...params },
+      level: 1,
+      ...extras(),
+    },
   };
 }
 
@@ -278,30 +289,87 @@ export function paramSpecs(id) {
   return PARAMS[baseOf(id)] ?? [];
 }
 
+/* ---------------------------------------------------------------- mods -- */
+
+// Strudel's names for these chances: always, almostAlways, often, sometimes,
+// rarely, almostNever.
+export const CHANCES = [1, 0.9, 0.75, 0.5, 0.25, 0.1];
+export const COND_EVERY = [2, 4, 8];
+// "a:b" plays on loop a of every b; "!a:b" on every other loop.
+export const CONDS = COND_EVERY.flatMap((b) => Array.from({ length: b }, (_, i) => `${i + 1}:${b}`));
+export const PLIES = [1, 2, 3, 4];
+export const MOD_KEYS = ["p", "cond", "ply"];
+export const MOD_DEFAULTS = { p: 1, cond: null, ply: 1 };
+
+const isCond = (v) => typeof v === "string" && CONDS.includes(v.replace(/^!/, ""));
+
+/** A mod with only its valid, non-default keys, in MOD_KEYS order; null when none is left. */
+export function cleanMod(saved) {
+  if (!saved || typeof saved !== "object") return null;
+  const out = {};
+  if (CHANCES.includes(saved.p) && saved.p !== 1) out.p = saved.p;
+  if (isCond(saved.cond)) out.cond = saved.cond;
+  if (PLIES.includes(saved.ply) && saved.ply !== 1) out.ply = saved.ply;
+  return Object.keys(out).length ? out : null;
+}
+
+// FNV-1a and a murmur finalizer: a well spread draw in [0, 1).
+function draw(id, loop, step) {
+  let h = 0x811c9dc5;
+  for (const c of `${id}|${loop}|${step}`) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
 /**
- * Events variant `id` plays on `step`. Notes start on their own step; on
+ * Whether a hit (or note) starting on `step` with `mod` plays on `loop`
+ * (2-bar loops counted from ▶, 0 first). The chance is a draw from id, loop
+ * and step, never Math.random: a restart, a WAV export and a share link all
+ * hear the same loops, and a chord drops as one.
+ */
+export function passes(mod, id, step, loop) {
+  if (!mod) return true;
+  if (mod.cond) {
+    const [a, b] = mod.cond.replace("!", "").split(":").map(Number);
+    if ((((loop % b) + b) % b === a - 1) === mod.cond.startsWith("!")) return false;
+  }
+  return mod.p === undefined || draw(id, loop, step) < mod.p;
+}
+
+// A ratchet: `n` copies of `ev` inside its `len` steps, each one `offset`
+// steps after the first (the engine adds it to the step's time).
+function plied(ev, n = 1, len = 1) {
+  if (n === 1) return [ev];
+  return Array.from({ length: n }, (_, k) => ({ ...ev, offset: (k * len) / n, ...(ev.steps && { steps: ev.steps / n }) }));
+}
+
+/**
+ * Events variant `id` plays on `step` of `loop`. Notes start on their own step; on
  * `entering` (the lane's first step) notes already in progress also start,
  * with whatever is left of them, so a pad switched on mid-phrase sounds now
- * instead of up to 2 bars later.
+ * instead of up to 2 bars later. Mods decide on the step a note starts.
  */
 // With a sample, the event plays it and keeps its own voice as the fallback.
 const withSample = (ev, data) => (data.sample ? { ...ev, voice: "sample", fallback: ev.voice, sample: data.sample } : ev);
 
-export function eventsAt(id, step, entering = false, data = defOf(id)?.data) {
+export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loop = 0) {
   const def = defOf(id);
   if (!def || def.kind === "fx") return [];
   if (def.kind === "drum") {
     const v = data.steps[step];
-    return v ? [withSample({ voice: def.voice, ...data.params, accent: v === ACCENT }, data)] : [];
+    const mod = data.mods?.[step];
+    if (!v || !passes(mod, id, step, loop)) return [];
+    return plied(withSample({ voice: def.voice, ...data.params, accent: v === ACCENT }, data), mod?.ply);
   }
   const events = [];
   for (const n of data.notes) {
     const left =
       n.step === step ? n.len : entering && n.step < step && n.step + n.len > step ? n.step + n.len - step : 0;
-    if (left) {
-      const ev = { voice: data.synth, ...data.params, freq: midiToFreq(n.midi + data.transpose), steps: left, accent: n.accent };
-      events.push(withSample(ev, data));
-    }
+    if (!left || !passes(n, id, n.step, loop)) continue;
+    const ev = { voice: data.synth, ...data.params, freq: midiToFreq(n.midi + data.transpose), steps: left, accent: n.accent };
+    // A ratchet splits the whole note; joining one halfway plays the rest as one.
+    events.push(...plied(withSample(ev, data), n.step === step ? n.ply : 1, left));
   }
   return events;
 }
@@ -377,14 +445,19 @@ export function sanitize(id, saved) {
   out.insert = cleanInsert(saved.insert, base.insert);
   out.sample = cleanSample(saved.sample);
 
-  if (def.kind === "drum" && Array.isArray(saved.steps) && saved.steps.length === LOOP_STEPS) {
-    out.steps = saved.steps.map((v) => (isInt(v, OFF, ACCENT) ? v : OFF));
+  if (def.kind === "drum") {
+    if (Array.isArray(saved.steps) && saved.steps.length === LOOP_STEPS) {
+      out.steps = saved.steps.map((v) => (isInt(v, OFF, ACCENT) ? v : OFF));
+    }
+    // A mod lives on a hit: on an empty step it is dropped.
+    const mods = Array.isArray(saved.mods) && saved.mods.length === LOOP_STEPS ? saved.mods : base.mods;
+    out.mods = mods.map((m, s) => (out.steps[s] ? cleanMod(m) : null));
   }
   if (def.kind === "notes") {
     if (Array.isArray(saved.notes)) {
       out.notes = saved.notes
         .filter((n) => n && isInt(n.step, 0, LOOP_STEPS - 1) && isInt(n.midi, 12, 108) && isInt(n.len, 1, LOOP_STEPS - n.step))
-        .map((n) => note(n.step, n.midi, n.len, n.accent === true));
+        .map((n) => note(n.step, n.midi, n.len, n.accent === true, cleanMod(n)));
     }
     if (SYNTH_IDS.includes(saved.synth)) out.synth = saved.synth;
     if (Object.hasOwn(SCALES, saved.scale)) out.scale = saved.scale;

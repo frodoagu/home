@@ -244,8 +244,8 @@ What each variant plays is **data**, not code
 
 | Type | Data | Editor |
 |---|---|---|
-| `drum` (kick, percussion) | `steps`: 32 × off / hit / accent + the voice's params | one row of 32 steps + knobs |
-| `notes` (bass, lead, pad, toms) | `notes: [{step, midi, len, accent}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + synth + brightness + scale + octave + new-note length |
+| `drum` (kick, percussion) | `steps`: 32 × off / hit / accent, `mods`: 32 × mod or null, + the voice's params | one row of 32 steps + knobs |
+| `notes` (bass, lead, pad, toms) | `notes: [{step, midi, len, accent, ...mod}]`, `synth`, `params.bright`, `scale`, `transpose`, `len` | piano roll + synth + brightness + scale + octave + new-note length |
 | `fx` | `params` (length in bars, range, decay…) | knobs + ▶ Fire |
 
 All of them also have **Volume** (`level`, 0-150 % of their layer's level,
@@ -325,6 +325,44 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
   just under its tile (`placeEditor`), so the rows below don't move; a press
   anywhere outside it or Esc closes it. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
   4 shaded, and a rule between the two bars.
+
+### Mods: chance, condition, ratchet
+
+Borrowed from [Strudel](https://strudel.cc)'s `sometimes` / `every` / `ply`
+(and Elektron's trig conditions): any hit or note can carry a **mod**, `{ p,
+cond, ply }`, each key stored only when it is not the default (`cleanMod` in
+`patterns.js`). Drums keep them in `mods`, parallel to `steps`; a note carries
+them as its own fields.
+
+| Key | Values | What it does |
+|---|---|---|
+| `p` | 0.9 / 0.75 / 0.5 / 0.25 / 0.1 (Strudel's almostAlways, often, sometimes, rarely, almostNever) | the chance it plays on each loop |
+| `cond` | `a:b` with b = 2, 4, 8; `!a:b` | plays only on loop a of every b (`!`: on every other loop). Loops are 2 bars, counted from ▶ (the first is 1) |
+| `ply` | 2, 3, 4 | a ratchet: the hit repeats n times inside its step; a note splits into n inside its length |
+
+- **The chance is not `Math.random`.** `passes()` draws from a hash of the
+  sound's id, the loop and the step, so a restart replays the same loops, a
+  share link and a WAV export sound the same, and a chord (same step) drops as
+  one. A copy (`~n`) draws its own.
+- **The loop counter** lives in the scheduler's cursor (`collectSteps` in
+  `timing.js`), so it survives a throttled tab skipping steps. A WAV render keeps
+  its second pass, so it renders that pass as the first loop after ▶ and the
+  warm-up before it as the last of every b.
+- Ratchets are events with an `offset` in steps, added to the step's time by
+  the engine. A lane joining mid-note plays the rest as one note.
+- **In the editor**, the **Brush** picks what a click on the grid does: *Write*
+  (the plain hit / note cycle) or one of the three keys with its value. A
+  brush click on a hit or note sets that key, the same value again takes it
+  off, an empty cell gets a new hit or note carrying it, and Ctrl (+ Shift)
+  echoes it like a plain click. **Apply to all** puts it on every hit or note,
+  or takes it off all of them when they all have it already. One brush is
+  shared by every editor (app state, not saved). A cell with a mod is striped
+  when it may not play and tagged with its condition, else its ratchet, else
+  its chance; the title lists them all.
+- A mod lives on a hit: writing a hit away drops it (`pruneMods`), and so does
+  `sanitize` for a mod on an empty step. *Reset hits* resets them with the
+  steps, the build-up bar plays without them, and the tiles' flashes skip what
+  a mod leaves out.
 
 ### Custom sounds: duplicate and rename
 

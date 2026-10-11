@@ -58,7 +58,7 @@ import {
 import { djCutoffs } from "../audio/insert.js";
 import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
-import { createEditor } from "./editor.js";
+import { BRUSH, createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
@@ -121,6 +121,7 @@ export function mountApp(root, engine, opts = {}) {
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
     queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
+    brush: resume?.brush ?? { ...BRUSH }, // what a click on an editor's grid paints, shared by every editor
   };
   let open = null; // the one open editor: { layer, id, editor }
   const snapshot = () => ({ lang: lang(), ...ws });
@@ -145,7 +146,7 @@ export function mountApp(root, engine, opts = {}) {
   function feed(id, data, glide) {
     fed.set(id, data);
     const b = state.buildUp;
-    const live = b?.id === id && b.from !== null ? { ...data, steps: withBuildUp(data.steps, b.from) } : data;
+    const live = b?.id === id && b.from !== null ? withBuildUp(data, b.from) : data;
     engine.setData(id, live, glide);
   }
   const dataNow = (id) => fed.get(id) ?? dataOf(id);
@@ -788,15 +789,16 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // Each audible step flashes the tiles that play on it, brighter on an
-  // accent, and the BPM on every beat.
+  // accent, and the BPM on every beat. A hit its mod skips this loop does not.
   let struck = null;
   function strikeStep(step) {
     if (step === struck) return;
     struck = step;
     if (step === null) return;
     if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
+    const loop = engine.visibleLoop() ?? 0;
     for (const id of Object.values(lanes)) {
-      const events = eventsAt(id, step, false, dataNow(id));
+      const events = eventsAt(id, step, false, dataNow(id), loop);
       const t = tiles.get(id);
       if (events.length && t) strike(t.node, events.some((ev) => ev.accent));
     }
@@ -1037,10 +1039,10 @@ export function mountApp(root, engine, opts = {}) {
     },
     // Only the factory notes (or hits): the voice, the insert and the volume stay.
     "reset-part": (layer, id) => {
-      const key = defOf(id).kind === "drum" ? "steps" : "notes";
+      const keys = defOf(id).kind === "drum" ? ["steps", "mods"] : ["notes"];
       const factory = defaultData(id);
       state.newParts.delete(id);
-      setVariant(id, { ...dataOf(id), [key]: structuredClone(factory[key]) });
+      setVariant(id, { ...dataOf(id), ...Object.fromEntries(keys.map((k) => [k, structuredClone(factory[k])])) });
       if (!isCopy(id) && JSON.stringify(ws.variants[id]) === JSON.stringify(factory)) {
         delete ws.variants[id]; // nothing left that differs from factory
         persist();
@@ -1345,6 +1347,7 @@ export function mountApp(root, engine, opts = {}) {
       id,
       label: labelOf(id),
       data: dataOf(id),
+      brush: state.brush,
       varying: state.varying.has(id),
       amount: improvOf(id),
       onAmount: (amount) => setImprov(id, amount),
@@ -1604,8 +1607,8 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj };
+    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });

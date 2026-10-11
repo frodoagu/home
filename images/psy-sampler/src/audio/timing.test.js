@@ -11,7 +11,7 @@ describe("stepDuration", () => {
 describe("collectSteps", () => {
   it("returns only the steps that start inside the lookahead window", () => {
     const { due, cursor } = collectSteps({ step: 0, time: 0.06 }, 0, 0.12, 0.1);
-    expect(due).toEqual([{ step: 0, time: 0.06 }]);
+    expect(due).toEqual([{ step: 0, time: 0.06, loop: 0 }]);
     expect(cursor.step).toBe(1);
     expect(cursor.time).toBeCloseTo(0.16, 12);
   });
@@ -21,6 +21,15 @@ describe("collectSteps", () => {
     expect(due.map((s) => s.step)).toEqual([31, 0]);
     expect(cursor.step).toBe(1);
     expect(LOOP_STEPS).toBe(32);
+  });
+
+  it("counts loops, also across a throttled backlog", () => {
+    const { due, cursor } = collectSteps({ step: 31, time: 1, loop: 2 }, 0.95, 0.12, 0.05);
+    expect(due.map((s) => s.loop)).toEqual([2, 3]);
+    expect(cursor.loop).toBe(3);
+    // Half a second late: six steps skipped, from step 30 into the next loop.
+    const late = collectSteps({ step: 30, time: 1, loop: 0 }, 1.5, 0.12, 0.1);
+    expect(late.due.map(({ step, loop }) => [step, loop])).toEqual([[4, 1]]);
   });
 
   it("applies a new step duration from the cursor on, without moving queued steps", () => {
