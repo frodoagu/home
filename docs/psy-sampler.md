@@ -323,7 +323,11 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
 - **One editor open at a time**: opening one folds whichever was open, in any
   layer. It floats over the page like a context menu, as wide as its layer and
   just under its tile (`placeEditor`), so the rows below don't move; a press
-  anywhere outside it or Esc closes it. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
+  anywhere outside it or Esc closes it. In the column layout it is wider than
+  its layer when the 32 steps need it (`min-width`), shifted left when it would
+  leave the screen. While it is open a veil dims the page (`--veil`, darker in
+  dark mode) and the tile being edited sits above it with an outline; the veil
+  lets clicks through, so the other sounds still play live. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
   4 shaded, and a rule between the two bars.
 
 ### Mods: chance, condition, ratchet
@@ -350,19 +354,47 @@ them as its own fields.
   warm-up before it as the last of every b.
 - Ratchets are events with an `offset` in steps, added to the step's time by
   the engine. A lane joining mid-note plays the rest as one note.
-- **In the editor**, the **Brush** picks what a click on the grid does: *Write*
-  (the plain hit / note cycle) or one of the three keys with its value. A
-  brush click on a hit or note sets that key, the same value again takes it
-  off, an empty cell gets a new hit or note carrying it, and Ctrl (+ Shift)
-  echoes it like a plain click. **Apply to all** puts it on every hit or note,
-  or takes it off all of them when they all have it already. One brush is
-  shared by every editor (app state, not saved). A cell with a mod is striped
-  when it may not play and tagged with its condition, else its ratchet, else
-  its chance; the title lists them all.
+- **In the editor**, a **Click:** row over the grid picks what a click does:
+  **✏️ Write** (the default, the plain hit / note cycle) or 🎲 Chance, 🔁
+  Condition, ⚡ Ratchet with a value. A mod click on a hit or note sets that
+  key, the same value again takes it off, an empty cell gets a new hit or note
+  carrying it, and Ctrl (+ Shift) echoes it like a plain click. **Apply to
+  all** puts it on every hit or note (or takes it off all of them when they
+  all have it), **Remove modifiers** takes every mod off the sound, and **↺
+  Reset** (shown once the row moves off its default) goes back to Write and
+  the factory values. The row is app state shared by every editor, carried
+  across a remount, never saved. A cell with a mod is striped when it may not
+  play and tagged with its condition, else its ratchet, else its chance (the
+  tag is out of the flow, so it never sizes the cell); the title lists them
+  all.
 - A mod lives on a hit: writing a hit away drops it (`pruneMods`), and so does
   `sanitize` for a mod on an empty step. *Reset hits* resets them with the
   steps, the build-up bar plays without them, and the tiles' flashes skip what
   a mod leaves out.
+
+### Pattern: speed, iter, echo and part edits
+
+The editor's **Pattern** box, after Strudel's pattern functions:
+
+| Control | Data | What it does |
+|---|---|---|
+| Speed | `speed`: 0.5 / 1 / 2 | `slow(2)` / `fast(2)`: ×2 plays the part twice per loop (odd steps land half a step in), ×½ stretches it over two loops |
+| Iter | `iter`: 1 / 2 / 4 / 8 | `iter(n)`: each loop starts 1/n further into the part, back to the start every n loops |
+| Echo | `echo`: null or `{ steps, semis }` | `off(t, add(semis))`: every hit or note again `steps` 16ths later, unaccented, without a ratchet; notes transposed (`semis` is always 0 on drums) |
+| ◀ 1/16, 1/16 ▶ | | `early` / `late`: rewrites the part a 16th earlier or later, wrapping; right away, like a grid click |
+| ⇆ Reverse | | a retrograde around step 0 (step s → −s), so beats stay beats and offbeats stay offbeats; notes keep their length and get trimmed so a row never overlaps (`tidy`) |
+| Euclidean (drums) | | `euclid(k, n)` / `euclidRot`: Bjorklund's k hits over n steps (the same strings as Strudel: 3/8 is the tresillo), repeated across the loop; an n that doesn't divide 32 runs against the bar and restarts on the loop. It replaces the hits and their mods |
+
+Speed, iter and echo only change how `eventsAt` reads the part
+(`positionAt` / `readsAt`), so the written part is untouched and they are
+saved with the sound. A part read out of place never plays past the loop end,
+and at each loop start it joins whatever its new position is in the middle of
+(the same "entering" rule a lane uses), so a ×½ pad holds across both loops.
+⇆ and Euclidean rewrite what plays now, an improvised variation included,
+and wait for the bar line like ×2 (`reshape` in `app.js`); like any edit they
+switch a silent sound on. The euclid's k / n / rot are app state like the
+Click row. *Reset hits / notes* puts speed, iter and echo back too, and the
+kick's build-up bar plays in place, without them.
 
 ### Custom sounds: duplicate and rename
 

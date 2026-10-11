@@ -581,9 +581,7 @@ describe("editors", () => {
     openEditor("perc.hat");
     expect(editor("perc.hat").querySelector('[data-action="reset-part"]').textContent).toBe("Restaurar golpes");
     stepCell("perc.hat", 0).click();
-    const brush = editor("perc.hat").querySelector('[data-control="brush"]');
-    brush.value = "p";
-    brush.dispatchEvent(new Event("change"));
+    editor("perc.hat").querySelector('[data-brush="p"]').click();
     editor("perc.hat").querySelector('[data-action="brush-all"]').click(); // the mods go with the hits
     expect(saved().variants["perc.hat"].mods.filter(Boolean)).toHaveLength(9);
     editor("perc.hat").querySelector('[data-action="reset-part"]').click();
@@ -707,6 +705,7 @@ describe("editors", () => {
 
 describe("brush (mods)", () => {
   const pick = (variant, control, value) => {
+    if (control === "brush") return editor(variant).querySelector(`[data-brush="${value}"]`).click();
     const sel = editor(variant).querySelector(`[data-control="${control}"]`);
     sel.value = String(value);
     sel.dispatchEvent(new Event("change"));
@@ -764,8 +763,124 @@ describe("brush (mods)", () => {
     expect(rollCell("lead.melodic", 69, 0).dataset.mod).toBe("1:4");
     expect(rollCell("lead.melodic", 69, 3).dataset.mod).toBeUndefined();
     openEditor("perc.hat");
-    expect(editor("perc.hat").querySelector('[data-control="brush"]').value).toBe("cond");
+    expect(editor("perc.hat").querySelector('[data-brush="cond"]').getAttribute("aria-pressed")).toBe("true");
     expect(editor("perc.hat").querySelector('[data-control="brush-cond"]').value).toBe("1:4");
+  });
+
+  it("↺ Restaurar shows once the brush moves and takes it back to Escribe", () => {
+    openEditor("perc.hat");
+    const reset = editor("perc.hat").querySelector('[data-action="brush-reset"]');
+    expect(reset.hidden).toBe(true);
+    expect(editor("perc.hat").querySelector('[data-brush="hit"]').getAttribute("aria-pressed")).toBe("true");
+    pick("perc.hat", "brush", "ply");
+    pick("perc.hat", "brush-ply", 4);
+    expect(reset.hidden).toBe(false);
+    reset.click();
+    expect(reset.hidden).toBe(true);
+    expect(editor("perc.hat").querySelector('[data-brush="hit"]').getAttribute("aria-pressed")).toBe("true");
+    expect(editor("perc.hat").querySelector('[data-control="brush-ply"]').value).toBe("2");
+    stepCell("perc.hat", 1).click();
+    expect(saved().variants["perc.hat"].steps[1]).toBe(1);
+    expect(mods("perc.hat")[1]).toBeNull();
+  });
+
+  it("Quitar modificadores shows while any exists and takes them all off", () => {
+    openEditor("lead.melodic");
+    const clear = editor("lead.melodic").querySelector('[data-action="brush-clear"]');
+    expect(clear.hidden).toBe(true);
+    pick("lead.melodic", "brush", "p");
+    editor("lead.melodic").querySelector('[data-action="brush-all"]').click();
+    expect(clear.hidden).toBe(false);
+    clear.click();
+    expect(saved().variants["lead.melodic"].notes.every((n) => !("p" in n))).toBe(true);
+    expect(clear.hidden).toBe(true);
+  });
+
+  it("a snapshot keeps the mods it was taken with", () => {
+    openEditor("perc.hat");
+    pick("perc.hat", "brush", "cond");
+    pick("perc.hat", "brush-cond", "2:4");
+    stepCell("perc.hat", 2).click();
+    click("perc.hat");
+    $('[data-action="snapshot"]').click();
+    expect(saved().snapshots.at(-1).data["perc.hat"].mods[2]).toEqual({ cond: "2:4" });
+  });
+});
+
+describe("pattern", () => {
+  const pick = (variant, control, value) => {
+    const sel = editor(variant).querySelector(`[data-control="${control}"]`);
+    sel.value = String(value);
+    sel.dispatchEvent(new Event("change"));
+  };
+  const hits = (variant) => saved().variants[variant].steps.flatMap((v, s) => (v ? [s] : []));
+
+  it("speed, iter and echo are saved with the sound; the echo's pitch only shows for notes", () => {
+    openEditor("lead.acid");
+    pick("lead.acid", "speed", 2);
+    pick("lead.acid", "iter", 4);
+    const semis = editor("lead.acid").querySelector('[data-control="echo-semis"]').closest("label");
+    expect(semis.hidden).toBe(true);
+    pick("lead.acid", "echo", 3);
+    expect(semis.hidden).toBe(false);
+    pick("lead.acid", "echo-semis", 12);
+    expect(saved().variants["lead.acid"]).toMatchObject({ speed: 2, iter: 4, echo: { steps: 3, semis: 12 } });
+    openEditor("perc.hat");
+    pick("perc.hat", "echo", 2);
+    expect(editor("perc.hat").querySelector('[data-control="echo-semis"]').closest("label").hidden).toBe(true);
+  });
+
+  it("◀ ▶ move the part a 16th right away", () => {
+    openEditor("perc.clap"); // 4, 12, 20, 28
+    editor("perc.clap").querySelector('[data-action="rotate-right"]').click();
+    expect(hits("perc.clap")).toEqual([5, 13, 21, 29]);
+    expect(stepCell("perc.clap", 5).dataset.state).toBe("hit");
+    editor("perc.clap").querySelector('[data-action="rotate-left"]').click();
+    editor("perc.clap").querySelector('[data-action="rotate-left"]').click();
+    expect(hits("perc.clap")).toEqual([3, 11, 19, 27]);
+  });
+
+  it("⇆ and the euclid land on the bar line while it plays, and switch the sound on", () => {
+    openEditor("perc.rim"); // 3, 6, 11, 14 of each bar
+    pick("perc.rim", "euclid-k", 5);
+    pick("perc.rim", "euclid-n", 8);
+    const apply = editor("perc.rim").querySelector('[data-action="euclid"]');
+    click("lead.acid"); // start the loop with something else
+    advanceSeconds(BAR / 2);
+    apply.click();
+    expect(apply.getAttribute("aria-pressed")).toBe("true");
+    advanceSeconds(BAR);
+    expect(apply.getAttribute("aria-pressed")).toBe("false");
+    expect(hits("perc.rim").slice(0, 5)).toEqual([0, 2, 3, 5, 6]);
+    expect(pressed()).toContain("perc.rim");
+    editor("perc.rim").querySelector('[data-action="reverse"]').click();
+    advanceSeconds(BAR);
+    // 5 over 8 mirrored around step 0: 0, then 32 - 30, 32 - 29…
+    expect(hits("perc.rim").slice(0, 4)).toEqual([0, 2, 3, 5]);
+  });
+
+  it("Restaurar golpes also puts speed, iter and echo back", () => {
+    openEditor("perc.hat");
+    pick("perc.hat", "speed", 0.5);
+    editor("perc.hat").querySelector('[data-action="reset-part"]').click(); // playing: on the bar line
+    advanceSeconds(BAR);
+    expect(saved().variants["perc.hat"]).toBeUndefined();
+  });
+});
+
+describe("editor focus", () => {
+  it("dims the page around the open editor and marks its tile", () => {
+    const veil = $(".editor-veil");
+    expect(veil.hidden).toBe(true);
+    openEditor("perc.hat");
+    expect(veil.hidden).toBe(false);
+    expect(button("perc.hat").closest(".tile").classList.contains("is-editing")).toBe(true);
+    openEditor("perc.clap");
+    expect(button("perc.hat").closest(".tile").classList.contains("is-editing")).toBe(false);
+    expect(button("perc.clap").closest(".tile").classList.contains("is-editing")).toBe(true);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(veil.hidden).toBe(true);
+    expect(root.querySelector(".is-editing")).toBeNull();
   });
 });
 

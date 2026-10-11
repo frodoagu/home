@@ -35,7 +35,7 @@ export const BUILD_UP = [
 ];
 
 // Drum data with the bar starting at `from` replaced by the build-up, mods
-// and all: a roll has no "sometimes".
+// and all, read in place: a roll has no "sometimes" and no speed.
 export function withBuildUp(data, from) {
   const steps = data.steps.slice();
   const mods = data.mods.slice();
@@ -43,7 +43,7 @@ export function withBuildUp(data, from) {
     steps[(from + i) % steps.length] = v;
     mods[(from + i) % steps.length] = null;
   });
-  return { ...data, steps, mods };
+  return { ...data, steps, mods, speed: 1, iter: 1, echo: null };
 }
 
 export const noteAt = (notes, step, midi) =>
@@ -192,6 +192,73 @@ export function brushNote(notes, step, midi, len, key, value, { echo = false, bo
 export function brushAllNotes(notes, key, value) {
   const off = notes.length > 0 && notes.every((n) => n[key] === value);
   return notes.map((n) => noteWith(n, cleanMod({ ...n, [key]: off ? MOD_DEFAULTS[key] : value })));
+}
+
+/* ------------------------------------------------------ pattern tools -- */
+
+const wrap = (s) => ((s % LOOP_STEPS) + LOOP_STEPS) % LOOP_STEPS;
+
+// Each note kept inside the loop and clear of the next one on its row.
+function tidy(notes) {
+  const sorted = [...notes].sort((a, b) => a.step - b.step || a.midi - b.midi);
+  return sorted
+    .filter((n, i) => !sorted.slice(0, i).some((o) => o.midi === n.midi && o.step === n.step))
+    .map((n) => {
+      const next = Math.min(LOOP_STEPS, ...sorted.filter((o) => o.midi === n.midi && o.step > n.step).map((o) => o.step));
+      return { ...n, len: Math.min(n.len, next - n.step) };
+    });
+}
+
+// Drum steps (and their mods) or notes moved by `move(step)`.
+function remap(data, kind, move) {
+  if (kind === "drum") {
+    const steps = Array(LOOP_STEPS).fill(OFF);
+    const mods = Array(LOOP_STEPS).fill(null);
+    data.steps.forEach((v, s) => {
+      steps[move(s)] = v;
+      mods[move(s)] = data.mods[s];
+    });
+    return { steps, mods };
+  }
+  return { notes: tidy(data.notes.map((n) => ({ ...n, step: move(n.step) }))) };
+}
+
+// Strudel's early / late by one 16th: the part `by` steps later, wrapping.
+export const rotatePart = (data, kind, by) => remap(data, kind, (s) => wrap(s + by));
+
+/**
+ * The part backwards around its first step (a retrograde): step s goes to
+ * -s, so what sat on the beat stays on a beat and an offbeat stays an
+ * offbeat; notes keep their length.
+ */
+export const reversePart = (data, kind) => remap(data, kind, (s) => wrap(-s));
+
+/**
+ * Bjorklund's `k` hits as evenly as possible over `n` steps, the same
+ * pattern as Strudel's euclid(k, n), started `rot` steps in (euclidRot).
+ */
+export function euclid(k, n, rot = 0) {
+  let a = Array.from({ length: k }, () => [1]);
+  let b = Array.from({ length: n - k }, () => [0]);
+  while (b.length > 1 && a.length > 0) {
+    const m = Math.min(a.length, b.length);
+    const rest = a.length > m ? a.slice(m) : b.slice(m);
+    a = a.slice(0, m).map((x, i) => [...x, ...b[i]]);
+    b = rest;
+  }
+  const one = [...a, ...b].flat();
+  return Array.from({ length: n }, (_, i) => one[(i + rot) % n]);
+}
+
+/**
+ * A drum row from euclid(): the n-step cycle repeats across the loop, so an
+ * n that does not divide 32 runs against the bar (a polymeter) and restarts
+ * on every loop.
+ */
+export function euclidSteps(k, n, rot = 0) {
+  const cycle = euclid(k, n, rot);
+  const steps = Array.from({ length: LOOP_STEPS }, (_, s) => (cycle[s % n] ? HIT : OFF));
+  return { steps, mods: Array(LOOP_STEPS).fill(null) };
 }
 
 /* ------------------------------------------------------- improvisation -- */

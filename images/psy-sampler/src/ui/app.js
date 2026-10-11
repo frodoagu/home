@@ -37,7 +37,19 @@ import {
   startPilot,
 } from "../autopilot.js";
 import { dress } from "../dress.js";
-import { IMPROV_DEFAULT, doubleSteps, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
+import {
+  IMPROV_DEFAULT,
+  doubleSteps,
+  euclidSteps,
+  improvise,
+  newPart,
+  reversePart,
+  seeded,
+  styleOf,
+  varyNotes,
+  varySteps,
+  withBuildUp,
+} from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
@@ -58,7 +70,7 @@ import {
 import { djCutoffs } from "../audio/insert.js";
 import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
-import { BRUSH, createEditor } from "./editor.js";
+import { BRUSH, EUCLID, createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
@@ -122,8 +134,10 @@ export function mountApp(root, engine, opts = {}) {
     queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
     brush: resume?.brush ?? { ...BRUSH }, // what a click on an editor's grid paints, shared by every editor
+    euclid: resume?.euclid ?? { ...EUCLID }, // the drum editors' euclid(k, n, rot), shared like the brush
   };
   let open = null; // the one open editor: { layer, id, editor }
+  const veil = el("div", { class: "editor-veil", hidden: "" }); // dims the page around the open editor
   const snapshot = () => ({ lang: lang(), ...ws });
   const persist = () => {
     const snap = snapshot();
@@ -648,6 +662,7 @@ export function mountApp(root, engine, opts = {}) {
   root.replaceChildren(
     topbar,
     help.dialog,
+    veil,
     el(
       "header",
       { class: "top" },
@@ -1017,14 +1032,19 @@ export function mountApp(root, engine, opts = {}) {
     if (!isOn(target, id)) press(layer, id);
   }
 
-  // ×2 and the resets: on the next bar line while it runs (a second click
-  // cancels), at once when it is stopped.
+  // A part rewritten from what plays now (an improvised part included).
+  function reshape(id, fn) {
+    const data = dataNow(id);
+    setVariant(id, { ...data, ...fn(data, defOf(id).kind) });
+    if (open?.id === id) open.editor.show(dataNow(id));
+  }
+
+  // ×2, reverse, euclid and the resets: on the next bar line while it runs
+  // (a second click cancels), at once when it is stopped.
   const edits = {
-    double: (layer, id) => {
-      const data = dataNow(id); // an improvised part doubles as it plays
-      setVariant(id, { ...data, steps: doubleSteps(data.steps) });
-      if (open?.id === id) open.editor.show(dataNow(id));
-    },
+    double: (layer, id) => reshape(id, (data) => ({ steps: doubleSteps(data.steps) })),
+    reverse: (layer, id) => reshape(id, reversePart),
+    euclid: (layer, id) => reshape(id, () => euclidSteps(state.euclid.k, state.euclid.n, state.euclid.rot)),
     reset: (layer, id) => {
       if (isCopy(id)) ws.variants[id] = defaultData(id);
       else delete ws.variants[id];
@@ -1039,7 +1059,7 @@ export function mountApp(root, engine, opts = {}) {
     },
     // Only the factory notes (or hits): the voice, the insert and the volume stay.
     "reset-part": (layer, id) => {
-      const keys = defOf(id).kind === "drum" ? ["steps", "mods"] : ["notes"];
+      const keys = [...(defOf(id).kind === "drum" ? ["steps", "mods"] : ["notes"]), "speed", "iter", "echo"];
       const factory = defaultData(id);
       state.newParts.delete(id);
       setVariant(id, { ...dataOf(id), ...Object.fromEntries(keys.map((k) => [k, structuredClone(factory[k])])) });
@@ -1057,9 +1077,9 @@ export function mountApp(root, engine, opts = {}) {
 
   function askEdit(layer, id, action) {
     const running = engine.isRunning();
-    // Like any edit, ×2 on something silent switches it on.
+    // Like any edit, rewriting the part of something silent switches it on.
     const target = state.pending ?? state.active;
-    if (action === "double" && !layer.oneShot && !isOn(target, id)) press(layer, id);
+    if (!action.startsWith("reset") && !layer.oneShot && !isOn(target, id)) press(layer, id);
     if (!running) return edits[action](layer, id);
     const actions = state.queued.get(id) ?? new Set();
     if (!actions.delete(action)) actions.add(action);
@@ -1309,11 +1329,18 @@ export function mountApp(root, engine, opts = {}) {
     const { node, slot } = sections.get(open.layer.id);
     const top = anchor.getBoundingClientRect().bottom - node.getBoundingClientRect().top - node.clientTop;
     slot.style.top = `${top + 6}px`;
+    // Wider than its layer (min-width), it grows to the right: pull it back
+    // left when that would leave the screen.
+    slot.style.left = "";
+    const over = slot.getBoundingClientRect().right - (document.documentElement.clientWidth - 8);
+    if (over > 0) slot.style.left = `${-4 - over}px`;
   }
 
   function showEditor(node) {
     sections.get(open.layer.id).slot.replaceChildren(node);
     openTile().edit.setAttribute("aria-expanded", "true");
+    openTile().tile.classList.add("is-editing");
+    veil.hidden = false;
     placeEditor();
     node.scrollIntoView?.({ block: "nearest" });
   }
@@ -1338,6 +1365,8 @@ export function mountApp(root, engine, opts = {}) {
     open.editor.destroy();
     sections.get(open.layer.id).slot.replaceChildren();
     openTile()?.edit.setAttribute("aria-expanded", "false");
+    openTile()?.tile.classList.remove("is-editing");
+    veil.hidden = true;
     open = null;
   }
 
@@ -1365,6 +1394,8 @@ export function mountApp(root, engine, opts = {}) {
         engine.audition(id, note);
       },
       onDouble: () => askEdit(layer, id, "double"),
+      onEdit: (action) => askEdit(layer, id, action),
+      euclid: state.euclid,
       onReset: () => askEdit(layer, id, "reset"),
       onResetPart: () => askEdit(layer, id, "reset-part"),
       queued: state.queued.get(id) ?? new Set(),
@@ -1607,8 +1638,8 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush };
+    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });

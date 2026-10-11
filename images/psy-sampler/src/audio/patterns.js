@@ -86,6 +86,10 @@ const steps = (fn) => Array.from({ length: LOOP_STEPS }, (_, s) => fn(s));
 const note = (step, midi, len = 1, accent = false, mod = null) => ({ step, midi, len, accent, ...mod });
 const every = (fn) => steps(fn).filter(Boolean);
 
+// How a loop reads its part (Strudel's fast/slow, iter and off): the speed,
+// how many parts the loop start moves through, and an echo { steps, semis }.
+const PLAYBACK = { speed: 1, iter: 1, echo: null };
+
 // What every variant starts with on top of its own data.
 const extras = (insert = {}) => ({ insert: { ...INSERT_DEFAULT, ...insert }, sample: null });
 
@@ -96,6 +100,7 @@ function drum(voice, pattern, params = {}) {
     data: {
       steps: pattern,
       mods: Array(LOOP_STEPS).fill(null),
+      ...PLAYBACK,
       params: { ...paramDefaults(voice), ...params },
       level: 1,
       ...extras(),
@@ -109,7 +114,17 @@ function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
     kind: "notes",
     low,
     high,
-    data: { notes: list, synth, params: paramDefaults("synth"), level: 1, scale, transpose: 0, len, ...extras(insert) },
+    data: {
+      notes: list,
+      ...PLAYBACK,
+      synth,
+      params: paramDefaults("synth"),
+      level: 1,
+      scale,
+      transpose: 0,
+      len,
+      ...extras(insert),
+    },
   };
 }
 
@@ -344,11 +359,40 @@ function plied(ev, n = 1, len = 1) {
   return Array.from({ length: n }, (_, k) => ({ ...ev, offset: (k * len) / n, ...(ev.steps && { steps: ev.steps / n }) }));
 }
 
+/* ------------------------------------------------------------ playback -- */
+
+export const SPEEDS = [0.5, 1, 2];
+export const ITERS = [1, 2, 4, 8];
+export const ECHO_STEPS = [1, 2, 3, 4, 6, 8];
+export const ECHO_SEMIS = [-12, 0, 5, 7, 12];
+
+const mod32 = (v) => ((v % LOOP_STEPS) + LOOP_STEPS) % LOOP_STEPS;
+
+// Where in its part a sound is on `step` of `loop`, in part steps (half
+// steps at ×½). Iter moves the start on by 1/iter of the loop each loop.
+export function positionAt(step, loop, { speed = 1, iter = 1 }) {
+  const shift = iter > 1 ? (((loop % iter) + iter) % iter) * (LOOP_STEPS / iter) : 0;
+  const pos = speed === 2 ? 2 * step : speed === 0.5 ? ((((loop % 2) + 2) % 2) * LOOP_STEPS + step) / 2 : step;
+  return mod32(pos + shift);
+}
+
+// The part steps that start inside `step`: { at, offset } with `offset` the
+// fraction of the step where each one lands. ×2 reads two, ×½ one every other.
+export function readsAt(step, loop, data) {
+  const pos = positionAt(step, loop, data);
+  if (data.speed === 2) return [{ at: pos, offset: 0 }, { at: mod32(pos + 1), offset: 0.5 }];
+  return Number.isInteger(pos) ? [{ at: pos, offset: 0 }] : [];
+}
+
 /**
  * Events variant `id` plays on `step` of `loop`. Notes start on their own step; on
  * `entering` (the lane's first step) notes already in progress also start,
  * with whatever is left of them, so a pad switched on mid-phrase sounds now
  * instead of up to 2 bars later. Mods decide on the step a note starts.
+ *
+ * A sound with a speed or an iter reads its part out of place, so nothing it
+ * plays runs past the loop end, and each loop starts by joining whatever its
+ * new position is in the middle of.
  */
 // With a sample, the event plays it and keeps its own voice as the fallback.
 const withSample = (ev, data) => (data.sample ? { ...ev, voice: "sample", fallback: ev.voice, sample: data.sample } : ev);
@@ -356,22 +400,53 @@ const withSample = (ev, data) => (data.sample ? { ...ev, voice: "sample", fallba
 export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loop = 0) {
   const def = defOf(id);
   if (!def || def.kind === "fx") return [];
-  if (def.kind === "drum") {
-    const v = data.steps[step];
-    const mod = data.mods?.[step];
-    if (!v || !passes(mod, id, step, loop)) return [];
-    return plied(withSample({ voice: def.voice, ...data.params, accent: v === ACCENT }, data), mod?.ply);
-  }
+  const { speed = 1, iter = 1, echo = null } = data;
+  const moved = speed !== 1 || iter > 1;
+  const scale = 1 / speed; // loop steps per part step
+  const room = moved ? LOOP_STEPS - step : Infinity; // loop steps left before the loop end
   const events = [];
-  for (const n of data.notes) {
-    const left =
-      n.step === step ? n.len : entering && n.step < step && n.step + n.len > step ? n.step + n.len - step : 0;
-    if (!left || !passes(n, id, n.step, loop)) continue;
-    const ev = { voice: data.synth, ...data.params, freq: midiToFreq(n.midi + data.transpose), steps: left, accent: n.accent };
-    // A ratchet splits the whole note; joining one halfway plays the rest as one.
-    events.push(...plied(withSample(ev, data), n.step === step ? n.ply : 1, left));
+  const at = (offset, list) => list.map((ev) => (offset ? { ...ev, offset: offset + (ev.offset ?? 0) } : ev));
+  for (const read of readsAt(step, loop, data)) {
+    events.push(...at(read.offset, starts(id, def, data, read.at, loop, scale, room - read.offset)));
+    if (echo) {
+      const copies = starts(id, def, data, mod32(read.at - echo.steps), loop, scale, room - read.offset, echo);
+      events.push(...at(read.offset, copies));
+    }
+  }
+  if (def.kind === "notes" && (entering || (moved && step === 0))) {
+    const pos = positionAt(step, loop, data);
+    for (const n of data.notes) {
+      if (!(n.step < pos && n.step + n.len > pos) || !passes(n, id, n.step, loop)) continue;
+      events.push(noteEvent(data, n, Math.min((n.step + n.len - pos) * scale, room)));
+    }
   }
   return events;
+}
+
+const noteEvent = (data, n, steps, semis = 0, accent = n.accent) =>
+  withSample(
+    { voice: data.synth, ...data.params, freq: midiToFreq(n.midi + data.transpose + semis), steps, accent },
+    data,
+  );
+
+// What starts on part step `at`, `scale` loop steps per part step, cut at
+// `room`. An echo copy plays unaccented, transposed and without a ratchet.
+function starts(id, def, data, at, loop, scale, room, echo = null) {
+  if (def.kind === "drum") {
+    const v = data.steps[at];
+    const mod = data.mods?.[at];
+    if (!v || !passes(mod, id, at, loop)) return [];
+    const ev = withSample({ voice: def.voice, ...data.params, accent: !echo && v === ACCENT }, data);
+    return echo ? [ev] : plied(ev, mod?.ply, scale);
+  }
+  const out = [];
+  for (const n of data.notes) {
+    if (n.step !== at || !passes(n, id, at, loop)) continue;
+    const len = Math.min(n.len * scale, room);
+    if (echo) out.push(noteEvent(data, n, len, echo.semis, false));
+    else out.push(...plied(noteEvent(data, n, len), n.ply, len));
+  }
+  return out;
 }
 
 // One note (or hit) to preview in the editor, outside the loop.
@@ -424,6 +499,12 @@ export function cleanSample(saved) {
   return out;
 }
 
+// A drum echo repeats the hit: it has no pitch to move.
+export function cleanEcho(saved, kind) {
+  if (!saved || !ECHO_STEPS.includes(saved.steps) || !ECHO_SEMIS.includes(saved.semis)) return null;
+  return { steps: saved.steps, semis: kind === "drum" ? 0 : saved.semis };
+}
+
 /**
  * Rebuilds variant data from whatever localStorage returned: every field is
  * checked against the default's shape and anything off falls back to the
@@ -445,6 +526,9 @@ export function sanitize(id, saved) {
   out.insert = cleanInsert(saved.insert, base.insert);
   out.sample = cleanSample(saved.sample);
 
+  if (SPEEDS.includes(saved.speed)) out.speed = saved.speed;
+  if (ITERS.includes(saved.iter)) out.iter = saved.iter;
+  out.echo = cleanEcho(saved.echo, def.kind);
   if (def.kind === "drum") {
     if (Array.isArray(saved.steps) && saved.steps.length === LOOP_STEPS) {
       out.steps = saved.steps.map((v) => (isInt(v, OFF, ACCENT) ? v : OFF));
