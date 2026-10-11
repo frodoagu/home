@@ -1,7 +1,8 @@
 {{- /*
   The page loads nothing but its own files and Google Sign-In (script, its
   stylesheet, the button's iframe). Inline styles stay allowed: the editors set
-  style attributes. A new third-party origin must be added here or it is blocked.
+  style attributes. media-src takes blob: for the silent track that holds the
+  media session (src/mediaKeys.js). A new third-party origin must be added here or it is blocked.
   No Cross-Origin-Opener-Policy: same-origin would cut the sign-in popup off.
 */}}
 {{- $csp := list
@@ -11,6 +12,7 @@
   "frame-src https://accounts.google.com/gsi/"
   "connect-src 'self' https://accounts.google.com/gsi/"
   "img-src 'self' data:"
+  "media-src 'self' blob:"
   "object-src 'none'"
   "base-uri 'none'"
   "form-action 'self'"

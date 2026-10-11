@@ -84,7 +84,8 @@ goes through it:
   queued together from step 0, a queued snapshot included. Stop arms with
   what was playing queued (dotted) and hides itself, so ▶ Play sits in its
   slot and brings that mix back; the autopilot, armed, takes the queued mix
-  and starts. FX still fire at once.
+  and starts. FX still fire at once. The keyboard's play/pause and stop keys
+  press the same buttons (`mediaKeys.js`, see *Gotchas*).
 - **Autopilot** (see below), at every loop start.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
@@ -1081,6 +1082,15 @@ npm run build
   blocked until it's added there. Inline styles stay allowed because the
   editors set `style` attributes. The headers sit in `location = /index.html`
   itself: nginx drops server-level `add_header`s in any location that sets its
-  own.
+  own. `media-src` allows `blob:` for the media keys' silent track (next).
+- **Media keys need a media element.** Browsers route the keyboard's
+  play/pause and stop keys (and the OS media overlay) to a page only while it
+  holds a media session, and Web Audio alone never opens one. `mediaKeys.js`
+  plays a silent looping `<audio>` (a WAV built in memory, a blob: URL) while
+  the engine runs and pauses it on Stop, so the session stays with the tab and
+  ▶ comes back to it. The track lasts 6 s: Chrome leaves media under 5 s out of
+  the session. Before the first ▶ there is no session, so the keys do nothing
+  until something has played once. Without the Media Session API the keys fall
+  back to `keydown` (`MediaPlayPause`, `MediaStop`).
 - **`listen [::]:80`** in the nginx config (like `agu-spa`) fails on a host
   without IPv6 (e.g. a test Docker); on the Pi it works.

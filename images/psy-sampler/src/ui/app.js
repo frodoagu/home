@@ -91,6 +91,7 @@ export function mountApp(root, engine, opts = {}) {
     cloud = null, // cloud.js; survives remounts, like the engine
     samples = null, // samples.js; same
     stats = null, // stats.js; same
+    mediaKeys = null, // mediaKeys.js; same
     recorder = createRecorder(engine),
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
@@ -731,6 +732,7 @@ export function mountApp(root, engine, opts = {}) {
   // Running, the slot holds Parar; stopped, the cue button arms, and armed it
   // plays what was queued.
   function showCue() {
+    mediaKeys?.setPlaying(engine.isRunning());
     stopBtn.hidden = !engine.isRunning();
     cueBtn.hidden = engine.isRunning();
     cueBtn.textContent = state.armed ? tx.transport.play : tx.transport.arm;
@@ -1510,6 +1512,7 @@ export function mountApp(root, engine, opts = {}) {
     closeEditor();
     clearInterval(recTimer);
     recorder.onFull(null);
+    mediaKeys?.bind(null);
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     engine.onBar(null);
@@ -1701,6 +1704,8 @@ export function mountApp(root, engine, opts = {}) {
     paintStep(null);
     showSection();
   });
+  // The keyboard's play/pause and stop keys press the same buttons.
+  mediaKeys?.bind({ playing: engine.isRunning, play: () => cueBtn.click(), stop: () => stopBtn.click() });
   cueBtn.addEventListener("click", () => {
     if (!state.armed) {
       state.armed = true;
