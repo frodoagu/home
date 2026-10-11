@@ -9,7 +9,8 @@ signed-in user can upload samples to their profile and play any sound through
 one. A DJ filter sweeps the whole mix. An autopilot builds a track
 on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
-sound sounds; its sections can be forced and queued. What plays exports to WAV,
+sound sounds; its sections can be forced and queued. A second one, the snapshot
+autopilot, plays the user's saved snapshots in order instead. What plays exports to WAV,
 as a loop or as a live recording.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
@@ -87,6 +88,8 @@ goes through it:
   and starts. FX still fire at once. The keyboard's play/pause and stop keys
   press the same buttons (`mediaKeys.js`, see *Gotchas*).
 - **Autopilot** (see below), at every loop start.
+- **Snapshot autopilot** (see Snapshots), on the loop start where a snapshot
+  has played its bars.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
 - The editors' **×2 hits**, **Reset** and **Reset hits / notes**, at the next
@@ -524,6 +527,35 @@ sounds: it gets saved, and if it matches the factory data they show no ✎).
 Another click before the bar cancels; a double click comes in right away; with
 the loop stopped it comes in right away. With the **autopilot** running, it also
 takes it to the snapshot's section and carries on from there.
+
+**🎞️ Snapshot autopilot** (in the autopilot row, next to 🤖) plays the
+snapshots one after another, in the panel's order, and starts over after the
+last one: drag the tiles to arrange the track. Nothing in it is random, so the
+same list plays the same way every time.
+
+- **How long**: each snapshot plays the bars the **Changes** slider says (2-32)
+  and the next one comes in on a **loop start**, so a change never cuts a 2-bar
+  loop in half. A snapshot that came in mid-loop (a click lands on any bar line)
+  plays one bar more. The slider applies to the snapshot already playing.
+- **What it plays**: exactly the snapshot, through the same `load()` as a click
+  (its selection and its data). It fires no FX, writes no melodies, dresses no
+  sound and doesn't ride the faders: that is the 🤖 autopilot's job. Like it,
+  it keeps the background kick out, so a Breakdown snapshot stays kickless.
+- **Where it starts**: the queued snapshot (by hand or armed), else the one
+  playing (it carries on from it, counting from the next bar line), else the
+  first. From silence it starts at once.
+- **By hand**: clicking a snapshot plays it from the next bar and the tour carries
+  on from it. A click on a sound changes the mix until the next snapshot (on the
+  line where both fall, the hand wins and the snapshot waits a loop).
+  **⏭ Next** moves on on the next loop start. The row shows the snapshot playing,
+  its bars left and the one coming next, which pulses (and its tile, dotted) in
+  the last loop.
+- It needs two snapshots. 🤖 and the section buttons switch to the other
+  autopilot; Stop switches it off. Removing the snapshot playing goes on to the
+  one after it; removing the last one switches it off.
+
+The logic is pure (`startTour`, `countBar`, `tourDue`, `tourLeft`,
+`nextSnapshot` in `snapshots.js`); the UI drives it from the bar hook.
 
 The **editor** (▾) works on a **draft**: name (Enter saves), moment, remove a
 sound (✕), add one (takes how it sounds now; on kick or bass it replaces the one
@@ -1199,7 +1231,8 @@ npm run build
   variations and new melodies with a seeded PRNG), `workspace` (normalize,
   presets, snapshot files), `autopilot` (sections, forms, never without lead/pad, changes every
   N bars, section queue, styles, per-seed determinism), `dress` (per-seed
-  sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
+  sounds), `snapshots` (capture, parts, the snapshot autopilot's order and
+  timing), `tempo` (BPM ramp), `share`, `wav`,
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`.
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
@@ -1223,7 +1256,7 @@ npm run build
   reordering, autopilot (same seed = same track and same sounds, never more than
   one bar without lead/pad, styles, queued sections and Next, the changes
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
-  section, export / import, a snapshot's link), bar-by-bar BPM change,
+  section, export / import, a snapshot's link, the snapshot autopilot), bar-by-bar BPM change,
   languages, export / import, WAV, recording (through a fake worklet), Reset
   everything and shared links.
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
