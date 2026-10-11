@@ -73,6 +73,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
+                     Sample import in src/import/ (own WAV/AIFF/CAF/AU decoders, zip, SoundFont,
+                     Ableton/SFZ/REAPER references), fixtures from src/test/audioFiles.js.
   psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
                      any Google account signs in (ID token verified server-side, own HMAC
                      cookie), one opaque JSON workspace + the user's uploaded audio samples
@@ -491,7 +493,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (SQLite + samples + session key) has no backup. nginx sends a CSP (configmap.yaml):
   a new third-party origin is blocked until listed there. Share links are untrusted
   input: `#s=` and `#snap=` (one snapshot) inflate to `SOUNDS_MAX` at most, and
-  outside names are looked up with `Object.hasOwn`, never `in`. See docs/psy-sampler.md.
+  outside names are looked up with `Object.hasOwn`, never `in`. Sample import:
+  Chromium and Firefox can't decode AIFF/CAF/AU, so `src/import/pcm.js` does, and
+  whatever not EVERY browser decodes is re-encoded to WAV in the page before upload
+  (a sample must play wherever its owner signs in) — don't widen psy-sync's
+  `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
+  can't follow: their samples must come in the same selection (the project folder).
+  See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

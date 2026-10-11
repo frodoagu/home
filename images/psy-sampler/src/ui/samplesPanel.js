@@ -2,11 +2,55 @@
 // listen, delete, and "+ Sound in…" a layer, which makes a new sound that
 // plays the sample (the app builds it). Signed out, or without the API, it
 // only says why there is nothing to show. Collapsed by default.
+//
+// Uploads take files, a folder (picked or dropped) or archives; what they
+// hold comes from import/gather.js. A lone audio file goes straight up; more
+// than one, or a project file, opens a picker to choose (and audition) which.
 import { LAYERS } from "../catalog.js";
-import { formatBytes, nameOf } from "../samples.js";
-import { el, select } from "./dom.js";
+import { formatBytes } from "../samples.js";
+import { el, nextId, select } from "./dom.js";
 
-export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, onPreview, onUse, onRemove }) {
+// What the file dialog offers; anything else can still be dropped.
+const ACCEPT = [
+  "audio/*",
+  ...["wav", "wave", "bwf", "rf64", "aif", "aiff", "aifc", "caf", "au", "snd", "flac", "mp3", "ogg", "oga", "opus", "m4a", "aac", "webm"],
+  ...["zip", "sf2", "sf3", "als", "alc", "adg", "adv", "sfz", "dspreset", "dslibrary", "rpp", "multisample", "xrni", "xrns"],
+]
+  .map((x) => (x.includes("/") ? x : `.${x}`))
+  .join(",");
+
+const MAX_DROPPED = 20000;
+const NAMES_SHOWN = 3;
+
+// A drop -> [{ file, path }], walking dropped folders. The entries must be taken
+// while the event is dispatched; reading them can wait.
+export function droppedEntries(dataTransfer) {
+  const entries = [...(dataTransfer?.items ?? [])].map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
+  const files = [...(dataTransfer?.files ?? [])];
+  return async () => {
+    if (!entries.length) return files.map((file) => ({ file, path: file.name }));
+    const out = [];
+    async function walk(entry, prefix) {
+      if (out.length >= MAX_DROPPED) return;
+      if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject)).catch(() => null);
+        if (file) out.push({ file, path: prefix + entry.name });
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        // readEntries hands a directory over in batches, until an empty one.
+        for (;;) {
+          const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject)).catch(() => []);
+          if (!batch.length) break;
+          for (const child of batch) await walk(child, `${prefix}${entry.name}/`);
+        }
+      }
+    }
+    for (const entry of entries) await walk(entry, "");
+    return out;
+  };
+}
+
+export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, onPreview, onAudition, onUse, onRemove }) {
   const t = tx.samples;
   const usage = el("span", { class: "samples-usage" });
   const body = el("div", { class: "samples-body" });
@@ -27,23 +71,194 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     return e[err.code] ?? e.failed;
   }
 
-  const file = el("input", { type: "file", accept: "audio/*", hidden: "" });
+  const slotsLeft = () => {
+    const { limits, used } = samples.info;
+    return limits ? Math.max(0, limits.count - used.count) : Infinity;
+  };
+
+  let busy = false;
+  let picking = null; // the open picker: { node, sync }
+
+  const files = el("input", { type: "file", accept: ACCEPT, multiple: "", hidden: "" });
+  const folder = el("input", { type: "file", webkitdirectory: "", hidden: "" });
   const uploadBtn = el("button", { type: "button", class: "action", "data-action": "upload-sample", text: t.upload });
-  uploadBtn.addEventListener("click", () => file.click());
-  file.addEventListener("change", async () => {
-    const chosen = file.files?.[0];
-    file.value = "";
-    if (!chosen) return;
-    uploadBtn.disabled = true;
-    status(t.uploading(nameOf(chosen)));
-    try {
-      const sample = await samples.upload(chosen);
-      status(t.uploaded(sample.name));
-    } catch (err) {
-      status(errorText(err));
-    } finally {
-      uploadBtn.disabled = false;
+  const folderBtn = el("button", { type: "button", class: "ghost", "data-action": "upload-folder", text: t.folder });
+  uploadBtn.addEventListener("click", () => files.click());
+  folderBtn.addEventListener("click", () => folder.click());
+  for (const input of [files, folder]) {
+    input.addEventListener("change", () => {
+      const chosen = [...(input.files ?? [])].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+      input.value = "";
+      importFrom(chosen);
+    });
+  }
+
+  const setBusy = (on) => {
+    busy = on;
+    uploadBtn.disabled = on;
+    folderBtn.disabled = on;
+    picking?.node.querySelectorAll("button, input").forEach((b) => (b.disabled = on));
+    if (!on) picking?.sync();
+  };
+
+  // What the selection held besides candidates: projects, missing files, closed formats, failures.
+  function notes(found) {
+    const out = found.projects.map((p) => t.project(p.name, p.app, p.found, p.refs));
+    const { missing } = found;
+    if (missing.length) out.push(t.missing(missing.slice(0, NAMES_SHOWN), Math.max(0, missing.length - NAMES_SHOWN)));
+    for (const c of found.closed) out.push(t.closed(c.name, c.app));
+    for (const u of found.unreadable) {
+      out.push(u.why === "encrypted" ? t.encrypted(u.name) : u.why === "tooBig" ? t.failedOne(u.name, errorText({ code: "tooBig" })) : t.unreadable(u.name));
     }
+    if (found.more) out.push(t.more(found.more));
+    return out;
+  }
+
+  async function importFrom(inputs) {
+    if (!inputs.length || busy) return;
+    closePicker();
+    setBusy(true);
+    status(t.reading);
+    try {
+      const found = await samples.gather(inputs);
+      const extra = notes(found);
+      if (!found.candidates.length) {
+        status([t.nothing, ...extra].join(" "));
+        return;
+      }
+      if (found.candidates.length === 1 && !found.projects.length) {
+        await uploadAll(found.candidates, extra);
+        return;
+      }
+      openPicker(found, extra);
+    } catch {
+      status(t.errors.failed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // One by one, saying how it goes; a full account stops the rest.
+  async function uploadAll(candidates, extra = []) {
+    const failed = [];
+    let ok = 0;
+    for (const [i, candidate] of candidates.entries()) {
+      status(candidates.length === 1 ? t.uploading(candidate.name) : t.progress(i + 1, candidates.length, candidate.name));
+      try {
+        const sample = await samples.upload(candidate);
+        ok++;
+        if (candidates.length === 1) status([t.uploaded(sample.name), ...extra].join(" "));
+      } catch (err) {
+        failed.push(t.failedOne(candidate.name, errorText(err)));
+        if (["quota", "count", "full"].includes(err.code)) break;
+      }
+    }
+    if (candidates.length === 1 && !ok) status([failed[0] ?? t.errors.failed, ...extra].join(" "));
+    else if (candidates.length > 1) status([t.done(ok, candidates.length), ...failed.slice(0, NAMES_SHOWN), ...extra].join(" "));
+    return ok;
+  }
+
+  function closePicker() {
+    if (!picking) return;
+    picking = null;
+    samples.endAuditions();
+    render();
+  }
+
+  function openPicker(found, extra) {
+    const { candidates } = found;
+    // What the projects use, if they found any of it; otherwise everything. As many as fit.
+    const wanted = found.projects.length && candidates.some((c) => c.used) ? candidates.filter((c) => c.used) : candidates;
+    const preselected = new Set(wanted.slice(0, slotsLeft()));
+
+    const go = el("button", { type: "button", class: "action", "data-action": "upload-picked" });
+    const cancel = el("button", { type: "button", class: "ghost", "data-action": "cancel-pick", text: t.cancel });
+    const slots = el("span", { class: "hint" });
+    const allId = nextId("pick-all");
+    const all = el("input", { type: "checkbox", id: allId, "data-action": "pick-all" });
+    const boxes = [];
+
+    const sync = () => {
+      const n = boxes.filter((b) => b.checked).length;
+      go.textContent = t.uploadN(n);
+      go.disabled = busy || n === 0 || n > slotsLeft();
+      all.checked = n === boxes.length;
+      all.indeterminate = n > 0 && n < boxes.length;
+      slots.textContent = Number.isFinite(slotsLeft()) ? t.slots(slotsLeft()) : "";
+    };
+
+    const rows = candidates.map((candidate) => {
+      const id = nextId("pick");
+      const box = el("input", { type: "checkbox", id, "data-pick": candidate.key });
+      box.checked = preselected.has(candidate);
+      box.addEventListener("change", sync);
+      boxes.push(box);
+      const play = el("button", { type: "button", class: "ghost icon", "data-action": "audition", text: "▶" });
+      play.title = t.play;
+      play.setAttribute("aria-label", `${t.play}: ${candidate.name}`);
+      play.addEventListener("click", () => {
+        onAudition?.(candidate).catch((err) => status(t.failedOne(candidate.name, errorText(err))));
+      });
+      const origin = candidate.region ? `${candidate.origin} · ${t.slice}` : candidate.origin;
+      return el(
+        "li",
+        { class: "pick-row" },
+        box,
+        el("label", { for: id, class: "pick-label" }, el("span", { class: "sample-name", text: candidate.name }), el("span", { class: "pick-origin", text: origin })),
+        play,
+      );
+    });
+
+    all.addEventListener("change", () => {
+      boxes.forEach((b) => (b.checked = all.checked));
+      sync();
+    });
+    cancel.addEventListener("click", closePicker);
+    go.addEventListener("click", async () => {
+      const chosen = candidates.filter((_, i) => boxes[i].checked);
+      setBusy(true);
+      try {
+        await uploadAll(chosen, extra);
+      } finally {
+        setBusy(false);
+        closePicker();
+      }
+    });
+
+    picking = {
+      node: el(
+        "div",
+        { class: "sample-picker", role: "group", "aria-label": t.pick },
+        el("p", { class: "hint", text: [t.found(candidates.length), ...extra].join(" ") }),
+        el("p", { class: "hint", text: t.pick }),
+        el("div", { class: "pick-head" }, all, el("label", { for: allId, text: t.all }), slots),
+        el("ul", { class: "pick-list" }, ...rows),
+        el("div", { class: "tools-row" }, go, cancel),
+      ),
+      sync,
+    };
+    sync();
+    status(t.found(candidates.length));
+    render();
+  }
+
+  // Dropping files or folders anywhere on the panel.
+  const canImport = () => Boolean(cloud?.info.available && cloud.info.user && samples.info.ready);
+  node.addEventListener("dragover", (e) => {
+    if (!canImport()) return;
+    e.preventDefault();
+    node.classList.add("dropping");
+  });
+  node.addEventListener("dragleave", (e) => {
+    if (!node.contains(e.relatedTarget)) node.classList.remove("dropping");
+  });
+  node.addEventListener("drop", async (e) => {
+    node.classList.remove("dropping");
+    if (!canImport()) return;
+    e.preventDefault();
+    node.open = true;
+    const read = droppedEntries(e.dataTransfer);
+    importFrom(await read());
   });
 
   const layerOptions = [
@@ -99,17 +314,24 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     const { ready, samples: list, used, limits } = samples.info;
     usage.textContent = user && ready && limits ? t.usage(size(used.bytes), size(limits.quota), used.count, limits.count) : "";
     if (!available) {
+      picking = null;
       body.replaceChildren(el("p", { class: "hint", text: t.unavailable }));
       return;
     }
     if (!user) {
+      picking = null;
       body.replaceChildren(el("p", { class: "hint", text: t.signIn }));
       return;
     }
     const items = list.length
       ? el("ul", { class: "sample-list" }, ...list.map(row))
       : el("p", { class: "hint", text: t.empty });
-    body.replaceChildren(el("p", { class: "hint", text: t.hint }), el("div", { class: "tools-row" }, uploadBtn, file), items);
+    body.replaceChildren(
+      el("p", { class: "hint", text: `${t.hint} ${t.formats}` }),
+      el("div", { class: "tools-row" }, uploadBtn, folderBtn, files, folder),
+      ...(picking ? [picking.node] : []),
+      items,
+    );
   }
 
   const offs = [samples.on(render), cloud?.on((event) => (event === "user" || event === "info") && render())];

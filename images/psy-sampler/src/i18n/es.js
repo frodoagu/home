@@ -139,7 +139,7 @@ export default {
         title: "Guardado y samples",
         items: [
           ["Se guarda solo", "Todo queda en este browser. Con sesión de Google, también en la nube, para usarlo en cualquier dispositivo."],
-          ["🎵 Samples", "Con sesión, subí tus audios. «+ Sonido en…» crea un sonido nuevo con ese sample en la capa que elijas; o elegilo como Fuente de cualquier sonido."],
+          ["🎵 Samples", "Con sesión, subí tus audios: archivos sueltos, una carpeta o un .zip (o arrastralos al panel). Lee WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts y, con su carpeta, los samples de un set de Ableton, SFZ, Decent Sampler o REAPER. «+ Sonido en…» crea un sonido nuevo con ese sample en la capa que elijas; o elegilo como Fuente de cualquier sonido."],
         ],
       },
       {
@@ -306,9 +306,34 @@ export default {
   samples: {
     title: "🎵 Samples",
     hint: "Tus samples quedan en tu perfil, en el servidor. Usalos como fuente de cualquier sonido.",
+    formats:
+      "Subí archivos, una carpeta o un .zip, o arrastralos acá: WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts (.sf2/.sf3), " +
+      "y los samples de un set de Ableton (.als, .alc, .adg, .adv), SFZ, Decent Sampler o REAPER si elegís su carpeta.",
     signIn: "Iniciá sesión con Google para subir tus samples: quedan guardados en tu perfil.",
     unavailable: "La nube no responde: los samples no están disponibles.",
-    upload: "⬆ Subir sample",
+    upload: "⬆ Subir archivos",
+    folder: "📁 Subir carpeta",
+    reading: "Leyendo los archivos…",
+    nothing: "No encontré audio en lo que elegiste.",
+    found: (n) => (n === 1 ? "Encontré 1 sample." : `Encontré ${n} samples.`),
+    more: (n) => `Hay ${n} más que no entran en la lista.`,
+    project: (name, app, found, refs) =>
+      `«${name}» (${app}) usa ${refs === 1 ? "1 archivo" : `${refs} archivos`}: ${found} ${found === 1 ? "está" : "están"} en lo que elegiste.`,
+    missing: (names, more) =>
+      `Falta${names.length + more === 1 ? "" : "n"} ${names.map((n) => `«${n}»`).join(", ")}${more ? ` y ${more} más` : ""}. ` +
+      "Elegí la carpeta del proyecto entera (en Ableton, File › Collect All and Save junta todo ahí).",
+    closed: (name, app) => `«${name}» es un formato cerrado de ${app}: exportá sus samples a WAV.`,
+    unreadable: (name) => `«${name}» no se pudo leer.`,
+    encrypted: (name) => `«${name}» está encriptado.`,
+    pick: "Elegí cuáles subir:",
+    all: "Todos",
+    slice: "fragmento",
+    slots: (n) => (n === 1 ? "Te queda 1 lugar." : `Te quedan ${n} lugares.`),
+    uploadN: (n) => `⬆ Subir ${n}`,
+    cancel: "Cancelar",
+    progress: (i, n, name) => `Subiendo ${i} de ${n}: «${name}»…`,
+    done: (ok, n) => `Subidos ${ok} de ${n}.`,
+    failedOne: (name, why) => `«${name}»: ${why}`,
     uploading: (name) => `Subiendo «${name}»…`,
     uploaded: (name) => `Sample «${name}» subido.`,
     usage: (used, quota, n, max) => `${used} de ${quota} · ${n} de ${max} samples`,
@@ -320,9 +345,9 @@ export default {
     useIn: "+ Sonido en…",
     created: (name, layer) => `Nuevo sonido con «${name}» en ${layer}.`,
     errors: {
-      tooBig: (max) => `El archivo pesa más de ${max}.`,
+      tooBig: (max) => `Pesa más de ${max}.`,
       tooLong: (secs) => `El sample dura más de ${secs} s: recortalo.`,
-      format: "Ese archivo no es audio que el navegador pueda leer.",
+      format: "No es audio que se pueda leer.",
       quota: "No queda espacio en tu perfil: borrá algún sample.",
       count: (max) => `Llegaste a ${max} samples: borrá alguno.`,
       full: "El servidor se quedó sin lugar para samples.",
