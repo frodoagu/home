@@ -17,6 +17,7 @@
   --ok: #15803d;
   --warn: #b45309;
   --current-tint: rgba(76, 29, 149, 0.28);
+  --veil: rgba(12, 10, 16, 0.45);
 }
 
 [data-layer="kick"] { --layer: #b91c1c; --on-layer: #ffffff; }
@@ -45,6 +46,7 @@
     --ok: #4ade80;
     --warn: #fbbf24;
     --current-tint: rgba(196, 181, 253, 0.32);
+    --veil: rgba(0, 0, 0, 0.62);
   }
   [data-layer="kick"] { --layer: #f87171; --on-layer: #1a0b0b; }
   [data-layer="bass"] { --layer: #fb923c; --on-layer: #1c0f05; }
@@ -1809,7 +1811,10 @@ html:has(dialog.help[open], dialog.intro[open]) {
   left: -4px; /* flush with the layer's own borders */
   right: -1px;
   z-index: 15;
-  min-width: 0;
+  /* Wider than a narrow layer column when it has to be: the 32 steps fit
+     without a scrollbar (placeEditor shifts it left if it would leave the
+     screen). A phone still scrolls the grid inside its own box. */
+  min-width: min(684px, calc(100vw - 16px));
   padding: 12px 14px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1821,6 +1826,38 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .editor-slot:empty {
   display: none;
+}
+
+/* While an editor is open everything else dims, so it is clear what is being
+   edited: the editor and its tile sit above the veil. The veil lets clicks
+   through, so the other sounds still play live (a press outside closes the
+   editor, as always). */
+.editor-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  background: var(--veil);
+  pointer-events: none;
+  animation: veil-in 120ms ease-out;
+}
+
+.editor-veil[hidden] {
+  display: none;
+}
+
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.tile.is-editing {
+  position: relative;
+  z-index: 15;
+  border-radius: 10px;
+  outline: 3px solid var(--layer);
+  outline-offset: 3px;
+  background: var(--surface);
 }
 
 @keyframes pop-in {
@@ -2025,6 +2062,50 @@ html:has(dialog.help[open], dialog.intro[open]) {
   color: var(--muted);
 }
 
+/* What a click on the grid does: one pressed button among four. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.seg-label {
+  margin-right: 2px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.seg {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.seg:hover {
+  border-color: var(--layer);
+}
+
+.seg[aria-pressed="true"] {
+  color: var(--on-layer);
+  background: var(--layer);
+  border-color: var(--layer);
+}
+
+.pickers .ghost[hidden] {
+  display: none;
+}
+
+.pattern .editor-actions,
+.euclid {
+  align-items: center;
+}
+
 .synth-detail,
 .legend {
   margin: 0;
@@ -2046,6 +2127,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
   grid-template-columns: 3.4rem repeat(32, minmax(16px, 1fr));
   gap: 2px;
   min-width: 640px;
+  padding-block: 2px; /* room for the bar rule, which reaches 2px past the cells */
 }
 
 .row-label {
@@ -2181,12 +2263,17 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .step[data-mod] {
-  overflow: hidden;
+  position: relative;
 }
 
+/* Out of the flow: a tag never sizes its cell, so the grid never grows. */
 .step[data-mod]::after {
   content: attr(data-mod);
-  display: block;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   font-size: 0.56rem;
   font-weight: 700;
   line-height: 1;
@@ -2311,7 +2398,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   .cue.is-armed,
   .rec.is-waiting,
   .rec.is-recording,
-  .editor-slot {
+  .editor-slot,
+  .editor-veil {
     animation: none !important;
   }
 }

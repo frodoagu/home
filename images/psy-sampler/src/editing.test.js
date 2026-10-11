@@ -14,12 +14,16 @@ import {
   cycleStep,
   cycleStepEcho,
   doubleSteps,
+  euclid,
+  euclidSteps,
   changesFor,
   improvise,
   newPart,
   noteAt,
   placeNote,
   pruneMods,
+  reversePart,
+  rotatePart,
   seeded,
   varyNotes,
   varySteps,
@@ -372,5 +376,54 @@ describe("newPart", () => {
     const arp = Array.from({ length: 32 }, (_, s) => n(s, 57));
     expect(newPart("lead", arp, rows, seeded(4))).toEqual(improvise("lead", rows, seeded(4)));
     expect(newPart("bass", [], rows, seeded(4))).toEqual(improvise("bass", rows, seeded(4)));
+  });
+});
+
+describe("pattern tools", () => {
+  const hitsOf = (steps) => steps.flatMap((v, s) => (v ? [s] : []));
+  const drum = (hits) => {
+    const steps = Array(32).fill(OFF);
+    const mods = Array(32).fill(null);
+    for (const s of hits) steps[s] = HIT;
+    return { steps, mods };
+  };
+
+  it("euclid matches Strudel's euclid and euclidRot", () => {
+    const x = (list) => list.map((v) => (v ? "x" : ".")).join("");
+    expect(x(euclid(3, 8))).toBe("x..x..x.");
+    expect(x(euclid(5, 8))).toBe("x.xx.xx.");
+    expect(x(euclid(4, 16))).toBe("x...x...x...x...");
+    expect(x(euclid(3, 8, 2))).toBe(".x..x.x.");
+    expect(x(euclid(0, 4))).toBe("....");
+    expect(x(euclid(4, 4))).toBe("xxxx");
+  });
+
+  it("euclidSteps repeats the cycle across the loop and clears the mods", () => {
+    const { steps, mods } = euclidSteps(3, 8);
+    expect(hitsOf(steps)).toEqual([0, 3, 6, 8, 11, 14, 16, 19, 22, 24, 27, 30]);
+    expect(mods.every((m) => m === null)).toBe(true);
+    // 5 does not divide 32: a polymeter that restarts on the loop.
+    expect(hitsOf(euclidSteps(2, 5).steps).slice(0, 6)).toEqual([0, 2, 5, 7, 10, 12]);
+  });
+
+  it("rotatePart moves hits and their mods, wrapping", () => {
+    const data = drum([0, 31]);
+    data.mods[31] = { p: 0.5 };
+    const out = rotatePart(data, "drum", 1);
+    expect(hitsOf(out.steps)).toEqual([0, 1]);
+    expect(out.mods[0]).toEqual({ p: 0.5 });
+    expect(hitsOf(rotatePart(data, "drum", -1).steps)).toEqual([30, 31]);
+  });
+
+  it("reversePart mirrors around the first step, keeping the beat", () => {
+    expect(hitsOf(reversePart(drum([0, 4, 6]), "drum").steps)).toEqual([0, 26, 28]);
+    const notes = [n(0, 69, 8), n(8, 72, 8), n(16, 67, 8), n(24, 64, 8)];
+    const out = reversePart({ notes }, "notes").notes;
+    expect(out.map((x) => [x.step, x.midi])).toEqual([[0, 69], [8, 64], [16, 67], [24, 72]]);
+  });
+
+  it("moved notes stay inside the loop and clear of the next one on their row", () => {
+    const out = rotatePart({ notes: [n(28, 60, 4), n(30, 60, 1)] }, "notes", 2).notes;
+    expect(out).toEqual([n(0, 60, 1), n(30, 60, 2)]);
   });
 });

@@ -20,6 +20,8 @@ import {
   cleanMod,
   cleanSample,
   passes,
+  positionAt,
+  readsAt,
 } from "./patterns.js";
 import { INSERT_DEFAULT } from "./insert.js";
 
@@ -379,5 +381,68 @@ describe("mods", () => {
     expect(JSON.stringify(sanitize("perc.hat", old))).toBe(JSON.stringify(d));
     const notes = sanitize("lead.melodic", { ...defaultData("lead.melodic"), notes: [{ step: 0, midi: 69, len: 2, accent: false, ply: 2, p: 7 }] });
     expect(notes.notes).toEqual([{ step: 0, midi: 69, len: 2, accent: false, ply: 2 }]);
+  });
+});
+
+describe("playback: speed, iter, echo", () => {
+  const starts = (id, data, loop = 0) =>
+    Array.from({ length: 32 }, (_, s) => eventsAt(id, s, false, data, loop).map((e) => s + (e.offset ?? 0))).flat();
+
+  it("factory data reads its part in place", () => {
+    expect(defaultData("perc.hat")).toMatchObject({ speed: 1, iter: 1, echo: null });
+    expect(readsAt(5, 3, defaultData("perc.hat"))).toEqual([{ at: 5, offset: 0 }]);
+  });
+
+  it("×2 plays the part twice per loop, ×½ once over two loops", () => {
+    const d = defaultData("perc.clap"); // steps 4, 12, 20, 28
+    expect(starts("perc.clap", { ...d, speed: 2 })).toEqual([2, 6, 10, 14, 18, 22, 26, 30]);
+    const slow = { ...d, speed: 0.5 };
+    expect(starts("perc.clap", slow, 0)).toEqual([8, 24]);
+    expect(starts("perc.clap", slow, 1)).toEqual([8, 24]);
+    expect(positionAt(8, 1, slow)).toBe(20);
+  });
+
+  it("×2 reads odd part steps half a step in", () => {
+    const d = { ...defaultData("perc.hat"), speed: 2 }; // steps 2, 6…: even, on the step
+    const chat = { ...defaultData("perc.chat"), speed: 2 }; // steps 1, 3, 5…: odd, half a step in
+    expect(starts("perc.chat", chat).slice(0, 3)).toEqual([0.5, 1.5, 2.5]);
+    expect(starts("perc.hat", d).slice(0, 2)).toEqual([1, 3]);
+  });
+
+  it("iter starts each loop 1/iter further into the part", () => {
+    const d = { ...defaultData("lead.melodic"), iter: 4 }; // 8-step notes on 0, 8, 16, 24
+    const first = (loop) => eventsAt("lead.melodic", 0, false, d, loop)[0].freq;
+    const freqs = [0, 1, 2, 3].map(first);
+    expect(new Set(freqs).size).toBe(4);
+    expect(first(4)).toBe(freqs[0]);
+  });
+
+  it("a moved part never plays past the loop end, and rejoins long notes on the next loop", () => {
+    const pad = { ...defaultData("pad.drone"), speed: 0.5 }; // 32-step notes on 0
+    const first = eventsAt("pad.drone", 0, false, pad, 0);
+    expect(first.every((e) => e.steps === 32)).toBe(true);
+    const second = eventsAt("pad.drone", 0, false, pad, 1);
+    expect(second.map((e) => e.steps)).toEqual([32, 32]);
+    expect(eventsAt("pad.drone", 0, false, defaultData("pad.drone"), 1)).toHaveLength(2); // unmoved: starts there anyway
+  });
+
+  it("an echo repeats a hit unaccented, and a note transposed", () => {
+    const d = { ...defaultData("perc.clap"), echo: { steps: 3, semis: 0 } };
+    d.steps[4] = ACCENT;
+    expect(starts("perc.clap", d)).toEqual([4, 7, 12, 15, 20, 23, 28, 31]);
+    expect(eventsAt("perc.clap", 7, false, d).map((e) => e.accent)).toEqual([false]);
+    const lead = { ...defaultData("lead.melodic"), echo: { steps: 4, semis: 12 } };
+    const [orig] = eventsAt("lead.melodic", 0, false, lead);
+    const [copy] = eventsAt("lead.melodic", 4, false, lead);
+    expect(copy.freq / orig.freq).toBeCloseTo(2, 9);
+  });
+
+  it("sanitize keeps valid playback fields and pitchless drum echoes", () => {
+    const d = sanitize("perc.hat", { ...defaultData("perc.hat"), speed: 2, iter: 4, echo: { steps: 3, semis: 7 } });
+    expect(d).toMatchObject({ speed: 2, iter: 4, echo: { steps: 3, semis: 0 } });
+    const bad = sanitize("lead.acid", { ...defaultData("lead.acid"), speed: 3, iter: 5, echo: { steps: 5, semis: 12 } });
+    expect(bad).toMatchObject({ speed: 1, iter: 1, echo: null });
+    const ok = sanitize("lead.acid", { ...defaultData("lead.acid"), echo: { steps: 3, semis: 12 } });
+    expect(ok.echo).toEqual({ steps: 3, semis: 12 });
   });
 });

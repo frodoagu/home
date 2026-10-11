@@ -14,8 +14,12 @@ import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js"
 import {
   CHANCES,
   COND_EVERY,
+  ECHO_SEMIS,
+  ECHO_STEPS,
+  ITERS,
   NOTE_LENGTHS,
   PLIES,
+  SPEEDS,
   TRANSPOSE,
   cleanMod,
   defOf,
@@ -36,22 +40,30 @@ import {
   cycleStepEcho,
   placeNote,
   pruneMods,
+  rotatePart,
 } from "../editing.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
 const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
-// What a click on a grid paints: "hit" writes hits and notes, the others put
-// that mod key, at its value here, on them.
+// What a click on a grid does: "hit" writes hits and notes (the plain
+// click), the others put that mod key, at its value here, on them.
 const BRUSHES = ["hit", "p", "cond", "ply"];
 export const BRUSH = { kind: "hit", p: 0.5, cond: "1:2", ply: 2 };
+const isDefaultBrush = (b) => BRUSHES.every((k) => b[k] === BRUSH[k]) && b.kind === BRUSH.kind;
+
+// The drum editors' euclidean rhythm: k hits over n steps, started rot in.
+export const EUCLID = { k: 3, n: 8, rot: 0 };
+const EUCLID_N = [...Array.from({ length: 14 }, (_, i) => i + 3), 32];
 
 export function createEditor({
   id,
   label,
   data,
   brush = { ...BRUSH }, // the app's, mutated here so every editor shares it
+  euclid = { ...EUCLID }, // the same for the euclid picker
+  onEdit = () => {}, // a part edit that lands on the bar line: "reverse", "euclid"
   onChange,
   onAudition,
   onReset,
@@ -80,6 +92,7 @@ export function createEditor({
   let current = data;
   let paintGrid = () => {};
   let refreshGrid = () => {};
+  let showBrush = () => {};
   let buildUpBtn = null;
   let varyBtn = null;
   let paintAmount = () => {};
@@ -89,6 +102,7 @@ export function createEditor({
   function set(patch) {
     current = { ...current, ...patch };
     onChange(current);
+    showBrush();
   }
 
   // Improvise: a toggle and a slider in one. A click turns it on or off (the
@@ -130,14 +144,16 @@ export function createEditor({
     return b;
   }
 
-  /* ---- the brush: what a click on the grid paints ---- */
-  // `legendText` is the grid's own help, shown while the brush writes;
-  // `applyAll` puts the brush's value on every hit or note.
-  function brushControls(legendText, applyAll) {
+  /* ---- the brush: what a click on the grid does ---- */
+  // `legendText` is the grid's own help, shown while a click writes;
+  // `applyAll` puts the brush's value on every hit or note, `clearAll`
+  // takes every mod off.
+  function brushControls(legendText, applyAll, clearAll) {
     const help = legend("");
     const value = (key, options) =>
       select(tx.brushValue, options, brush[key], (v) => {
         brush[key] = key === "cond" ? v : Number(v);
+        show();
       }, `brush-${key}`);
     const values = {
       p: value("p", CHANCES.filter((p) => p < 1).map((p) => ({ value: p, label: tx.chances[p] }))),
@@ -150,29 +166,137 @@ export function createEditor({
       ),
       ply: value("ply", PLIES.filter((n) => n > 1).map((n) => ({ value: n, label: tx.ply(n) }))),
     };
-    const all = el("button", { type: "button", class: "ghost", "data-action": "brush-all", text: tx.applyAll });
-    all.title = tx.applyAllTitle;
-    all.addEventListener("click", () => {
-      applyAll(brush.kind, brush[brush.kind]);
-      refreshGrid();
+    const modes = BRUSHES.map((k) => {
+      const b = el("button", { type: "button", class: "seg", "data-brush": k, text: tx.brushes[k] });
+      b.title = tx.brushTitles[k];
+      b.addEventListener("click", () => {
+        brush.kind = k;
+        show();
+      });
+      return b;
     });
-    const show = () => {
+    const action = (name, text, title, fn) => {
+      const b = el("button", { type: "button", class: "ghost", "data-action": name, text });
+      b.title = title;
+      b.addEventListener("click", () => {
+        fn();
+        refreshGrid();
+        show();
+      });
+      return b;
+    };
+    const all = action("brush-all", tx.applyAll, tx.applyAllTitle, () => applyAll(brush.kind, brush[brush.kind]));
+    const clear = action("brush-clear", tx.clearMods, tx.clearModsTitle, clearAll);
+    const reset = action("brush-reset", tx.brushReset, tx.brushResetTitle, () => {
+      Object.assign(brush, BRUSH);
+      for (const [key, node] of Object.entries(values)) node.querySelector("select").value = String(brush[key]);
+    });
+    function show() {
+      for (const b of modes) b.setAttribute("aria-pressed", String(b.dataset.brush === brush.kind));
       for (const [key, node] of Object.entries(values)) node.hidden = key !== brush.kind;
       all.hidden = brush.kind === "hit";
+      clear.hidden = !hasMods();
+      reset.hidden = isDefaultBrush(brush);
       help.textContent = brush.kind === "hit" ? legendText : tx.modLegend;
-    };
-    const kind = select(
-      tx.brush,
-      BRUSHES.map((k) => ({ value: k, label: tx.brushes[k] })),
-      brush.kind,
-      (v) => {
-        brush.kind = v;
-        show();
-      },
-      "brush",
-    );
+    }
+    showBrush = show;
     show();
-    return [el("div", { class: "pickers brush" }, kind, ...Object.values(values), all), help];
+    const group = el(
+      "div",
+      { class: "segmented", role: "group", "aria-label": tx.brush },
+      el("span", { class: "seg-label", text: tx.brush }),
+      ...modes,
+    );
+    return [el("div", { class: "pickers brush" }, group, ...Object.values(values), all, clear, reset), help];
+  }
+
+  const hasMods = () =>
+    def.kind === "drum" ? current.mods.some((m, s) => m && current.steps[s]) : current.notes.some((n) => cleanMod(n));
+
+  /* ---- pattern: how the part is read, and edits of the whole part ---- */
+  // Speed, iter and echo change how the loop reads the part (Strudel's
+  // fast/slow, iter, off) without rewriting it; the buttons rewrite it.
+  function patternControls() {
+    const speed = select(
+      tx.speed,
+      SPEEDS.map((v) => ({ value: v, label: tx.speeds[v] })),
+      current.speed,
+      (v) => set({ speed: Number(v) }),
+      "speed",
+    );
+    const iter = select(
+      tx.iter,
+      ITERS.map((v) => ({ value: v, label: tx.iters[v] })),
+      current.iter,
+      (v) => set({ iter: Number(v) }),
+      "iter",
+    );
+    const semis = select(
+      tx.echoSemis,
+      ECHO_SEMIS.map((v) => ({ value: v, label: tx.semis[v] })),
+      current.echo?.semis ?? 0,
+      (v) => set({ echo: { ...current.echo, semis: Number(v) } }),
+      "echo-semis",
+    );
+    const echo = select(
+      tx.echo,
+      [0, ...ECHO_STEPS].map((v) => ({ value: v, label: tx.echoes[v] })),
+      current.echo?.steps ?? 0,
+      (v) => {
+        const steps = Number(v);
+        set({ echo: steps ? { steps, semis: current.echo?.semis ?? 0 } : null });
+        showSemis();
+      },
+      "echo",
+    );
+    const showSemis = () => {
+      semis.hidden = def.kind === "drum" || !current.echo;
+    };
+    showSemis();
+    const button = (name, text, title, fn) => {
+      const b = el("button", { type: "button", class: "ghost", "data-action": name, text });
+      b.title = title;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    // One 16th either way, right away, like a click on the grid.
+    const rotate = (by) => () => {
+      set(rotatePart(current, def.kind, by));
+      refreshGrid();
+    };
+    const tools = [
+      button("rotate-left", tx.rotateLeft, tx.rotateTitle, rotate(-1)),
+      button("rotate-right", tx.rotateRight, tx.rotateTitle, rotate(1)),
+      waits(button("reverse", tx.retro, tx.retroTitle, () => onEdit("reverse"))),
+    ];
+    const rows = [el("div", { class: "pickers" }, speed, iter, echo, semis), el("div", { class: "editor-actions" }, ...tools)];
+    if (def.kind === "drum") rows.push(euclidControls(button));
+    return el("fieldset", { class: "insert pattern" }, el("legend", { text: tx.pattern }), ...rows, legend(tx.patternLegend));
+  }
+
+  function euclidControls(button) {
+    const pick = (key, label, options) =>
+      select(label, options.map((v) => ({ value: v, label: String(v) })), euclid[key], (v) => {
+        euclid[key] = Number(v);
+        fit();
+      }, `euclid-${key}`);
+    const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+    const k = pick("k", tx.euclidHits, range(1, 32));
+    const n = pick("n", tx.euclidOver, EUCLID_N);
+    const rot = pick("rot", tx.euclidRot, range(0, 31));
+    // k and rot only go as far as n.
+    const fit = () => {
+      euclid.k = Math.min(euclid.k, euclid.n);
+      euclid.rot = Math.min(euclid.rot, euclid.n - 1);
+      for (const [node, max, key] of [[k, euclid.n, "k"], [rot, euclid.n - 1, "rot"]]) {
+        const sel = node.querySelector("select");
+        for (const o of sel.options) o.hidden = Number(o.value) > max;
+        sel.value = String(euclid[key]);
+      }
+    };
+    fit();
+    const apply = waits(button("euclid", tx.euclidApply, tx.euclidTitle, () => onEdit("euclid")));
+    return el("div", { class: "pickers euclid" }, el("span", { class: "seg-label", text: tx.euclid }), k, n, rot, apply);
   }
 
   // A hit's or note's mod on its cell: stripes when it may not play, and a
@@ -388,8 +512,12 @@ export function createEditor({
       refreshGrid();
     });
     const tools = [varyToggle(), ...(def.voice === "kick" ? [buildUpToggle()] : []), double, clear];
-    const brushRow = brushControls(tx.drumLegend, (key, value) => set(brushAllSteps(current, key, value)));
-    return [...brushRow, wrap(grid), el("div", { class: "editor-actions" }, ...tools)];
+    const brushRow = brushControls(
+      tx.drumLegend,
+      (key, value) => set(brushAllSteps(current, key, value)),
+      () => set({ mods: current.mods.map(() => null) }),
+    );
+    return [...brushRow, wrap(grid), el("div", { class: "editor-actions" }, ...tools), patternControls()];
   }
 
   // Kicks: a build-up on the next bar line. Pressed while armed or playing;
@@ -578,9 +706,14 @@ export function createEditor({
     });
     refreshGrid();
     return [
-      ...brushControls(tx.rollLegend, (key, value) => set({ notes: brushAllNotes(current.notes, key, value) })),
+      ...brushControls(
+        tx.rollLegend,
+        (key, value) => set({ notes: brushAllNotes(current.notes, key, value) }),
+        () => set({ notes: current.notes.map(({ step, midi, len, accent }) => ({ step, midi, len, accent })) }),
+      ),
       wrap(grid),
       el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, clear),
+      patternControls(),
     ];
   }
 
@@ -596,6 +729,7 @@ export function createEditor({
     show: (data) => {
       current = data;
       refreshGrid();
+      showBrush();
     },
     // The volume, set from the tile's fill.
     showLevel: (v) => {
