@@ -552,12 +552,14 @@ describe("audition", () => {
 });
 
 describe("insert", () => {
+  const duckerOf = (lane) => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(lane));
   const insertOf = (lane) => {
-    // lane gain <- chain output <- post <- shaper <- pre <- filter <- chain input <- lane input
-    const output = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(lane));
+    // lane gain <- ducker <- chain output <- panner <- post <- shaper <- pre <- filter <- chain input <- lane input
+    const ducker = duckerOf(lane);
+    const output = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ducker));
     const input = ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0]?.kind === "filter" && n.outputs[0].outputs[0]?.outputs[0]?.kind === "waveshaper"
-      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
-    return { output, input, filter: input.outputs[0] };
+      && n.outputs[0].outputs[0].outputs[0].outputs[0].outputs[0].outputs[0] === output);
+    return { ducker, output, input, filter: input.outputs[0] };
   };
 
   it("every lane plays its notes through its own filter + distortion", () => {
@@ -585,7 +587,7 @@ describe("insert", () => {
     engine.setData("lead.arp", lp); // still "off": same chain
     expect(insertOf(lane).output).toBe(old.output);
     engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 500 } });
-    const fresh = ctx.nodes.filter((n) => n.kind === "gain" && n.outputs.includes(lane) && n !== old.output);
+    const fresh = ctx.nodes.filter((n) => n.kind === "gain" && n.outputs.includes(old.ducker) && n !== old.output);
     expect(fresh).toHaveLength(1);
     expect(fresh[0].gain.events).toEqual([["set", 0, ctx.currentTime], ["linear", 1, ctx.currentTime + 0.03]]);
     expect(old.output.gain.events.at(-1)).toEqual(["linear", 0, ctx.currentTime + 0.03]);
@@ -690,5 +692,44 @@ describe("tap", () => {
     await engine.tap(() => {});
     await engine.tap(() => {});
     expect(ctx.modules).toHaveLength(1);
+  });
+});
+
+describe("groove: sidechain and nudge", () => {
+  const sidechain = () => {
+    const shaper = ctx.nodes.find((n) => n.kind === "waveshaper" && n.curve?.length === 1025);
+    return { input: ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === shaper), env: shaper.outputs[0] };
+  };
+
+  it("kick lanes feed the sidechain; a lane with duck gets its envelope at -duck on its ducker", () => {
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), duck: 0.7 });
+    engine.setLanes({ kick: "kick.punchy", bass: "bass.offbeat" });
+    run(0.2);
+    const { input, env } = sidechain();
+    expect(env.type).toBe("lowpass");
+    const kickGain = laneGains().find((g) => g.outputs.includes(input));
+    expect(kickGain).toBeDefined();
+    const [depth] = env.outputs;
+    expect(env.outputs).toHaveLength(1); // the kick does not duck itself
+    expect(depth.gain.value).toBe(-0.7);
+    expect(depth.outputs[0].constructor.name).toBe("FakeParam");
+  });
+
+  it("an edit glides the depth, and switching duck on mid-play wires it", () => {
+    engine.setLanes({ kick: "kick.punchy", pad: "pad.chord" });
+    run(0.2);
+    const { env } = sidechain();
+    expect(env.outputs).toHaveLength(0);
+    engine.setData("pad.chord", { ...defaultData("pad.chord"), duck: 0.5 });
+    const [depth] = env.outputs;
+    expect(depth.gain.events.at(-1)).toEqual(["target", -0.5, ctx.currentTime, 0.02]);
+  });
+
+  it("a nudge moves every hit by its ms", () => {
+    engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), nudge: 10 });
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(1);
+    const step = stepDuration(145);
+    startTimes("oscillator").forEach((t, i) => expect(t).toBeCloseTo(0.06 + (2 + 4 * i) * step + 0.01, 9));
   });
 });

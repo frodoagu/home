@@ -10,7 +10,7 @@
 // and carries the per-sound actions: duplicate, WAV, reset (the part alone,
 // or the whole sound), delete (copies).
 import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES } from "../audio/insert.js";
-import { INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
+import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
 import {
   CHANCES,
   COND_EVERY,
@@ -452,17 +452,55 @@ export function createEditor({
     );
   }
 
+  /* ---- groove and space: swing, nudge, duck; pan and autopan ---- */
+  function spaceControls() {
+    const setInsert = (patch) => set({ insert: { ...current.insert, ...patch } });
+    const panKnob = (key) => {
+      const spec = INSERT_PARAMS.find((p) => p.key === key);
+      return slider(localized(spec), current.insert[key], (v) => {
+        setInsert({ [key]: v });
+        showRate();
+      });
+    };
+    const panRate = select(
+      tx.panRate,
+      LFO_RATES.map((n) => ({ value: n, label: tx.lfoRates[n] })),
+      current.insert.panRate,
+      (v) => setInsert({ panRate: Number(v) }),
+      "pan-rate",
+    );
+    const showRate = () => {
+      panRate.hidden = !current.insert.width;
+    };
+    showRate();
+    // FX are one-shots: no grid to swing, nothing for the kick to duck.
+    const groove =
+      def.kind === "fx"
+        ? []
+        : GROOVE_PARAMS.filter((p) => !(p.key === "duck" && def.voice === "kick")).map((spec) =>
+            slider(localized(spec), current[spec.key], (v) => set({ [spec.key]: v })),
+          );
+    return el(
+      "fieldset",
+      { class: "insert space" },
+      el("legend", { text: def.kind === "fx" ? tx.spaceFx : tx.space }),
+      el("div", { class: "knobs" }, ...groove, panKnob("pan"), panKnob("width")),
+      el("div", { class: "pickers" }, panRate),
+      legend(def.kind === "fx" ? tx.spaceFxLegend : tx.spaceLegend),
+    );
+  }
+
   const node = el("div", { class: "editor", role: "region", "aria-label": tx.region(label), "data-editor": id }, head);
   const source = el("div", { class: "pickers source" }, ...sourcePicker());
 
   if (def.kind === "fx") {
     const fire = el("button", { type: "button", class: "action", text: tx.fire });
     fire.addEventListener("click", onTrigger);
-    node.append(source, knobs, insertControls(), el("div", { class: "editor-actions" }, fire));
+    node.append(source, knobs, insertControls(), spaceControls(), el("div", { class: "editor-actions" }, fire));
   } else if (def.kind === "drum") {
-    node.append(source, knobs, insertControls(), ...drumGrid());
+    node.append(source, knobs, insertControls(), spaceControls(), ...drumGrid());
   } else {
-    node.append(...noteControls(), knobs, insertControls(), ...pianoRoll());
+    node.append(...noteControls(), knobs, insertControls(), spaceControls(), ...pianoRoll());
   }
   renderVoiceKnobs();
 

@@ -119,6 +119,9 @@ export class FakeAudioContext {
       release: 0.25,
     });
   }
+  createStereoPanner() {
+    return withParams(new FakeNode(this, "panner"), { pan: 0 });
+  }
   createDelay() {
     return withParams(new FakeNode(this, "delay"), { delayTime: 0 });
   }

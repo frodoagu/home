@@ -6,8 +6,10 @@
 //                                               ├─ delay send ─> delay 3/16 ─> return ─┤
 //                                               └─ reverb send ─> convolver ─> return ─┘
 //
-// The insert is the variant's own filter + distortion (insert.js); FX shots
-// and auditions get one too. A variant using a sample plays it through
+// The insert is the variant's own filter + distortion + pan (insert.js); FX
+// shots and auditions get one too. Between the insert and the lane gain sits
+// a ducker: every kick lane also feeds a sidechain whose envelope pulls the
+// ducker's gain down on each kick, by the variant's `duck`. A variant using a sample plays it through
 // `sampleBuffer(id)`, or its own voice while that returns nothing.
 //
 // Lanes are what make changes click-free: a variant change or a stop never
@@ -66,6 +68,12 @@ const RENDER_RATE = 48000;
 // Longest FX (4 bars at the slowest BPM is 7.4 s) plus its reverb tail; the
 // silence after the sound is trimmed off.
 const FX_RENDER_SECONDS = 12;
+// Sidechain: the kick, rectified and clipped to 0..1 (DUCK_DRIVE: its body
+// already reads as full), then smoothed into an envelope by a lowpass this
+// slow, which sets the pump's attack and release.
+const DUCK_DRIVE = 8;
+const DUCK_HZ = 8;
+const DUCK_CURVE = Float32Array.from({ length: 1025 }, (_, i) => Math.min(1, DUCK_DRIVE * Math.abs(i / 512 - 1)));
 
 const layerOf = (variant) => variant.split(".")[0];
 
@@ -116,7 +124,33 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   dj.low.Q.value = DJ_Q;
   dj.high.Q.value = DJ_Q;
   master.connect(dj.low).connect(dj.high).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
-  return { master, dj, out: trim, bus: buildBus(ctx, dj.low, bpm, effects) };
+  return { master, dj, out: trim, bus: buildBus(ctx, dj.low, bpm, effects), side: buildSidechain(ctx) };
+}
+
+// The kick lanes' sum in `input`, its envelope out of `env` (never heard).
+function buildSidechain(ctx) {
+  const input = ctx.createGain();
+  const rectify = ctx.createWaveShaper();
+  rectify.curve = DUCK_CURVE;
+  const env = ctx.createBiquadFilter();
+  env.type = "lowpass";
+  env.frequency.value = DUCK_HZ;
+  env.Q.value = 0.5; // no overshoot: the envelope stays inside 0..1
+  input.connect(rectify).connect(env);
+  return { input, env };
+}
+
+// The sidechain envelope into `holder`'s ducker, at -amount. A kick never
+// ducks itself: kick -> sidechain -> kick would be a cycle without a delay.
+function duckWith(ctx, holder, side, amount, now = null) {
+  if (!holder.depth) {
+    if (!amount) return;
+    holder.depth = ctx.createGain();
+    holder.depth.gain.value = now === null ? -amount : 0;
+    side.env.connect(holder.depth).connect(holder.ducker.gain);
+    holder.side = side;
+  }
+  if (now !== null) holder.depth.gain.setTargetAtTime(-amount, now, 0.02);
 }
 
 function buildBus(ctx, into, bpm, effects) {
@@ -144,11 +178,13 @@ function buildBus(ctx, into, bpm, effects) {
   return { delay, delaySend, delayReturn, reverbSend, reverbReturn };
 }
 
-// A lane or FX gain into the master, with its layer's effect sends.
-function connectGain(ctx, { master, bus }, level, layer) {
+// A lane or FX gain into the master, with its layer's effect sends. A kick
+// also feeds the sidechain.
+function connectGain(ctx, { master, bus, side }, level, layer) {
   const gain = ctx.createGain();
   gain.gain.value = level;
   gain.connect(master);
+  if (layer === "kick") gain.connect(side.input);
   gain.sends = [];
   const sends = SENDS[layer];
   if (sends) {
@@ -163,14 +199,15 @@ function connectGain(ctx, { master, bus }, level, layer) {
   return gain;
 }
 
-// Notes connect to `input`; its insert chain feeds `gain`. Used by lanes,
-// FX shots and auditions alike.
+// Notes connect to `input`; its insert chain feeds `gain` through the
+// ducker. Used by lanes, FX shots and auditions alike.
 function withInsert(ctx, gain, insert, stepDur, at) {
   const input = ctx.createGain();
   const chain = buildInsert(ctx, insert, { stepDur, at });
+  const ducker = ctx.createGain();
   input.connect(chain.input);
-  chain.output.connect(gain);
-  return { gain, input, chain };
+  chain.output.connect(ducker).connect(gain);
+  return { gain, input, chain, ducker, depth: null };
 }
 
 export function createEngine({
@@ -186,6 +223,7 @@ export function createEngine({
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
+  let side = null; // the kick sidechain: { input, env }
   let bpm = BPM_DEFAULT;
   let timer = null;
   let cursor = null; // { step, time, loop } of the next step to schedule; null when stopped
@@ -217,7 +255,7 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, out, bus } = buildChain(ctx, bpm, effects, djValue));
+      ({ master, dj, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -237,10 +275,14 @@ export function createEngine({
     return buffer ? sample(c, out, t, { sample: s, buffer }, stepDur) : FX[baseOf(id)](c, out, t, stepDur, params);
   }
 
-  // A ratchet's repeats land `offset` steps after their step.
+  // A ratchet's repeats (and a swung 16th) land `offset` steps after their
+  // step; a nudge moves them all, but never closer than SAFETY.
   function scheduleLane(lane, { step, time, loop }, stepDur) {
-    for (const ev of eventsAt(lane.variant, step, !lane.entered, dataOf(lane.variant), loop)) {
-      voice(ctx, lane.input, time + (ev.offset ?? 0) * stepDur, ev, stepDur);
+    const d = dataOf(lane.variant);
+    const nudge = (d.nudge ?? 0) / 1000;
+    const earliest = ctx.currentTime + SAFETY;
+    for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop)) {
+      voice(ctx, lane.input, Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge), ev, stepDur);
     }
     lane.entered = true;
   }
@@ -268,7 +310,8 @@ export function createEngine({
     stopAt = lanes.size === 0 ? s.time : null;
   }
 
-  const openGain = (level, layer) => connectGain(ctx, { master, bus }, level, layer);
+  const openGain = (level, layer) => connectGain(ctx, { master, bus, side }, level, layer);
+  const duckOf = (variant) => (layerOf(variant) === "kick" ? 0 : (dataOf(variant).duck ?? 0));
 
   // Gain + input + insert, the insert's LFO starting at `at`.
   const openVoice = (level, layer, insert, at) =>
@@ -277,6 +320,7 @@ export function createEngine({
   function openLane(key, variant, backfill, at) {
     const level = liveLane(key, variant);
     const lane = { variant, level, ...openVoice(level, layerOf(variant), dataOf(variant).insert, at), entered: false };
+    duckWith(ctx, lane, side, duckOf(variant));
     // Steps inside the lookahead window were queued before this lane existed.
     // Backfill them so the new variant enters on the very next step instead of
     // leaving a hole up to LOOKAHEAD long; steps closer than SAFETY are skipped
@@ -333,11 +377,16 @@ export function createEngine({
     lane.line = { from, to: value, start: now, end: now + ramp };
   }
 
-  function release({ gain, input, chain }) {
+  function release({ gain, input, chain, ducker, depth, side: from }) {
     gain.disconnect();
     for (const send of gain.sends) send.disconnect();
     input.disconnect();
     chain.output.disconnect();
+    ducker.disconnect();
+    if (depth) {
+      from.env.disconnect(depth);
+      depth.disconnect();
+    }
   }
 
   // A filter or distortion type changed: a fresh chain crossfades in.
@@ -348,7 +397,7 @@ export function createEngine({
     next.output.gain.setValueAtTime(0, now);
     next.output.gain.linearRampToValueAtTime(1, now + FADE);
     lane.input.connect(next.input);
-    next.output.connect(lane.gain);
+    next.output.connect(lane.ducker);
     old.output.gain.setValueAtTime(1, now);
     old.output.gain.linearRampToValueAtTime(0, now + FADE);
     old.stop(now + FADE);
@@ -436,6 +485,7 @@ export function createEngine({
       if (lane.variant !== id) continue;
       if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime);
       else swapInsert(lane, next.insert);
+      duckWith(ctx, lane, side, duckOf(id), ctx.currentTime);
       const level = liveLane(key, id);
       if (level === lane.level) continue;
       lane.level = level;
@@ -579,18 +629,23 @@ export function createEngine({
     const length = fx ? FX_RENDER_SECONDS * RENDER_RATE : 2 * loop;
     const off = createOffline(2, length, RENDER_RATE);
     const chain = buildChain(off, bpm, effects, djValue);
-    const into = (level, layer, insert) => withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0).input;
+    const into = (level, layer, insert, duck = 0) => {
+      const holder = withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0);
+      duckWith(off, holder, chain.side, duck);
+      return holder.input;
+    };
     if (fx) {
       fxVoice(off, into(shotLevel(fx), "fx", dataOf(fx).insert), 0, stepDur, fx);
     } else {
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
-        const input = into(laneLevel(key, variant), layerOf(variant), d.insert);
+        const input = into(laneLevel(key, variant), layerOf(variant), d.insert, duckOf(variant));
+        const nudge = (d.nudge ?? 0) / 1000;
         // The kept pass is loop 0, so mods sound as on the first loop after ▶.
         for (let i = 0; i < 2 * LOOP_STEPS; i++) {
           const loop = Math.floor(i / LOOP_STEPS) - 1;
           for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
-            voice(off, input, (i + (ev.offset ?? 0)) * stepDur, ev, stepDur);
+            voice(off, input, Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge), ev, stepDur);
           }
         }
       }

@@ -446,3 +446,25 @@ describe("playback: speed, iter, echo", () => {
     expect(ok.echo).toEqual({ steps: 3, semis: 12 });
   });
 });
+
+describe("groove", () => {
+  it("swing delays every odd 16th, and only those", () => {
+    const d = { ...defaultData("perc.chat"), swing: 0.3 }; // odd 16ths
+    expect(eventsAt("perc.chat", 1, false, d)[0].offset).toBeCloseTo(0.3, 9);
+    const shaker = { ...defaultData("perc.shaker"), swing: 0.3 }; // every 16th
+    expect(eventsAt("perc.shaker", 2, false, shaker)[0].offset).toBeUndefined();
+  });
+
+  it("sanitize clamps swing, nudge and duck, and a kick never ducks", () => {
+    const d = sanitize("bass.offbeat", { ...defaultData("bass.offbeat"), swing: 2, nudge: -99, duck: 0.6 });
+    expect(d).toMatchObject({ swing: 0.5, nudge: -30, duck: 0.6 });
+    expect(sanitize("kick.punchy", { ...defaultData("kick.punchy"), duck: 0.6 }).duck).toBe(0);
+    expect(defaultData("fx.riser")).not.toHaveProperty("swing");
+  });
+
+  it("the insert keeps a pan, an autopan depth and a rate from the LFO list", () => {
+    const ins = cleanInsert({ ...defaultData("pad.chord").insert, pan: -3, width: 0.5, panRate: 64 });
+    expect(ins).toMatchObject({ pan: -1, width: 0.5, panRate: 64 });
+    expect(cleanInsert({ panRate: 5 }).panRate).toBe(32);
+  });
+});
