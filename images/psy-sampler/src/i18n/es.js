@@ -68,7 +68,7 @@ export default {
         icon: "🎚️",
         title: "Tocar en vivo",
         items: [
-          ["BPM", "Entre 130 y 180; el slider cambia el tempo al instante."],
+          ["BPM", "Entre 60 y 180; el slider cambia el tempo al instante."],
           ["Tap", "Al lado del BPM: tocalo al ritmo (dos toques ya alcanzan, más es más preciso) y el BPM sigue tus toques. Tocando a medio o doble tiempo también funciona; una pausa de 2 s empieza de nuevo."],
           ["Cambio de BPM", "Elegí el destino y en cuántos compases: ▶ Ir lo mueve un paso por compás. ■ Cortar lo frena ahí; tocar el slider también."],
           ["Filtro DJ", "A la izquierda cierra un pasa-bajos, a la derecha abre un pasa-altos, sobre toda la mezcla."],

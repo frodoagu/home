@@ -32,6 +32,7 @@ import {
   stepDuration,
   BAR_STEPS,
   BPM_DEFAULT,
+  BPM_MIN,
   LOOKAHEAD,
   LOOP_STEPS,
   SAFETY,
@@ -65,9 +66,11 @@ const RETURN_LEVEL = MASTER_GAIN;
 const REVERB_SECONDS = 2.4;
 const AUDITION_SECONDS = 1.5;
 const RENDER_RATE = 48000;
-// Longest FX (4 bars at the slowest BPM is 7.4 s) plus its reverb tail; the
-// silence after the sound is trimmed off.
-const FX_RENDER_SECONDS = 12;
+// Longest FX (4 bars, params.js `length`, at the slowest BPM: 16 s at 60) plus
+// its tail (impact, delay and reverb); the silence after the sound is trimmed off.
+const FX_MAX_BARS = 4;
+const FX_TAIL_SECONDS = 4.6;
+const FX_RENDER_SECONDS = Math.ceil(FX_MAX_BARS * BAR_STEPS * stepDuration(BPM_MIN) + FX_TAIL_SECONDS);
 // Sidechain: the kick, rectified and clipped to 0..1 (DUCK_DRIVE: its body
 // already reads as full), then smoothed into an envelope by a lowpass this
 // slow, which sets the pump's attack and release.

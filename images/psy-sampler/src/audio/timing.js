@@ -8,7 +8,7 @@ export const LOOKAHEAD = 0.12; // seconds scheduled ahead of ctx.currentTime
 // when the audio thread sees it starts mid-envelope (non-zero gain): a click.
 export const SAFETY = 0.015;
 
-export const BPM_MIN = 130;
+export const BPM_MIN = 60;
 export const BPM_MAX = 180;
 export const BPM_DEFAULT = 145;
 
