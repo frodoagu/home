@@ -352,8 +352,10 @@ html {
 }
 
 /* ---- how to use it: a page over the app ---- */
+/* A fixed height, so a search that leaves few rows doesn't move the box. */
 .help {
   width: min(760px, calc(100vw - 32px));
+  height: min(860px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
   padding: 0;
   overflow: auto;
@@ -651,46 +653,176 @@ html:has(dialog.help[open], dialog.intro[open]) {
   padding: 0 20px 24px;
 }
 
+/* Title, search and fold-all stay pinned while the sections scroll. */
 .help-head {
   position: sticky;
   top: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 0 10px;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  padding: 14px 0 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-.help-head h2 {
+.help-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.help-title h2 {
   margin: 0;
   font-size: 1.25rem;
 }
 
+.help-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.help-search {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.help-toggle {
+  flex: none;
+  --layer: var(--current);
+}
+
 .help-intro {
-  margin: 12px 0 0;
+  margin: 14px 0 10px;
   color: var(--muted);
 }
 
+.help-section {
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.help-section[open] {
+  border-color: var(--current);
+}
+
+.help-section summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 9px;
+  user-select: none;
+}
+
+.help-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-section summary::after {
+  content: "▸";
+  margin-left: 4px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.help-section[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.help-section summary:hover {
+  background: var(--surface-2);
+}
+
+.help-section[open] summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: 9px 9px 0 0;
+}
+
+.help-icon {
+  flex: none;
+  width: 1.6em;
+  font-size: 1.15rem;
+  text-align: center;
+}
+
 .help-section h3 {
-  margin: 22px 0 8px;
+  flex: 1;
+  margin: 0;
   font-size: 1rem;
 }
 
+.help-count {
+  padding: 1px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
 .help-section dl {
-  display: grid;
-  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
-  gap: 8px 16px;
-  margin: 0;
+  margin: -1px 0 0;
+  padding: 0 0 2px;
+}
+
+/* Every row draws its top rule; the first one lands on the summary's. */
+.help-item {
+  padding: 10px 16px 11px;
+  border-top: 1px solid var(--border);
+  border-left: 3px solid transparent;
+}
+
+.help-item:hover {
+  border-left-color: var(--current);
+  background: var(--surface-2);
 }
 
 .help-section dt {
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .help-section dd {
-  margin: 0;
+  max-width: 68ch;
+  margin: 3px 0 0;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.help kbd {
+  display: inline-block;
+  padding: 0 5px;
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+
+.help mark {
+  color: inherit;
+  background: var(--current-tint);
+  border-radius: 3px;
+}
+
+.help-empty {
+  margin: 24px 0;
+  text-align: center;
   color: var(--muted);
 }
 
@@ -706,17 +838,10 @@ html:has(dialog.help[open], dialog.intro[open]) {
     border-radius: 0;
   }
   .help-page {
-    padding: 0 16px 24px;
+    padding: 0 12px 24px;
   }
-}
-
-@media (max-width: 640px) {
-  .help-section dl {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-  }
-  .help-section dd + dt {
-    margin-top: 10px;
+  .help-item {
+    padding: 9px 12px 10px;
   }
 }
 

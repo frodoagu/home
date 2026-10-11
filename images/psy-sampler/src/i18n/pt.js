@@ -10,8 +10,13 @@ export default {
     title: "Como usar o Psy Layers",
     close: "Fechar",
     intro: "Primeiro os truques que não se veem de cara; depois, tudo o que cada parte faz.",
+    search: "Buscar na ajuda…",
+    expandAll: "Abrir tudo",
+    collapseAll: "Fechar tudo",
+    noMatch: (q) => `Nada sobre “${q}”.`,
     sections: [
       {
+        icon: "💡",
         title: "Truques",
         items: [
           ["Clique duplo num som", "Entra agora mesmo, sem esperar o próximo compasso. Nos snapshots também."],
@@ -31,6 +36,7 @@ export default {
         ],
       },
       {
+        icon: "🎛️",
         title: "O básico",
         items: [
           ["Clique num som", "Liga; outro clique desliga. Kick e Baixo tocam um de cada vez (escolher outro substitui o que está; com Ctrl se somam); Percussão, Lead, Pad e Glitch se empilham."],
@@ -42,6 +48,7 @@ export default {
         ],
       },
       {
+        icon: "🤖",
         title: "Piloto automático e semente",
         items: [
           ["🤖 Piloto automático", "Monta a faixa sozinho: liga e desliga camadas a cada frase, dispara FX, escreve melodias e vai passando pelas fases."],
@@ -56,6 +63,7 @@ export default {
         ],
       },
       {
+        icon: "🎚️",
         title: "Tocar ao vivo",
         items: [
           ["BPM", "De 130 a 180; o slider muda o tempo na hora."],
@@ -71,6 +79,7 @@ export default {
         ],
       },
       {
+        icon: "✏️",
         title: "Editar um som (▾)",
         items: [
           ["▾", "Abre o editor embaixo da camada; fica um aberto por vez."],
@@ -79,15 +88,9 @@ export default {
           ["Synth, Escala, Oitava", "Mudam a voz, as notas que o piano roll mostra e a altura da parte."],
           ["🎲 Parte nova", "Escreve uma melodia nova na escala escolhida. Com o loop rodando entra no próximo loop; outro clique cancela."],
           ["×2 batidas", "Duplica as batidas marcadas: semínimas → colcheias → semicolcheias."],
-          ["Clique: ✏️ Escreve / 🎲 / 🔁 / ⚡", "Em cima da grade você escolhe o que um clique faz. ✏️ Escreve é o clique de sempre (batida → acento → vazio). Os outros põem um modificador na batida ou nota que você toca (ou escrevem uma nova com ele); outro clique com o mesmo valor o tira. «Aplicar a tudo» põe em todas, «Tirar modificadores» tira todos e ↺ Restaurar volta a ✏️ Escreve."],
-          ["Padrão: Velocidade, Iter, Eco", "Mudam como a parte é lida sem reescrevê-la, como no Strudel: ×2 toca duas vezes por loop e ×½ estica para 4 compassos (fast/slow); Iter começa cada loop um trecho mais adiante (iter); Eco repete alguns passos depois, nas notas transposto (off)."],
-          ["Padrão: ◀ ▶, ⇆, Euclidiano", "Reescrevem a parte: ◀ ▶ deslocam uma semicolcheia; ⇆ inverte sem mover o pulso; Euclidiano (nas batidas) distribui k batidas em n passos, o euclid do Strudel: 3 em 8 é o tresillo, e um n que não divide 32 corre contra o compasso."],
           ["Groove e espaço", "Swing (estilo MPC: 50 % reto, 66 % tercina), Nudge (adianta ou atrasa alguns ms), Duck (o som abaixa a cada batida do kick e volta: o bombeamento do sidechain), Pan e Autopan no tempo. Cada som tem os seus."],
           ["Filtro: vogal, forma do LFO, envelope", "O filtro também pode ser uma vogal (A E I O U, o vowel do Strudel). O LFO pode ser seno, triângulo, serra, quadrada ou aleatório (em degraus ou suave). O Envelope abre (ou fecha) o filtro a cada nota e o deixa voltar na «Queda»: o squelch do acid."],
           ["Modulação", "Phaser e Tremolo no tempo, em cada som."],
-          ["Probabilidade", "As do Strudel: quase sempre (90 %), muitas vezes (75 %), às vezes (50 %), raramente (25 %), quase nunca (10 %). O sorteio vem do som, do loop e do passo: recomeçar, exportar ou compartilhar soa igual."],
-          ["Condição", "Em quais loops toca (1 loop = 2 compassos, contados desde ▶). 1:4 toca no 1.º de cada 4; !4:4 em todos menos o 4.º, para dar lugar a uma virada. Com o piloto, cada fase dura 4, 8 ou 12 loops: 4:4 costuma cair logo antes da mudança."],
-          ["Ratchet", "Repete a batida 2, 3 ou 4 vezes dentro do seu passo (numa nota, dentro da sua duração): os rufos hi-tech sem escrever fusas."],
           ["⏫ Build-up", "Só nos kicks: no próximo compasso faz semínimas, colcheias e um rufo; no compasso seguinte volta sozinho."],
           ["Filtro e distorção", "Cada som tem seu próprio filtro (com um LFO no tempo) e sua distorção."],
           ["Fonte", "Troca a voz sintetizada por um dos seus samples."],
@@ -97,6 +100,19 @@ export default {
         ],
       },
       {
+        icon: "🧩",
+        title: "Modificadores e padrões",
+        items: [
+          ["Clique: ✏️ Escreve / 🎲 / 🔁 / ⚡", "Em cima da grade você escolhe o que um clique faz. ✏️ Escreve é o clique de sempre (batida → acento → vazio). Os outros põem um modificador na batida ou nota que você toca (ou escrevem uma nova com ele); outro clique com o mesmo valor o tira. «Aplicar a tudo» põe em todas, «Tirar modificadores» tira todos e ↺ Restaurar volta a ✏️ Escreve."],
+          ["Padrão: Velocidade, Iter, Eco", "Mudam como a parte é lida sem reescrevê-la, como no Strudel: ×2 toca duas vezes por loop e ×½ estica para 4 compassos (fast/slow); Iter começa cada loop um trecho mais adiante (iter); Eco repete alguns passos depois, nas notas transposto (off)."],
+          ["Padrão: ◀ ▶, ⇆, Euclidiano", "Reescrevem a parte: ◀ ▶ deslocam uma semicolcheia; ⇆ inverte sem mover o pulso; Euclidiano (nas batidas) distribui k batidas em n passos, o euclid do Strudel: 3 em 8 é o tresillo, e um n que não divide 32 corre contra o compasso."],
+          ["Probabilidade", "As do Strudel: quase sempre (90 %), muitas vezes (75 %), às vezes (50 %), raramente (25 %), quase nunca (10 %). O sorteio vem do som, do loop e do passo: recomeçar, exportar ou compartilhar soa igual."],
+          ["Condição", "Em quais loops toca (1 loop = 2 compassos, contados desde ▶). 1:4 toca no 1.º de cada 4; !4:4 em todos menos o 4.º, para dar lugar a uma virada. Com o piloto, cada fase dura 4, 8 ou 12 loops: 4:4 costuma cair logo antes da mudança."],
+          ["Ratchet", "Repete a batida 2, 3 ou 4 vezes dentro do seu passo (numa nota, dentro da sua duração): os rufos hi-tech sem escrever fusas."],
+        ],
+      },
+      {
+        icon: "📸",
         title: "Snapshots",
         items: [
           ["📸 Snapshot", "Salva o que está tocando, com cada som do jeito que está editado, como um momento da faixa."],
@@ -105,6 +121,7 @@ export default {
         ],
       },
       {
+        icon: "⏺️",
         title: "Gravar e exportar",
         items: [
           ["● Gravar", "Grava o que sai pelos alto-falantes e ao terminar baixa em WAV. Até 15 minutos."],
@@ -115,6 +132,7 @@ export default {
         ],
       },
       {
+        icon: "☁️",
         title: "Salvamento e samples",
         items: [
           ["Salva sozinho", "Tudo fica neste navegador. Com login do Google, também na nuvem, para usar em qualquer dispositivo."],
@@ -122,6 +140,7 @@ export default {
         ],
       },
       {
+        icon: "🔎",
         title: "O que significa cada marca",
         items: [
           ["Borda tracejada piscando", "Na fila: entra no próximo compasso. O que pisca preenchido é o que está saindo."],
