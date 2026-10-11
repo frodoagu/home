@@ -3,8 +3,9 @@
 // the same seed plays the same track anywhere. A share link carries the seed,
 // the style and the BPM in the URL fragment, plus the user's own sounds (a
 // deflated preset), since the track is only the same with the same sounds.
-// What the autopilot wrote is left out: the seed writes it again.
-import { cleanSeed, parsePreset, toPreset } from "./workspace.js";
+// What the autopilot wrote is left out: the seed writes it again. A snapshot
+// travels on its own link: a one-snapshot file, deflated the same way.
+import { cleanSeed, parsePreset, toPreset, toSnapshotFile } from "./workspace.js";
 
 export { cleanSeed };
 
@@ -65,15 +66,18 @@ function fromBase64Url(text) {
 // The user's sounds: edits and copies, not what the autopilot wrote.
 const ownVariants = (ws) => Object.fromEntries(Object.entries(ws.variants).filter(([id]) => !ws.auto.includes(id)));
 
+const pack = async (value) =>
+  toBase64Url(await pipe(new TextEncoder().encode(JSON.stringify(value)), new CompressionStream("deflate-raw")));
+
+const unpack = async (text, max) => new TextDecoder().decode(await inflate(fromBase64Url(text), max));
+
 export async function packSounds(ws) {
   const { lists, names } = ws;
-  const json = JSON.stringify(toPreset({ lists, names, variants: ownVariants(ws), auto: [] }));
-  return toBase64Url(await pipe(new TextEncoder().encode(json), new CompressionStream("deflate-raw")));
+  return pack(toPreset({ lists, names, variants: ownVariants(ws), auto: [] }));
 }
 
 export async function unpackSounds(text, max = SOUNDS_MAX) {
-  const bytes = await inflate(fromBase64Url(text), max);
-  const { lists, names, variants, auto } = parsePreset(new TextDecoder().decode(bytes));
+  const { lists, names, variants, auto } = parsePreset(await unpack(text, max));
   return { lists, names, variants, auto };
 }
 
@@ -87,6 +91,17 @@ export async function shareFragment(ws) {
   if (hasCustomSounds(ws)) params.set("s", await packSounds(ws));
   return `#${params}`;
 }
+
+/** "#snap=…": `snap` alone, as a snapshots file with the names of the copies it plays. */
+export async function snapFragment(ws, snap) {
+  return `#${new URLSearchParams({ snap: await pack(toSnapshotFile({ names: ws.names, snapshots: [snap] })) })}`;
+}
+
+/** The fragment of a snapshot link -> its packed file, or null. */
+export const readSnapFragment = (hash) => new URLSearchParams(String(hash ?? "").replace(/^#/, "")).get("snap") || null;
+
+/** A packed snapshot -> the file's text, for importSnapshots() (the gate). */
+export const unpackSnap = (text, max = SOUNDS_MAX) => unpack(text, max);
 
 /** The fragment of a share link -> { seed, style, bpm, sounds? } or null. */
 export function readFragment(hash) {

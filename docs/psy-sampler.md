@@ -235,7 +235,8 @@ of its tile (`.level-bar`, a `role="slider"` sibling of the tile's button, not
 inside it), so it can be set before the sound enters: a drag, a click on it or
 ← → on the focused bar. Its hit area is a strip, not the whole tile, so the
 silent tile still drags to reorder. Once the sound plays the bar hides and the
-fill takes over.
+fill takes over. Both read the same `--level` (see *Gotchas*: the bar's
+`::before` has to inherit it by hand).
 
 **🎧 solo** sits between 🔀 and ▾ on every loop sound: while it is held
 (pointer captured, or Space / Enter down) only that sound is heard.
@@ -502,6 +503,19 @@ a page reload. **▶ Try** plays the draft from the next bar without saving it.
 Deleting a sound copy removes it from the snapshots, and a snapshot left with no
 sounds disappears.
 
+**🔗 Share** (in the editor) copies a link to that snapshot alone:
+`#snap=…`, a snapshots file holding just it (the same `toSnapshotFile()` as
+⬇ Export, so the names of the copies it plays travel too), deflated and
+base64url like the sounds of a seed link (`snapFragment()` in `share.js`).
+It takes what the editor shows, unsaved changes and an emptied name (back to
+its moment) included, like ▶ Try; with no sounds it is off. One with a kick
+and a lead measured ~750 characters. Opening it is an **⬆ Import** of that file
+(`importSnapshots()`): the snapshot goes after yours, a copy it plays comes
+along, and one you already have (same moment, sounds and data, whatever its
+name) adds nothing. It does not touch what plays nor your sounds, clears the
+fragment and says to click it: audio needs that click. BPM, layer volumes and
+samples stay out, as in the file.
+
 **⬇ Export** (in the panel) downloads the snapshots alone as
 `psy-layers-snapshots.json` (`kind: "snapshots"`, plus the names of the copies
 they play). **⬆ Import** takes that file, or a whole preset, and **adds** its
@@ -559,7 +573,8 @@ so are the layout and the settings. Ticking **Factory** next to it turns it into
 - **Export / Import preset**: the workspace (snapshots included) + what plays,
   as JSON (`app: "psy-sampler"`). Importing replaces it entirely and plays its
   mix. Shared links carry only the sounds, not the snapshots. The snapshots
-  alone travel through the panel's own Export / Import (see Snapshots).
+  alone travel through the panel's own Export / Import, and one at a time
+  through its editor's 🔗 Share (see Snapshots).
 
 ## Cloud save
 
@@ -894,8 +909,9 @@ if you already had your own), clears the fragment and says to press the
 autopilot: audio needs that click. 🎲 draws a new seed (6 characters without
 0/o/1/l/i).
 
-A link is anyone's input. The sounds go through `normalize()` like any preset,
-and they inflate to at most `SOUNDS_MAX` (1 MiB): deflate expands up to ~1000×,
+A link is anyone's input. The sounds go through `normalize()` like any preset
+(a snapshot link through `importSnapshots()`, which ends in it too), and both
+inflate to at most `SOUNDS_MAX` (1 MiB): deflate expands up to ~1000×,
 so a URL at Chrome's 2 MB limit would otherwise unpack to gigabytes and kill
 the tab. Lookups of a name from outside (style, section, scale, language) use
 `Object.hasOwn`, never `in`: `"constructor" in STYLES` is true.
@@ -1176,8 +1192,9 @@ npm run build
   reordering, autopilot (same seed = same track and same sounds, never more than
   one bar without lead/pad, styles, queued sections and Next, the changes
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
-  section, export / import), bar-by-bar BPM change, languages, export / import, WAV, recording
-  (through a fake worklet), Reset everything and shared links.
+  section, export / import, a snapshot's link), bar-by-bar BPM change,
+  languages, export / import, WAV, recording (through a fake worklet), Reset
+  everything and shared links.
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
   those drag critical advisories into the test toolchain.
 
@@ -1230,5 +1247,17 @@ npm run build
   the session. Before the first ▶ there is no session, so the keys do nothing
   until something has played once. Without the Media Session API the keys fall
   back to `keydown` (`MediaPlayPause`, `MediaStop`).
+- **`--level` does not inherit.** It is registered with `@property`
+  (`inherits: false`) so the playing tile's fill can glide with the
+  autopilot. Anything that reads it on a child or a pseudo-element has to say
+  `--level: inherit` itself: the silent tile's thin bar draws in its
+  `::before`, and without that line it always showed the initial value
+  (100 %) whatever the sound's volume. jsdom computes no styles, so only a
+  real browser catches it.
+- **jsdom's `Blob` has no `stream()`.** A test that packs or opens a link with
+  sounds or a snapshot swaps in Node's (`node:buffer`) and real timers: zlib
+  settles off the fake ones. And open a link by mounting with the fragment
+  set, not with a `hashchange`: every earlier test's app is still listening,
+  and the first one clears the fragment.
 - **`listen [::]:80`** in the nginx config (like `agu-spa`) fails on a host
   without IPv6 (e.g. a test Docker); on the Pi it works.

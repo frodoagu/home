@@ -53,7 +53,17 @@ import {
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
-import { hasCustomSounds, hashSeed, randomSeed, readFragment, shareFragment, unpackSounds } from "../share.js";
+import {
+  hasCustomSounds,
+  hashSeed,
+  randomSeed,
+  readFragment,
+  readSnapFragment,
+  shareFragment,
+  snapFragment,
+  unpackSnap,
+  unpackSounds,
+} from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBpm } from "../tempo.js";
@@ -526,6 +536,8 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- snapshot tiles ---- */
   const snapTiles = new Map(); // snapshot id -> { node, tile, edit, labelEl, detailEl }
   const snapDetail = (snap) => `${tx.sections[snap.section]} · ${tx.snap.count(partsOf(snap).length)}`;
+  // An emptied name falls back to the snapshot's section.
+  const named = (draft) => ({ ...draft, name: draft.name.trim().slice(0, 40) || tx.sections[draft.section] });
 
   function makeSnapTile(snap) {
     const labelEl = el("span", { class: "variant-label", text: snap.name });
@@ -1281,7 +1293,7 @@ export function mountApp(root, engine, opts = {}) {
         renderButtons();
       },
       onSave: (draft) => {
-        const snap = { ...draft, name: draft.name.trim().slice(0, 40) || tx.sections[draft.section] };
+        const snap = named(draft);
         ws.snapshots = ws.snapshots.map((s) => (s.id === id ? snap : s));
         state.drafts.delete(id);
         persist();
@@ -1293,12 +1305,18 @@ export function mountApp(root, engine, opts = {}) {
         return snap;
       },
       onTry: (draft) => recall(draft),
+      onShare: (draft) => shareSnapshot(named(draft)),
       onRemove: () => removeSnapshot(id),
       onClose: closeEditor,
     });
     open = { layer: { id: SNAP_PANEL }, id, editor };
     showEditor(editor.node);
     if (focusName) editor.focusName();
+  }
+
+  async function shareSnapshot(snap) {
+    stats?.count("shares");
+    copyLink(await snapFragment(ws, snap), tx.snap.copied(snap.name));
   }
 
   function removeSnapshot(id) {
@@ -1662,9 +1680,27 @@ export function mountApp(root, engine, opts = {}) {
     remount({ ws: normalize(next), ...fresh(), pending: null, status: tx.share.loaded(seed), open: null });
   }
 
+  // A snapshot link adds its snapshot after yours, like ⬆ Importar does,
+  // and leaves what plays alone.
+  async function loadSharedSnap(packed) {
+    history.replaceState(null, "", location.pathname + location.search);
+    let merged;
+    try {
+      merged = importSnapshots(ws, await unpackSnap(packed));
+    } catch {
+      status(tx.snap.badLink);
+      return;
+    }
+    const { added, left } = merged;
+    const text = added ? tx.snap.linked(merged.ws.snapshots.at(-1).name) : left ? tx.snap.full : tx.snap.had;
+    remount({ ws: merged.ws, status: text });
+  }
+
   const onHash = () => {
+    const snap = readSnapFragment(location?.hash);
     const shared = readFragment(location?.hash);
-    if (shared) loadShared(shared);
+    if (snap) loadSharedSnap(snap);
+    else if (shared) loadShared(shared);
   };
 
   // Over a playing mix the autopilot takes it as it is and carries on from
@@ -1858,15 +1894,19 @@ export function mountApp(root, engine, opts = {}) {
     persist();
   });
   diceBtn.addEventListener("click", () => setSeed(randomSeed()));
-  shareBtn.addEventListener("click", async () => {
-    const url = `${location.origin}${location.pathname}${await shareFragment(ws)}`;
-    stats?.count("shares");
+  // This page's URL with `fragment`, to the clipboard or, failing that, on screen.
+  async function copyLink(fragment, copied) {
+    const url = `${location.origin}${location.pathname}${fragment}`;
     try {
       await navigator.clipboard.writeText(url);
-      status(tx.share.copied);
+      status(copied);
     } catch {
       status(tx.share.manual(url));
     }
+  }
+  shareBtn.addEventListener("click", async () => {
+    stats?.count("shares");
+    copyLink(await shareFragment(ws), tx.share.copied);
   });
   recBtn.addEventListener("click", async () => {
     if (recStopping) return;

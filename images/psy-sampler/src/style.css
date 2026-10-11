@@ -1659,7 +1659,9 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 /* Off, a loop sound shows its volume as a bar along the bottom of the tile:
-   a taller hit area than it looks, the tick at 100 %. */
+   a taller hit area than it looks, the tick at 100 %. --level is registered
+   with inherits: false (so the fill can glide), so the ::before that draws
+   the bar has to inherit it by hand or it always reads 100 %. */
 .variant.has-bar {
   padding-bottom: 16px;
 }
@@ -1681,6 +1683,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .level-bar::before {
+  --level: inherit;
   content: "";
   position: absolute;
   inset: auto 0 4px;
@@ -1695,8 +1698,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
     ),
     linear-gradient(
       to right,
-      color-mix(in srgb, var(--layer) 70%, var(--surface-2)) var(--level, 66.7%),
-      var(--border) var(--level, 66.7%)
+      color-mix(in srgb, var(--layer) 70%, var(--surface-2)) var(--level),
+      var(--border) var(--level)
     );
 }
 
