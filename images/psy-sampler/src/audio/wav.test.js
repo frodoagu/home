@@ -30,6 +30,16 @@ describe("encodeWav", () => {
     const samples = Array.from({ length: 8 }, (_, i) => int24(view, 44 + i * 3));
     expect(samples).toEqual([0, 0, 0x7fffff, -0x3fffff, -0x7fffff, 0x7fffff, 0x400000, -0x7fffff]);
   });
+
+  it("writes 16-bit PCM on request", () => {
+    const v16 = new DataView(encodeWav({ sampleRate: 44100, channels: [left, right] }, 16));
+    expect(v16.getUint16(32, true)).toBe(4);
+    expect(v16.getUint16(34, true)).toBe(16);
+    expect(v16.getUint32(28, true)).toBe(44100 * 4);
+    expect(v16.byteLength).toBe(44 + 16);
+    const samples = Array.from({ length: 8 }, (_, i) => v16.getInt16(44 + i * 2, true));
+    expect(samples).toEqual([0, 0, 0x7fff, -0x3fff, -0x7fff, 0x7fff, 0x4000, -0x7fff]);
+  });
 });
 
 describe("trimTail", () => {

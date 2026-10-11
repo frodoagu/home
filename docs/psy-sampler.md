@@ -766,10 +766,10 @@ and uploads with the next change.
 
 ### Samples
 
-A signed-in user uploads audio files (WAV, AIFF, MP3, AAC/M4A, OGG, FLAC, WebM)
-in the **🎵 Samples** panel (under the tools, collapsed). They are kept **on the
-Pi**, in the user's profile: BLOBs in the same SQLite file, so deleting the
-account takes them along.
+A signed-in user uploads audio in the **🎵 Samples** panel (under the tools,
+collapsed): loose files, a folder (**📁**, or dropped on the panel) or archives.
+They are kept **on the Pi**, in the user's profile: BLOBs in the same SQLite
+file, so deleting the account takes them along.
 
 | Route | |
 |---|---|
@@ -778,11 +778,71 @@ account takes them along.
 | `GET /api/samples/:id` | the file, to its owner only (anyone else gets 404); `immutable`, `nosniff`, `attachment` |
 | `DELETE /api/samples/:id` | 204 |
 
-- **Checks, twice.** The page decodes a file before sending it: what the browser
-  can't play, or what runs longer than 15 s (`MAX_SECONDS` in
-  [`samples.js`](../images/psy-sampler/src/samples.js)), never leaves the page.
-  The server trusts none of it: the bytes must start like one of the formats
-  above (`sniffAudio`), and the stored `content-type` is the sniffed one.
+#### What it imports
+
+[`src/import/`](../images/psy-sampler/src/import) turns a selection into a flat
+list of candidates (`gather.js`), each read only when it is auditioned or
+uploaded. A lone audio file goes straight up; anything more (or a project file)
+opens a picker: ▶ to audition, a checkbox per sample, preselected up to the slots
+the account has left.
+
+| Source | Read by |
+|---|---|
+| MP3, FLAC, AAC/M4A, Ogg Vorbis/Opus, WebM | the browser's `decodeAudioData` (open-source Chromium has no AAC; Chrome does) |
+| WAV: 8/16/24/32-bit, 32/64-bit float, A-law/μ-law, `WAVE_FORMAT_EXTENSIBLE`, BWF, **RF64/BW64** | the browser, else `pcm.js` |
+| **AIFF/AIFC** (`NONE`, `twos`, `sowt`, `in24`, `in32`, `fl32`, `fl64`, `alaw`, `ulaw`), **CAF** (`lpcm`, `alaw`, `ulaw`), Sun **.au/.snd** | `pcm.js`: Chromium and Firefox decode none of these |
+| **SoundFont .sf2** (16/24-bit, linked L/R pairs joined) and **.sf3** (MuseScore: one Ogg Vorbis stream per sample) | `soundfont.js`: one candidate per sample, sliced out of `smpl` on demand |
+| **.zip** (ZIP64 too), and zips under other names: Bitwig `.multisample`, Renoise `.xrni`/`.xrns`, Decent Sampler `.dslibrary` | `zip.js`: reads the central directory, inflates each entry on demand (`DecompressionStream`), opens a zip inside a zip |
+| **Ableton Live** `.als` `.alc` `.adg` `.adv` | `projects.js`: gunzips the XML; marks the files the set uses, and a Simpler/Sampler zone with its own start/end becomes a **slice** |
+| **SFZ**, **Decent Sampler** `.dspreset`, **REAPER** `.rpp` | `projects.js`: the `sample=` / `path="…"` / `FILE` references |
+
+`pcm.js` was checked bit-exact against ffmpeg's float decode for every codec
+above; `soundfont.js` against a GM bank (488 samples) and MuseScore's SF3.
+
+Every extension lives in one table,
+[`formats.js`](../images/psy-sampler/src/import/formats.js) (audio, archives,
+instruments, projects, closed): `gather.js` sorts files by it, the file dialog's
+`accept` comes from it, and the panel's **ⓘ Formatos admitidos** (collapsed,
+shown signed in or out, with the per-sample limits) lists it, so what the page
+says it reads is what it reads. A new format is one line there.
+
+- **Project files only point at samples.** A page can't follow a path on disk,
+  so the samples must come in the same selection: pick or drop the **project
+  folder** (or a zip of it). A reference matches by file name, preferring the
+  file whose folders agree with it; what isn't there is listed as missing. In
+  Live, **File › Collect All and Save** copies every sample into the project
+  folder first. Sets under `Backup/` are skipped (stale references).
+- The Ableton XML is not a published format. `projects.js` reads what Live 9-12
+  write: `<SampleRef><FileRef>` with `RelativePath`/`Path` values (Live 11+) or
+  `RelativePathElement`s + `Name` (earlier), and `SampleStart`/`SampleEnd`, in
+  frames of the file, in a `<MultiSamplePart>`. Audio clips import whole: their
+  markers are in beats once warped.
+- **Not supported**, and named in the message so the user exports to WAV: REX
+  (`.rx2`), Kontakt (`.nki`, `.ncw`…), Reason ReFills, FL Studio `.flp`, Logic
+  `.logicx`/EXS, Cubase, Pro Tools, Bitwig projects, Maschine, Ableton `.alp`
+  packs. Nor ADPCM WAV, ALAC, WMA, APE/WavPack/DSD, 7z/RAR, encrypted zips.
+- Clutter in folders and archives (`.asd`, `__MACOSX/`, `._*`, artwork, docs,
+  MIDI) is skipped quietly; the list stops at 500 candidates.
+
+#### What goes up
+
+- **Checked twice.** The page decodes every candidate before sending it (the
+  browser's decoder, then `pcm.js` for what it refuses): what runs longer than
+  15 s (`MAX_SECONDS` in [`samples.js`](../images/psy-sampler/src/samples.js)),
+  or a source over 64 MiB, never leaves the page.
+- **Stored as it came** only when every browser decodes it and it fits the
+  per-file limit: plain WAV (8/16/24-bit PCM or 32-bit float, not extensible),
+  FLAC, MP3, AAC/M4A (not ALAC). **Everything else goes up as WAV**: AIFF and
+  CAF (Safari only), Ogg/WebM (not in every Safari), RF64, G.711, 64-bit float,
+  SoundFont samples, Ableton slices. At 48 kHz (the decoding context's rate),
+  24-bit when it fits the per-file limit, 16-bit otherwise: 15 s of stereo only
+  fits the 3 MiB default in 16. So a sample plays wherever its owner signs in. A
+  float file over full scale comes in scaled down to it, not clipped.
+- Samples stored before this (an AIFF uploaded from Safari) still play in
+  Chrome: `load()` falls back to `pcm.js` as well.
+- The server trusts none of it: the bytes must start like WAV, AIFF, OGG, FLAC,
+  MP4, WebM, MP3 or AAC (`sniffAudio`), and the stored `content-type` is the
+  sniffed one. Its list didn't change: the page never sends it anything else.
 - **Limits** (`sync.samples`): 3 MiB per file, 24 samples and 100 MiB per account,
   and **1 GiB for everyone together**: that shared cap, not the number of
   accounts, is what keeps uploads off the SD card's free space (local-path

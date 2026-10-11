@@ -6,6 +6,8 @@ import { createCloud } from "../cloud.js";
 import { createSamples } from "../samples.js";
 import { mountApp } from "./app.js";
 import { resetAccountForTests } from "./account.js";
+import { droppedEntries } from "./samplesPanel.js";
+import { gzip, ramp, wav16, zip } from "../test/audioFiles.js";
 
 let server;
 let root;
@@ -48,6 +50,17 @@ async function fakeFetch(url, { method = "GET", body } = {}) {
 }
 
 const $ = (sel) => root.querySelector(sel);
+const $$ = (sel) => [...root.querySelectorAll(sel)];
+const WAV = wav16([ramp(480)]);
+const pick = (input, files) => {
+  Object.defineProperty(input, "files", { value: files, configurable: true });
+  input.dispatchEvent(new Event("change"));
+};
+const inFolder = (path) => {
+  const file = new File([WAV], path.split("/").pop());
+  Object.defineProperty(file, "webkitRelativePath", { value: path });
+  return file;
+};
 const settle = async () => {
   for (let i = 0; i < 40; i++) await Promise.resolve();
 };
@@ -161,5 +174,124 @@ describe("samples panel", () => {
     expect(server.samples).toEqual([]);
     expect(saved().variants["perc.clap~1"].sample).toBeNull();
     expect($(".status").textContent).toBe("Sample «Kick 909» borrado.");
+  });
+
+  it("ⓘ Supported formats lists what the importer reads, signed in or not", async () => {
+    await mount();
+    const guide = $('[data-role="formats"]');
+    expect(guide.querySelector("summary").textContent).toBe("ⓘ Formatos admitidos");
+    expect([...guide.querySelectorAll("dt")].map((n) => n.textContent)).toEqual([
+      "Audio",
+      "Packs comprimidos",
+      "Instrumentos",
+      "Proyectos, con su carpeta",
+      "No se pueden leer",
+    ]);
+    const line = (app) => [...guide.querySelectorAll(".format-list li")].find((li) => li.querySelector(".format-app")?.textContent === app);
+    expect(line("Ableton Live").querySelector("code").textContent).toBe(".als .alc .adg .adv");
+    expect(line("Kontakt").querySelector("code").textContent).toContain(".nki");
+    expect(guide.querySelector("code").textContent).toContain(".wav");
+    expect(guide.textContent).toContain("Cada sample dura hasta 15 s y pesa hasta 3 MB");
+
+    server.user = null;
+    await mount();
+    expect($('[data-role="formats"]')).not.toBeNull();
+    expect($('[data-role="formats"]').textContent).toContain("Cada sample dura hasta 15 s.");
+  });
+
+  it("several files open a picker; the chosen ones go up one by one", async () => {
+    await mount();
+    pick($('.samples input[type="file"][multiple]'), [new File([WAV], "Kick.wav"), new File([WAV], "Snare.wav"), new File([WAV], "Hat.wav")]);
+    await settle();
+    expect($(".status").textContent).toBe("Encontré 3 samples.");
+    expect($$(".pick-row .sample-name").map((n) => n.textContent)).toEqual(["Kick", "Snare", "Hat"]);
+    expect($$("[data-pick]").every((b) => b.checked)).toBe(true);
+    $$("[data-pick]")[1].click(); // not the snare
+    expect($('[data-action="upload-picked"]').textContent).toBe("⬆ Subir 2");
+    $('[data-action="upload-picked"]').click();
+    await vi.waitFor(() => expect(server.samples.map((s) => s.name)).toEqual(["Kick 909", "Kick", "Hat"]));
+    await settle();
+    expect($(".status").textContent).toBe("Subidos 2 de 2.");
+    expect($(".sample-picker")).toBeNull();
+  });
+
+  it("an Ableton project folder: what the set uses is preselected, what's missing is said", async () => {
+    await mount();
+    const set = await gzip(`<?xml version="1.0"?><Ableton><SampleRef><FileRef><RelativePath Value="Samples/Imported/Amen.wav" /></FileRef></SampleRef>
+      <SampleRef><FileRef><RelativePath Value="Samples/Imported/Gone.wav" /></FileRef></SampleRef></Ableton>`);
+    const als = new File([set], "Song.als");
+    Object.defineProperty(als, "webkitRelativePath", { value: "Song Project/Song.als" });
+    pick($('.samples input[webkitdirectory]'), [als, inFolder("Song Project/Samples/Imported/Amen.wav"), inFolder("Song Project/Samples/Imported/Other.wav")]);
+    await vi.waitFor(() => expect($(".sample-picker")).not.toBeNull());
+    const hint = $(".sample-picker .hint").textContent;
+    expect(hint).toContain("«Song Project/Song.als» (Ableton Live) usa 2 archivos: 1 está en lo que elegiste.");
+    expect(hint).toContain("Falta «Gone.wav». Elegí la carpeta del proyecto entera");
+    expect($$("[data-pick]").map((b) => [b.dataset.pick, b.checked])).toEqual([
+      ["Song Project/Samples/Imported/Amen.wav", true],
+      ["Song Project/Samples/Imported/Other.wav", false],
+    ]);
+    $('[data-action="cancel-pick"]').click();
+    expect($(".sample-picker")).toBeNull();
+  });
+
+  it("never preselects more than the account has room for", async () => {
+    server.samples = Array.from({ length: 22 }, (_, i) => ({ ...KICK, id: `k${String(i).padStart(21, "0")}` }));
+    await mount();
+    pick($('.samples input[type="file"][multiple]'), ["a", "b", "c"].map((n) => new File([WAV], `${n}.wav`)));
+    await settle();
+    expect($$("[data-pick]").map((b) => b.checked)).toEqual([true, true, false]);
+    expect($(".sample-picker").textContent).toContain("Te quedan 2 lugares.");
+    $('[data-action="pick-all"]').click();
+    expect($('[data-action="upload-picked"]').disabled).toBe(true);
+  });
+
+  it("▶ in the picker plays a candidate before it is uploaded", async () => {
+    await mount();
+    pick($('.samples input[type="file"][multiple]'), [new File([WAV], "a.wav"), new File([WAV], "b.wav")]);
+    await settle();
+    $$('[data-action="audition"]')[1].click();
+    await settle();
+    expect(ctx.sources().some((src) => src.buffer)).toBe(true);
+    expect(server.samples).toHaveLength(1);
+  });
+
+  it("closed formats get named, with where to export from", async () => {
+    await mount();
+    pick($('.samples input[type="file"][multiple]'), [new File([new Uint8Array(40)], "Break.rx2")]);
+    await settle();
+    expect($(".status").textContent).toBe(
+      "No encontré audio en lo que elegiste (mirá ⓘ Formatos admitidos). «Break.rx2» es un formato cerrado de ReCycle (REX): exportá sus samples a WAV.",
+    );
+  });
+
+  it("a dropped zip goes through the same picker", async () => {
+    await mount();
+    const pack = await zip([
+      { name: "Pack/Kick.wav", data: WAV, deflate: true },
+      { name: "Pack/Clap.wav", data: WAV },
+    ]);
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    event.dataTransfer = { files: [new File([pack], "Pack.zip")], items: [] };
+    $(".samples").dispatchEvent(event);
+    await settle();
+    await vi.waitFor(() => expect($$(".pick-row .pick-origin").map((n) => n.textContent)).toEqual(["Pack.zip/Pack/Kick.wav", "Pack.zip/Pack/Clap.wav"]));
+    expect($(".samples").open).toBe(true);
+  });
+});
+
+describe("droppedEntries", () => {
+  it("walks dropped folders, batch by batch, into paths", async () => {
+    const file = (name) => ({ isFile: true, name, file: (ok) => ok(new File(["x"], name)) });
+    const dir = (name, children) => ({
+      isDirectory: true,
+      name,
+      createReader: () => {
+        const batches = [children.slice(0, 1), children.slice(1), []];
+        return { readEntries: (ok) => ok(batches.shift()) };
+      },
+    });
+    const items = [dir("Kit", [file("Kick.wav"), dir("Hats", [file("Hat.wav")])]), file("Loose.wav")].map((entry) => ({ webkitGetAsEntry: () => entry }));
+    const read = droppedEntries({ items, files: [] });
+    expect((await read()).map((i) => i.path)).toEqual(["Kit/Kick.wav", "Kit/Hats/Hat.wav", "Loose.wav"]);
   });
 });

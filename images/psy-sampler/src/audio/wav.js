@@ -1,19 +1,20 @@
-// WAV export: 24-bit PCM, interleaved. Pure, so it is tested without audio.
+// WAV export: 24-bit PCM (16-bit on request), interleaved. Pure, so it is tested without audio.
 
 const BYTES = 3;
 
 /** { sampleRate, channels: [Float32Array, ...] } -> ArrayBuffer of a .wav file. */
-export function encodeWav({ sampleRate, channels }) {
+export function encodeWav({ sampleRate, channels }, bits = BYTES * 8) {
+  const bytes = bits / 8;
   const frames = channels[0]?.length ?? 0;
-  const out = new Uint8Array(44 + frames * channels.length * BYTES);
-  out.set(new Uint8Array(wavHeader(sampleRate, channels.length, frames)));
-  out.set(pcm24(channels, 0, frames), 44);
+  const out = new Uint8Array(44 + frames * channels.length * bytes);
+  out.set(new Uint8Array(wavHeader(sampleRate, channels.length, frames, bits)));
+  out.set(bytes === 2 ? pcm16(channels, 0, frames) : pcm24(channels, 0, frames), 44);
   return out.buffer;
 }
 
 // The 44-byte header of a PCM .wav holding `frames` frames.
-export function wavHeader(sampleRate, channelCount, frames) {
-  const block = channelCount * BYTES;
+export function wavHeader(sampleRate, channelCount, frames, bits = BYTES * 8) {
+  const block = channelCount * (bits / 8);
   const dataSize = frames * block;
   const view = new DataView(new ArrayBuffer(44));
   const ascii = (at, text) => [...text].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
@@ -28,7 +29,7 @@ export function wavHeader(sampleRate, channelCount, frames) {
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, sampleRate * block, true);
   view.setUint16(32, block, true);
-  view.setUint16(34, BYTES * 8, true);
+  view.setUint16(34, bits, true);
   ascii(36, "data");
   view.setUint32(40, dataSize, true);
   return view.buffer;
@@ -48,6 +49,19 @@ export function pcm24(channels, from, to) {
     }
   }
   return out;
+}
+
+// The same in 16 bits.
+export function pcm16(channels, from, to) {
+  const out = new DataView(new ArrayBuffer((to - from) * channels.length * 2));
+  let at = 0;
+  for (let i = from; i < to; i++) {
+    for (const data of channels) {
+      out.setInt16(at, Math.round(Math.max(-1, Math.min(1, data[i])) * 0x7fff), true);
+      at += 2;
+    }
+  }
+  return new Uint8Array(out.buffer);
 }
 
 export const SILENCE = 1e-4; // -80 dBFS

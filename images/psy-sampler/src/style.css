@@ -1194,6 +1194,115 @@ html:has(dialog.help[open], dialog.intro[open]) {
   font-variant-numeric: tabular-nums;
 }
 
+.sample-formats summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.sample-formats dl {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.sample-formats dt {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.sample-formats dd {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.format-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.format-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
+.format-app {
+  font-size: 0.85rem;
+}
+
+.format-list code {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.samples.dropping {
+  outline: 2px dashed var(--current);
+  outline-offset: 4px;
+}
+
+.sample-picker {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sample-picker .hint {
+  margin: 0;
+}
+
+.pick-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.pick-head .hint {
+  margin-left: auto;
+}
+
+.pick-list {
+  display: grid;
+  gap: 4px;
+  max-height: 18rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pick-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
+.pick-label {
+  display: grid;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.pick-origin {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .topbar-transport {
   display: flex;
   flex-wrap: wrap; /* five buttons on a phone's row */

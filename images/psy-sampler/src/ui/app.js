@@ -715,6 +715,7 @@ export function mountApp(root, engine, opts = {}) {
         confirm,
         status: (text) => status(text),
         onPreview: previewSample,
+        onAudition: auditionSample,
         onUse: addSampleSound,
         onRemove: forgetSample,
       })
@@ -1722,6 +1723,12 @@ export function mountApp(root, engine, opts = {}) {
   function previewSample(sampleId) {
     engine.ensureContext();
     samples.load(sampleId).then((buffer) => buffer && engine.previewSample(sampleId));
+  }
+
+  // The picker's ▶, before uploading: decoded here, played like a stored one.
+  function auditionSample(candidate) {
+    engine.ensureContext();
+    return samples.audition(candidate).then((id) => engine.previewSample(id));
   }
 
   // A deleted sample: the sounds using it go back to their own voice.

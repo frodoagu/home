@@ -144,7 +144,7 @@ export default {
         title: "Saving and samples",
         items: [
           ["It saves itself", "Everything stays in this browser. Signed in with Google, also in the cloud, to use on any device."],
-          ["🎵 Samples", "Signed in, upload your own audio. «+ Sound in…» makes a new sound with that sample in the layer you pick; or choose it as any sound's Source."],
+          ["🎵 Samples", "Signed in, upload your own audio: loose files, a folder or a .zip (or drop them on the panel). It reads WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts and, with their folder, the samples of an Ableton set, SFZ, Decent Sampler or REAPER. «+ Sound in…» makes a new sound with that sample in the layer you pick; or choose it as any sound's Source."],
         ],
       },
       {
@@ -316,9 +316,45 @@ export default {
   samples: {
     title: "🎵 Samples",
     hint: "Your samples live in your profile, on the server. Use them as the source of any sound.",
+    how: "Upload files, a folder or a .zip, or drop them here.",
+    formats: {
+      title: "ⓘ Supported formats",
+      audio: ["Audio", "WAV, FLAC, MP3 and AAC go up as they are; the rest is converted to WAV so it plays in any browser."],
+      archives: ["Compressed packs", "Opened up, even a .zip inside another."],
+      instruments: ["Instruments", "Each sample in the bank is listed on its own."],
+      projects: [
+        "Projects, with their folder",
+        "They only say which samples they use: pick or drop the project folder (or a .zip of it). From Ableton, Simpler and Sampler slices come in too.",
+      ],
+      closed: ["Can't be read", "Closed formats: export their samples to WAV from the program."],
+      limits: (secs, max) =>
+        max ? `Each sample lasts up to ${secs} s and weighs up to ${max}: anything heavier goes up as a lighter WAV.` : `Each sample lasts up to ${secs} s.`,
+    },
     signIn: "Sign in with Google to upload your samples: they are kept in your profile.",
     unavailable: "The cloud is not answering: samples are unavailable.",
-    upload: "⬆ Upload sample",
+    upload: "⬆ Upload files",
+    folder: "📁 Upload folder",
+    reading: "Reading the files…",
+    nothing: "No audio found in what you picked (see ⓘ Supported formats).",
+    found: (n) => (n === 1 ? "Found 1 sample." : `Found ${n} samples.`),
+    more: (n) => `There are ${n} more that don't fit in the list.`,
+    project: (name, app, found, refs) =>
+      `"${name}" (${app}) uses ${refs === 1 ? "1 file" : `${refs} files`}: ${found} ${found === 1 ? "is" : "are"} in what you picked.`,
+    missing: (names, more) =>
+      `Missing ${names.map((n) => `"${n}"`).join(", ")}${more ? ` and ${more} more` : ""}. ` +
+      "Pick the whole project folder (in Ableton, File › Collect All and Save gathers everything there).",
+    closed: (name, app) => `"${name}" is a closed ${app} format: export its samples to WAV.`,
+    unreadable: (name) => `"${name}" could not be read.`,
+    encrypted: (name) => `"${name}" is encrypted.`,
+    pick: "Choose which to upload:",
+    all: "All",
+    slice: "slice",
+    slots: (n) => (n === 1 ? "1 slot left." : `${n} slots left.`),
+    uploadN: (n) => `⬆ Upload ${n}`,
+    cancel: "Cancel",
+    progress: (i, n, name) => `Uploading ${i} of ${n}: "${name}"…`,
+    done: (ok, n) => `Uploaded ${ok} of ${n}.`,
+    failedOne: (name, why) => `"${name}": ${why}`,
     uploading: (name) => `Uploading "${name}"…`,
     uploaded: (name) => `Sample "${name}" uploaded.`,
     usage: (used, quota, n, max) => `${used} of ${quota} · ${n} of ${max} samples`,
@@ -330,9 +366,9 @@ export default {
     useIn: "+ Sound in…",
     created: (name, layer) => `New sound with "${name}" in ${layer}.`,
     errors: {
-      tooBig: (max) => `The file is larger than ${max}.`,
+      tooBig: (max) => `It is larger than ${max}.`,
       tooLong: (secs) => `The sample is longer than ${secs} s: trim it.`,
-      format: "That file is not audio this browser can read.",
+      format: "Not audio that can be read (see ⓘ Supported formats).",
       quota: "Your profile is full: delete a sample.",
       count: (max) => `You reached ${max} samples: delete one.`,
       full: "The server ran out of room for samples.",
