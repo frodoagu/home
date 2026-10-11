@@ -7,12 +7,19 @@ kind: Application
 metadata:
   name: oauth2-proxy
   namespace: argocd
+  labels:
+    agu.com.ar/category: security
+    agu.com.ar/exposure: public
+    agu.com.ar/blast-radius: platform
   annotations:
     link.argocd.argoproj.io/external-link: "https://auth.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Google OAuth2 backend of the google-auth ForwardAuth middleware (email allowlist)."
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

@@ -5,10 +5,19 @@ kind: Application
 metadata:
   name: shelly-config
   namespace: argocd
+  labels:
+    agu.com.ar/category: home-automation
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: app
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Reconciles switch settings + mJS scripts onto the LAN Shelly relays (CronJob + PostSync Job). Deploys no device."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/shelly.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

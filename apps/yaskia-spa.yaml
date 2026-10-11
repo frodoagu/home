@@ -6,12 +6,21 @@ kind: Application
 metadata:
   name: yaskia-spa
   namespace: argocd
+  labels:
+    agu.com.ar/category: web
+    agu.com.ar/exposure: public
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://yaskia.com"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "nginx serving the yaskia.com SPA; chart and site source live in frodoagu/yaskia."
+    - name: Docs
+      value: "https://github.com/frodoagu/yaskia"
   source:
     repoURL: https://github.com/frodoagu/yaskia.git
     targetRevision: HEAD

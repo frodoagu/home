@@ -6,10 +6,21 @@ kind: Application
 metadata:
   name: origin-firewall
   namespace: argocd
+  labels:
+    agu.com.ar/category: security
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: platform
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Privileged hostNetwork DaemonSet programming nftables: 80/443 only from Cloudflare + LAN."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/origin-firewall.md"
+    - name: Image
+      value: "ghcr.io/frodoagu/origin-firewall (digest pinned by Image Updater)"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

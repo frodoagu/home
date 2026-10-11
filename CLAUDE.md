@@ -167,6 +167,23 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - `resources` requests/limits are tuned small for the RPi.
 - `maintainers: [{name: frodoagu}]`, `repoURL: git@github.com:frodoagu/home.git`.
 
+## Application conventions (`apps/*.yaml`)
+
+- Copy an existing app: `namespace: argocd`, `resources-finalizer`, `project: default`,
+  `targetRevision: HEAD`, automated prune + selfHeal, `CreateNamespace=true`.
+- **Labels — all three required**, values from the README table
+  ("Application labels & info"): `agu.com.ar/category`, `agu.com.ar/exposure`
+  (internet attack surface: `public` / `own-auth` / `google-auth` / `internal`),
+  `agu.com.ar/blast-radius` (`lan` / `platform` / `app`). They're for humans;
+  nothing selects on them — the ImageUpdater CRs match by `namePattern`. Don't
+  add `app.kubernetes.io/instance`: it's ArgoCD's legacy tracking label (3.x
+  tracks by annotation, but a label-tracking switch would make it collide).
+- **`spec.info`**: always a `Description`; a `Docs` URL when a doc exists; an
+  `Image` line for CI-built images pinned by Image Updater. Values double-quoted.
+- `link.argocd.argoproj.io/external-link` annotation for each app with a UI; extra
+  URLs go in further `link.argocd.argoproj.io/<name>` keys (see `apps/monitoring.yaml`).
+- A new hostname or doc → keep `exposure` and the `Docs` entry in step.
+
 ## Per-chart gotchas (hard-won — don't re-investigate)
 
 - **monitoring — the `VMRule` sits OutOfSync forever without `ignoreDifferences`.**
