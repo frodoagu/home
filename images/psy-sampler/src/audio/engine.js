@@ -282,7 +282,9 @@ export function createEngine({
     const nudge = (d.nudge ?? 0) / 1000;
     const earliest = ctx.currentTime + SAFETY;
     for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop)) {
-      voice(ctx, lane.input, Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge), ev, stepDur);
+      const t = Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge);
+      lane.chain.trigger(t);
+      voice(ctx, lane.input, t, ev, stepDur);
     }
     lane.entered = true;
   }
@@ -558,6 +560,7 @@ export function createEngine({
     const prev = fxPlaying.get(id);
     if (prev) fadeOut(prev);
     const shot = openVoice(liveShot(id), "fx", dataOf(id).insert, t);
+    shot.chain.trigger(t);
     const end = fxVoice(ctx, shot.input, t, stepDur, id);
     shot.chain.stop(end + FADE);
     fxPlaying.set(id, { ...shot, end });
@@ -572,6 +575,7 @@ export function createEngine({
     const layer = layerOf(id);
     const t = ctx.currentTime + SAFETY;
     const shot = openVoice(shotLevel(id), layer, dataOf(id).insert, t);
+    shot.chain.trigger(t);
     voice(ctx, shot.input, t, ev, stepDuration(bpm));
     fadeOut(shot, t + AUDITION_SECONDS);
   }
@@ -632,20 +636,24 @@ export function createEngine({
     const into = (level, layer, insert, duck = 0) => {
       const holder = withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0);
       duckWith(off, holder, chain.side, duck);
-      return holder.input;
+      return holder;
     };
     if (fx) {
-      fxVoice(off, into(shotLevel(fx), "fx", dataOf(fx).insert), 0, stepDur, fx);
+      const shot = into(shotLevel(fx), "fx", dataOf(fx).insert);
+      shot.chain.trigger(0);
+      fxVoice(off, shot.input, 0, stepDur, fx);
     } else {
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
-        const input = into(laneLevel(key, variant), layerOf(variant), d.insert, duckOf(variant));
+        const { input, chain: insert } = into(laneLevel(key, variant), layerOf(variant), d.insert, duckOf(variant));
         const nudge = (d.nudge ?? 0) / 1000;
         // The kept pass is loop 0, so mods sound as on the first loop after ▶.
         for (let i = 0; i < 2 * LOOP_STEPS; i++) {
           const loop = Math.floor(i / LOOP_STEPS) - 1;
           for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
-            voice(off, input, Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge), ev, stepDur);
+            const t = Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge);
+            insert.trigger(t);
+            voice(off, input, t, ev, stepDur);
           }
         }
       }

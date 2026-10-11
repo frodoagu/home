@@ -8,8 +8,11 @@ import {
   djCutoffs,
   driveCurve,
   driveGains,
+  ENV_CENTS,
+  VOWELS,
   kindOf,
   lfoHz,
+  noiseValues,
 } from "./insert.js";
 
 const STEP = 60 / 145 / 4;
@@ -19,7 +22,7 @@ const chainOf = (ins) => {
   const pre = filter.outputs[0];
   const shaper = pre.outputs[0];
   const post = shaper.outputs[0];
-  const panner = post.outputs[0];
+  const panner = post.outputs[0].kind === "panner" ? post.outputs[0] : null;
   return { filter, pre, shaper, post, panner };
 };
 
@@ -71,16 +74,20 @@ describe("buildInsert", () => {
     expect(filter.frequency.value).toBe(24000);
     expect(shaper.curve).toBeNull();
     expect([pre.gain.value, post.gain.value]).toEqual([1, 1]);
-    expect([panner.kind, panner.pan.value]).toEqual(["panner", 0]);
-    expect(panner.outputs[0]).toBe(ins.output);
+    expect(panner).toBeNull(); // a StereoPannerNode at 0 is -3 dB on a mono input, not an identity
+    expect(post.outputs[0]).toBe(ins.output);
     expect(ctx.sources()).toHaveLength(0);
   });
 
   it("pans, and an autopan swings the pan with its own tempo LFO", () => {
     const ctx = new FakeAudioContext();
     const plain = buildInsert(ctx, { ...INSERT_DEFAULT, pan: -0.4 }, { stepDur: STEP });
-    expect(chainOf(plain).panner.pan.value).toBe(-0.4);
+    const { panner } = chainOf(plain);
+    expect(panner.pan.value).toBe(-0.4);
+    expect(panner.outputs[0].gain.value).toBe(Math.SQRT2); // equal-power back to unity at the centre
+    expect(panner.outputs[0].outputs[0]).toBe(plain.output);
     expect(ctx.sources()).toHaveLength(0);
+    expect(kindOf({ ...INSERT_DEFAULT, pan: -0.4 })).not.toBe(kindOf(INSERT_DEFAULT));
     const swung = buildInsert(ctx, { ...INSERT_DEFAULT, width: 0.8, panRate: 16 }, { stepDur: STEP, at: 1 });
     const [lfo] = ctx.sources();
     expect(lfo.startTime).toBe(1);
@@ -146,5 +153,64 @@ describe("djCutoffs", () => {
     expect(djCutoffs(-0.5, 24000).low).toBeCloseTo(Math.sqrt(18000 * 150), 6);
     expect(djCutoffs(0.5, 24000).low).toBe(24000);
     expect(djCutoffs(-0.5, 24000).high).toBe(0);
+  });
+});
+
+describe("buildInsert: shapes, vowel, envelope, phaser, tremolo", () => {
+  const filtered = { ...INSERT_DEFAULT, filter: "lowpass", lfo: 0.5 };
+
+  it("the filter LFO takes an oscillator shape, or loops a random table at the LFO's Hz", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, { ...filtered, shape: "sawtooth" }, { stepDur: STEP });
+    expect(ctx.sources()[0].type).toBe("sawtooth");
+    const ctx2 = new FakeAudioContext();
+    buildInsert(ctx2, { ...filtered, shape: "random", rate: 16 }, { stepDur: STEP, at: 3 });
+    const [table] = ctx2.sources();
+    expect([table.kind, table.loop, table.startTime]).toEqual(["buffer", true, 3]);
+    expect(table.playbackRate.value).toBeCloseTo(lfoHz(16, STEP), 9);
+    expect(kindOf({ ...filtered, shape: "random" })).not.toBe(kindOf(filtered));
+  });
+
+  it("the random tables repeat from a fixed seed, inside -1..1", () => {
+    const v = noiseValues();
+    expect(noiseValues()).toEqual(v);
+    expect(v.every((x) => x >= -1 && x < 1)).toBe(true);
+  });
+
+  it("a vowel is three bandpasses at its formants, and the LFO moves all three", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, { ...INSERT_DEFAULT, filter: "vowel", vowel: "o", lfo: 0.5 }, { stepDur: STEP });
+    const bands = ctx.nodes.filter((n) => n.kind === "filter" && n.type === "bandpass");
+    expect(bands.map((b) => b.frequency.value)).toEqual(VOWELS.o.map(([hz]) => hz));
+    const depth = ctx.sources()[0].outputs[0];
+    expect(depth.outputs).toEqual(bands.map((b) => b.detune));
+  });
+
+  it("trigger() opens the filter by the envelope and lets it decay, only with a filter and an envelope", () => {
+    const ctx = new FakeAudioContext();
+    const ins = buildInsert(ctx, { ...filtered, env: 0.5, envDecay: 0.3 }, { stepDur: STEP });
+    ins.trigger(2);
+    const filter = ctx.nodes.find((n) => n.kind === "filter");
+    const [open, close] = filter.detune.events;
+    expect(open).toEqual(["target", 0.5 * ENV_CENTS, 2, 0.002]);
+    expect(close.slice(0, 3)).toEqual(["target", 0, 2.008]);
+    expect(close[3]).toBeCloseTo(0.1, 9);
+    const plain = buildInsert(ctx, { ...INSERT_DEFAULT, env: 0.5 }, { stepDur: STEP });
+    plain.trigger(1); // filter off: nothing to move
+  });
+
+  it("phaser and tremolo only exist while on, and follow the BPM", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
+    expect(ctx.nodes.filter((n) => n.type === "allpass")).toHaveLength(0);
+    const ins = buildInsert(ctx, { ...INSERT_DEFAULT, phaser: 0.6, trem: 0.4, tremRate: 1 }, { stepDur: STEP });
+    expect(ctx.nodes.filter((n) => n.type === "allpass")).toHaveLength(4);
+    const [phaserLfo, tremLfo] = ctx.sources();
+    expect(tremLfo.frequency.value).toBeCloseTo(lfoHz(1, STEP), 9);
+    const amp = tremLfo.outputs[0].outputs[0];
+    expect(amp.constructor.name).toBe("FakeParam");
+    ins.setStepDur(STEP / 2, 1);
+    expect(phaserLfo.frequency.events.at(-1)).toEqual(["target", lfoHz(16, STEP / 2), 1, 0.05]);
+    expect(kindOf({ ...INSERT_DEFAULT, phaser: 0.6 })).not.toBe(kindOf(INSERT_DEFAULT));
   });
 });

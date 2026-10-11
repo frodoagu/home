@@ -172,8 +172,9 @@ distortion":
 
 | | Options | Knobs |
 |---|---|---|
-| Filter | off, lowpass, highpass, bandpass | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars |
+| Filter | off, lowpass, highpass, bandpass, vowel | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars, LFO shape, envelope (±4 octaves) and its decay |
 | Distortion | off, saturation (tanh), hard clip, wavefold, bitcrush | drive |
+| Modulation | phaser, tremolo | mix / depth, each with its rate (phaser 1/8 … 4 bars, tremolo 1/16 … 1/2) |
 
 - **Live**: knob moves glide (20 ms) on the playing lane. Switching a *type*
   needs other nodes, so the engine builds a fresh chain and crossfades it in
@@ -188,6 +189,25 @@ distortion":
   wavefold stay within ±2 dB of the bypass from 0 to 100 % (wavefold needed its
   own correction: it read 2.6 dB hot at 0 % and 6.6 dB quiet at 100 %). Bitcrush
   goes from 8 bits (0 %) to 2 (100 %) at full scale and doesn't change the level.
+- **Vowel** (Strudel's `vowel`): three bandpasses in parallel at A, E, I, O
+  or U's formants, Q 4 + resonance, the LFO moving all three. Each vowel's
+  levels carry its own makeup: measured in Chrome on the melodic lead, all five
+  sit within ±0.5 dB of the dry sound.
+- **LFO shape**: sine, triangle, saw, square (an `OscillatorNode`), or
+  random (sample & hold) and smooth random, which loop a table at the LFO's
+  rate: 8 values a cycle, 16 cycles before it repeats, from a fixed seed, so
+  a WAV export wobbles the same way every time. A new shape builds a fresh
+  chain.
+- **Envelope** (`lpenv` / `lpdecay`): every note (and FX shot, and preview)
+  calls the chain's `trigger(t)`, which pushes the filter's `detune` to
+  ±4 octaves × the envelope in 2 ms and lets it fall back over the decay, on
+  top of the LFO. It is mono-synth style, one filter per lane: the acid
+  squelch on any sound.
+- **Phaser**: 4 allpasses at 900 Hz in series, swept ±2 octaves by a sine,
+  mixed with the dry signal and scaled by 1/√(1 + mix), which keeps it within
+  half a dB. **Tremolo**: a gain swinging between 1 and 1 − depth (so it does
+  lower the average level, ~3.7 dB at full depth). Both exist only while on,
+  so switching either on or off builds a fresh chain.
 - FX shots and the editor's previews get an insert too, and WAV exports render it.
 
 `lead.bits` ships with a resonant lowpass wobbling over 2 bars, to show it off;
@@ -405,8 +425,16 @@ The editor's **Groove and space** box (FX get only its pan half):
 | Swing | `swing`: 0-0.5 of a step | every odd 16th lands that much later (`eventsAt` adds it to the events' `offset`); shown MPC style, 50 % straight to 75 %, 66 % ≈ a triplet feel |
 | Nudge | `nudge`: ±30 ms | every hit of the sound earlier or later; the engine adds it to the time and never schedules closer than `SAFETY` |
 | Duck | `duck`: 0-1 | sidechain to the kick (Strudel's `duckorbit`); not on kicks |
-| Pan | `insert.pan`: −1..1 | a `StereoPannerNode` at the end of the insert |
+| Pan | `insert.pan`: −1..1 | a `StereoPannerNode` at the end of the insert, only while panned (see below) |
 | Autopan | `insert.width`, `insert.panRate` | a tempo-synced sine on the pan, like the filter LFO; switching it on or off builds a fresh chain (`kindOf`) |
+
+**Pan is not free at the centre.** A `StereoPannerNode` spreads a mono input
+equal-power, so at pan 0 it leaves each side at ×0.707 (−3 dB): every
+synthesized sound would lose 3 dB just by having one. So an unpanned sound
+(pan 0, no autopan) has no panner and its chain stays an identity, and a
+panned one gets √2 after the panner: unity at the centre again and constant
+power across a sweep. Moving the pan off 0, or back, swaps the chain with
+the usual 30 ms crossfade. A stereo sample, panned, comes out 3 dB hotter.
 
 **The sidechain is audio, not scheduled envelopes**, so it follows any kick
 pattern (ratchets, the background kick, a build-up) and renders into WAV
