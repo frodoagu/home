@@ -293,11 +293,43 @@ export function createEngine({
   // for GC, it never times audio.
   function fadeOut(holder, at = ctx.currentTime) {
     const { gain } = holder;
-    gain.gain.cancelScheduledValues(at);
-    gain.gain.setValueAtTime(gain.gain.value, at);
+    pin(holder, at);
     gain.gain.linearRampToValueAtTime(0, at + FADE);
     holder.chain.stop(at + FADE);
     setTimeout(() => release(holder), (at - ctx.currentTime + FADE + 0.05) * 1000);
+  }
+
+  // Clears a gain's automation from `at` on and holds the value it has then;
+  // returns it. A volume line still running is cut where it is, not undone.
+  function pin(holder, at) {
+    const param = holder.gain.gain;
+    const line = holder.line;
+    holder.line = null;
+    const now = ctx.currentTime;
+    if (!line || line.end <= now) {
+      param.cancelScheduledValues(at);
+      param.setValueAtTime(param.value, at);
+      return param.value;
+    }
+    const valueAt = (t) => line.from + ((line.to - line.from) * Math.min(1, (t - line.start) / (line.end - line.start)));
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(valueAt(now), now);
+    if (at > now) param.linearRampToValueAtTime(valueAt(at), at);
+    return valueAt(Math.max(at, now));
+  }
+
+  // A lane's gain to `value`: a quick glide (time constant `tau`), or a
+  // straight line over `ramp` seconds.
+  function moveGain(lane, value, tau, ramp = 0) {
+    const now = ctx.currentTime;
+    if (!ramp) {
+      if (lane.line) pin(lane, now);
+      lane.gain.gain.setTargetAtTime(value, now, tau);
+      return;
+    }
+    const from = pin(lane, now);
+    lane.gain.gain.linearRampToValueAtTime(value, now + ramp);
+    lane.line = { from, to: value, start: now, end: now + ramp };
   }
 
   function release({ gain, input, chain }) {
@@ -392,10 +424,11 @@ export function createEngine({
 
   /**
    * Swap the data a variant plays. Notes and params apply from the next
-   * scheduled step; a volume change glides the lanes playing it (20 ms) so
-   * the slider never zips, and so do the insert's knobs.
+   * scheduled step; a volume change glides the lanes playing it (20 ms, or
+   * in a straight line over `ramp` seconds) so the slider never zips, and so
+   * do the insert's knobs.
    */
-  function setData(id, next) {
+  function setData(id, next, ramp = 0) {
     data.set(id, next);
     if (!ctx) return;
     for (const [key, lane] of lanes) {
@@ -405,7 +438,7 @@ export function createEngine({
       const level = liveLane(key, id);
       if (level === lane.level) continue;
       lane.level = level;
-      lane.gain.gain.setTargetAtTime(level, ctx.currentTime, 0.02);
+      moveGain(lane, level, 0.02, ramp);
     }
   }
 
@@ -416,7 +449,7 @@ export function createEngine({
     for (const [key, lane] of lanes) {
       if (layerOf(lane.variant) !== layer) continue;
       lane.level = liveLane(key, lane.variant);
-      lane.gain.gain.setTargetAtTime(lane.level, ctx.currentTime, 0.02);
+      moveGain(lane, lane.level, 0.02);
     }
     if (layer !== "fx") return;
     for (const [id, fx] of fxPlaying) {
@@ -432,7 +465,7 @@ export function createEngine({
     if (!ctx) return;
     for (const [key, lane] of lanes) {
       lane.level = liveLane(key, lane.variant);
-      lane.gain.gain.setTargetAtTime(lane.level, ctx.currentTime, 0.01);
+      moveGain(lane, lane.level, 0.01);
     }
     for (const [fxId, fx] of fxPlaying) {
       if (fx.end > ctx.currentTime) fx.gain.gain.setTargetAtTime(liveShot(fxId), ctx.currentTime, 0.01);

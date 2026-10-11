@@ -49,9 +49,10 @@ export default {
           ["⏭ Next", "Ends the current section on the next loop."],
           ["Style", "Which sounds the autopilot uses. Changing it takes the BPM to the style's, gradually."],
           ["Changes", "How many bars between the autopilot's sound changes within a section."],
+          ["Volumes", "The autopilot mixes: each section has its own balance, the build-up swells into the peak, stacked sounds share their room and the pad steps back under the lead. It moves the fill of everything playing gradually, in smooth curves, yours too."],
           ["Seed", "The same seed builds the same track in any browser. Type your own or roll 🎲 for a new one; with the autopilot running, changing it restarts it."],
           ["🔗 Share", "Copies a link with the seed, style, BPM and your edited sounds: whoever opens it and hits 🤖 hears the same."],
-          ["Your edits win", "The autopilot never overwrites what you edited by hand."],
+          ["Your edits win", "The autopilot never overwrites what you edited by hand, except the volume."],
         ],
       },
       {

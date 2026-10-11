@@ -1309,6 +1309,24 @@ describe("autopilot", () => {
     expect(saved().variants[kick]).toEqual(ws.variants[kick]);
   });
 
+  it("rides the volume of every sound it plays, yours too, over the loop, and leaves the rest of your edit", () => {
+    click("bass.rolling");
+    advanceSeconds(BAR);
+    openEditor("bass.rolling");
+    const bright = editor("bass.rolling").querySelector('[data-param="bright"]');
+    bright.value = "2";
+    bright.dispatchEvent(new Event("input"));
+    button("bass.rolling").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect(saved().variants["bass.rolling"].level).toBeLessThan(1);
+    const glide = () => parseFloat(button("bass.rolling").style.getPropertyValue("--glide"));
+    expect(glide()).toBe(0); // by hand: at once
+    autoBtn().click(); // a groove: one bass at full level, reached over the loop
+    expect(glide()).toBeCloseTo(2 * BAR, 6);
+    expect(saved().variants["bass.rolling"]).toMatchObject({ level: 1, params: { bright: 2 } });
+    expect(saved().auto).not.toContain("bass.rolling");
+    expect(button("bass.rolling").parentElement.classList.contains("is-edited")).toBe(true);
+  });
+
   it("a style picks its sounds and takes the BPM to its own", () => {
     const style = $('[data-control="style"]');
     style.value = "techno";
