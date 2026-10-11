@@ -1271,6 +1271,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .layer {
+  position: relative; /* the open editor's anchor */
   display: grid;
   grid-template-columns: minmax(180px, 260px) 1fr;
   gap: 12px 18px;
@@ -1801,21 +1802,38 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 /* ---- editor panel ---- */
+/* A popover over the rows below, as wide as its layer, its top set from JS
+   to just under the tile. Below the sticky top bar (20). */
 .editor-slot {
-  grid-column: 1 / -1;
+  position: absolute;
+  left: -4px; /* flush with the layer's own borders */
+  right: -1px;
+  z-index: 15;
   min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--layer);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  animation: pop-in 120ms ease-out;
 }
 
 .editor-slot:empty {
   display: none;
 }
 
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 .editor {
   display: grid;
   gap: 10px;
   min-width: 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border);
 }
 
 .editor-head {
@@ -1914,8 +1932,11 @@ html:has(dialog.help[open], dialog.intro[open]) {
   font-weight: 400;
 }
 
-/* 🎲 New part waiting for the next loop. */
-.ghost[data-action="new-part"][aria-pressed="true"] {
+/* 🎲 New part waiting for the next loop; ×2 and the resets for the bar line. */
+.ghost[data-action="new-part"][aria-pressed="true"],
+.ghost[data-action="double"][aria-pressed="true"],
+.ghost[data-action="reset"][aria-pressed="true"],
+.ghost[data-action="reset-part"][aria-pressed="true"] {
   border-style: dashed;
   border-color: var(--layer);
   animation: pulse 0.9s ease-in-out infinite alternate;
@@ -2257,7 +2278,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   .bpm-value,
   .cue.is-armed,
   .rec.is-waiting,
-  .rec.is-recording {
+  .rec.is-recording,
+  .editor-slot {
     animation: none !important;
   }
 }

@@ -37,7 +37,7 @@ import {
   startPilot,
 } from "../autopilot.js";
 import { dress } from "../dress.js";
-import { IMPROV_DEFAULT, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
+import { IMPROV_DEFAULT, doubleSteps, improvise, newPart, seeded, styleOf, varyNotes, varySteps, withBuildUp } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
@@ -119,6 +119,7 @@ export function mountApp(root, engine, opts = {}) {
     ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
     bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
+    queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
   };
   let open = null; // the one open editor: { layer, id, editor }
@@ -463,6 +464,7 @@ export function mountApp(root, engine, opts = {}) {
   function renderTiles(layer) {
     for (const [id, t] of tiles) if (t.layer === layer) tiles.delete(id);
     sections.get(layer.id).group.replaceChildren(...ws.lists[layer.id].map((id) => makeTile(layer, id)));
+    placeEditor();
   }
 
   // One row of the layer list: a layer's tiles, or the snapshots'.
@@ -545,6 +547,7 @@ export function mountApp(root, engine, opts = {}) {
     snapExport.disabled = !ws.snapshots.length;
     snapTiles.clear();
     sections.get(SNAP_PANEL).group.replaceChildren(...ws.snapshots.map(makeSnapTile));
+    placeEditor();
   }
 
   for (const id of ws.order) {
@@ -881,6 +884,7 @@ export function mountApp(root, engine, opts = {}) {
       state.newParts.clear();
       varyAll();
     }
+    runQueued();
     rollBuildUp(step);
     stepRamp();
     let changed = false;
@@ -1009,6 +1013,68 @@ export function mountApp(root, engine, opts = {}) {
     }
     const target = state.pending ?? state.active;
     if (!isOn(target, id)) press(layer, id);
+  }
+
+  // ×2 and the resets: on the next bar line while it runs (a second click
+  // cancels), at once when it is stopped.
+  const edits = {
+    double: (layer, id) => {
+      const data = dataNow(id); // an improvised part doubles as it plays
+      setVariant(id, { ...data, steps: doubleSteps(data.steps) });
+      if (open?.id === id) open.editor.show(dataNow(id));
+    },
+    reset: (layer, id) => {
+      if (isCopy(id)) ws.variants[id] = defaultData(id);
+      else delete ws.variants[id];
+      ws.auto = ws.auto.filter((x) => x !== id);
+      delete ws.improv[id];
+      state.newParts.delete(id);
+      state.varying.delete(id); // back to the factory part, improvise off too
+      feed(id, dataOf(id));
+      persist();
+      renderButtons();
+      if (open?.id === id) openEditor(layer, id); // rebuild with the factory values
+    },
+    // Only the factory notes (or hits): the voice, the insert and the volume stay.
+    "reset-part": (layer, id) => {
+      const key = defOf(id).kind === "drum" ? "steps" : "notes";
+      const factory = defaultData(id);
+      state.newParts.delete(id);
+      setVariant(id, { ...dataOf(id), [key]: structuredClone(factory[key]) });
+      if (!isCopy(id) && JSON.stringify(ws.variants[id]) === JSON.stringify(factory)) {
+        delete ws.variants[id]; // nothing left that differs from factory
+        persist();
+        renderButtons();
+      }
+      if (open?.id === id) {
+        open.editor.showNewPart(false);
+        open.editor.show(dataNow(id));
+      }
+    },
+  };
+
+  function askEdit(layer, id, action) {
+    const running = engine.isRunning();
+    // Like any edit, ×2 on something silent switches it on.
+    const target = state.pending ?? state.active;
+    if (action === "double" && !layer.oneShot && !isOn(target, id)) press(layer, id);
+    if (!running) return edits[action](layer, id);
+    const actions = state.queued.get(id) ?? new Set();
+    if (!actions.delete(action)) actions.add(action);
+    if (actions.size) state.queued.set(id, actions);
+    else state.queued.delete(id);
+    if (open?.id === id) open.editor.showQueued(action, actions.has(action));
+  }
+
+  function runQueued() {
+    const queued = state.queued;
+    state.queued = new Map();
+    for (const [id, actions] of queued) {
+      for (const action of actions) {
+        if (open?.id === id) open.editor.showQueued(action, false);
+        edits[action](layerOf(id), id);
+      }
+    }
   }
 
   // The tile's fill: only the sound's volume changes, an improvised part
@@ -1209,9 +1275,7 @@ export function mountApp(root, engine, opts = {}) {
       onClose: closeEditor,
     });
     open = { layer: { id: SNAP_PANEL }, id, editor };
-    sections.get(SNAP_PANEL).slot.replaceChildren(editor.node);
-    snapTiles.get(id).edit.setAttribute("aria-expanded", "true");
-    editor.node.scrollIntoView?.({ block: "nearest" });
+    showEditor(editor.node);
     if (focusName) editor.focusName();
   }
 
@@ -1231,11 +1295,47 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   /* ---- editors: one open at a time ---- */
+  // The open editor floats over the page just under its tile, like a context
+  // menu: the rows below stay put, and a click elsewhere or Esc closes it.
+  function openTile() {
+    return open ? (tiles.get(open.id) ?? snapTiles.get(open.id)) : null;
+  }
+
+  function placeEditor() {
+    const anchor = openTile()?.tile;
+    if (!anchor) return;
+    const { node, slot } = sections.get(open.layer.id);
+    const top = anchor.getBoundingClientRect().bottom - node.getBoundingClientRect().top - node.clientTop;
+    slot.style.top = `${top + 6}px`;
+  }
+
+  function showEditor(node) {
+    sections.get(open.layer.id).slot.replaceChildren(node);
+    openTile().edit.setAttribute("aria-expanded", "true");
+    placeEditor();
+    node.scrollIntoView?.({ block: "nearest" });
+  }
+
+  const onOutside = (e) => {
+    if (!open || !e.target.isConnected) return;
+    if (sections.get(open.layer.id).slot.contains(e.target) || openTile()?.edit.contains(e.target)) return;
+    closeEditor();
+  };
+  const onEscape = (e) => {
+    if (e.key !== "Escape" || !open) return;
+    const { edit } = openTile() ?? {};
+    closeEditor();
+    edit?.focus();
+  };
+  document.addEventListener("pointerdown", onOutside);
+  document.addEventListener("keydown", onEscape);
+  window.addEventListener("resize", placeEditor);
+
   function closeEditor() {
     if (!open) return;
     open.editor.destroy();
     sections.get(open.layer.id).slot.replaceChildren();
-    (tiles.get(open.id) ?? snapTiles.get(open.id))?.edit.setAttribute("aria-expanded", "false");
+    openTile()?.edit.setAttribute("aria-expanded", "false");
     open = null;
   }
 
@@ -1261,32 +1361,10 @@ export function mountApp(root, engine, opts = {}) {
         if (layer.oneShot || engine.isRunning()) return;
         engine.audition(id, note);
       },
-      onReset: () => {
-        if (isCopy(id)) ws.variants[id] = defaultData(id);
-        else delete ws.variants[id];
-        ws.auto = ws.auto.filter((x) => x !== id);
-        delete ws.improv[id];
-        state.newParts.delete(id);
-        state.varying.delete(id); // back to the factory part, improvise off too
-        feed(id, dataOf(id));
-        persist();
-        renderButtons();
-        openEditor(layer, id); // rebuild with the factory values
-      },
-      // Only the factory notes (or hits): the voice, the insert and the volume stay.
-      onResetPart: () => {
-        const key = defOf(id).kind === "drum" ? "steps" : "notes";
-        const factory = defaultData(id);
-        state.newParts.delete(id);
-        open.editor.showNewPart(false);
-        setVariant(id, { ...dataOf(id), [key]: structuredClone(factory[key]) });
-        if (!isCopy(id) && JSON.stringify(ws.variants[id]) === JSON.stringify(factory)) {
-          delete ws.variants[id]; // nothing left that differs from factory
-          persist();
-          renderButtons();
-        }
-        open.editor.show(dataNow(id));
-      },
+      onDouble: () => askEdit(layer, id, "double"),
+      onReset: () => askEdit(layer, id, "reset"),
+      onResetPart: () => askEdit(layer, id, "reset-part"),
+      queued: state.queued.get(id) ?? new Set(),
       onClose: closeEditor,
       onTrigger: () => fire(id),
       onRename: (name) => rename(id, name),
@@ -1310,10 +1388,8 @@ export function mountApp(root, engine, opts = {}) {
       },
     });
     open = { layer, id, editor };
-    sections.get(layer.id).slot.replaceChildren(editor.node);
-    tiles.get(id).edit.setAttribute("aria-expanded", "true");
+    showEditor(editor.node);
     editor.paint(engine.visibleStep());
-    editor.node.scrollIntoView?.({ block: "nearest" });
     if (focusName) editor.focusName();
   }
 
@@ -1421,6 +1497,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.auto = ws.auto.filter((x) => x !== id);
     state.varying.delete(id);
     state.newParts.delete(id);
+    state.queued.delete(id);
     if (state.buildUp?.id === id) state.buildUp = null;
     const without = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v !== id));
     if (state.pending) state.pending = without(state.pending);
@@ -1521,6 +1598,9 @@ export function mountApp(root, engine, opts = {}) {
     samplesPanel?.destroy();
     sampleOffs.forEach((off) => off?.());
     window.removeEventListener("hashchange", onHash);
+    document.removeEventListener("pointerdown", onOutside);
+    document.removeEventListener("keydown", onEscape);
+    window.removeEventListener("resize", placeEditor);
   }
 
   function remount(changes = {}) {
@@ -1693,6 +1773,8 @@ export function mountApp(root, engine, opts = {}) {
     state.ramp = null;
     state.newParts.clear();
     open?.editor.showNewPart(false);
+    for (const action of state.queued.get(open?.id) ?? []) open.editor.showQueued(action, false);
+    state.queued.clear();
     showRamp();
     if (state.buildUp) setBuildUp(state.buildUp.id, false);
     lanes = {};
