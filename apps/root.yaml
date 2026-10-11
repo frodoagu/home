@@ -30,3 +30,20 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      # Re-apply only the Applications that actually diff. A full apply
+      # replaces each `finalizers` list with git's, stripping the controller's
+      # delete-hook finalizers below on every root sync.
+      # (RespectIgnoreDifferences=true doesn't help: it restores a list field
+      # to the git value when only live has the ignored entries.)
+      - ApplyOutOfSyncOnly=true
+  # When a child app renders a Helm pre-delete/post-delete hook (e.g. the
+  # vm-operator CRD cleanup Job in charts/monitoring), the Argo CD controller
+  # adds `{pre,post}-delete-finalizer.argocd.argoproj.io` (+ `/cleanup`) to
+  # that Application. They aren't in git, so root sat OutOfSync forever.
+  # Drop only those entries: a finalizer changed in git still diffs.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Application
+      jqPathExpressions:
+        - '.metadata.finalizers[]? | select(startswith("pre-delete-finalizer.argocd.argoproj.io") or startswith("post-delete-finalizer.argocd.argoproj.io"))'

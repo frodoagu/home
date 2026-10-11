@@ -186,6 +186,19 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 
 ## Per-chart gotchas (hard-won — don't re-investigate)
 
+- **root — controller-added delete-hook finalizers.** Argo CD (3.5 here) maps
+  Helm `pre-delete`/`post-delete` hooks to PreDelete/PostDelete and, for any
+  child app that renders one, adds `{pre,post}-delete-finalizer.argocd.argoproj.io`
+  (+ `/cleanup`) to that Application. Today that's `monitoring`: the k8s-stack
+  turns on `victoria-metrics-operator.crds.cleanup` (a pre-delete Job that
+  removes VM* CRs before the operator goes). Those entries aren't in git, so
+  `apps/root.yaml` ignores them via `jqPathExpressions` and syncs with
+  `ApplyOutOfSyncOnly=true`. A full apply would swap each `finalizers` list for
+  git's and strip them, and the controller would put them back.
+  `RespectIgnoreDifferences=true` does NOT preserve them: its
+  `restoreNonIgnoredFields` resets a list to the git value when only live holds
+  the ignored entries. Don't add these finalizers to `apps/*.yaml` either: the
+  controller owns them and removes them once the hook is gone.
 - **monitoring — the `VMRule` sits OutOfSync forever without `ignoreDifferences`.**
   The VMRule CRD schema defaults `record` (and `alert`) to `""`, so the API
   server stamps `record: ""` onto every alerting rule and the live object cannot
