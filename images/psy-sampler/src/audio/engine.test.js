@@ -245,6 +245,95 @@ describe("bar hook", () => {
   });
 });
 
+describe("tap sync", () => {
+  const step = stepDuration(145);
+  // The perc.shaker hits every step: its start times are the grid itself.
+  // Only the sources made from here on, so notes the old grid had queued (and
+  // its lane fades) stay out.
+  const hitsFrom = (n) =>
+    ctx
+      .sources()
+      .slice(n)
+      .filter((src) => src.kind === "buffer")
+      .map((src) => src.startTime);
+
+  it("restart() plays the 1 right away and runs the grid from the tap, fading what the old grid queued", () => {
+    const calls = [];
+    engine.onBar((time, s, bar) => {
+      calls.push([time, s, bar]);
+    });
+    engine.setLanes({ perc: "perc.shaker" });
+    run(0.5);
+    const [oldLane] = laneGains();
+    const n = ctx.sources().length;
+    const now = ctx.currentTime;
+    engine.restart(performance.now() - 20); // the tap was 20 ms ago
+    const zero = now - 0.02;
+    const at = now + 0.015; // SAFETY: the 1 is due already
+    expect(oldLane.gain.events[0]).toEqual(["cancel", at]);
+    expect(calls.at(-1)).toEqual([at, 0, 0]);
+    run(1);
+    const [first, ...rest] = hitsFrom(n);
+    expect(first).toBeCloseTo(at, 9);
+    rest.forEach((t, i) => expect(t).toBeCloseTo(zero + (i + 1) * step, 9));
+    expect(rest.length).toBeGreaterThan(8);
+  });
+
+  it("restart() reads the output clock when the browser pairs it, latency included", () => {
+    engine.setLanes({ perc: "perc.shaker" });
+    run(0.5);
+    // The speakers are 40 ms behind the audio clock.
+    ctx.getOutputTimestamp = () => ({ contextTime: ctx.currentTime - 0.04, performanceTime: performance.now() });
+    const n = ctx.sources().length;
+    const now = ctx.currentTime;
+    engine.restart(performance.now() - 100); // heard 100 ms ago: audio time now - 0.14
+    run(1);
+    // Step 1 (at -0.04) has passed and is skipped; step 2 is on the grid.
+    expect(hitsFrom(n)[1]).toBeCloseTo(now - 0.14 + 2 * step, 9);
+  });
+
+  it("restart() does nothing with the loop stopped", () => {
+    engine.restart(performance.now());
+    expect(engine.isRunning()).toBe(false);
+  });
+
+  // The flow the app drives: restart on the first tap, then BPM + align.
+  function tapped(bpm, drift) {
+    engine.setLanes({ perc: "perc.shaker" });
+    run(0.5);
+    const tap0 = performance.now();
+    const fresh = ctx.sources().length;
+    engine.restart(tap0);
+    run(60 / bpm); // one tapped beat later, the second tap
+    engine.setBpm(bpm);
+    const n = ctx.sources().length;
+    const seam = Math.max(...hitsFrom(fresh));
+    engine.align(tap0 + drift * 1000); // the fit puts the 1 `drift` s off the first tap
+    run(1.5);
+    const zero = 0.5 + drift;
+    return { fresh, n, seam, zero };
+  }
+
+  for (const [label, bpm] of [
+    ["a small correction", 150],
+    ["a big jump down", 110],
+  ]) {
+    it(`align() puts every step after the seam on the tapped grid, never doubling one (${label})`, () => {
+      const { fresh, n, seam, zero } = tapped(bpm, 0.012);
+      const d = stepDuration(bpm);
+      const all = hitsFrom(fresh).sort((a, b) => a - b);
+      const gaps = all.slice(1).map((t, i) => t - all[i]);
+      expect(Math.min(...gaps)).toBeGreaterThan(d / 2 - 1e-9);
+      const moved = hitsFrom(n).filter((t) => t > seam + 1e-9);
+      expect(moved.length).toBeGreaterThan(6);
+      for (const t of moved) {
+        const k = Math.round((t - zero) / d);
+        expect(t).toBeCloseTo(zero + k * d, 9);
+      }
+    });
+  }
+});
+
 describe("render", () => {
   let offline;
   const renderer = () => {

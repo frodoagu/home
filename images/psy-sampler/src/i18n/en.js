@@ -67,7 +67,7 @@ export default {
         title: "Playing live",
         items: [
           ["BPM", "From 60 to 180; the slider changes the tempo at once."],
-          ["Tap", "Next to the BPM: tap it to the beat (two taps are enough, more is more precise) and the BPM follows your taps. Half or double time works too; a 2 s pause starts over."],
+          ["Tap", "Left of the BPM, to lock onto another track or another tab: the first tap takes the loop back to the 1 of the bar right there (start on the 1 of what you follow) and every tap after it adjusts the BPM and the phase live. More taps, more precise: about 20 nail the exact BPM. Half or double time works too; a 2 s pause starts over."],
           ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
           ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],
           ["Delay 3/16 and Reverb", "The mix effects: switch them on and off any time."],
@@ -162,7 +162,7 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
-    tapTitle: "Tap it to the beat, tap tap tap tap: sets the BPM to the average of your taps",
+    tapTitle: "Tap it to the beat, tap tap tap tap: the first goes back to the 1 of the bar, the rest bring the BPM and the phase to your taps",
     bgKick: "Background kick",
     delay: "Delay 3/16",
     reverb: "Reverb",

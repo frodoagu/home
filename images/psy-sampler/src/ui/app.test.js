@@ -1511,6 +1511,100 @@ describe("BPM change", () => {
     expect($(".bpm-value").textContent).toBe("150");
   });
 
+  describe("Tap sync", () => {
+    const tapBtn = () => $('[data-action="tap"]');
+    const press = () => tapBtn().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    // The audio clock and performance.now() move together here, 1 s = 1000 ms.
+    const offset = () => performance.now() - ctx.currentTime * 1000;
+    const advanceTo = (ms) => {
+      for (let left = ms - performance.now(); left > 1e-6; left = ms - performance.now()) {
+        const dt = Math.min(25, left);
+        ctx.currentTime += dt / 1000;
+        vi.advanceTimersByTime(dt);
+      }
+    };
+    const kicksFrom = (n) =>
+      ctx
+        .sources()
+        .slice(n)
+        .filter((s) => s.kind === "oscillator" && s.frequency.events[0]?.[1] === 120)
+        .map((s) => s.startTime);
+
+    it("sits left of the BPM slider", () => {
+      const tempo = $(".topbar-tempo");
+      expect(tempo.firstElementChild).toBe(tapBtn());
+      expect(tempo.children[1].querySelector("#bpm")).not.toBeNull();
+    });
+
+    it("the first tap takes the loop back to its 1, right there", () => {
+      immediate();
+      click("kick.long");
+      advanceSeconds(1.1); // well into the bar: the next kick on the old grid is some way off
+      const n = ctx.sources().length;
+      const now = ctx.currentTime;
+      press();
+      expect(kicksFrom(n)[0]).toBeCloseTo(now + 0.015, 6);
+      expect($("#bpm").value).toBe("145"); // one tap: no tempo yet
+      advance(1);
+      expect([engine.visibleStep(), engine.visibleLoop()]).toEqual([0, 0]);
+    });
+
+    it("locks the loop onto a beat it is tapped along to: tempo and phase", () => {
+      immediate();
+      click("kick.long"); // a kick on every beat, at 145
+      advanceSeconds(0.73);
+      // The other tab: 150 BPM, its beat 137 ms after an arbitrary moment.
+      const beat = 400;
+      const ref = performance.now() + 137;
+      const jitter = [6, -4, 3, -7, 5, -2, 4, -5];
+      jitter.forEach((j, k) => {
+        advanceTo(ref + k * beat + j);
+        press();
+      });
+      expect($("#bpm").value).toBe("150");
+      const n = ctx.sources().length;
+      advanceSeconds(4 * BAR);
+      const kicks = kicksFrom(n);
+      expect(kicks.length).toBeGreaterThan(10);
+      const zero = (ref - offset()) / 1000; // the other tab's beat, on this tab's audio clock
+      for (const t of kicks) {
+        const k = Math.round((t - zero) / 0.4);
+        expect(Math.abs(t - (zero + k * 0.4))).toBeLessThan(0.003);
+      }
+      // ...and its bars: the first tap was the 1, so every 4th beat from it starts one.
+      const bar = Math.ceil((performance.now() - ref) / beat / 4) * 4 + 4; // a tapped beat 4k ahead
+      advanceTo(ref + bar * beat + 5);
+      expect(engine.visibleStep() % 16).toBe(0);
+      advanceTo(ref + (bar + 1) * beat + 5);
+      expect(engine.visibleStep() % 16).toBe(4);
+    });
+
+    it("Space and Enter tap on the press, once, not again on the click they cause", () => {
+      immediate();
+      click("kick.long");
+      advance(10);
+      const start = performance.now() + 100;
+      [" ", "Enter", " "].forEach((key, k) => {
+        advanceTo(start + k * 400);
+        tapBtn().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        advanceTo(start + k * 400 + 150);
+        tapBtn().click(); // the key's own click (Space sends it on the release), past the bounce window
+      });
+      expect($("#bpm").value).toBe("150");
+    });
+
+    it("a bounce right after a tap is not a beat", () => {
+      immediate();
+      click("kick.long");
+      advance(10);
+      for (const t of [0, 400, 430, 800, 1200]) {
+        advanceTo(10_000 + t);
+        press();
+      }
+      expect($("#bpm").value).toBe("150");
+    });
+  });
+
   it("with the loop stopped, it just sets the BPM", () => {
     rampTo(160);
     expect($("#bpm").value).toBe("160");

@@ -25,8 +25,12 @@
 // What a variant plays is data (patterns.js) the UI can edit at any time:
 // setData() swaps it and the scheduler reads it on the next step.
 //
+// Tap sync: restart() takes the loop back to its first step at a tap, and
+// align() moves the grid onto the beat the taps lay down (tempo.js).
+//
 // tap() hands out what the trim sends to the destination, for recording.
 import {
+  alignCursor,
   collectSteps,
   nextBeatTime,
   stepDuration,
@@ -292,15 +296,17 @@ export function createEngine({
     lane.entered = true;
   }
 
+  function queueStep(s, stepDur) {
+    if (s.step % BAR_STEPS === 0) atBar(s);
+    for (const lane of lanes.values()) scheduleLane(lane, s, stepDur);
+    queued.push(s);
+  }
+
   function tick() {
     const stepDur = stepDuration(bpm); // read every tick: the BPM slider applies live
     const { due, cursor: next } = collectSteps(cursor, ctx.currentTime, LOOKAHEAD, stepDur);
     cursor = next;
-    for (const s of due) {
-      if (s.step % BAR_STEPS === 0) atBar(s);
-      for (const lane of lanes.values()) scheduleLane(lane, s, stepDur);
-      queued.push(s);
-    }
+    for (const s of due) queueStep(s, stepDur);
     const horizon = ctx.currentTime - 1;
     while (queued.length && queued[0].time < horizon) queued.shift();
     if (stopAt !== null && ctx.currentTime >= stopAt + FADE) stopLoop();
@@ -433,6 +439,48 @@ export function createEngine({
     stopAt = null;
     tick();
     timer = setInterval(tick, TICK_MS);
+  }
+
+  // The audio time of what leaves the speakers at `heard`, a performance.now()
+  // time such as an input event's timeStamp. getOutputTimestamp() pairs the two
+  // clocks and counts the output latency; without it, the latency the context
+  // reports.
+  function audioTimeAt(heard) {
+    const out = ctx.getOutputTimestamp?.();
+    if (out?.performanceTime > 0) return out.contextTime + (heard - out.performanceTime) / 1000;
+    return ctx.currentTime - (ctx.outputLatency || 0) + (heard - performance.now()) / 1000;
+  }
+
+  /**
+   * Tap sync: the loop starts over from its first step, the 1 heard at `heard`
+   * (ms, performance.now()), as a fresh ▶ would. That moment has passed by the
+   * time the tap gets here, so the 1 plays as soon as it safely can and the
+   * steps after it fall on the grid that starts at the tap. Every lane fades
+   * and reopens there, so what the old grid had queued does not flam on top.
+   */
+  function restart(heard) {
+    if (!cursor || lanes.size === 0) return;
+    const zero = audioTimeAt(heard);
+    const at = Math.max(zero, ctx.currentTime + SAFETY);
+    const playing = Object.fromEntries([...lanes].map(([key, lane]) => [key, lane.variant]));
+    for (const lane of lanes.values()) fadeOut(lane, at);
+    lanes.clear();
+    reconcile(playing, at, false);
+    queued = queued.filter((s) => s.time < at);
+    bars = 0;
+    stopAt = null;
+    const stepDur = stepDuration(bpm);
+    queueStep({ step: 0, time: at, loop: 0 }, stepDur);
+    cursor = { step: 1, time: zero + stepDur, loop: 0 };
+  }
+
+  /**
+   * Tap sync: from the next step on, the loop runs on the grid whose step 0
+   * was heard at `heard` (ms, performance.now()), at the current BPM. Notes
+   * already queued keep their time, so the seam is at most half a step off.
+   */
+  function align(heard) {
+    if (cursor) cursor = alignCursor(cursor, audioTimeAt(heard), stepDuration(bpm));
   }
 
   function stopLoop() {
@@ -714,6 +762,8 @@ export function createEngine({
     setSolo,
     setEffects,
     setBpm,
+    restart,
+    align,
     setMasterFilter,
     triggerFx,
     audition,

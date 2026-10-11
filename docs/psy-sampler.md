@@ -102,12 +102,43 @@ goes through it:
   comes in at most one step after the line. With the loop stopped there are no
   bars: it changes right away. Moving the slider, Stop, Tap or the same button
   cut it short.
-- **Tap** (next to the BPM): tapping it to the beat sets the BPM to the average
-  interval of the last eight taps (`addTap` / `tapBpm` in `tempo.js`), from the
-  second tap on, at once, like the slider. A tempo far outside 60-180 moves by
-  octaves first, so tapping half or double time lands in range; a 2 s pause
-  starts a new count. It counts on `pointerdown`, not the click, to follow the
-  hand; Enter and Space tap too.
+- **Tap** (left of the BPM): tap along to another track, or another
+  psy-sampler tab, and the loop locks onto it, tempo and phase.
+  - The **first tap** of a count is the 1: `engine.restart()` takes the loop
+    back to step 0 of loop 0 right there, like a fresh ▶ (the bar hook sees
+    bar 0 again). The tap is already in the past when the handler runs, so the
+    1 plays as soon as it safely can (`SAFETY`) and the steps after it fall on
+    the grid that starts at the tap; every lane fades and reopens there, so
+    the steps the old grid had queued inside the lookahead don't flam on top.
+  - From the **second tap** on, `tapBeat` (`tempo.js`) fits one least-squares
+    line through every tap of the count (the last 32 of them): the BPM is its
+    slope, rounded to the slider, and `at` is where the 1 falls on it at that
+    BPM. The app sets the BPM and `engine.align(at)` moves the cursor onto that
+    grid (`alignCursor` in `timing.js`): the closest step, never back past the
+    cursor. Notes already queued keep their time, so the seam is at most half a
+    step off; a big tempo jump leaves a short hole there instead of doubling
+    the steps the old grid already played. Each tap re-aligns, so the phase
+    never drifts while you keep tapping.
+  - **Precision** (Monte Carlo, taps scattered σ = 15 ms around 145 BPM): the
+    fit lands on the exact whole BPM 46 % of the time after 8 taps, 92 % after
+    16, ~100 % after 24; first-to-last (the old way, capped at 8 taps) topped
+    out at 37 %. The 1 lands ~8 ms off on average after 8 taps, ~5 ms after 16. Whole
+    BPM is the point: two psy-sampler tabs, and most produced tracks, run at
+    a whole BPM, so once it is right nothing drifts. A source at a fractional
+    tempo (a pitched-up deck) drifts by the rounding until the next tap.
+  - **Clocks**: taps are timed by the input event's `timeStamp`, not by when
+    the handler runs (a busy main thread would jitter them), and mapped to
+    the audio clock through `AudioContext.getOutputTimestamp()`, which pairs
+    `performance.now()` with the sample leaving the speakers (output latency
+    included); without it, `currentTime - outputLatency`. What stays out of
+    reach: your own tapping bias (most people tap 10-40 ms ahead of the beat)
+    and any latency the browser doesn't report (Bluetooth), both of which
+    show up as a constant offset.
+  - Half or double time works: a tempo far outside 60-180 moves by octaves
+    and the 1 stays on the first tap. A 2 s pause starts a new count; a tap
+    under 120 ms after the last is a bounce and is dropped. It counts on
+    `pointerdown` and on the Space/Enter `keydown`, never on the click they
+    cause. With the loop stopped, taps only set the BPM.
 
 `triggerFx(id, at)` takes a time, so the autopilot fires FX on the same bar
 line.

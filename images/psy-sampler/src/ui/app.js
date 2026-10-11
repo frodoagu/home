@@ -66,7 +66,7 @@ import {
 } from "../share.js";
 import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
-import { RAMP_BARS, addTap, clampBpm, rampAt, tapBpm } from "../tempo.js";
+import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
   SNAP_PANEL,
   cleanSeed,
@@ -650,8 +650,8 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "topbar-tempo" },
-      el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
       tapBtn,
+      el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
       rampBox,
     ),
     el("div", { class: "topbar-end" }, help.button, ...(account ? [account.node] : []), language),
@@ -1776,19 +1776,43 @@ export function mountApp(root, engine, opts = {}) {
     setTempo(Number(bpm.value));
     showRamp();
   });
-  // Tap tempo: on the press, not the release, so it follows the hand.
-  let taps = [];
-  const tap = () => {
-    taps = addTap(taps, Date.now());
-    const next = tapBpm(taps);
-    if (next === null) return;
-    state.ramp = null;
-    setTempo(next);
+  // Tap tempo (tempo.js): the first tap of a count takes the loop back to its
+  // 1, every tap after it brings the BPM and the phase onto the tapped beat.
+  // On the press, not the release, and timed by the event, not by when the
+  // handler runs: a busy main thread would otherwise jitter every tap.
+  let taps = null;
+  const tapTime = (e) => {
+    const now = performance.now();
+    return Math.abs(now - e.timeStamp) < 1000 ? e.timeStamp : now; // an epoch timeStamp (old engines) is no use
+  };
+  const tap = (e) => {
+    const at = tapTime(e);
+    const before = taps;
+    taps = addTap(taps, at);
+    if (taps === before) return; // a bounce
+    state.ramp = null; // the hand wins
+    const beat = tapBeat(taps);
+    if (beat) {
+      setTempo(beat.bpm);
+      engine.align(beat.at);
+    } else engine.restart(at);
     showRamp();
   };
-  tapBtn.addEventListener("pointerdown", tap);
+  tapBtn.addEventListener("pointerdown", (e) => {
+    if (e.button === 0) tap(e);
+  });
+  // Space and Enter tap on the key press. The key's own click (Space clicks on
+  // the release) is not a second tap; a click with no pointer or key behind it
+  // (assistive tech) is a tap.
+  let keyedAt = -Infinity;
+  tapBtn.addEventListener("keydown", (e) => {
+    if ((e.key !== " " && e.key !== "Enter") || e.repeat) return;
+    e.preventDefault();
+    keyedAt = performance.now();
+    tap(e);
+  });
   tapBtn.addEventListener("click", (e) => {
-    if (e.detail === 0) tap(); // Enter or Space
+    if (e.detail === 0 && performance.now() - keyedAt > 1000) tap(e);
   });
   rampBtn.addEventListener("click", () => {
     if (!state.ramp) startRamp();

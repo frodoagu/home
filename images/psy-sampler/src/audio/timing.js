@@ -53,3 +53,17 @@ export function nextBeatTime(cursor, stepDur) {
   const toBeat = (4 - (cursor.step % 4)) % 4;
   return cursor.time + toBeat * stepDur;
 }
+
+/**
+ * The cursor moved onto another grid, one whose loop started (step 0 of
+ * loop 0) at `zero`: the next step to schedule becomes the grid step closest
+ * to where the cursor was, at that step's time on the grid. It never moves
+ * back past the cursor: steps the old grid already queued are not queued
+ * twice, and the grid catches up with them in a short gap instead. A grid
+ * running ahead skips the steps whose time has passed.
+ */
+export function alignCursor(cursor, zero, stepDur) {
+  const queued = (cursor.loop ?? 0) * LOOP_STEPS + cursor.step;
+  const next = Math.max(queued, Math.round((cursor.time - zero) / stepDur));
+  return { step: next % LOOP_STEPS, time: zero + next * stepDur, loop: Math.floor(next / LOOP_STEPS) };
+}
