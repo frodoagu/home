@@ -177,6 +177,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `jqPathExpressions` `select(.record == "")`, so a real recording rule still
   diffs. Don't reach for `ServerSideDiff=true` — it hides this one but surfaces
   false diffs on Grafana and the operator's webhook. See docs/monitoring.md.
+- **monitoring — Grafana restarts on every commit without a pinned admin Secret.**
+  With no `adminPassword`/`admin.existingSecret` the Grafana chart mints a
+  `randAlphaNum` password on every render (Argo CD doesn't run `lookup`), and the
+  Deployment's `checksum/secret` annotation turns that into a rollout. Argo CD
+  re-renders on every new git revision, so ANY commit to the repo restarted the
+  ephemeral Grafana. `grafana.admin.existingSecret: grafana-admin` (SealedSecret)
+  fixes it. Check with two `helm template` runs + `diff`: the only remaining churn
+  is the vm-operator webhook's `genCA` cert, which rolls no pod.
 - **monitoring — Grafana datasources/plugins.** The VM k8s-stack provisions
   datasources via `victoria-metrics-k8s-stack.defaultDatasources` (it renders a
   `grafana_datasource`-labelled ConfigMap that the Grafana sidecar imports), NOT

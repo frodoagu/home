@@ -27,6 +27,7 @@ see [.gitignore](../.gitignore).
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
+| `grafana-admin` | `monitoring` | Grafana (`admin.existingSecret`) + its dashboard sidecar | Random admin `admin-user` / `admin-password`; no one logs in with it (auth.proxy). Pinned so the chart stops minting a new one per render and rolling the pod |
 | `pihole-admin` | `pihole` (+ `monitoring`) | Pi-hole web UI (+ pihole-exporter) | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI). When it is set, the exporter needs a copy in `monitoring` (`piholeExporter.passwordSecret`) |
 
 ## Create them
@@ -182,6 +183,7 @@ beside the chart that consumes them:
 | `cloudflare-ddns-token` (cloudflare-ddns) | `charts/cloudflare-ddns/templates/cloudflare-ddns-token-sealed.yaml` |
 | `ha-google-sa` (home-assistant) | `charts/home-assistant/templates/ha-google-sa-sealed.yaml` |
 | `alertmanager-telegram` (monitoring) | `charts/monitoring/templates/alertmanager-telegram-sealed.yaml` |
+| `grafana-admin` (monitoring) | `charts/monitoring/templates/grafana-admin-sealed.yaml` |
 
 Install the CLI once, matching the controller's `appVersion` in
 `charts/sealed-secrets/Chart.yaml` (`brew install kubeseal`). The controller is

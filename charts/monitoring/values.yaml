@@ -329,6 +329,13 @@ victoria-metrics-k8s-stack:
     # `helm test` hook pod; Argo CD never runs it.
     testFramework:
       enabled: false
+    # Admin credentials from templates/grafana-admin-sealed.yaml. Without it the
+    # chart mints a random password on every render (Argo CD can't run its
+    # `lookup`), and the checksum/secret annotation rolls the pod on every commit.
+    # Nobody logs in with it (auth.proxy, login form off); the dashboard sidecar
+    # uses it for the reload API.
+    admin:
+      existingSecret: grafana-admin
     # We expose Grafana via our own Traefik IngressRoute (templates/grafana-ingress.yaml).
     ingress:
       enabled: false
