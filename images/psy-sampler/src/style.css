@@ -881,7 +881,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   gap: 8px 12px;
 }
 
-.auto {
+.auto,
+.tour {
   padding: 7px 14px;
   font: inherit;
   font-weight: 600;
@@ -892,9 +893,15 @@ html:has(dialog.help[open], dialog.intro[open]) {
   cursor: pointer;
 }
 
-.auto[aria-pressed="true"] {
+.auto[aria-pressed="true"],
+.tour[aria-pressed="true"] {
   color: var(--on-current);
   background: var(--current);
+}
+
+.tour:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .section-badge {
@@ -1581,6 +1588,13 @@ html:has(dialog.help[open], dialog.intro[open]) {
    a fading fill going out. */
 .variant.is-queued {
   border-style: dashed;
+  border-color: var(--layer);
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* The snapshot the snapshot autopilot plays next, in its last loop. */
+.variant.is-next {
+  border-style: dotted;
   border-color: var(--layer);
   animation: pulse 0.9s ease-in-out infinite alternate;
 }
@@ -2520,6 +2534,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
     transition: none;
   }
   .variant.is-queued,
+  .variant.is-next,
   .variant.is-leaving,
   .variant::after,
   .bpm-value,

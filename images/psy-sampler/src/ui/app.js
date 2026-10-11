@@ -4,7 +4,8 @@
 // clicks, the autopilot, improvise variations) run in the engine's bar hook.
 // Snapshots recall a saved mix (and the data it played) on the next bar line;
 // a BPM change ramps there too, one slice per bar. The autopilot dresses each
-// sound it brings in from the seed (dress.js) and writes new melodies.
+// sound it brings in from the seed (dress.js) and writes new melodies; the
+// snapshot autopilot plays the snapshots one after another instead.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 // The signed-in user's samples (samples.js) load as the sounds using them
@@ -64,7 +65,20 @@ import {
   unpackSnap,
   unpackSounds,
 } from "../share.js";
-import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
+import {
+  SNAP_MAX,
+  capture,
+  countBar,
+  freshName,
+  nextSnapId,
+  nextSnapshot,
+  partsOf,
+  removePart,
+  skipTour,
+  startTour,
+  tourDue,
+  tourLeft,
+} from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
@@ -102,7 +116,7 @@ const stamp = (d = new Date()) => {
 };
 
 // Everything tied to the old workspace, dropped when another one replaces it.
-const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null, armed: false });
+const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null, armed: false, tour: null });
 
 export function mountApp(root, engine, opts = {}) {
   const {
@@ -132,6 +146,7 @@ export function mountApp(root, engine, opts = {}) {
     auto: resume?.auto ?? false,
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
+    tour: resume?.tour ?? null, // the snapshot autopilot (snapshots.js), never on with `auto`
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
     queuedSnap: resume?.queuedSnap ?? null, // a snapshot entering with `pending` on the next bar line
@@ -258,6 +273,8 @@ export function mountApp(root, engine, opts = {}) {
     text: tx.transport.auto,
   });
   autoBtn.title = tx.transport.autoTitle;
+  const tourBtn = el("button", { type: "button", class: "tour", "aria-pressed": "false", text: tx.transport.tour });
+  tourBtn.title = tx.transport.tourTitle;
   const sectionBadge = el("span", { class: "section-badge", "aria-live": "polite" });
   const sectionLeft = el("span", { class: "section-left" });
   const queueList = el("ol", { class: "section-queue", "aria-label": tx.pilot.queue });
@@ -575,6 +592,7 @@ export function mountApp(root, engine, opts = {}) {
     snapTiles.clear();
     sections.get(SNAP_PANEL).group.replaceChildren(...ws.snapshots.map(makeSnapTile));
     placeEditor();
+    showSection();
   }
 
   for (const id of ws.order) {
@@ -585,6 +603,7 @@ export function mountApp(root, engine, opts = {}) {
         (ids) => {
           ws.snapshots = ids.map(snapById);
           persist();
+          showSection(); // the tour's next one follows the order
         },
         el("div", { class: "snap-files" }, snapExport, snapImport, snapFile),
       );
@@ -694,7 +713,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, tourBtn, sectionBadge, sectionLeft, queueList, nextBtn),
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
         "div",
@@ -718,7 +737,7 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- rendering ---- */
   let lanes = {};
-  const laneMap = () => desiredLanes(state.active, { bgKick: ws.bgKick && !state.auto });
+  const laneMap = () => desiredLanes(state.active, { bgKick: ws.bgKick && !state.auto && !state.tour });
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
@@ -776,6 +795,13 @@ export function mountApp(root, engine, opts = {}) {
   function showSection() {
     const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
+    tourBtn.setAttribute("aria-pressed", String(Boolean(state.tour)));
+    tourBtn.disabled = !state.tour && ws.snapshots.length < 2;
+    if (state.tour) {
+      showTour(state.tour);
+      return;
+    }
+    for (const { node } of snapTiles.values()) node.classList.remove("is-next");
     sectionBadge.textContent = p ? tx.sections[p.section] : "";
     sectionBadge.hidden = !p;
     sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
@@ -794,6 +820,23 @@ export function mountApp(root, engine, opts = {}) {
     queueList.replaceChildren(...chips);
     queueList.hidden = !chips.length;
     nextBtn.disabled = !p || p.left === 1;
+  }
+
+  // The same row under the snapshot autopilot: the snapshot playing, its bars
+  // left and the one coming next, which pulses (its tile too) in the last loop.
+  function showTour(tour) {
+    const now = snapById(tour.id);
+    const left = tourLeft(tour, ws.changeBars);
+    const next = nextSnapshot(ws.snapshots, tour);
+    sectionBadge.textContent = now?.name ?? "";
+    sectionBadge.hidden = !now;
+    sectionLeft.textContent = tx.pilot.left(left);
+    const chip = next && el("li", { class: "queued is-auto", "data-queued": next.id }, el("span", { text: next.name }));
+    chip?.classList.toggle("is-next", left <= 2);
+    queueList.replaceChildren(...(chip ? [chip] : []));
+    queueList.hidden = !chip;
+    for (const [id, { node }] of snapTiles) node.classList.toggle("is-next", left <= 2 && next?.id === id);
+    nextBtn.disabled = Boolean(tour.skip) || left <= 2;
   }
 
   let shownStep = null;
@@ -918,11 +961,23 @@ export function mountApp(root, engine, opts = {}) {
     stepRamp();
     let changed = false;
     if (state.pending) {
-      if (state.queuedSnap) load(state.queuedSnap);
+      if (state.queuedSnap) load(state.queuedSnap, step);
+      else if (state.tour) state.tour = countBar(state.tour, step); // the hand wins this line
       state.queuedSnap = null;
       state.active = state.pending;
       state.pending = null;
       changed = true;
+    } else if (state.tour) {
+      changed = state.tour.bars === null; // its first line drops the background kick
+      state.tour = countBar(state.tour, step);
+      if (tourDue(state.tour, step, ws.changeBars)) {
+        const next = nextSnapshot(ws.snapshots, state.tour);
+        if (next) {
+          load(next, step);
+          state.active = { ...next.active };
+        } else state.tour = null;
+        changed = true;
+      }
     } else if (state.auto && loopStart) {
       const move = advance(state.pilot, state.active, ws.lists, state.rng, {
         style: ws.style,
@@ -947,6 +1002,7 @@ export function mountApp(root, engine, opts = {}) {
         changed = true;
       }
     }
+    if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) mixIn();
     lanes = laneMap();
@@ -1254,9 +1310,10 @@ export function mountApp(root, engine, opts = {}) {
     sync();
   }
 
-  // A recalled snapshot's sounds go back to the data they played then, and
-  // a running autopilot jumps to its section.
-  function load(snap) {
+  // A recalled snapshot's sounds go back to the data they played then, a
+  // running autopilot jumps to its section and the snapshot autopilot carries
+  // on from it, counting from bar line `step` (or the next one).
+  function load(snap, step = null) {
     for (const [id, data] of Object.entries(snap.data)) {
       if (!tiles.has(id) || sameData(dataOf(id), data)) continue;
       setVariant(id, structuredClone(data));
@@ -1267,10 +1324,9 @@ export function mountApp(root, engine, opts = {}) {
       if (open?.id === id) openEditor(open.layer, id);
     }
     state.applied = snap.id;
-    if (state.auto) {
-      state.pilot = moveTo(state.pilot, snap.section);
-      showSection();
-    }
+    if (state.auto) state.pilot = moveTo(state.pilot, snap.section);
+    if (state.tour) state.tour = startTour(ws.snapshots, snap.id, step);
+    showSection();
   }
 
   function openSnapEditor(id, { focusName = false } = {}) {
@@ -1302,6 +1358,7 @@ export function mountApp(root, engine, opts = {}) {
         tile.detailEl.textContent = snapDetail(snap);
         tile.edit.setAttribute("aria-label", tx.tile.edit(snap.name));
         renderButtons();
+        showSection(); // a new name on the pilot row
         return snap;
       },
       onTry: (draft) => recall(draft),
@@ -1323,6 +1380,7 @@ export function mountApp(root, engine, opts = {}) {
     if (!confirm(tx.snap.confirmRemove(snapById(id).name))) return;
     closeEditor();
     ws.snapshots = ws.snapshots.filter((s) => s.id !== id);
+    if (!ws.snapshots.length) state.tour = null;
     state.drafts.delete(id);
     if (state.applied === id) state.applied = null;
     if (state.queuedSnap?.id === id) {
@@ -1558,6 +1616,7 @@ export function mountApp(root, engine, opts = {}) {
     // Snapshots lose the sound too; one left with nothing goes.
     const strip = (snap) => (id in snap.data ? removePart(snap, id) : snap);
     ws.snapshots = ws.snapshots.map(strip).filter((snap) => partsOf(snap).length);
+    if (!ws.snapshots.length) state.tour = null;
     for (const [key, draft] of state.drafts) {
       if (snapById(key)) state.drafts.set(key, strip(draft));
       else state.drafts.delete(key);
@@ -1656,8 +1715,8 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
+    const { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });
@@ -1712,6 +1771,7 @@ export function mountApp(root, engine, opts = {}) {
     const playing = { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
+    state.tour = null;
     state.bare = 0;
     state.rng = seeded(hashSeed(ws.seed));
     if (Object.keys(playing).length) {
@@ -1739,6 +1799,24 @@ export function mountApp(root, engine, opts = {}) {
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
     commit(start.active);
+    showSection();
+  }
+
+  // The snapshot autopilot starts from the snapshot queued or playing, or
+  // from the first, and turns the other autopilot off.
+  function engageTour() {
+    stats?.count("autopilot");
+    state.auto = false;
+    state.pilot = null;
+    const target = state.pending ?? state.active;
+    const playing = ws.snapshots.find((s) => s.id === state.applied && sameLanes(target, s.active));
+    const start = state.queuedSnap ?? playing ?? ws.snapshots[0];
+    state.armed = false;
+    state.tour = startTour(ws.snapshots, start.id);
+    // Already queued or playing, it carries on from the next bar line (where
+    // the background kick drops); anything else enters on that line, or at
+    // once with the loop stopped.
+    if (!engine.isRunning() || (start !== state.queuedSnap && start !== playing)) recall(start);
     showSection();
   }
 
@@ -1863,6 +1941,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = state.armed ? playing : null;
     state.auto = false;
     state.pilot = null;
+    state.tour = null;
     state.queuedSnap = null;
     state.ramp = null;
     state.newParts.clear();
@@ -1906,16 +1985,26 @@ export function mountApp(root, engine, opts = {}) {
     sync(); // the background kick may come back
     showSection();
   });
+  tourBtn.addEventListener("click", () => {
+    if (!state.tour) {
+      engageTour();
+      return;
+    }
+    state.tour = null;
+    sync(); // the background kick may come back
+    showSection();
+  });
   seedInput.addEventListener("change", () => setSeed(seedInput.value));
   nextBtn.addEventListener("click", () => {
-    if (!state.auto || !state.pilot) return;
-    state.pilot = skip(state.pilot);
+    if (state.tour) state.tour = skipTour(state.tour);
+    else if (state.auto && state.pilot) state.pilot = skip(state.pilot);
     showSection();
   });
   changes.addEventListener("input", () => {
     ws.changeBars = CHANGE_BARS[Number(changes.value)];
     changesOut.textContent = tx.pilot.every(ws.changeBars);
     persist();
+    if (state.tour) showSection();
   });
   diceBtn.addEventListener("click", () => setSeed(randomSeed()));
   // This page's URL with `fragment`, to the clipboard or, failing that, on screen.
@@ -2007,6 +2096,7 @@ export function mountApp(root, engine, opts = {}) {
         armed: false,
         auto: false,
         pilot: null,
+        tour: null,
         varying: new Map(),
         queuedSnap: null,
         applied: null,

@@ -1357,6 +1357,141 @@ describe("snapshots", () => {
     expect($(".section-badge").textContent).toBe("Break");
   });
 
+  describe("snapshot autopilot", () => {
+    const tourBtn = () => $("button.tour");
+    const badge = () => ($(".section-badge").hidden ? "" : $(".section-badge").textContent);
+    // Intro (a kick), Groove (kick + bass) and Break (a pad, taken with no background kick).
+    function three() {
+      immediate();
+      click("kick.long");
+      snapBtn().click();
+      click("bass.gallop");
+      snapBtn().click();
+      click("pad.air");
+      click("kick.long");
+      click("bass.gallop");
+      $("#bgkick").click();
+      snapBtn().click();
+      $("#bgkick").click();
+      expect(saved().snapshots.map((x) => x.name)).toEqual(["Intro", "Groove", "Break"]);
+    }
+    // [audio time, badge] each time the badge changes, over `bars` bars.
+    function watch(bars) {
+      const seen = [];
+      let last = badge();
+      for (let i = 0; i < Math.ceil((bars * BAR) / 0.025); i++) {
+        advance(1);
+        if (badge() !== last) seen.push([ctx.currentTime, (last = badge())]);
+      }
+      return seen;
+    }
+
+    it("needs two snapshots", () => {
+      expect(tourBtn().disabled).toBe(true);
+      immediate();
+      click("kick.long");
+      snapBtn().click();
+      expect(tourBtn().disabled).toBe(true);
+      click("bass.gallop");
+      snapBtn().click();
+      expect(tourBtn().disabled).toBe(false);
+    });
+
+    it("plays them in the panel's order, each for the Cambios bars, and starts over", () => {
+      three();
+      const changes = $("#changes");
+      changes.value = "0"; // every 2 bars
+      changes.dispatchEvent(new Event("input"));
+      expect(button("kick.punchy").classList.contains("is-background")).toBe(true); // under the pad
+      tourBtn().click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("true");
+      expect(badge()).toBe("Break"); // it carries on from the one playing
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+      advanceSeconds(BAR);
+      expect(root.querySelectorAll(".is-background")).toHaveLength(0); // a pilot: no background kick
+
+      const seen = watch(8);
+      expect(seen.slice(0, 3).map(([, name]) => name)).toEqual(["Intro", "Groove", "Break"]);
+      for (let i = 1; i < seen.length; i++) expect(seen[i][0] - seen[i - 1][0]).toBeCloseTo(2 * BAR, 1);
+      expect(pressed()).toEqual(["pad.air"]);
+      expect(saved().snapshots).toHaveLength(3); // untouched
+    });
+
+    it("pulses the one coming next in the last loop, ⏭ moves on early and a click carries on from there", () => {
+      three();
+      tourBtn().click();
+      const tile = (id) => $(`[data-snap="${id}"]`);
+      advanceSeconds(BAR);
+      expect(tile("snap-1").classList.contains("is-next")).toBe(false); // every 8 bars: still early
+      expect($('[data-action="next-section"]').disabled).toBe(false);
+      $('[data-action="next-section"]').click();
+      expect($('[data-action="next-section"]').disabled).toBe(true);
+      expect(tile("snap-1").classList.contains("is-next")).toBe(true);
+      expect(watch(3).map(([, name]) => name)).toEqual(["Intro"]);
+      expect(pressed()).toEqual(["kick.long"]);
+
+      tile("snap-3").click(); // by hand, on the next bar line
+      advanceSeconds(BAR);
+      expect(badge()).toBe("Break");
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+    });
+
+    it("🤖, Parar and its own button turn it off", () => {
+      three();
+      tourBtn().click();
+      $("button.auto").click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect($("button.auto").getAttribute("aria-pressed")).toBe("true");
+      tourBtn().click();
+      expect($("button.auto").getAttribute("aria-pressed")).toBe("false");
+      $("button.stop").click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(badge()).toBe("");
+
+      $("button.cue").click(); // ▶ brings the mix back, without the tour
+      tourBtn().click();
+      tourBtn().click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(root.querySelectorAll(".is-next")).toHaveLength(0);
+    });
+
+    it("from silence it starts with the first one; armed, with what is queued", () => {
+      three();
+      click("pad.air");
+      expect(engine.isRunning()).toBe(false);
+      tourBtn().click();
+      expect(engine.isRunning()).toBe(true);
+      expect(badge()).toBe("Intro");
+      expect(pressed()).toEqual(["kick.long"]);
+
+      $("button.stop").click();
+      $('[data-snap="snap-2"]').click(); // armed: queued for ▶
+      tourBtn().click();
+      expect(engine.isRunning()).toBe(true);
+      expect(badge()).toBe("Groove");
+      expect(pressed()).toEqual(["kick.long", "bass.gallop"]);
+    });
+
+    it("keeps going after removing the one playing, and stops with none left", () => {
+      const remove = (id) => {
+        if (!snapEditor(id)) $(`[data-edit-snap="${id}"]`).click();
+        act(id, "remove").click();
+      };
+      three();
+      tourBtn().click();
+      remove("snap-3");
+      expect(badge()).toBe("");
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+      $('[data-action="next-section"]').click();
+      advanceSeconds(3 * BAR);
+      expect(badge()).toBe("Intro");
+      remove("snap-1");
+      remove("snap-2");
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(tourBtn().disabled).toBe(true);
+    });
+  });
+
   it("survive a reload, travel in presets and lose a deleted copy", async () => {
     immediate();
     openEditor("lead.arp");
