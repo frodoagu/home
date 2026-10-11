@@ -11,7 +11,8 @@
 
 import { TooBig, ascii, baseName, extOf, readBlob, stem } from "./bytes.js";
 import { isPlainWav } from "./pcm.js";
-import { AUDIO_EXTS, isProject, projectRefs } from "./projects.js";
+import { AUDIO_EXTS, CLOSED, kindOf } from "./formats.js";
+import { isProject, projectRefs } from "./projects.js";
 import { isSoundfont, soundfontSamples } from "./soundfont.js";
 import { isZip, zipEntries } from "./zip.js";
 
@@ -21,28 +22,11 @@ const MAX_PROJECT_BYTES = 64 * 2 ** 20;
 const MAX_DEPTH = 2;
 export const MAX_CANDIDATES = 500;
 
-// Zip under another name.
-const ZIP_EXTS = new Set(["zip", "multisample", "xrni", "xrns", "dslibrary"]);
-
 // What sample packs and project folders carry besides audio: never a candidate.
 const NOT_AUDIO = new Set([
   "txt", "md", "rtf", "pdf", "doc", "docx", "html", "htm", "url", "nfo", "json", "ini", "cfg", "log",
   "jpg", "jpeg", "png", "gif", "webp", "bmp", "ico", "svg", "mid", "midi", "exe", "dmg", "app", "db",
 ]);
-
-// Closed formats: no way in without the vendor's code, so the message says where to export from.
-export const CLOSED = {
-  rx2: "ReCycle (REX)", rex: "ReCycle (REX)", rcy: "ReCycle (REX)",
-  nki: "Kontakt", nkm: "Kontakt", nkb: "Kontakt", nkx: "Kontakt", nkc: "Kontakt", ncw: "Kontakt", nicnt: "Kontakt",
-  rfl: "Reason", reason: "Reason", rns: "Reason",
-  flp: "FL Studio",
-  exs: "Logic", logicx: "Logic",
-  cpr: "Cubase",
-  ptx: "Pro Tools", ptf: "Pro Tools",
-  bwproject: "Bitwig", bwpreset: "Bitwig",
-  mxprj: "Maschine", mxgrp: "Maschine", mxsnd: "Maschine",
-  alp: "Ableton Live",
-};
 
 const EBML = [0x1a, 0x45, 0xdf, 0xa3];
 
@@ -110,8 +94,8 @@ export async function gather(inputs) {
   async function visit(item, depth) {
     if (skip(item.path)) return;
     const ext = extOf(item.name);
-    let kind = ZIP_EXTS.has(ext) ? "zip" : ext === "sf2" || ext === "sf3" ? "sf2" : AUDIO_EXTS.has(ext) ? "audio" : null;
-    if (!kind && isProject(item.name)) kind = "project";
+    let kind = kindOf(ext);
+    if (kind === "closed") kind = null; // unless the bytes say otherwise (an .alp that is a zip)
     if (!kind && item.blob && !NOT_AUDIO.has(ext)) {
       const head = await readBlob(item.blob, 0, 64);
       if (isZip(head)) kind = "zip";
@@ -119,7 +103,7 @@ export async function gather(inputs) {
       else if (looksLikeAudio(head)) kind = "audio";
       else if (item.picked && isProject(item.name, head)) kind = "project";
     }
-    if (!kind && CLOSED[ext]) kind = "closed";
+    if (!kind && Object.hasOwn(CLOSED, ext)) kind = "closed";
     if (!kind && item.picked && NOT_AUDIO.has(ext)) unreadable.push({ name: item.path, why: "format" });
     // Picked by hand and still unknown: let the browser try it.
     else if (!kind && item.picked) kind = "audio";

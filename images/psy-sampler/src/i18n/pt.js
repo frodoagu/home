@@ -304,15 +304,26 @@ export default {
   samples: {
     title: "🎵 Samples",
     hint: "Seus samples ficam no seu perfil, no servidor. Use-os como fonte de qualquer som.",
-    formats:
-      "Envie arquivos, uma pasta ou um .zip, ou arraste-os aqui: WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts (.sf2/.sf3), " +
-      "e os samples de um set do Ableton (.als, .alc, .adg, .adv), SFZ, Decent Sampler ou REAPER se você escolher a pasta deles.",
+    how: "Envie arquivos, uma pasta ou um .zip, ou arraste-os aqui.",
+    formats: {
+      title: "ⓘ Formatos aceitos",
+      audio: ["Áudio", "WAV, FLAC, MP3 e AAC sobem como estão; o resto, convertido para WAV para tocar em qualquer navegador."],
+      archives: ["Pacotes compactados", "São abertos, até um .zip dentro de outro."],
+      instruments: ["Instrumentos", "Cada sample do banco aparece separado."],
+      projects: [
+        "Projetos, com a pasta deles",
+        "Só dizem quais samples usam: escolha ou arraste a pasta do projeto (ou um .zip dela). Do Ableton entram também os trechos do Simpler e do Sampler.",
+      ],
+      closed: ["Não podem ser lidos", "São formatos fechados: exporte os samples deles para WAV no programa."],
+      limits: (secs, max) =>
+        max ? `Cada sample dura até ${secs} s e pesa até ${max}: se pesar mais, sobe convertido para um WAV mais leve.` : `Cada sample dura até ${secs} s.`,
+    },
     signIn: "Entre com o Google para enviar seus samples: eles ficam guardados no seu perfil.",
     unavailable: "A nuvem não responde: os samples estão indisponíveis.",
     upload: "⬆ Enviar arquivos",
     folder: "📁 Enviar pasta",
     reading: "Lendo os arquivos…",
-    nothing: "Não encontrei áudio no que você escolheu.",
+    nothing: "Não encontrei áudio no que você escolheu (veja ⓘ Formatos aceitos).",
     found: (n) => (n === 1 ? "Encontrei 1 sample." : `Encontrei ${n} samples.`),
     more: (n) => `Há mais ${n} que não cabem na lista.`,
     project: (name, app, found, refs) =>
@@ -345,7 +356,7 @@ export default {
     errors: {
       tooBig: (max) => `Tem mais de ${max}.`,
       tooLong: (secs) => `O sample dura mais de ${secs} s: corte-o.`,
-      format: "Não é áudio que possa ser lido.",
+      format: "Não é áudio que possa ser lido (veja ⓘ Formatos aceitos).",
       quota: "Não sobra espaço no seu perfil: apague algum sample.",
       count: (max) => `Você chegou a ${max} samples: apague algum.`,
       full: "O servidor ficou sem espaço para samples.",

@@ -11,14 +11,9 @@
 // in frames of the file inside a <MultiSamplePart>.
 
 import { ascii, baseName, extOf, inflate } from "./bytes.js";
+import { AUDIO_EXTS, PROJECT_APPS } from "./formats.js";
 
 const MAX_XML = 256 * 2 ** 20;
-
-// Extensions a sample reference can end in (anything else is not audio we import).
-export const AUDIO_EXTS = new Set([
-  "wav", "wave", "bwf", "rf64", "aif", "aiff", "aifc", "caf", "au", "snd", "flac",
-  "mp3", "ogg", "oga", "opus", "m4a", "mp4", "aac", "webm", "weba",
-]);
 
 const ENTITIES = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 const unescapeXml = (s) =>
@@ -86,13 +81,9 @@ export const decentRefs = (xml) => [...xml.matchAll(/<sample\b[^>]*?\bpath="([^"
 /** REAPER: the FILE line of each <SOURCE …> block. */
 export const reaperRefs = (text) => [...text.matchAll(/^\s*FILE\s+(?:"([^"]*)"|(\S+))/gm)].map((m) => ({ path: slash(m[1] ?? m[2]) }));
 
-const PROJECT_EXTS = new Set(["als", "alc", "adg", "adv", "sfz", "dspreset", "rpp"]);
-
 /** Worth reading as a project: by extension, or (picked directly) gzip / XML. */
 export const isProject = (name, head = null) =>
-  PROJECT_EXTS.has(extOf(name)) || (head !== null && ((head[0] === 0x1f && head[1] === 0x8b) || ascii(head, 0, 5) === "<?xml"));
-
-const APPS = { als: "Ableton Live", alc: "Ableton Live", adg: "Ableton Live", adv: "Ableton Live", sfz: "SFZ", dspreset: "Decent Sampler", rpp: "REAPER" };
+  Object.hasOwn(PROJECT_APPS, extOf(name)) || (head !== null && ((head[0] === 0x1f && head[1] === 0x8b) || ascii(head, 0, 5) === "<?xml"));
 
 /**
  * A project's bytes -> { app, refs } (refs to audio files only), or null when
@@ -108,7 +99,7 @@ export async function projectRefs(name, bytes) {
     }
   }
   const text = new TextDecoder().decode(data.subarray(0, MAX_XML));
-  let app = APPS[extOf(name)] ?? null;
+  let app = Object.hasOwn(PROJECT_APPS, extOf(name)) ? PROJECT_APPS[extOf(name)] : null;
   let refs;
   if (/<Ableton\b/.test(text.slice(0, 4096))) {
     app = "Ableton Live";

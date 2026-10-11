@@ -306,15 +306,26 @@ export default {
   samples: {
     title: "🎵 Samples",
     hint: "Tus samples quedan en tu perfil, en el servidor. Usalos como fuente de cualquier sonido.",
-    formats:
-      "Subí archivos, una carpeta o un .zip, o arrastralos acá: WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts (.sf2/.sf3), " +
-      "y los samples de un set de Ableton (.als, .alc, .adg, .adv), SFZ, Decent Sampler o REAPER si elegís su carpeta.",
+    how: "Subí archivos, una carpeta o un .zip, o arrastralos acá.",
+    formats: {
+      title: "ⓘ Formatos admitidos",
+      audio: ["Audio", "WAV, FLAC, MP3 y AAC se suben tal cual; el resto, convertido a WAV para que suene en cualquier navegador."],
+      archives: ["Packs comprimidos", "Se abren por dentro, incluso un .zip dentro de otro."],
+      instruments: ["Instrumentos", "Cada sample del banco aparece por separado."],
+      projects: [
+        "Proyectos, con su carpeta",
+        "Sólo dicen qué samples usan: elegí o arrastrá la carpeta del proyecto (o un .zip de ella). De Ableton entran también los fragmentos de Simpler y Sampler.",
+      ],
+      closed: ["No se pueden leer", "Son formatos cerrados: exportá sus samples a WAV desde el programa."],
+      limits: (secs, max) =>
+        max ? `Cada sample dura hasta ${secs} s y pesa hasta ${max}: si pesa más, se sube convertido a un WAV más liviano.` : `Cada sample dura hasta ${secs} s.`,
+    },
     signIn: "Iniciá sesión con Google para subir tus samples: quedan guardados en tu perfil.",
     unavailable: "La nube no responde: los samples no están disponibles.",
     upload: "⬆ Subir archivos",
     folder: "📁 Subir carpeta",
     reading: "Leyendo los archivos…",
-    nothing: "No encontré audio en lo que elegiste.",
+    nothing: "No encontré audio en lo que elegiste (mirá ⓘ Formatos admitidos).",
     found: (n) => (n === 1 ? "Encontré 1 sample." : `Encontré ${n} samples.`),
     more: (n) => `Hay ${n} más que no entran en la lista.`,
     project: (name, app, found, refs) =>
@@ -347,7 +358,7 @@ export default {
     errors: {
       tooBig: (max) => `Pesa más de ${max}.`,
       tooLong: (secs) => `El sample dura más de ${secs} s: recortalo.`,
-      format: "No es audio que se pueda leer.",
+      format: "No es audio que se pueda leer (mirá ⓘ Formatos admitidos).",
       quota: "No queda espacio en tu perfil: borrá algún sample.",
       count: (max) => `Llegaste a ${max} samples: borrá alguno.`,
       full: "El servidor se quedó sin lugar para samples.",

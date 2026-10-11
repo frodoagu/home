@@ -7,19 +7,33 @@
 // hold comes from import/gather.js. A lone audio file goes straight up; more
 // than one, or a project file, opens a picker to choose (and audition) which.
 import { LAYERS } from "../catalog.js";
-import { formatBytes } from "../samples.js";
+import { ACCEPT, FORMATS } from "../import/formats.js";
+import { MAX_SECONDS, formatBytes } from "../samples.js";
 import { el, nextId, select } from "./dom.js";
 
-// What the file dialog offers; anything else can still be dropped.
-const ACCEPT = [
-  "audio/*",
-  ...["wav", "wave", "bwf", "rf64", "aif", "aiff", "aifc", "caf", "au", "snd", "flac", "mp3", "ogg", "oga", "opus", "m4a", "aac", "webm"],
-  ...["zip", "sf2", "sf3", "als", "alc", "adg", "adv", "sfz", "dspreset", "dslibrary", "rpp", "multisample", "xrni", "xrns"],
-]
-  .map((x) => (x.includes("/") ? x : `.${x}`))
-  .join(",");
-
 const MAX_DROPPED = 20000;
+const FORMAT_GROUPS = ["audio", "archives", "instruments", "projects", "closed"];
+
+// [[app, [".ext", …]], …] in the table's order; a null app is the format itself (".zip").
+function byApp(entries) {
+  const out = new Map();
+  for (const [ext, app] of entries) out.set(app, [...(out.get(app) ?? []), `.${ext}`]);
+  return [...out];
+}
+
+// "ⓘ Supported formats": built from import/formats.js, the table the importer itself reads.
+function formatsGuide(text) {
+  const limits = el("p", { class: "hint" });
+  const groups = FORMAT_GROUPS.flatMap((group) => {
+    const [title, note] = text[group];
+    const lines = byApp(FORMATS[group]).map(([app, exts]) =>
+      el("li", {}, ...(app ? [el("span", { class: "format-app", text: app })] : []), el("code", { text: exts.join(" ") })),
+    );
+    return [el("dt", { text: title }), el("dd", {}, el("p", { class: "hint", text: note }), el("ul", { class: "format-list" }, ...lines))];
+  });
+  const node = el("details", { class: "sample-formats", "data-role": "formats" }, el("summary", { text: text.title }), el("dl", {}, ...groups), limits);
+  return { node, limits };
+}
 const NAMES_SHOWN = 3;
 
 // A drop -> [{ file, path }], walking dropped folders. The entries must be taken
@@ -62,6 +76,7 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
   );
 
   const size = (n) => formatBytes(n, lang);
+  const guide = formatsGuide(t.formats);
   function errorText(err) {
     const e = t.errors;
     const limits = samples.info.limits;
@@ -313,6 +328,7 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     const { available, user } = cloud?.info ?? {};
     const { ready, samples: list, used, limits } = samples.info;
     usage.textContent = user && ready && limits ? t.usage(size(used.bytes), size(limits.quota), used.count, limits.count) : "";
+    guide.limits.textContent = t.formats.limits(MAX_SECONDS, user && limits ? size(limits.bytes) : null);
     if (!available) {
       picking = null;
       body.replaceChildren(el("p", { class: "hint", text: t.unavailable }));
@@ -320,15 +336,16 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     }
     if (!user) {
       picking = null;
-      body.replaceChildren(el("p", { class: "hint", text: t.signIn }));
+      body.replaceChildren(el("p", { class: "hint", text: t.signIn }), guide.node);
       return;
     }
     const items = list.length
       ? el("ul", { class: "sample-list" }, ...list.map(row))
       : el("p", { class: "hint", text: t.empty });
     body.replaceChildren(
-      el("p", { class: "hint", text: `${t.hint} ${t.formats}` }),
+      el("p", { class: "hint", text: `${t.hint} ${t.how}` }),
       el("div", { class: "tools-row" }, uploadBtn, folderBtn, files, folder),
+      guide.node,
       ...(picking ? [picking.node] : []),
       items,
     );

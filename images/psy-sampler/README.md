@@ -15,8 +15,9 @@ Dockerfile that bakes it into an nginx image. Deployed by
 - `src/autopilot.js`, `snapshots.js`, `tempo.js`, `workspace.js`, `share.js`,
   `cloud.js`: autopilot and seeds, snapshots, BPM ramps, persistence, share
   links, and the client for the cloud save ([`../psy-sync`](../psy-sync)).
-- `src/import/`: sample import. `gather.js` turns files, folders and archives
-  into candidates; `pcm.js` decodes WAV/RF64/AIFF/CAF/AU, `zip.js`,
+- `src/import/`: sample import. `formats.js` is the one table of extensions
+  (classification, the file dialog, the panel's format guide); `gather.js` turns
+  files, folders and archives into candidates; `pcm.js` decodes WAV/RF64/AIFF/CAF/AU, `zip.js`,
   `soundfont.js` (SF2/SF3) and `projects.js` (Ableton, SFZ, Decent Sampler,
   REAPER references). Fixtures are built byte by byte in
   [`src/test/audioFiles.js`](src/test/audioFiles.js).

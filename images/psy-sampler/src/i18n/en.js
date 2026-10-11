@@ -304,15 +304,26 @@ export default {
   samples: {
     title: "🎵 Samples",
     hint: "Your samples live in your profile, on the server. Use them as the source of any sound.",
-    formats:
-      "Upload files, a folder or a .zip, or drop them here: WAV, AIFF, FLAC, MP3, OGG, CAF, SoundFonts (.sf2/.sf3), " +
-      "and the samples of an Ableton set (.als, .alc, .adg, .adv), SFZ, Decent Sampler or REAPER when you pick its folder.",
+    how: "Upload files, a folder or a .zip, or drop them here.",
+    formats: {
+      title: "ⓘ Supported formats",
+      audio: ["Audio", "WAV, FLAC, MP3 and AAC go up as they are; the rest is converted to WAV so it plays in any browser."],
+      archives: ["Compressed packs", "Opened up, even a .zip inside another."],
+      instruments: ["Instruments", "Each sample in the bank is listed on its own."],
+      projects: [
+        "Projects, with their folder",
+        "They only say which samples they use: pick or drop the project folder (or a .zip of it). From Ableton, Simpler and Sampler slices come in too.",
+      ],
+      closed: ["Can't be read", "Closed formats: export their samples to WAV from the program."],
+      limits: (secs, max) =>
+        max ? `Each sample lasts up to ${secs} s and weighs up to ${max}: anything heavier goes up as a lighter WAV.` : `Each sample lasts up to ${secs} s.`,
+    },
     signIn: "Sign in with Google to upload your samples: they are kept in your profile.",
     unavailable: "The cloud is not answering: samples are unavailable.",
     upload: "⬆ Upload files",
     folder: "📁 Upload folder",
     reading: "Reading the files…",
-    nothing: "No audio found in what you picked.",
+    nothing: "No audio found in what you picked (see ⓘ Supported formats).",
     found: (n) => (n === 1 ? "Found 1 sample." : `Found ${n} samples.`),
     more: (n) => `There are ${n} more that don't fit in the list.`,
     project: (name, app, found, refs) =>
@@ -345,7 +356,7 @@ export default {
     errors: {
       tooBig: (max) => `It is larger than ${max}.`,
       tooLong: (secs) => `The sample is longer than ${secs} s: trim it.`,
-      format: "Not audio that can be read.",
+      format: "Not audio that can be read (see ⓘ Supported formats).",
       quota: "Your profile is full: delete a sample.",
       count: (max) => `You reached ${max} samples: delete one.`,
       full: "The server ran out of room for samples.",

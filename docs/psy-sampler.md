@@ -734,6 +734,13 @@ the account has left.
 `pcm.js` was checked bit-exact against ffmpeg's float decode for every codec
 above; `soundfont.js` against a GM bank (488 samples) and MuseScore's SF3.
 
+Every extension lives in one table,
+[`formats.js`](../images/psy-sampler/src/import/formats.js) (audio, archives,
+instruments, projects, closed): `gather.js` sorts files by it, the file dialog's
+`accept` comes from it, and the panel's **ⓘ Formatos admitidos** (collapsed,
+shown signed in or out, with the per-sample limits) lists it, so what the page
+says it reads is what it reads. A new format is one line there.
+
 - **Project files only point at samples.** A page can't follow a path on disk,
   so the samples must come in the same selection: pick or drop the **project
   folder** (or a zip of it). A reference matches by file name, preferring the

@@ -176,6 +176,29 @@ describe("samples panel", () => {
     expect($(".status").textContent).toBe("Sample «Kick 909» borrado.");
   });
 
+  it("ⓘ Supported formats lists what the importer reads, signed in or not", async () => {
+    await mount();
+    const guide = $('[data-role="formats"]');
+    expect(guide.querySelector("summary").textContent).toBe("ⓘ Formatos admitidos");
+    expect([...guide.querySelectorAll("dt")].map((n) => n.textContent)).toEqual([
+      "Audio",
+      "Packs comprimidos",
+      "Instrumentos",
+      "Proyectos, con su carpeta",
+      "No se pueden leer",
+    ]);
+    const line = (app) => [...guide.querySelectorAll(".format-list li")].find((li) => li.querySelector(".format-app")?.textContent === app);
+    expect(line("Ableton Live").querySelector("code").textContent).toBe(".als .alc .adg .adv");
+    expect(line("Kontakt").querySelector("code").textContent).toContain(".nki");
+    expect(guide.querySelector("code").textContent).toContain(".wav");
+    expect(guide.textContent).toContain("Cada sample dura hasta 15 s y pesa hasta 3 MB");
+
+    server.user = null;
+    await mount();
+    expect($('[data-role="formats"]')).not.toBeNull();
+    expect($('[data-role="formats"]').textContent).toContain("Cada sample dura hasta 15 s.");
+  });
+
   it("several files open a picker; the chosen ones go up one by one", async () => {
     await mount();
     pick($('.samples input[type="file"][multiple]'), [new File([WAV], "Kick.wav"), new File([WAV], "Snare.wav"), new File([WAV], "Hat.wav")]);
@@ -236,7 +259,9 @@ describe("samples panel", () => {
     await mount();
     pick($('.samples input[type="file"][multiple]'), [new File([new Uint8Array(40)], "Break.rx2")]);
     await settle();
-    expect($(".status").textContent).toBe("No encontré audio en lo que elegiste. «Break.rx2» es un formato cerrado de ReCycle (REX): exportá sus samples a WAV.");
+    expect($(".status").textContent).toBe(
+      "No encontré audio en lo que elegiste (mirá ⓘ Formatos admitidos). «Break.rx2» es un formato cerrado de ReCycle (REX): exportá sus samples a WAV.",
+    );
   });
 
   it("a dropped zip goes through the same picker", async () => {
