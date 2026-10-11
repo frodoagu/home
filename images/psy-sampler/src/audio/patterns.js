@@ -146,6 +146,7 @@ export const DEFAULTS = {
   "perc.toms": notes("tom", TOM_LINE.map(([s, m]) => note(s, m)), { low: A2, high: A4 }),
   "perc.hat16": drum("chat", steps((s) => (s % 4 === 2 ? ACCENT : HIT)), { tone: 10000, decay: 0.03 }),
   "perc.rim": drum("rim", steps((s) => ([3, 6, 11, 14].includes(s % 16) ? HIT : OFF))),
+  "perc.keys": drum("keys", steps((s) => (s % 8 === 6 ? ACCENT : [3, 9].includes(s % 16) ? HIT : OFF))),
 
   "lead.acid": notes(
     "acid",

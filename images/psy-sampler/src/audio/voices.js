@@ -196,6 +196,39 @@ export function rim(ctx, out, t, { tone = 1700, decay = 0.04, accent }) {
   src.connect(filter(ctx, "highpass", 4000)).connect(g).connect(out);
 }
 
+// Modes of a thin metal sheet, relative to its lowest one.
+const SHEET = [1, 1.59, 2.14, 2.65, 3.6];
+
+// A bunch of keys thrown on a metal sheet: the sheet's short inharmonic clang,
+// then 3-5 keys landing about `spread` apart, each a pair of high partials and
+// a tick. Random per hit, so no two throws sound the same.
+export function keys(ctx, out, t, { tone = 3200, decay = 0.09, spread = 0.012, accent }) {
+  const v = accent ? 1 : 0.7;
+  const sheet = ctx.createGain();
+  const sheetEnd = percEnv(sheet.gain, t, 0.18 * v, 0.001, decay * 1.6);
+  sheet.connect(filter(ctx, "highpass", 250)).connect(out);
+  const modes = SHEET.map((r) => osc(ctx, "triangle", (tone / 7) * r));
+  for (const m of modes) m.connect(sheet);
+  play(modes, t, sheetEnd);
+
+  const count = 3 + Math.floor(Math.random() * 3);
+  let at = t;
+  for (let i = 0; i < count; i++) {
+    const f = tone * (0.75 + Math.random() * 0.7);
+    const amp = ctx.createGain();
+    const end = percEnv(amp.gain, at, 0.2 * v * (1 - 0.12 * i), 0.0005, decay * (0.6 + Math.random() * 0.6));
+    amp.connect(out);
+    const partials = [f, Math.min(15000, f * 2.76)].map((hz) => osc(ctx, "sine", hz));
+    for (const p of partials) p.connect(amp);
+    play(partials, at, end);
+    const src = noise(ctx, at, 0.02);
+    const g = ctx.createGain();
+    percEnv(g.gain, at, 0.25 * v, 0.0003, 0.006);
+    src.connect(filter(ctx, "highpass", 5000)).connect(g).connect(out);
+    at += spread * (0.6 + Math.random() * 0.8);
+  }
+}
+
 /* ------------------------------------------------------------- glitch -- */
 // Hi-tech ear candy: digital artefacts rather than instruments. Several draw
 // from Math.random on purpose (a different bleep per hit), like the noise.
@@ -683,7 +716,7 @@ export const INSTRUMENTS = {
 
 export const GLITCH = { stutter, blip, zip, crush, metal, ring, crackle, rise, tape, laser };
 
-export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, ...GLITCH, ...INSTRUMENTS };
+export const VOICES = { kick, hat, chat, shaker, clap, snare, ride, rim, keys, ...GLITCH, ...INSTRUMENTS };
 
 /* ------------------------------------------------------------------ FX -- */
 

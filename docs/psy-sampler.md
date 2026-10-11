@@ -842,6 +842,7 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 | | Tribal toms | `tom` synth on the piano roll, with a fill at the end |
 | | 16th hats | closed on every step, HP 10 kHz, accent on the offbeat |
 | | Rim | `rim` voice (1.7 kHz triangle + noise tick), syncopated |
+| | Keys | `keys` voice: a metal sheet's inharmonic clang + 3-5 random keys (sine pairs + tick) ~12 ms apart; accented on the offbeat of beats 2 and 4, plus steps 3 and 9 |
 | Lead (stack) | Acid | 303: a 16-step line in A minor with rests and accents; base cutoff drifting 300 Hz ↔ 1.5 kHz every 16 s (audio clock, not the loop) |
 | | Arpeggio | square, A-C-E-A in sixteenths |
 | | 3/16 arpeggio | pluck, a 3-note cycle against the grid of 4 |

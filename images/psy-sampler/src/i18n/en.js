@@ -401,6 +401,7 @@ export default {
     "perc.toms": ["Tribal toms", "goa: tuned, with a fill"],
     "perc.hat16": ["16th hats", "closed on every step, accent on the offbeat"],
     "perc.rim": ["Rim", "syncopated rimshot"],
+    "perc.keys": ["Keys", "a bunch of keys on a metal sheet"],
     "lead.acid": ["Acid", "303: resonant filter, A minor"],
     "lead.arp": ["Arpeggio", "square, A-C-E-A"],
     "lead.arp3": ["3/16 arpeggio", "pluck, a 3 against 4 cycle"],

@@ -81,6 +81,11 @@ describe("percussion", () => {
   it("toms are pitched notes played by the tom synth", () => {
     expect(first("perc.toms", 3)).toMatchObject({ voice: "tom", freq: midiToFreq(NOTE.A3) });
   });
+
+  it("keys accent the offbeat of beats 2 and 4, with hits on steps 3 and 9", () => {
+    expect(stepsWith("perc.keys")).toEqual([3, 6, 9, 14, 19, 22, 25, 30]);
+    expect(stepsWith("perc.keys").filter((s) => first("perc.keys", s).accent)).toEqual([6, 14, 22, 30]);
+  });
 });
 
 describe("lead", () => {
@@ -247,7 +252,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(61);
+  expect(LOOP_VARIANTS).toHaveLength(62);
 });
 
 describe("copies", () => {

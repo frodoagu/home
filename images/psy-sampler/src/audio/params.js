@@ -36,6 +36,11 @@ export const PARAMS = {
   snare: [tone(190, 120, 320), decay(0.15, 0.05, 0.4)],
   ride: [tone(9000, 5000, 12000, "band"), decay(0.45, 0.1, 1.2, 0.01)],
   rim: [tone(1700, 800, 3500), decay(0.04, 0.015, 0.15)],
+  keys: [
+    tone(3200, 1500, 6000),
+    decay(0.09, 0.03, 0.3),
+    { key: "spread", label: "spread", min: 0.003, max: 0.03, step: 0.001, def: 0.012, fmt: ms },
+  ],
 
   /* glitch voices */
   stutter: [
