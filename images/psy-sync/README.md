@@ -14,6 +14,9 @@ Deployment + PVC behind `/api/`. Full story in
 - `GET` / `PUT /api/state` read and write the workspace. A `PUT` carries the
   `updatedAt` it was based on; if the stored copy has moved on, it gets a 409
   with that copy instead, unless it sets `force`.
+- `POST /api/stats` adds what a browser did since its last report (seconds
+  played, exports, shares, autopilot starts) to its row for the UTC day; the
+  totals and the top players go out on `/metrics`.
 - `DELETE /api/session` signs out, `DELETE /api/account` deletes the user and
   their workspace, `GET /api/health` is the probe.
 - Non-`GET` requests must come from an `ALLOWED_ORIGINS` origin.

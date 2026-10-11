@@ -79,6 +79,20 @@ describe("context lifecycle", () => {
     expect(trim.gain.value).toBe(0.8);
     expect(trim.outputs[0]).toBe(ctx.destination);
   });
+
+  it("counts the seconds the loop runs, across runs, by the audio clock", () => {
+    expect(engine.playedSeconds()).toBe(0);
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(2);
+    expect(engine.playedSeconds()).toBeCloseTo(2, 5);
+    engine.setLanes({});
+    ctx.currentTime += 10; // silence between runs does not count
+    engine.triggerFx("fx.impact"); // nor does an FX shot on its own
+    engine.setLanes({ kick: "kick.punchy" });
+    run(1);
+    engine.stop();
+    expect(engine.playedSeconds()).toBeCloseTo(3, 5);
+  });
 });
 
 describe("scheduler", () => {
@@ -249,6 +263,13 @@ describe("render", () => {
     expect(createContext).not.toHaveBeenCalled();
   });
 
+  it("a held solo never reaches a render", async () => {
+    const r = renderer();
+    r.setSolo("lead.arp");
+    await r.render({ lanes: { bass: "bass.offbeat" } });
+    expect(offline.nodes.some((n) => n.kind === "gain" && Math.abs(n.gain.value - 0.6) < 1e-9)).toBe(true);
+  });
+
   it("an FX renders from time 0 and is trimmed at its tail", async () => {
     const r = renderer();
     const out = await r.render({ fx: "fx.impact" });
@@ -375,6 +396,22 @@ describe("edits (setData)", () => {
     const shot = laneGains().at(-1);
     engine.setLayerVolume("fx", 0);
     expect(shot.gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.02]);
+  });
+
+  it("a solo silences every other lane and FX shot, new ones too, and gives them back", () => {
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp" });
+    run(0.2);
+    const [bass, lead] = laneGains();
+    engine.setSolo("lead.arp");
+    expect(bass.gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.01]);
+    expect(lead.gain.events.at(-1)[1]).toBeCloseTo(0.3, 9);
+    engine.triggerFx("fx.impact");
+    expect(laneGains().at(-1).gain.value).toBe(0);
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp", pad: "pad.chord" });
+    expect(laneGains().at(-1).gain.value).toBe(0);
+    engine.setSolo(null);
+    expect(bass.gain.events.at(-1)[1]).toBeCloseTo(0.6, 9);
+    expect(lead.gain.events.at(-1)[1]).toBeCloseTo(0.3, 9);
   });
 
   it("FX read their sliders: a 4-bar sweep lasts 4 bars", () => {

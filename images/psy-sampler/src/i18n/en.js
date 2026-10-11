@@ -65,6 +65,8 @@ export default {
           ["A layer's volume", "The slider under each layer's name (Kick, Lead, FX…) turns all its sounds up or down together, like a master for the layer, on top of each sound's own volume."],
           ["A sound's fill", "While it plays, the fill is its volume: drag it left or right (or ← →) to turn it up or down, 0 to 150 %. The tick marks 100 %."],
           ["🔀 on a sound", "Improvise: varies it every loop around its part. The first variation waits for the next loop, so nothing jumps when you press it."],
+          ["🎧 on a sound", "Hold it down (mouse, finger, Space or Enter) and only that sound plays; the rest keep running silently and come back right where they were when you let go. Only while the sound is on."],
+          ["The bar on a sound that is off", "It is its volume: drag or click it (or ← →) to have it ready before you turn it on. Once it plays, the fill takes its place."],
         ],
       },
       {
@@ -294,6 +296,27 @@ export default {
     reload: "Reload",
     later: "Later",
   },
+  intro: {
+    title: "This is Psy Layers",
+    what:
+      "A psychedelic electronic music machine that runs entirely in your browser. No samples: every kick, " +
+      "bass, lead and pad is a formula computed live, and you choose what plays and when.",
+    points: [
+      ["🎛️", "Each row is a layer: Kick, Bass, Percussion, Lead, Pad, Glitch and FX. One click turns a sound on, another turns it off, and it comes in right on the next bar."],
+      ["🤖", "The Autopilot builds a whole track from a seed. The same seed sounds the same anywhere, and you can share it with 🔗."],
+      ["▾", "Open any sound to edit its hits or notes, the synth, the filter and the distortion, without stopping."],
+      ["📸", "Save moments as snapshots and record what you play to WAV. Everything saves itself in this browser, and in the cloud if you sign in with Google."],
+    ],
+    phones: {
+      title: "You need headphones",
+      text:
+        "The lows (kick and bass, the heart of psytrance) don't come out of phone or laptop speakers. " +
+        "With headphones, or good speakers, you hear everything. Sound starts with your first click.",
+    },
+    help: "📖 Read the instructions",
+    start: "Start playing",
+  },
+  credits: { repo: "Source: frodoagu/home", made: "Made with ❤️ on 🌍 with Claude by Fr0D3" },
   topbar: { back: "agu.com.ar", backTitle: "Back to agu.com.ar" },
   cloud: {
     pitch: "Sign in to save your setup to the cloud and use it on any device.",
@@ -427,6 +450,8 @@ export default {
     editTitle: "Edit",
     vary: (label) => `Improvise ${label}`,
     varyTitle: "Improvise. Click: on or off. Drag up or down (or arrow keys) to set how much it changes.",
+    solo: (label) => `Solo ${label}`,
+    soloTitle: "Hold it down to hear only this sound",
     bgKick: "Dashed outline: playing as the background kick",
     queued: "Queued: comes in on the next bar",
     copyName: (label) => `${label} (copy)`,
@@ -437,6 +462,8 @@ export default {
     layerVolume: (name) => `${name} volume`,
     layerVolumeTitle: "The whole layer's volume: turns all its sounds up or down together",
     level: (pct) => `Volume ${pct}`,
+    levelBar: (label) => `${label} volume`,
+    levelBarTitle: "Its volume: drag or click the bar (or ← →) to set it before you turn it on",
     levelTitle: "The fill is its volume: drag left or right (or ← →) to change it. Click: switches it off.",
   },
   editor: {

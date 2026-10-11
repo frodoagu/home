@@ -1,12 +1,31 @@
 // SQLite on the PVC: one row per user, one JSON workspace per user, the
 // user's audio samples (as BLOBs, so deleting the account takes them along),
 // and one row per browser that checked its session (a random id the page
-// keeps; no sub = never signed in there). WAL keeps writes small and lets a
-// rolling pod read while the old one finishes.
+// keeps; no sub = never signed in there), and what each browser did per day
+// (UTC) as the page reports it. WAL keeps writes small and lets a rolling pod
+// read while the old one finishes.
 import { Database } from "bun:sqlite";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
+
+/**
+ * The usage columns: most one report may add (`report`) and most one browser
+ * may reach in a day (`day`). Seconds for `played` and `recorded`, counts
+ * for the rest.
+ */
+export const USAGE = {
+  played: { report: 3600, day: 86400 }, // the loop running
+  recordings: { report: 50, day: 1000 }, // takes saved as WAV
+  recorded: { report: 3600, day: 86400 }, // seconds in those takes
+  renders: { report: 50, day: 1000 }, // a loop, an FX or the mix rendered to WAV
+  presets: { report: 50, day: 1000 },
+  snapshots: { report: 50, day: 1000 },
+  shares: { report: 50, day: 1000 },
+  autopilot: { report: 50, day: 1000 },
+};
+const COLUMNS = Object.keys(USAGE);
+export const dayOf = (ms) => Math.floor(ms / DAY);
 
 export function openDb(path) {
   const db = new Database(path, { create: true, strict: true });
@@ -41,7 +60,19 @@ export function openDb(path) {
       first_seen INTEGER NOT NULL,
       seen_at    INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS usage (
+      visitor    TEXT NOT NULL,
+      day        INTEGER NOT NULL,
+      ${COLUMNS.map((c) => `${c} INTEGER NOT NULL DEFAULT 0`).join(",\n      ")},
+      PRIMARY KEY (visitor, day)
+    ) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS usage_by_day ON usage (day);
   `);
+  const addUsage = db.query(
+    `INSERT INTO usage (visitor, day, ${COLUMNS.join(", ")}) VALUES (?, ?, ${COLUMNS.map(() => "?").join(", ")})
+     ON CONFLICT(visitor, day) DO UPDATE SET
+     ${COLUMNS.map((c) => `${c} = MIN(${c} + excluded.${c}, ${USAGE[c].day})`).join(",\n     ")}`,
+  );
   const count = (sql, ...args) => db.query(sql).get(...args).n;
   return {
     user: (sub) => db.query("SELECT sub, email FROM users WHERE sub = ?").get(sub),
@@ -68,11 +99,33 @@ export function openDb(path) {
     },
     /** Forgets anonymous browsers not seen since `before`. */
     pruneVisitors: (before) => db.query("DELETE FROM visitors WHERE sub IS NULL AND seen_at < ?").run(before).changes,
+    /**
+     * Adds one report (already clamped to USAGE.report) to a known browser's
+     * day. New rows stop at `maxRows` a day. Returns "ok", "unknown" or "full".
+     */
+    addUsage(visitor, day, counts, maxRows) {
+      if (!db.query("SELECT 1 FROM visitors WHERE id = ?").get(visitor)) return "unknown";
+      const exists = db.query("SELECT 1 FROM usage WHERE visitor = ? AND day = ?").get(visitor, day);
+      if (!exists && count("SELECT COUNT(*) AS n FROM usage WHERE day = ?", day) >= maxRows) return "full";
+      addUsage.run(visitor, day, ...COLUMNS.map((c) => Math.min(counts[c] ?? 0, USAGE[c].day)));
+      return "ok";
+    },
+    /** Forgets usage days before `day`. */
+    pruneUsage: (day) => db.query("DELETE FROM usage WHERE day < ?").run(day).changes,
     /** Everything /metrics reports from the database. */
     stats(now, topUsers) {
       const windows = { "1d": now - DAY, "7d": now - 7 * DAY, "30d": now - 30 * DAY };
       const perWindow = (sql) => Object.fromEntries(Object.entries(windows).map(([w, since]) => [w, count(sql, since)]));
       const sizes = db.query("SELECT length(CAST(data AS BLOB)) AS bytes FROM states").all().map((r) => r.bytes);
+      // Usage has day resolution: a window starts at 00:00 UTC of its first day.
+      const usageSince = (since) =>
+        db
+          .query(
+            `SELECT ${COLUMNS.map((c) => `COALESCE(SUM(${c}), 0) AS ${c}`).join(", ")},
+             COUNT(DISTINCT CASE WHEN played > 0 THEN visitor END) AS players
+             FROM usage WHERE day >= ?`,
+          )
+          .get(dayOf(since));
       return {
         users: count("SELECT COUNT(*) AS n FROM users"),
         usersCreated: perWindow("SELECT COUNT(*) AS n FROM users WHERE created_at >= ?"),
@@ -89,6 +142,17 @@ export function openDb(path) {
              FROM samples JOIN users USING (sub) GROUP BY sub ORDER BY bytes DESC LIMIT ?`,
           )
           .all(topUsers),
+        usage: Object.fromEntries(Object.entries(windows).map(([w, since]) => [w, usageSince(since)])),
+        // Over 30 days: an account sums its browsers; an anonymous browser
+        // shows as the start of its random id.
+        usageTop: db
+          .query(
+            `SELECT COALESCE(users.email, 'anon-' || substr(usage.visitor, 1, 8)) AS user,
+             SUM(played) AS played, SUM(recordings + renders + presets + snapshots) AS exports
+             FROM usage LEFT JOIN visitors ON visitors.id = usage.visitor LEFT JOIN users ON users.sub = visitors.sub
+             WHERE day >= ? GROUP BY user ORDER BY played DESC, exports DESC LIMIT ?`,
+          )
+          .all(dayOf(windows["30d"]), topUsers),
         top: db
           .query(
             `SELECT users.email AS email, length(CAST(states.data AS BLOB)) AS bytes

@@ -194,16 +194,23 @@ export function createEngine({
   let barHook = null; // (time, step, bar) -> desired lanes | undefined
   let bars = 0; // bar lines queued since start(); the first one is 0
   let stopAt = null; // a bar-line stop: the timer ends once this time passes
+  let played = 0; // seconds the loop ran in earlier runs, by the audio clock
+  let runFrom = 0; // audio time the current run started
   const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered }
   const fxPlaying = new Map(); // fx id -> { gain, input, chain, end }
   const data = new Map(); // variant id -> edited data (factory data otherwise)
   const volumes = new Map(); // layer id -> its fader over every sound in it (1 otherwise)
+  let solo = null; // the variant heard alone while its 🎧 is held
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
   const volumeOf = (layer) => volumes.get(layer) ?? 1;
   const laneLevel = (key, variant) =>
     (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) * volumeOf(layerOf(variant)) * dataOf(variant).level;
   const shotLevel = (id) => LAYER_LEVEL[layerOf(id)] * volumeOf(layerOf(id)) * dataOf(id).level;
+  // What the speakers get: a solo silences everything else. Renders skip it.
+  const heard = (id, level) => (solo === null || solo === id ? level : 0);
+  const liveLane = (key, variant) => heard(variant, laneLevel(key, variant));
+  const liveShot = (id) => heard(id, shotLevel(id));
 
   // Must run synchronously inside a click handler: browsers only let an
   // AudioContext start (or resume) from a user gesture.
@@ -267,7 +274,7 @@ export function createEngine({
     withInsert(ctx, openGain(level, layer), insert, stepDuration(bpm), at);
 
   function openLane(key, variant, backfill, at) {
-    const level = laneLevel(key, variant);
+    const level = liveLane(key, variant);
     const lane = { variant, level, ...openVoice(level, layerOf(variant), dataOf(variant).insert, at), entered: false };
     // Steps inside the lookahead window were queued before this lane existed.
     // Backfill them so the new variant enters on the very next step instead of
@@ -332,6 +339,7 @@ export function createEngine({
   }
 
   function start() {
+    runFrom = ctx.currentTime;
     cursor = { step: 0, time: ctx.currentTime + START_DELAY };
     queued = [];
     bars = 0;
@@ -341,7 +349,10 @@ export function createEngine({
   }
 
   function stopLoop() {
-    if (timer !== null) clearInterval(timer);
+    if (timer !== null) {
+      clearInterval(timer);
+      played += ctx.currentTime - runFrom;
+    }
     timer = null;
     cursor = null;
     queued = [];
@@ -391,7 +402,7 @@ export function createEngine({
       if (lane.variant !== id) continue;
       if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime);
       else swapInsert(lane, next.insert);
-      const level = laneLevel(key, id);
+      const level = liveLane(key, id);
       if (level === lane.level) continue;
       lane.level = level;
       lane.gain.gain.setTargetAtTime(level, ctx.currentTime, 0.02);
@@ -404,12 +415,27 @@ export function createEngine({
     if (!ctx) return;
     for (const [key, lane] of lanes) {
       if (layerOf(lane.variant) !== layer) continue;
-      lane.level = laneLevel(key, lane.variant);
+      lane.level = liveLane(key, lane.variant);
       lane.gain.gain.setTargetAtTime(lane.level, ctx.currentTime, 0.02);
     }
     if (layer !== "fx") return;
     for (const [id, fx] of fxPlaying) {
-      if (fx.end > ctx.currentTime) fx.gain.gain.setTargetAtTime(shotLevel(id), ctx.currentTime, 0.02);
+      if (fx.end > ctx.currentTime) fx.gain.gain.setTargetAtTime(liveShot(id), ctx.currentTime, 0.02);
+    }
+  }
+
+  // Hear one variant alone (null: everything again). Every other lane and FX
+  // shot glides to silence and back (10 ms) and keeps playing underneath, so
+  // letting go drops back in on the grid. Its echoes and reverb tails ring out.
+  function setSolo(id) {
+    solo = id;
+    if (!ctx) return;
+    for (const [key, lane] of lanes) {
+      lane.level = liveLane(key, lane.variant);
+      lane.gain.gain.setTargetAtTime(lane.level, ctx.currentTime, 0.01);
+    }
+    for (const [fxId, fx] of fxPlaying) {
+      if (fx.end > ctx.currentTime) fx.gain.gain.setTargetAtTime(liveShot(fxId), ctx.currentTime, 0.01);
     }
   }
 
@@ -447,7 +473,7 @@ export function createEngine({
     const t = at ?? (cursor ? nextBeatTime(cursor, stepDur) : ctx.currentTime + START_DELAY);
     const prev = fxPlaying.get(id);
     if (prev) fadeOut(prev);
-    const shot = openVoice(shotLevel(id), "fx", dataOf(id).insert, t);
+    const shot = openVoice(liveShot(id), "fx", dataOf(id).insert, t);
     const end = fxVoice(ctx, shot.input, t, stepDur, id);
     shot.chain.stop(end + FADE);
     fxPlaying.set(id, { ...shot, end });
@@ -581,6 +607,7 @@ export function createEngine({
     setLanes,
     setData,
     setLayerVolume,
+    setSolo,
     setEffects,
     setBpm,
     setMasterFilter,
@@ -596,5 +623,7 @@ export function createEngine({
       barHook = fn;
     },
     isRunning: () => timer !== null,
+    /** Seconds the loop has run since the engine was created (FX shots and previews aside). */
+    playedSeconds: () => played + (timer !== null ? ctx.currentTime - runFrom : 0),
   };
 }

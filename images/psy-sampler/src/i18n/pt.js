@@ -65,6 +65,8 @@ export default {
           ["Volume de uma camada", "O slider embaixo do nome de cada camada (Kick, Lead, FX…) sobe ou desce todos os seus sons juntos, como um master da camada, em cima do volume de cada um."],
           ["O preenchimento de um som", "Enquanto toca, o preenchimento é o volume dele: arraste da esquerda para a direita (ou ← →) para subir ou baixar, de 0 a 150 %. O tracinho marca 100 %."],
           ["🔀 num som", "Improvisar: varia ele a cada loop em volta da sua parte. A primeira variação espera o próximo loop, assim nada pula ao apertar."],
+          ["🎧 num som", "Segure apertado (mouse, dedo, Espaço ou Enter) e só esse som toca; os outros seguem rodando em silêncio e voltam bem onde estavam quando você solta. Só com o som ligado."],
+          ["A barrinha de um som desligado", "É o volume dele: arraste ou clique (ou ← →) para deixá-lo pronto antes de ligar. Quando toca, o preenchimento toma o lugar dela."],
         ],
       },
       {
@@ -294,6 +296,27 @@ export default {
     reload: "Recarregar",
     later: "Mais tarde",
   },
+  intro: {
+    title: "Isto é o Psy Layers",
+    what:
+      "Uma máquina de música eletrônica psicodélica que roda inteira no seu navegador. Sem samples: cada kick, " +
+      "baixo, lead e pad é uma fórmula calculada ao vivo, e você escolhe o que toca e quando.",
+    points: [
+      ["🎛️", "Cada linha é uma camada: Kick, Baixo, Percussão, Lead, Pad, Glitch e FX. Um clique liga um som, outro desliga, e ele entra bem no próximo compasso."],
+      ["🤖", "O Piloto automático monta uma faixa inteira a partir de uma semente. A mesma semente soa igual em qualquer lugar, e você pode compartilhá-la com 🔗."],
+      ["▾", "Abra qualquer som para editar as batidas ou as notas, o synth, o filtro e a distorção, sem parar de tocar."],
+      ["📸", "Salve momentos com snapshots e grave o que você toca em WAV. Tudo se salva sozinho neste navegador, e na nuvem se você entrar com o Google."],
+    ],
+    phones: {
+      title: "Você precisa de fones",
+      text:
+        "Os graves (o kick e o baixo, o coração do psytrance) não saem pelos alto-falantes de um celular nem de um notebook. " +
+        "Com fones, ou boas caixas de som, você ouve tudo. O som começa no seu primeiro clique.",
+    },
+    help: "📖 Ver as instruções",
+    start: "Começar a tocar",
+  },
+  credits: { repo: "Código: frodoagu/home", made: "Feito com ❤️ na 🌍 com Claude por Fr0D3" },
   topbar: { back: "agu.com.ar", backTitle: "Voltar para agu.com.ar" },
   cloud: {
     pitch: "Entre para salvar sua configuração na nuvem e usar em qualquer dispositivo.",
@@ -427,6 +450,8 @@ export default {
     editTitle: "Editar",
     vary: (label) => `Improvisar ${label}`,
     varyTitle: "Improvisar. Clique: liga ou desliga. Arraste para cima ou para baixo (ou setas) para escolher quanto muda.",
+    solo: (label) => `Ouvir só ${label}`,
+    soloTitle: "Segure apertado para ouvir só este som",
     bgKick: "Borda tracejada: tocando como kick de fundo",
     queued: "Na fila: entra no próximo compasso",
     copyName: (label) => `${label} (cópia)`,
@@ -437,6 +462,8 @@ export default {
     layerVolume: (name) => `Volume de ${name}`,
     layerVolumeTitle: "Volume da camada inteira: sobe ou desce todos os seus sons juntos",
     level: (pct) => `Volume ${pct}`,
+    levelBar: (label) => `Volume de ${label}`,
+    levelBarTitle: "O volume dele: arraste ou clique na barrinha (ou ← →) para deixá-lo pronto antes de ligar",
     levelTitle: "O preenchimento é o volume dele: arraste da esquerda para a direita (ou ← →) para mudar. Clique: desliga.",
   },
   editor: {

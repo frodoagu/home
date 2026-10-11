@@ -207,6 +207,24 @@ pointer is the slider's, a playing tile cannot be dragged to reorder (a silent
 one can, and Alt + arrows always work). FX and snapshot tiles keep a plain
 fill.
 
+A silent loop sound shows the same volume as a **thin bar** along the bottom
+of its tile (`.level-bar`, a `role="slider"` sibling of the tile's button, not
+inside it), so it can be set before the sound enters: a drag, a click on it or
+← → on the focused bar. Its hit area is a strip, not the whole tile, so the
+silent tile still drags to reorder. Once the sound plays the bar hides and the
+fill takes over.
+
+**🎧 solo** sits between 🔀 and ▾ on every loop sound: while it is held
+(pointer captured, or Space / Enter down) only that sound is heard.
+`engine.setSolo(id)` glides every other lane and FX shot to 0 (10 ms) and back
+on release, and opens new ones silent meanwhile; nothing stops or reschedules,
+so the rest drops back in on the grid, and delay and reverb tails already sent
+ring out. The solo factor is applied only to live gains (`liveLane` /
+`liveShot`), never to `render()`, so a WAV export taken mid-solo is the full
+mix; a recording (which taps the output) does capture it. It does nothing on a
+sound that is not playing, which would only leave silence, and one finger
+cannot steal another's solo. A remount drops it.
+
 Each **layer volume** (the slider under a layer's name, 0-150 %) is a fader over
 every sound in that layer, on top of each sound's own volume. It is not a node:
 `engine.setLayerVolume` multiplies it into the level of the lanes and FX shots
@@ -468,6 +486,7 @@ the token itself and issues its own session cookie.
 | `GET /api/state` | `{ state, updatedAt }` or 404 |
 | `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, or **409** with the stored copy when `base` is stale |
 | `DELETE /api/account` | deletes the user and their workspace |
+| `POST /api/stats` | `{ visitor, played?, recordings?, … }`: usage since the last report, added to the browser's day (see *Usage* below) |
 
 - The server **doesn't interpret** the workspace: it stores an opaque JSON
   object (capped at 256 KB) and the page runs it through `normalize()` when
@@ -555,9 +574,22 @@ capabilities.
 The `/api/` rate limit is 120 requests/min per IP with a burst of 60: a page load
 fetches every sample its sounds use on top of the usual calls.
 
-Metrics, dashboard and alerts (accounts, anonymous browsers, disk per account,
-samples, visitor countries):
+Metrics, dashboard and alerts (accounts, anonymous browsers, usage, disk per
+account, samples, visitor countries):
 [monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
+
+**Usage.** `src/stats.js` reports, keyed by the same visitor id as the session
+check: whole seconds the loop ran (`engine.playedSeconds()`, by the audio
+clock; FX shots and previews alone do not count) and a count of WAV takes (plus
+their seconds), WAV renders, preset and snapshot exports, share links and
+autopilot starts (a new seed under a running autopilot is not a start). It sends
+every 5 minutes and when the tab is hidden, with `keepalive`; a report that
+fails to leave goes out with the next one. Nothing else about the session leaves
+the page. psy-sync sums each report into one `usage` row per browser per UTC day,
+so the table grows by ~100 bytes per active browser per day; rows older than 400
+days are pruned. Anyone can POST, so each report is clamped (1 h of play, 50 of
+each count), a day is capped (24 h, 1000), the browser must already be known
+from a session check, and new rows stop at 5000 browsers a day.
 
 ### One-time setup
 
@@ -715,10 +747,23 @@ plays (not the autopilot, not the queue, not the open editor). The picker
 on phones.
 
 The **📖 Help** button in the top bar opens a page (`ui/help.js`, a
-modal `<dialog>`, full screen on a phone) built from each dictionary's `help`:
+modal `<dialog>`, full screen on a phone, upright or on its side) built from each dictionary's `help`:
 the hidden tricks first (double click, clicking a queued sound, Arm, dragging
 across 🔀, Alt + arrows…), then a reference per area. It is plain text, so a
 new gesture or control needs a line there too, in all three languages.
+
+The **first visit** gets a welcome instead (`ui/intro.js`, the dictionary's
+`intro`): what the sampler is, a big notice that it needs headphones (phone
+and laptop speakers drop the kick and bass), four lines on what it's like, and
+a link that opens the Help page. A phone on its side gets it full screen in two
+columns, with the headphones notice in view. It shows once per browser: its own `localStorage` key
+(`psy-sampler:intro`, not the workspace, which is written on the first load
+anyway) is set the moment it opens, so a reload never brings it back. Without
+storage it never shows, rather than on every visit. On a short screen it
+scrolls with its buttons pinned to the bottom.
+
+The page ends with a small **credits** footer: a link to the source in this
+repo and "made with ❤️ on 🌍 with Claude by Fr0D3" (`credits` in each dictionary).
 
 ## Screen
 
