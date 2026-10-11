@@ -309,6 +309,7 @@ dns:
         - logs.agu.com.ar
         - dash.agu.com.ar
         - alertmanager.agu.com.ar
+        - psy.agu.com.ar
 ```
 
 Renders into `FTLCONF_dns_hosts` as one `IP host1 host2 ...` entry per `ip` (hosts-file

@@ -1035,11 +1035,10 @@ To keep it private: seal a `ghcr-creds` docker-registry Secret into the
 ### DNS
 
 - `psy.agu.com.ar` is in `cloudflare-ddns` (A record, proxied).
-- It's **not** in Pi-hole's `localRecords`, on purpose: those records render into
-  the Pi-hole Deployment's env (`strategy: Recreate`), so adding a host restarts
-  Pi-hole and cuts LAN DNS + DHCP during the rollout. For 20 kB of static files
-  the shortcut buys nothing; from the LAN it resolves to Cloudflare, like
-  `shelly` and `yaskia.com`.
+- It's in Pi-hole's `localRecords`, so from the LAN it resolves to the Pi and
+  cloud saves and sample uploads skip the Cloudflare hairpin. Those records render
+  into the Pi-hole Deployment's env (`strategy: Recreate`): adding or removing a
+  host restarts Pi-hole and cuts LAN DNS + DHCP for the rollout.
 - Blackbox probe (`blackboxTargets.public`) for uptime + TLS expiry.
 - A card in the public grid of `agu.com.ar` (an entry with `href` in `apps` of
   [`registry.jsx`](../images/home-site/src/apps/registry.jsx)).
