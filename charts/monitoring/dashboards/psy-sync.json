@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "psy.agu.com.ar cloud save (images/psy-sync): accounts, anonymous browsers, disk per account, API traffic. See docs/monitoring.md.",
+  "description": "psy.agu.com.ar cloud save (images/psy-sync): accounts, anonymous browsers, seconds played and exports, disk per account, API traffic. See docs/monitoring.md.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -1298,6 +1298,782 @@
     },
     {
       "type": "row",
+      "title": "🎛️ Usage (the page's own reports: day resolution, UTC days)",
+      "collapsed": false,
+      "id": 45,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Played · 24h",
+      "description": "Seconds the loop played, all browsers, since 00:00 UTC yesterday. FX shots and previews alone do not count.",
+      "id": 46,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"1d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Played · 7d",
+      "description": "",
+      "id": 47,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"7d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Played · 30d",
+      "description": "",
+      "id": 48,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"30d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Players · 7d",
+      "description": "Browsers that played the loop at all.",
+      "id": 49,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_players{window=\"7d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Per player · 7d",
+      "description": "",
+      "id": 50,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"7d\"}) / max(psy_sync_usage_players{window=\"7d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Exports · 7d",
+      "description": "WAV recordings, WAV renders (loop, FX, mix), preset files and snapshot files.",
+      "id": 51,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "sum(max by (event) (psy_sync_usage_events{window=\"7d\",event=~\"recordings|renders|presets|snapshots\"}))",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Recorded · 7d",
+      "description": "Length of the recordings saved as WAV.",
+      "id": 52,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_recorded_seconds{window=\"7d\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Seconds played per user · 30d",
+      "description": "An account sums its browsers; a browser that never signed in shows as anon-<start of its random id>. Only the top sync.metrics.topUsers users are exported.",
+      "id": 53,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "minVizWidth": 8,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "sort_desc(max by (user) (psy_sync_user_played_seconds))",
+          "legendFormat": "{{user}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Exports per user · 30d",
+      "description": "WAV recordings and renders plus preset and snapshot files, for the same users as the panel on the left.",
+      "id": 54,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "minVizWidth": 8,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "sort_desc(max by (user) (psy_sync_user_exports))",
+          "legendFormat": "{{user}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Exports, shares, autopilot · 30d",
+      "description": "recordings: takes saved as WAV · renders: loop/FX/mix rendered to WAV · presets / snapshots: JSON files · shares: links copied · autopilot: starts.",
+      "id": 55,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "minVizWidth": 8,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "sort_desc(max by (event) (psy_sync_usage_events{window=\"30d\"}))",
+          "legendFormat": "{{event}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Seconds played (rolling windows)",
+      "description": "",
+      "id": 56,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"1d\"})",
+          "legendFormat": "24h",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(psy_sync_usage_played_seconds{window=\"7d\"})",
+          "legendFormat": "7d",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Exports, shares, autopilot · 24h",
+      "description": "",
+      "id": 57,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max by (event) (psy_sync_usage_events{window=\"1d\"})",
+          "legendFormat": "{{event}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
       "title": "🌍 Countries (Traefik access log → VictoriaLogs; follows the time picker, logs keep 7d)",
       "collapsed": false,
       "id": 21,
@@ -1306,7 +2082,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 49
       }
     },
     {
@@ -1322,7 +2098,7 @@
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 50
       },
       "fieldConfig": {
         "defaults": {
@@ -1444,7 +2220,7 @@
         "h": 12,
         "w": 8,
         "x": 12,
-        "y": 27
+        "y": 50
       },
       "fieldConfig": {
         "defaults": {
@@ -1509,7 +2285,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 27
+        "y": 50
       },
       "fieldConfig": {
         "defaults": {
@@ -1571,7 +2347,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 31
+        "y": 54
       },
       "fieldConfig": {
         "defaults": {
@@ -1633,7 +2409,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 35
+        "y": 58
       },
       "fieldConfig": {
         "defaults": {
@@ -1695,7 +2471,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 62
       },
       "fieldConfig": {
         "defaults": {
@@ -1755,7 +2531,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 70
       }
     },
     {
@@ -1771,7 +2547,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -1833,7 +2609,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -1895,7 +2671,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -1957,7 +2733,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -2027,7 +2803,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -2097,7 +2873,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 48
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -2167,7 +2943,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 75
       },
       "fieldConfig": {
         "defaults": {
@@ -2242,7 +3018,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 75
       },
       "fieldConfig": {
         "defaults": {
@@ -2399,7 +3175,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 62
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2460,7 +3236,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 62
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2536,7 +3312,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 93
       }
     },
     {
@@ -2552,7 +3328,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 71
+        "y": 94
       },
       "fieldConfig": {
         "defaults": {
@@ -2630,7 +3406,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 75
+        "y": 98
       },
       "fieldConfig": {
         "defaults": {
@@ -2697,7 +3473,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 79
+        "y": 102
       },
       "fieldConfig": {
         "defaults": {
@@ -2764,7 +3540,7 @@
         "h": 12,
         "w": 10,
         "x": 4,
-        "y": 71
+        "y": 94
       },
       "fieldConfig": {
         "defaults": {
@@ -2825,7 +3601,7 @@
         "h": 12,
         "w": 10,
         "x": 14,
-        "y": 71
+        "y": 94
       },
       "fieldConfig": {
         "defaults": {

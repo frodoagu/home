@@ -194,6 +194,8 @@ export function createEngine({
   let barHook = null; // (time, step, bar) -> desired lanes | undefined
   let bars = 0; // bar lines queued since start(); the first one is 0
   let stopAt = null; // a bar-line stop: the timer ends once this time passes
+  let played = 0; // seconds the loop ran in earlier runs, by the audio clock
+  let runFrom = 0; // audio time the current run started
   const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered }
   const fxPlaying = new Map(); // fx id -> { gain, input, chain, end }
   const data = new Map(); // variant id -> edited data (factory data otherwise)
@@ -337,6 +339,7 @@ export function createEngine({
   }
 
   function start() {
+    runFrom = ctx.currentTime;
     cursor = { step: 0, time: ctx.currentTime + START_DELAY };
     queued = [];
     bars = 0;
@@ -346,7 +349,10 @@ export function createEngine({
   }
 
   function stopLoop() {
-    if (timer !== null) clearInterval(timer);
+    if (timer !== null) {
+      clearInterval(timer);
+      played += ctx.currentTime - runFrom;
+    }
     timer = null;
     cursor = null;
     queued = [];
@@ -617,5 +623,7 @@ export function createEngine({
       barHook = fn;
     },
     isRunning: () => timer !== null,
+    /** Seconds the loop has run since the engine was created (FX shots and previews aside). */
+    playedSeconds: () => played + (timer !== null ? ctx.currentTime - runFrom : 0),
   };
 }

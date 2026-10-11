@@ -17,10 +17,15 @@
 //                         count or full)
 //   GET    /api/samples/:id   the file, to its owner only
 //   DELETE /api/samples/:id
+//   POST   /api/stats     { visitor, played?, recordings?, … } (see USAGE in
+//                         db.js): what this browser did since its last report,
+//                         added to its day; 404 for a browser the session
+//                         check never recorded
 //
 // The server never interprets a workspace: it stores an opaque JSON object
 // (size-capped) and the page runs it through normalize() on the way back in.
 // Samples are opaque too, past a check that they start like an audio file.
+import { USAGE, dayOf } from "./db.js";
 import { verifyIdToken } from "./google.js";
 import { requestCounter } from "./metrics.js";
 import { SAMPLE_PATH, cleanName, sampleId, sniffAudio } from "./samples.js";
@@ -28,6 +33,7 @@ import { SESSION_MS, cookieValue, readSession, setCookie, signSession } from "./
 
 const MAX_BYTES = 256 * 1024;
 const MAX_VISITORS = 100_000;
+const MAX_USAGE_ROWS = 5000; // browsers reporting in one day
 const VISITOR_ID = /^[\w-]{16,64}$/;
 const ROUTES = new Set([
   "GET /api/health",
@@ -41,8 +47,9 @@ const ROUTES = new Set([
   "POST /api/samples",
   "GET /api/samples/:id",
   "DELETE /api/samples/:id",
+  "POST /api/stats",
 ]);
-const PUBLIC = ["GET /api/health", "POST /api/session", "GET /api/session", "DELETE /api/session"];
+const PUBLIC = ["GET /api/health", "POST /api/session", "GET /api/session", "DELETE /api/session", "POST /api/stats"];
 const PRIVATE = new Set([...ROUTES].filter((r) => !PUBLIC.includes(r)));
 
 const MiB = 2 ** 20;
@@ -68,6 +75,7 @@ export function createApp({
   maxBytes = MAX_BYTES,
   maxUsers = 5000,
   maxVisitors = MAX_VISITORS,
+  maxUsageRows = MAX_USAGE_ROWS,
   samples: sampleLimits = {},
 }) {
   const sampleMax = { ...SAMPLE_LIMITS, ...sampleLimits };
@@ -123,6 +131,23 @@ export function createApp({
     return json({ updatedAt });
   }
 
+  // Usage numbers come from the page, so anyone can send them: each one is
+  // clamped to what a real session could add, and USAGE caps the day.
+  async function addStats(req) {
+    const { body, error } = await readBody(req);
+    if (error) return empty(error);
+    if (!VISITOR_ID.test(body?.visitor ?? "")) return json({ error: "bad visitor" }, 400);
+    const counts = {};
+    for (const [name, { report }] of Object.entries(USAGE)) {
+      const n = Number(body[name] ?? 0);
+      counts[name] = Number.isFinite(n) ? Math.min(Math.max(Math.round(n), 0), report) : 0;
+    }
+    if (Object.values(counts).every((n) => n === 0)) return empty(204);
+    const result = db.addUsage(body.visitor, dayOf(now()), counts, maxUsageRows);
+    if (result === "unknown") return json({ error: "unknown visitor" }, 404);
+    return result === "full" ? json({ error: "full" }, 507) : empty(204);
+  }
+
   function listSamples(user) {
     const { count, bytes } = db.sampleUsage(user.sub);
     const { bytes: max, count: maxCount, quota } = sampleMax;
@@ -170,6 +195,7 @@ export function createApp({
 
     if (route === "POST /api/session") return signIn(req);
     if (route === "DELETE /api/session") return empty(204, { "set-cookie": setCookie("", 0) });
+    if (route === "POST /api/stats") return addStats(req);
 
     const user = await currentUser(req);
     // Asked on every page load: a signed-out visitor is not an error.
@@ -200,7 +226,7 @@ export function createApp({
 
   return {
     requests,
-    limits: { maxBytes, maxUsers, maxVisitors, samples: sampleMax },
+    limits: { maxBytes, maxUsers, maxVisitors, maxUsageRows, samples: sampleMax },
     async fetch(req) {
       const route = routeOf(req.method, new URL(req.url).pathname);
       let res;

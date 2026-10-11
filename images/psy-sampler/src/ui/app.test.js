@@ -1483,6 +1483,18 @@ describe("export, import, reset", () => {
       expect($(".status").textContent).toMatch(/No sonó nada/);
     });
 
+    it("counts a saved take and its seconds for the usage numbers", async () => {
+      const stats = { count: vi.fn() };
+      root = document.createElement("div");
+      document.body.replaceChildren(root);
+      mount(root, engine, { stats });
+      rec().click();
+      await flushPromises();
+      play(2);
+      await stopRec();
+      expect(stats.count.mock.calls).toEqual([["recordings"], ["recorded", 2]]);
+    });
+
     it("keeps recording through a language change", async () => {
       rec().click();
       await flushPromises();
@@ -1610,5 +1622,28 @@ describe("filter, distortion and the DJ filter", () => {
     expect(spy).toHaveBeenLastCalledWith(0);
     expect($(".dj-value").textContent).toBe("abierto");
     expect(saved()).not.toHaveProperty("dj"); // a performance control, never stored
+  });
+});
+
+describe("usage counts", () => {
+  it("counts exports, shares and autopilot starts, not a new seed under the autopilot", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: async () => {} } });
+    const stats = { count: vi.fn() };
+    root = document.createElement("div");
+    document.body.replaceChildren(root);
+    mount(root, engine, { stats });
+    const counted = () => stats.count.mock.calls.map(([event]) => event);
+
+    $('[data-action="export"]').click();
+    $('[data-action="share"]').click();
+    await flushPromises();
+    $("button.auto").click();
+    $("#seed").value = "otra";
+    $("#seed").dispatchEvent(new Event("change"));
+    $('[data-action="wav-mix"]').click();
+    await flushPromises();
+    $('[data-action="snapshot"]').click();
+    $('[data-action="export-snaps"]').click();
+    expect(counted()).toEqual(["presets", "shares", "autopilot", "renders", "snapshots"]);
   });
 });

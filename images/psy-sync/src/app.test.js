@@ -421,6 +421,58 @@ describe("visitors and metrics", () => {
     expect(text).toContain("# TYPE psy_sync_http_requests_total counter\n");
     expect(text).toContain("psy_sync_samples 0\n");
     expect(text).toContain(`psy_sync_sample_quota_bytes ${100 * 2 ** 20}\n`);
+    expect(text).toContain('psy_sync_usage_played_seconds{window="30d"} 0\n');
+    expect(text).toContain('psy_sync_usage_events{event="renders",window="1d"} 0\n');
+  });
+
+  it("adds a known browser's reports to its day, clamped per report and per day", async () => {
+    await call("GET", "/api/session", { visitor: A });
+    const report = (body) => call("POST", "/api/stats", { body: { visitor: A, ...body } });
+    expect((await report({ played: 120.4, renders: 1 })).status).toBe(204);
+    expect((await report({ played: 30, shares: 2, nonsense: 9 })).status).toBe(204);
+    expect(stats().usage["1d"]).toMatchObject({ played: 150, renders: 1, shares: 2, players: 1 });
+    // A report never adds more than an hour of play, a day never more than 24 h.
+    expect((await report({ played: 1e9, presets: -5, snapshots: "x" })).status).toBe(204);
+    expect(stats().usage["1d"]).toMatchObject({ played: 3750, presets: 0, snapshots: 0 });
+    for (let i = 0; i < 30; i++) await report({ played: 3600 });
+    expect(stats().usage["1d"].played).toBe(86400);
+    // The next UTC day starts a new row.
+    clock += DAY;
+    await report({ played: 10 });
+    expect(stats().usage["1d"].played).toBe(86410);
+    expect(stats().usage["7d"].players).toBe(1);
+  });
+
+  it("rejects reports from unknown or malformed browsers, other origins, and past the daily row cap", async () => {
+    app = createApp({ db, clientId: CLIENT, key, origins: [ORIGIN], getKey, now: () => clock, maxUsageRows: 1 });
+    expect((await call("POST", "/api/stats", { body: { visitor: A, played: 5 } })).status).toBe(404);
+    expect((await call("POST", "/api/stats", { body: { visitor: "short", played: 5 } })).status).toBe(400);
+    await call("GET", "/api/session", { visitor: A });
+    await call("GET", "/api/session", { visitor: B });
+    expect((await call("POST", "/api/stats", { body: { visitor: A, played: 5 }, origin: "https://evil.example" })).status).toBe(403);
+    expect((await call("POST", "/api/stats", { body: { visitor: A } })).status).toBe(204);
+    expect((await call("POST", "/api/stats", { body: { visitor: A, played: 5 } })).status).toBe(204);
+    expect((await call("POST", "/api/stats", { body: { visitor: B, played: 5 } })).status).toBe(507);
+    expect((await call("POST", "/api/stats", { body: { visitor: A, played: 5 } })).status).toBe(204);
+    expect(stats().usage["1d"]).toMatchObject({ played: 10, players: 1 });
+  });
+
+  it("ranks users by seconds played: an account sums its browsers, anonymous ones show by id", async () => {
+    const cookie = await signIn();
+    await call("GET", "/api/session", { cookie, visitor: A });
+    await call("GET", "/api/session", { cookie, visitor: "cccccccccccccccc" });
+    await call("GET", "/api/session", { visitor: B });
+    await call("POST", "/api/stats", { body: { visitor: A, played: 100, recordings: 1 } });
+    await call("POST", "/api/stats", { body: { visitor: "cccccccccccccccc", played: 100, presets: 2 } });
+    await call("POST", "/api/stats", { body: { visitor: B, played: 150, shares: 4 } });
+    expect(stats().usageTop).toEqual([
+      { user: "ana@example.com", played: 200, exports: 3 },
+      { user: "anon-bbbbbbbb", played: 150, exports: 0 },
+    ]);
+    // Usage outlives a pruned browser, and old days go.
+    clock += 100 * DAY;
+    db.pruneVisitors(clock - 90 * DAY);
+    expect(db.pruneUsage(Math.floor(clock / DAY) - 50)).toBe(3);
   });
 
   it("parses Kubernetes quantities", () => {

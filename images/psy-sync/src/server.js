@@ -5,13 +5,14 @@
 import { existsSync, readFileSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SAMPLE_LIMITS, createApp } from "./app.js";
-import { openDb } from "./db.js";
+import { dayOf, openDb } from "./db.js";
 import { googleKeys } from "./google.js";
 import { parseQuantity, renderMetrics } from "./metrics.js";
 import { hmacKey } from "./session.js";
 
 const HOUR = 3600 * 1000;
 const VISITOR_RETENTION_MS = 90 * 24 * HOUR;
+const USAGE_RETENTION_MS = 400 * 24 * HOUR; // a year of history, plus room to compare
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -46,7 +47,10 @@ const maxRequestBodySize = Math.max(512 * 1024, app.limits.samples.bytes + 64 * 
 const server = Bun.serve({ port: Number(process.env.PORT ?? 8787), fetch: app.fetch, maxRequestBodySize });
 console.log(`psy-sync listening on :${server.port}`);
 
-const prune = () => db.pruneVisitors(Date.now() - VISITOR_RETENTION_MS);
+const prune = () => {
+  db.pruneVisitors(Date.now() - VISITOR_RETENTION_MS);
+  db.pruneUsage(dayOf(Date.now() - USAGE_RETENTION_MS));
+};
 prune();
 setInterval(prune, HOUR);
 

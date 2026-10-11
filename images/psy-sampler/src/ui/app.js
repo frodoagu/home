@@ -89,6 +89,7 @@ export function mountApp(root, engine, opts = {}) {
     confirm = (message) => window.confirm(message),
     cloud = null, // cloud.js; survives remounts, like the engine
     samples = null, // samples.js; same
+    stats = null, // stats.js; same
     recorder = createRecorder(engine),
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
@@ -1437,6 +1438,7 @@ export function mountApp(root, engine, opts = {}) {
     try {
       const audio = await engine.render(job);
       download(name, encodeWav(audio), "audio/wav");
+      stats?.count("renders");
       status(tx.tools.rendered(name));
     } catch {
       status(tx.tools.renderFailed);
@@ -1475,6 +1477,8 @@ export function mountApp(root, engine, opts = {}) {
     }
     const name = `psy-layers-${stamp()}.wav`;
     download(name, done.blob, "audio/wav");
+    stats?.count("recordings");
+    stats?.count("recorded", done.seconds);
     const saved = tx.rec.saved(name, clock(done.seconds));
     status(full ? `${tx.rec.full(MAX_SECONDS / 60)} ${saved}` : saved);
   }
@@ -1531,6 +1535,7 @@ export function mountApp(root, engine, opts = {}) {
   // a real kick so it does not drop out. From silence it starts an intro, or
   // `section`.
   function engageAuto(section = null) {
+    if (!state.auto) stats?.count("autopilot"); // a new seed re-engages: not a start
     const playing = { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
@@ -1712,6 +1717,7 @@ export function mountApp(root, engine, opts = {}) {
   diceBtn.addEventListener("click", () => setSeed(randomSeed()));
   shareBtn.addEventListener("click", async () => {
     const url = `${location.origin}${location.pathname}${await shareFragment(ws)}`;
+    stats?.count("shares");
     try {
       await navigator.clipboard.writeText(url);
       status(tx.share.copied);
@@ -1738,6 +1744,7 @@ export function mountApp(root, engine, opts = {}) {
   exportBtn.addEventListener("click", () => {
     const preset = toPreset({ ...ws, active: state.pending ?? state.active });
     download("psy-layers-preset.json", JSON.stringify(preset, null, 2), "application/json");
+    stats?.count("presets");
   });
   importBtn.addEventListener("click", () => {
     engine.ensureContext(); // inside the click: the imported mix may start playing
@@ -1760,6 +1767,7 @@ export function mountApp(root, engine, opts = {}) {
   });
   snapExport.addEventListener("click", () => {
     download("psy-layers-snapshots.json", JSON.stringify(toSnapshotFile(ws), null, 2), "application/json");
+    stats?.count("snapshots");
   });
   snapImport.addEventListener("click", () => snapFile.click());
   snapFile.addEventListener("change", async () => {

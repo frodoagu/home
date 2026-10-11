@@ -486,6 +486,7 @@ the token itself and issues its own session cookie.
 | `GET /api/state` | `{ state, updatedAt }` or 404 |
 | `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, or **409** with the stored copy when `base` is stale |
 | `DELETE /api/account` | deletes the user and their workspace |
+| `POST /api/stats` | `{ visitor, played?, recordings?, … }`: usage since the last report, added to the browser's day (see *Usage* below) |
 
 - The server **doesn't interpret** the workspace: it stores an opaque JSON
   object (capped at 256 KB) and the page runs it through `normalize()` when
@@ -573,9 +574,22 @@ capabilities.
 The `/api/` rate limit is 120 requests/min per IP with a burst of 60: a page load
 fetches every sample its sounds use on top of the usual calls.
 
-Metrics, dashboard and alerts (accounts, anonymous browsers, disk per account,
-samples, visitor countries):
+Metrics, dashboard and alerts (accounts, anonymous browsers, usage, disk per
+account, samples, visitor countries):
 [monitoring.md#psy-sampler-cloud-save](monitoring.md#psy-sampler-cloud-save).
+
+**Usage.** `src/stats.js` reports, keyed by the same visitor id as the session
+check: whole seconds the loop ran (`engine.playedSeconds()`, by the audio
+clock; FX shots and previews alone do not count) and a count of WAV takes (plus
+their seconds), WAV renders, preset and snapshot exports, share links and
+autopilot starts (a new seed under a running autopilot is not a start). It sends
+every 5 minutes and when the tab is hidden, with `keepalive`; a report that
+fails to leave goes out with the next one. Nothing else about the session leaves
+the page. psy-sync sums each report into one `usage` row per browser per UTC day,
+so the table grows by ~100 bytes per active browser per day; rows older than 400
+days are pruned. Anyone can POST, so each report is clamped (1 h of play, 50 of
+each count), a day is capped (24 h, 1000), the browser must already be known
+from a session check, and new rows stop at 5000 browsers a day.
 
 ### One-time setup
 

@@ -79,6 +79,20 @@ describe("context lifecycle", () => {
     expect(trim.gain.value).toBe(0.8);
     expect(trim.outputs[0]).toBe(ctx.destination);
   });
+
+  it("counts the seconds the loop runs, across runs, by the audio clock", () => {
+    expect(engine.playedSeconds()).toBe(0);
+    engine.setLanes({ bass: "bass.offbeat" });
+    run(2);
+    expect(engine.playedSeconds()).toBeCloseTo(2, 5);
+    engine.setLanes({});
+    ctx.currentTime += 10; // silence between runs does not count
+    engine.triggerFx("fx.impact"); // nor does an FX shot on its own
+    engine.setLanes({ kick: "kick.punchy" });
+    run(1);
+    engine.stop();
+    expect(engine.playedSeconds()).toBeCloseTo(3, 5);
+  });
 });
 
 describe("scheduler", () => {

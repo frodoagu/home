@@ -66,7 +66,7 @@ keep Grafana focused on these:
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 | Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
-| psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
+| psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, usage (seconds played, per player, per user; exports, shares and autopilot starts), visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
 the `home` tag — see *Playlist* below) and commit — no template changes needed.
@@ -213,6 +213,9 @@ after a restart; only `psy_sync_http_requests_total` lives in memory.
 | `psy_sync_samples`, `psy_sync_sample_bytes_total` | uploaded audio samples, and their total size |
 | `psy_sync_sample_bytes_limit`, `psy_sync_sample_quota_bytes` | the shared cap on all samples (`sync.samples.total`) and the per-account quota (`sync.samples.quota`) |
 | `psy_sync_user_sample_bytes{email}` | sample bytes of the `sync.metrics.topUsers` accounts storing the most |
+| `psy_sync_usage_played_seconds{window}`, `psy_sync_usage_players{window}` | seconds the loop played, and browsers that played at all (see *Usage* below) |
+| `psy_sync_usage_events{event,window}`, `psy_sync_usage_recorded_seconds{window}` | `recordings` (WAV takes), `renders` (loop/FX/mix WAVs), `presets`, `snapshots`, `shares`, `autopilot`; and the length of the takes |
+| `psy_sync_user_played_seconds{user}`, `psy_sync_user_exports{user}` | over 30 days, for the `sync.metrics.topUsers` users who played the most: an account email, or `anon-<first 8 chars of the browser id>` |
 | `psy_sync_http_requests_total{route,status}` | API requests; unknown paths fold into `route="other"`, every sample id into one `…/api/samples/:id` route per method |
 
 - **Anonymous visitors.** The page keeps a random id in localStorage
@@ -224,13 +227,20 @@ after a restart; only `psy_sync_http_requests_total` lives in memory.
   account and once as anonymous. Ids are client-made, so the number can be
   inflated by a script (bounded by the `/api/` rate limit and the 100 000-row
   cap); anonymous rows unseen for 90 days are pruned.
+- **Usage** comes from the page itself (`POST /api/stats`, see
+  [psy-sampler.md](psy-sampler.md)), summed per browser per **UTC day**, so a
+  window starts at 00:00 UTC of its first day: `1d` is yesterday plus today.
+  An account's figure sums every browser it signed in on. The numbers are
+  client-reported: clamped per report and per day, but a script could still
+  inflate them within those caps. The 🎛️ row of the dashboard shows them.
 - **Active** is `seen_at`, written at most once an hour per account or browser,
   so the session check on every page load doesn't turn into an SD write.
 - **Disk per account** is the byte length of the stored JSON. The SQLite files
   are larger (pages, indexes, WAL, the visitor table). local-path does not
   enforce the PVC size, so the database can outgrow its 2 Gi into the SD card's
   free space. That is why `PsySyncDataVolumeHigh` compares against the request.
-- **Emails are labels** on `psy_sync_user_workspace_bytes` and `psy_sync_user_sample_bytes`, so they land in
+- **Emails are labels** on `psy_sync_user_workspace_bytes`, `psy_sync_user_sample_bytes` and the
+  `user` label of `psy_sync_user_played_seconds` / `psy_sync_user_exports`, so they land in
   VictoriaMetrics. Grafana is behind google-auth, and only the top N accounts
   are exported.
 

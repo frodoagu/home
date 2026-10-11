@@ -51,6 +51,45 @@ export function renderMetrics({ stats, requests, limits, files = {}, volume = nu
   metric("psy_sync_visitors_stored", "gauge", "Browser rows stored, signed in or not.", single(stats.visitors));
   metric("psy_sync_visitors_max", "gauge", "New browser rows stop at this many.", single(limits.maxVisitors));
 
+  const windows = Object.keys(stats.usage);
+  metric(
+    "psy_sync_usage_played_seconds",
+    "gauge",
+    "Seconds the loop played, all browsers, within the window (day resolution).",
+    windows.map((window) => [{ window }, stats.usage[window].played]),
+  );
+  metric(
+    "psy_sync_usage_players",
+    "gauge",
+    "Browsers that played the loop within the window (day resolution).",
+    windows.map((window) => [{ window }, stats.usage[window].players]),
+  );
+  metric(
+    "psy_sync_usage_recorded_seconds",
+    "gauge",
+    "Seconds of recordings saved as WAV within the window (day resolution).",
+    windows.map((window) => [{ window }, stats.usage[window].recorded]),
+  );
+  const EVENTS = ["recordings", "renders", "presets", "snapshots", "shares", "autopilot"];
+  metric(
+    "psy_sync_usage_events",
+    "gauge",
+    "Exports, shares and autopilot starts within the window (day resolution).",
+    windows.flatMap((window) => EVENTS.map((event) => [{ event, window }, stats.usage[window][event]])),
+  );
+  metric(
+    "psy_sync_user_played_seconds",
+    "gauge",
+    "Seconds played over 30 days by the users who played the most (account email, or anon-<browser id>).",
+    stats.usageTop.map(({ user, played }) => [{ user }, played]),
+  );
+  metric(
+    "psy_sync_user_exports",
+    "gauge",
+    "WAV recordings and renders plus preset and snapshot files over 30 days, same users.",
+    stats.usageTop.map(({ user, exports }) => [{ user }, exports]),
+  );
+
   const total = stats.sizes.reduce((sum, n) => sum + n, 0);
   metric("psy_sync_workspaces", "gauge", "Accounts with a saved workspace.", single(stats.sizes.length));
   metric("psy_sync_workspace_bytes_total", "gauge", "Bytes of saved workspaces, all accounts.", single(total));
