@@ -4,6 +4,7 @@ import { createCloud } from "./cloud.js";
 import { createSamples } from "./samples.js";
 import { browserStorage } from "./storage.js";
 import { mountApp } from "./ui/app.js";
+import { showIntro } from "./ui/intro.js";
 import { showUpdate } from "./ui/updateNotice.js";
 import { watchVersion } from "./update.js";
 
@@ -12,6 +13,11 @@ import { watchVersion } from "./update.js";
 const cloud = createCloud({ storage: browserStorage() });
 const samples = createSamples();
 mountApp(document.getElementById("app"), createEngine({ sampleBuffer: samples.get }), { cloud, samples });
+// First visit only: what this is, and the way to the how-to page.
+showIntro({
+  storage: browserStorage(),
+  openHelp: () => document.querySelector('[data-action="help"]')?.click(),
+});
 // A save still waiting for its debounce goes up before the tab disappears.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") cloud.flush();

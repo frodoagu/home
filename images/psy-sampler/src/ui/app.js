@@ -63,6 +63,8 @@ import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
 
+const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
+
 // Drag on a tile's 🔀 over the whole improvise range: the button is small.
 const TILE_SLIDE_PX = 120;
 
@@ -361,10 +363,98 @@ export function mountApp(root, engine, opts = {}) {
         },
       });
     }
-    const side = vary ? el("div", { class: "tile-side" }, vary, edit) : edit;
-    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, side);
-    tiles.set(id, { layer, node, tile, edit, vary, labelEl, detailEl });
+    const solo = layer.oneShot ? null : soloButton(id);
+    const levelBar = layer.oneShot ? null : levelSlider(id, node, detailEl);
+    const side = vary ? el("div", { class: "tile-side" }, vary, solo, edit) : edit;
+    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side);
+    tiles.set(id, { layer, node, tile, edit, vary, solo, levelBar, labelEl, detailEl });
     return tile;
+  }
+
+  // A sound that is not playing shows its volume as a thin bar along its
+  // bottom edge, set by a drag or a click on it (or ← →), so it can enter at
+  // the right level. The tile itself still drags to reorder; once it plays,
+  // its fill takes over.
+  function levelSlider(id, node, detailEl) {
+    const bar = el("div", {
+      class: "level-bar",
+      role: "slider",
+      tabindex: "0",
+      "data-level": id,
+      "aria-label": tx.tile.levelBar(labelOf(id)),
+      "aria-valuemin": "0",
+      "aria-valuemax": String(Math.round(LEVEL.max * 100)),
+      title: tx.tile.levelBarTitle,
+    });
+    const at = (e) => {
+      const r = bar.getBoundingClientRect();
+      return (e.clientX - r.left) / r.width;
+    };
+    const put = (v) => setLevel(id, Math.round(Math.min(1, Math.max(0, v)) * LEVEL.max * 100) / 100);
+    amountSlider(bar, {
+      steps: Math.round(LEVEL.max / LEVEL.step),
+      get: () => dataOf(id).level / LEVEL.max,
+      set: (v) => setLevel(id, Math.round(v * LEVEL.max * 100) / 100),
+      at,
+      onClick: (e) => {
+        const v = at(e);
+        if (e.detail && Number.isFinite(v)) put(v); // a pointer click, not Enter
+      },
+      onSlide: (on) => {
+        node.classList.toggle("is-sliding", on);
+        detailEl.textContent = on ? tx.tile.level(LEVEL.fmt(dataOf(id).level)) : detailOf(id);
+      },
+    });
+    return bar;
+  }
+
+  // 🎧: while held (pointer, Space or Enter) only this sound is heard; the
+  // rest keep playing silent underneath. It does nothing on a sound that is
+  // not playing, which would only leave silence.
+  let soloing = null;
+  function soloButton(id) {
+    const b = el("button", {
+      type: "button",
+      class: "solo-tile",
+      "data-solo": id,
+      "aria-label": tx.tile.solo(labelOf(id)),
+      title: tx.tile.soloTitle,
+      text: "🎧",
+    });
+    const hold = () => {
+      if (soloing || !(isOn(state.active, id) || lanes.bgKick === id)) return false;
+      soloing = id;
+      engine.setSolo(id);
+      b.classList.add("is-held");
+      tiles.get(id).tile.classList.add("is-solo");
+      layersMain.classList.add("is-soloing");
+      return true;
+    };
+    const letGo = () => {
+      if (soloing !== id) return;
+      soloing = null;
+      engine.setSolo(null);
+      b.classList.remove("is-held");
+      tiles.get(id)?.tile.classList.remove("is-solo");
+      layersMain.classList.remove("is-soloing");
+    };
+    b.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation(); // the pointer is the solo's, not a reorder's
+      e.preventDefault(); // no focus ring, no text selection on a long press
+      if (hold()) b.setPointerCapture?.(e.pointerId);
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture", "blur"]) b.addEventListener(type, letGo);
+    b.addEventListener("keydown", (e) => {
+      if ((e.key !== " " && e.key !== "Enter") || e.repeat) return;
+      e.preventDefault();
+      hold();
+    });
+    b.addEventListener("keyup", (e) => {
+      if (e.key === " " || e.key === "Enter") letGo();
+    });
+    b.addEventListener("contextmenu", (e) => e.preventDefault()); // a long touch is a hold
+    return b;
   }
 
   function renderTiles(layer) {
@@ -584,6 +674,12 @@ export function mountApp(root, engine, opts = {}) {
     ...(samplesPanel ? [samplesPanel.node] : []),
     el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
     layersMain,
+    el(
+      "footer",
+      { class: "credits" },
+      el("a", { href: REPO, text: tx.credits.repo }),
+      el("span", { text: tx.credits.made }),
+    ),
   );
 
   /* ---- rendering ---- */
@@ -592,9 +688,17 @@ export function mountApp(root, engine, opts = {}) {
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
-    for (const [id, { layer, node, tile, vary }] of tiles) {
+    for (const [id, { layer, node, tile, vary, solo, levelBar }] of tiles) {
       const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
-      node.style.setProperty("--level", `${Math.round((dataOf(id).level / LEVEL.max) * 1000) / 10}%`);
+      const level = `${Math.round((dataOf(id).level / LEVEL.max) * 1000) / 10}%`;
+      node.style.setProperty("--level", level);
+      if (levelBar) {
+        levelBar.hidden = on;
+        node.classList.toggle("has-bar", !on);
+        levelBar.style.setProperty("--level", level);
+        levelBar.setAttribute("aria-valuenow", String(Math.round(dataOf(id).level * 100)));
+        levelBar.setAttribute("aria-valuetext", LEVEL.fmt(dataOf(id).level));
+      }
       node.title = on && !layer.oneShot ? tx.tile.levelTitle : id === BG_KICK_VARIANT ? tx.tile.bgKick : "";
       const next = !layer.oneShot && isOn(target, id);
       node.classList.toggle("is-active", on);
@@ -604,6 +708,7 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-edited", owned(id) && !isCopy(id));
       tile.classList.toggle("is-auto", ws.auto.includes(id));
       tile.classList.toggle("is-varying", state.varying.has(id));
+      solo?.classList.toggle("is-idle", !on && lanes.bgKick !== id);
       if (vary) {
         vary.setAttribute("aria-pressed", String(state.varying.has(id)));
         vary.style.setProperty("--amount", `${Math.round(improvOf(id) * 100)}%`);
@@ -1204,6 +1309,8 @@ export function mountApp(root, engine, opts = {}) {
     tile.labelEl.textContent = label;
     tile.edit.setAttribute("aria-label", tx.tile.edit(label));
     tile.vary?.setAttribute("aria-label", tx.tile.vary(label));
+    tile.solo?.setAttribute("aria-label", tx.tile.solo(label));
+    tile.levelBar?.setAttribute("aria-label", tx.tile.levelBar(label));
     persist();
     return label;
   }
@@ -1375,6 +1482,7 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- remount: language, import, share links, reset ---- */
   function destroy() {
+    if (soloing) engine.setSolo(null);
     closeEditor();
     clearInterval(recTimer);
     recorder.onFull(null);

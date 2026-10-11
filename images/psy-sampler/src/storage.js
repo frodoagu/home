@@ -29,3 +29,23 @@ export function saveState(storage, state) {
     // Full or blocked: the edits still live for this session.
   }
 }
+
+// The first-visit welcome (ui/intro.js) shows once per browser. Without
+// storage it would show on every visit, so then it never shows.
+const INTRO_KEY = "psy-sampler:intro";
+
+export function introSeen(storage) {
+  try {
+    return !storage || storage.getItem(INTRO_KEY) !== null;
+  } catch {
+    return true;
+  }
+}
+
+export function markIntroSeen(storage) {
+  try {
+    storage?.setItem(INTRO_KEY, "1");
+  } catch {
+    // Blocked: it shows again next visit.
+  }
+}

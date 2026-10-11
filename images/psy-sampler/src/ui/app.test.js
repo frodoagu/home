@@ -106,6 +106,59 @@ describe("layout", () => {
     expect($("#seed").value).toMatch(/^[a-z2-9]{6}$/);
   });
 
+  it("a sound that is off shows its volume as a bar that sets it before it plays", () => {
+    const bar = $('[data-level="lead.arp"]');
+    expect($('[data-level="fx.impact"]')).toBeNull();
+    expect(bar.hidden).toBe(false);
+    expect(bar.getAttribute("aria-valuenow")).toBe("100");
+    bar.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(saved().variants["lead.arp"].level).toBeCloseTo(1.05, 9);
+    bar.getBoundingClientRect = () => ({ left: 0, width: 150 });
+    bar.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 50 }));
+    expect(saved().variants["lead.arp"].level).toBeCloseTo(0.5, 9);
+    expect(bar.getAttribute("aria-valuetext")).toBe("50 %");
+    immediate();
+    click("lead.arp");
+    expect(bar.hidden).toBe(true); // playing, the fill takes over
+    expect(button("lead.arp").style.getPropertyValue("--level")).toBe("33.3%");
+  });
+
+  it("🎧 held solos a playing sound and dims the rest; idle, it does nothing", () => {
+    const setSolo = vi.spyOn(engine, "setSolo");
+    const solo = (id) => $(`[data-solo="${id}"]`);
+    const down = (id) => solo(id).dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    const up = (id) => solo(id).dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    expect($('[data-solo="fx.impact"]')).toBeNull(); // one-shots have none
+    down("lead.arp");
+    expect(setSolo).not.toHaveBeenCalled();
+    immediate();
+    click("lead.arp");
+    click("bass.offbeat");
+    flushFrame();
+    expect(solo("lead.arp").classList.contains("is-idle")).toBe(false);
+    down("lead.arp");
+    expect(setSolo).toHaveBeenLastCalledWith("lead.arp");
+    expect($(".layers").classList.contains("is-soloing")).toBe(true);
+    expect(solo("lead.arp").closest(".tile").classList.contains("is-solo")).toBe(true);
+    down("bass.offbeat"); // a second finger does not steal it
+    expect(setSolo).toHaveBeenCalledTimes(1);
+    up("bass.offbeat");
+    expect(setSolo).toHaveBeenCalledTimes(1);
+    up("lead.arp");
+    expect(setSolo).toHaveBeenLastCalledWith(null);
+    expect($(".layers").classList.contains("is-soloing")).toBe(false);
+    solo("bass.offbeat").dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    expect(setSolo).toHaveBeenLastCalledWith("bass.offbeat");
+    solo("bass.offbeat").dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
+    expect(setSolo).toHaveBeenLastCalledWith(null);
+  });
+
+  it("ends with the credits and a link to the source", () => {
+    const credits = $("footer.credits");
+    expect(credits.querySelector("a").href).toBe("https://github.com/frodoagu/home/tree/main/images/psy-sampler");
+    expect(credits.textContent).toContain("Hecho con ❤️ en 🌍 con Claude por Fr0D3");
+  });
+
   it("opens the how-to page from the top bar, and closes it with ✕ or the backdrop", () => {
     const dialog = $("dialog.help");
     dialog.showModal = () => dialog.setAttribute("open", "");
