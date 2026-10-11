@@ -5,12 +5,23 @@ kind: Application
 metadata:
   name: agu-spa
   namespace: argocd
+  labels:
+    agu.com.ar/category: web
+    agu.com.ar/exposure: public
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "nginx serving the agu.com.ar landing SPA (images/home-site)."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/agu-spa.md"
+    - name: Image
+      value: "ghcr.io/frodoagu/home-site (digest pinned by Image Updater)"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

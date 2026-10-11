@@ -6,12 +6,19 @@ kind: Application
 metadata:
   name: homepage
   namespace: argocd
+  labels:
+    agu.com.ar/category: web
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://dash.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "gethomepage start page with Kubernetes service discovery."
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

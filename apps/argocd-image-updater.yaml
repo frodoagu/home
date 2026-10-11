@@ -7,10 +7,19 @@ kind: Application
 metadata:
   name: argocd-image-updater
   namespace: argocd
+  labels:
+    agu.com.ar/category: gitops
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: app
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Writes new digests of the CI-built images back to git (one ImageUpdater CR per image)."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/agu-spa.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

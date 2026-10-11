@@ -5,12 +5,21 @@ kind: Application
 metadata:
   name: argocd
   namespace: argocd
+  labels:
+    agu.com.ar/category: gitops
+    agu.com.ar/exposure: own-auth
+    agu.com.ar/blast-radius: platform
   annotations:
     link.argocd.argoproj.io/external-link: "https://argocd.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Argo CD itself, self-managed. Google sign-in via Dex; local admin disabled."
+    - name: Docs
+      value: "https://github.com/frodoagu/home#quick-start"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

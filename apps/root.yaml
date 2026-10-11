@@ -6,10 +6,19 @@ kind: Application
 metadata:
   name: root
   namespace: argocd
+  labels:
+    agu.com.ar/category: gitops
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: platform
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "App-of-Apps: syncs every Application under apps/, itself included."
+    - name: Docs
+      value: "https://github.com/frodoagu/home#quick-start"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

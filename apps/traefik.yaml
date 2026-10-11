@@ -6,12 +6,21 @@ kind: Application
 metadata:
   name: traefik
   namespace: argocd
+  labels:
+    agu.com.ar/category: networking
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: platform
   annotations:
     link.argocd.argoproj.io/external-link: "https://traefik.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Configures the k3s-bundled Traefik via HelmChartConfig (ACME DNS-01, HTTP/3, auth middlewares). Does not install it."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/tls.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

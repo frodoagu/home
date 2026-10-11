@@ -8,6 +8,10 @@ kind: Application
 metadata:
   name: monitoring
   namespace: argocd
+  labels:
+    agu.com.ar/category: observability
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://grafana.agu.com.ar"
     # Any key under this prefix adds a link; one key per URL.
@@ -16,6 +20,11 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "VictoriaMetrics k8s-stack + Grafana + blackbox; Telegram alerts, RPi temp/throttle, uptime/TLS probes."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/monitoring.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

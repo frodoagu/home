@@ -5,10 +5,17 @@ kind: Application
 metadata:
   name: cloudflare-ddns
   namespace: argocd
+  labels:
+    agu.com.ar/category: networking
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: platform
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Keeps the Cloudflare A records of every public hostname on the home IP."
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

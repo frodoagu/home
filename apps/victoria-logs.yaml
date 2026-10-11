@@ -7,12 +7,21 @@ kind: Application
 metadata:
   name: victoria-logs
   namespace: argocd
+  labels:
+    agu.com.ar/category: observability
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://logs.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "VictoriaLogs single node + Vector collector: cluster-wide pod logs, GeoIP-tagged Traefik access logs."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/monitoring.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

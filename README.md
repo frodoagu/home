@@ -432,6 +432,25 @@ webhook config (`-f config[secret]=...`).
 > only its ArgoCD `Application` ([apps/yaskia-spa.yaml](apps/yaskia-spa.yaml))
 > lives in this repo, pointing ArgoCD at that external chart.
 
+### Application labels & info
+
+Every `apps/*.yaml` carries three labels (filterable in the ArgoCD UI's
+Applications sidebar, the CLI and `kubectl`) and a `spec.info` list
+(`Description`, plus `Docs` / `Image` where they apply) shown in the app's
+Summary panel. Nothing selects on these labels yet — they're for people.
+
+| Label | Values | Meaning |
+|---|---|---|
+| `agu.com.ar/category` | `gitops`, `networking`, `security`, `observability`, `home-automation`, `web` | What the app is for |
+| `agu.com.ar/exposure` | `public`, `own-auth`, `google-auth`, `internal` | Its internet attack surface: reachable with no login, behind its own login, behind the `google-auth` ForwardAuth, or no public route at all |
+| `agu.com.ar/blast-radius` | `lan`, `platform`, `app` | What breaks when it's down: the home network, other apps on the cluster, or only itself |
+
+```bash
+argocd app list -l agu.com.ar/blast-radius=platform     # what to check first after a reboot/upgrade
+kubectl -n argocd get applications -l 'agu.com.ar/exposure in (public,own-auth)'   # unauthenticated surface
+kubectl -n argocd get applications -L agu.com.ar/category,agu.com.ar/exposure,agu.com.ar/blast-radius
+```
+
 ## Releases & commit conventions
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/), which

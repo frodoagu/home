@@ -5,12 +5,23 @@ kind: Application
 metadata:
   name: psy-sampler
   namespace: argocd
+  labels:
+    agu.com.ar/category: web
+    agu.com.ar/exposure: public
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://psy.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Psytrance live sampler (static SPA) + psy-sync cloud-save API (Bun + SQLite on a PVC, no backup)."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/psy-sampler.md"
+    - name: Image
+      value: "ghcr.io/frodoagu/psy-sampler + ghcr.io/frodoagu/psy-sync (digests pinned by Image Updater)"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

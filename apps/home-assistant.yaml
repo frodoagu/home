@@ -5,12 +5,21 @@ kind: Application
 metadata:
   name: home-assistant
   namespace: argocd
+  labels:
+    agu.com.ar/category: home-automation
+    agu.com.ar/exposure: own-auth
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://home.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Home Assistant + Google Assistant. Own login (not behind google-auth), /auth/* rate-limited."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/home-assistant.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

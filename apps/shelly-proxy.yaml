@@ -7,12 +7,21 @@ kind: Application
 metadata:
   name: shelly-proxy
   namespace: argocd
+  labels:
+    agu.com.ar/category: home-automation
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: app
   annotations:
     link.argocd.argoproj.io/external-link: "https://shelly.agu.com.ar"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  info:
+    - name: Description
+      value: "Control panel + per-device RPC reverse proxy to the LAN Shelly relays."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/shelly.md"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD
