@@ -19,7 +19,8 @@ const chainOf = (ins) => {
   const pre = filter.outputs[0];
   const shaper = pre.outputs[0];
   const post = shaper.outputs[0];
-  return { filter, pre, shaper, post };
+  const panner = post.outputs[0];
+  return { filter, pre, shaper, post, panner };
 };
 
 describe("driveCurve", () => {
@@ -65,13 +66,28 @@ describe("buildInsert", () => {
   it("bypassed: a lowpass at Nyquist, no curve, unity gains, no LFO", () => {
     const ctx = new FakeAudioContext();
     const ins = buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
-    const { filter, pre, shaper, post } = chainOf(ins);
+    const { filter, pre, shaper, post, panner } = chainOf(ins);
     expect(filter.type).toBe("lowpass");
     expect(filter.frequency.value).toBe(24000);
     expect(shaper.curve).toBeNull();
     expect([pre.gain.value, post.gain.value]).toEqual([1, 1]);
-    expect(post.outputs[0]).toBe(ins.output);
+    expect([panner.kind, panner.pan.value]).toEqual(["panner", 0]);
+    expect(panner.outputs[0]).toBe(ins.output);
     expect(ctx.sources()).toHaveLength(0);
+  });
+
+  it("pans, and an autopan swings the pan with its own tempo LFO", () => {
+    const ctx = new FakeAudioContext();
+    const plain = buildInsert(ctx, { ...INSERT_DEFAULT, pan: -0.4 }, { stepDur: STEP });
+    expect(chainOf(plain).panner.pan.value).toBe(-0.4);
+    expect(ctx.sources()).toHaveLength(0);
+    const swung = buildInsert(ctx, { ...INSERT_DEFAULT, width: 0.8, panRate: 16 }, { stepDur: STEP, at: 1 });
+    const [lfo] = ctx.sources();
+    expect(lfo.startTime).toBe(1);
+    expect(lfo.frequency.value).toBeCloseTo(lfoHz(16, STEP), 9);
+    expect(lfo.outputs[0].gain.value).toBe(0.8);
+    expect(lfo.outputs[0].outputs[0]).toBe(chainOf(swung).panner.pan);
+    expect(kindOf({ ...INSERT_DEFAULT, width: 0.8 })).not.toBe(kindOf(INSERT_DEFAULT));
   });
 
   it("a filter gets a tempo-synced LFO on its detune, started at `at`", () => {

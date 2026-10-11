@@ -396,6 +396,31 @@ switch a silent sound on. The euclid's k / n / rot are app state like the
 Click row. *Reset hits / notes* puts speed, iter and echo back too, and the
 kick's build-up bar plays in place, without them.
 
+### Groove and space: swing, nudge, duck, pan
+
+The editor's **Groove and space** box (FX get only its pan half):
+
+| Control | Data | What it does |
+|---|---|---|
+| Swing | `swing`: 0-0.5 of a step | every odd 16th lands that much later (`eventsAt` adds it to the events' `offset`); shown MPC style, 50 % straight to 75 %, 66 % ≈ a triplet feel |
+| Nudge | `nudge`: ±30 ms | every hit of the sound earlier or later; the engine adds it to the time and never schedules closer than `SAFETY` |
+| Duck | `duck`: 0-1 | sidechain to the kick (Strudel's `duckorbit`); not on kicks |
+| Pan | `insert.pan`: −1..1 | a `StereoPannerNode` at the end of the insert |
+| Autopan | `insert.width`, `insert.panRate` | a tempo-synced sine on the pan, like the filter LFO; switching it on or off builds a fresh chain (`kindOf`) |
+
+**The sidechain is audio, not scheduled envelopes**, so it follows any kick
+pattern (ratchets, the background kick, a build-up) and renders into WAV
+exports the same way. Every kick lane's gain also feeds a sidechain input →
+a `WaveShaper` that rectifies and clips (`min(1, 8·|x|)`, so the kick's whole
+body reads as full) → a 2-pole 8 Hz lowpass with Q 0.5 (no overshoot) → the
+envelope. Each lane has a **ducker** gain between its insert and its lane gain;
+with `duck` > 0 the envelope goes through a `-duck` gain into the ducker's
+`gain` param, so the lane plays at `1 − duck × envelope`. A kick never ducks
+(kick → sidechain → kick would be a cycle with no delay, which Web Audio mutes).
+Measured in Chrome on an offline render, a pad at duck 0.9 under the punchy
+kick at 145 BPM drops to 0.27-0.43 of its level (run to run) 40-80 ms after each kick and is
+back by ~150 ms, well before the next beat (414 ms).
+
 ### Custom sounds: duplicate and rename
 
 **Duplicate** (in the editor) creates a copy right next to the original, opens

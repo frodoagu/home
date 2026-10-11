@@ -868,6 +868,38 @@ describe("pattern", () => {
   });
 });
 
+describe("groove and space", () => {
+  const slide = (variant, key, value) => {
+    const input = editor(variant).querySelector(`input[data-param="${key}"]`);
+    input.value = String(value);
+    input.dispatchEvent(new Event("input"));
+  };
+
+  it("swing, nudge, duck and pan are saved with the sound; the autopan rate shows once it swings", () => {
+    openEditor("bass.offbeat");
+    slide("bass.offbeat", "swing", 0.16);
+    slide("bass.offbeat", "nudge", -5);
+    slide("bass.offbeat", "duck", 0.6);
+    slide("bass.offbeat", "pan", 0.25);
+    const rate = editor("bass.offbeat").querySelector('[data-control="pan-rate"]').closest("label");
+    expect(rate.hidden).toBe(true);
+    slide("bass.offbeat", "width", 0.5);
+    expect(rate.hidden).toBe(false);
+    expect(saved().variants["bass.offbeat"]).toMatchObject({ swing: 0.16, nudge: -5, duck: 0.6 });
+    expect(saved().variants["bass.offbeat"].insert).toMatchObject({ pan: 0.25, width: 0.5 });
+    expect(editor("bass.offbeat").querySelector('input[data-param="swing"]').closest("label").textContent).toMatch(/58 %/);
+  });
+
+  it("a kick has no duck and an FX no groove, only pan", () => {
+    openEditor("kick.punchy");
+    expect(editor("kick.punchy").querySelector('input[data-param="duck"]')).toBeNull();
+    expect(editor("kick.punchy").querySelector('input[data-param="swing"]')).not.toBeNull();
+    openEditor("fx.riser");
+    expect(editor("fx.riser").querySelector('input[data-param="swing"]')).toBeNull();
+    expect(editor("fx.riser").querySelector('input[data-param="pan"]')).not.toBeNull();
+  });
+});
+
 describe("editor focus", () => {
   it("dims the page around the open editor and marks its tile", () => {
     const veil = $(".editor-veil");

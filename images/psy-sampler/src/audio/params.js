@@ -15,6 +15,7 @@ const bars = (v) => t().bars(v);
 const count = (v) => `×${v}`;
 const octaves = (v) => `${v} oct`;
 const semis = (v) => `${v > 0 ? "+" : ""}${v} st`;
+const panFmt = (v) => (Math.abs(v) < 0.025 ? "C" : `${v < 0 ? "L" : "R"} ${Math.round(Math.abs(v) * 100)}`);
 
 const tone = (def, min, max, label = "tone") => ({ key: "tone", label, min, max, step: 10, def, fmt: hz });
 const decay = (def, min, max, step = 0.005, fmt = ms) => ({ key: "decay", label: "decay", min, max, step, def, fmt });
@@ -120,6 +121,16 @@ export const INSERT_PARAMS = [
   { key: "res", label: "resonance", min: 0.5, max: 20, step: 0.1, def: 1, fmt: (v) => v.toFixed(1) },
   { key: "lfo", label: "lfo", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
   { key: "amount", label: "drive", min: 0, max: 1, step: 0.05, def: 0.4, fmt: pct },
+  { key: "pan", label: "pan", min: -1, max: 1, step: 0.05, def: 0, fmt: panFmt },
+  { key: "width", label: "autopan", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+];
+
+// How a sound sits in time and under the kick (patterns.js GROOVE).
+export const GROOVE_PARAMS = [
+  // How late every odd 16th lands, in steps; read as an MPC swing (50 % straight, 66 % a triplet feel).
+  { key: "swing", label: "swing", min: 0, max: 0.5, step: 0.02, def: 0, fmt: (v) => `${Math.round(50 + v * 50)} %` },
+  { key: "nudge", label: "nudge", min: -30, max: 30, step: 1, def: 0, fmt: (v) => `${v > 0 ? "+" : ""}${v} ms` },
+  { key: "duck", label: "duck", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
 ];
 
 // Every variant, of any kind, also gets a volume relative to its layer's level.

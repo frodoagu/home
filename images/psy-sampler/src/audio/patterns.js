@@ -20,7 +20,7 @@
 // to the engine, which passes them back into eventsAt() on every step.
 import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES } from "./insert.js";
 import { NOTE, SCALES, midiToFreq } from "./music.js";
-import { INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
+import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
 import { LOOP_STEPS } from "./timing.js";
 
 export const OFF = 0;
@@ -90,6 +90,10 @@ const every = (fn) => steps(fn).filter(Boolean);
 // how many parts the loop start moves through, and an echo { steps, semis }.
 const PLAYBACK = { speed: 1, iter: 1, echo: null };
 
+// Where it sits: `swing` delays every odd 16th by that much of a step,
+// `nudge` moves every hit by ms, `duck` is how deep the kick pumps it.
+const GROOVE = { swing: 0, nudge: 0, duck: 0 };
+
 // What every variant starts with on top of its own data.
 const extras = (insert = {}) => ({ insert: { ...INSERT_DEFAULT, ...insert }, sample: null });
 
@@ -101,6 +105,7 @@ function drum(voice, pattern, params = {}) {
       steps: pattern,
       mods: Array(LOOP_STEPS).fill(null),
       ...PLAYBACK,
+      ...GROOVE,
       params: { ...paramDefaults(voice), ...params },
       level: 1,
       ...extras(),
@@ -117,6 +122,7 @@ function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
     data: {
       notes: list,
       ...PLAYBACK,
+      ...GROOVE,
       synth,
       params: paramDefaults("synth"),
       level: 1,
@@ -420,7 +426,8 @@ export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loo
       events.push(noteEvent(data, n, Math.min((n.step + n.len - pos) * scale, room)));
     }
   }
-  return events;
+  // Swing: everything on an odd 16th lands `swing` of a step late.
+  return step % 2 && data.swing ? at(data.swing, events) : events;
 }
 
 const noteEvent = (data, n, steps, semis = 0, accent = n.accent) =>
@@ -482,6 +489,7 @@ export function cleanInsert(saved, base = INSERT_DEFAULT) {
   if (FILTER_TYPES.includes(saved.filter)) out.filter = saved.filter;
   if (DRIVE_TYPES.includes(saved.drive)) out.drive = saved.drive;
   if (LFO_RATES.includes(saved.rate)) out.rate = saved.rate;
+  if (LFO_RATES.includes(saved.panRate)) out.panRate = saved.panRate;
   return out;
 }
 
@@ -526,6 +534,10 @@ export function sanitize(id, saved) {
   out.insert = cleanInsert(saved.insert, base.insert);
   out.sample = cleanSample(saved.sample);
 
+  if (def.kind !== "fx") {
+    cleanNumbers(out, saved, GROOVE_PARAMS);
+    if (def.voice === "kick") out.duck = 0; // the kick is what ducks the rest
+  }
   if (SPEEDS.includes(saved.speed)) out.speed = saved.speed;
   if (ITERS.includes(saved.iter)) out.iter = saved.iter;
   out.echo = cleanEcho(saved.echo, def.kind);

@@ -3,9 +3,9 @@
 // as data (`data.insert`); the engine builds a chain per lane, FX shot and
 // audition, and updates it live.
 //
-//   input ─> filter ─> pre ─> shaper ─> post ─> output
-//              ▲ detune
-//   lfo ─> depth
+//   input ─> filter ─> pre ─> shaper ─> post ─> panner ─> output
+//              ▲ detune                          ▲ pan
+//   lfo ─> depth                 panLfo ─> width
 //
 // Continuous values glide. Switching a type (filter or distortion) needs
 // other nodes, so the engine builds a fresh chain and crossfades it in:
@@ -18,14 +18,27 @@ export const DRIVE_TYPES = ["off", "soft", "hard", "fold", "crush"];
 export const LFO_RATES = [2, 4, 8, 16, 32, 64]; // steps per LFO cycle
 export const LFO_CENTS = 2400; // full depth: ±2 octaves around the cutoff
 
-export const INSERT_DEFAULT = { filter: "off", cutoff: 1200, res: 1, lfo: 0, rate: 16, drive: "off", amount: 0.4 };
+export const INSERT_DEFAULT = {
+  filter: "off",
+  cutoff: 1200,
+  res: 1,
+  lfo: 0,
+  rate: 16,
+  drive: "off",
+  amount: 0.4,
+  pan: 0, // -1 left .. 1 right
+  width: 0, // autopan: how far the pan LFO swings around `pan`
+  panRate: 32, // steps per autopan cycle
+};
 
 const GLIDE = 0.02;
 const CURVE_SIZE = 4097; // odd: the middle point is exactly 0 in, 0 out
 const RANGE = 4; // soft/hard/fold: the shaper's ±1 spans ±RANGE of the curve
 
-export const kindOf = (insert) => `${insert.filter}|${insert.drive}`;
-export const isBypass = (insert) => insert.filter === "off" && insert.drive === "off";
+// The autopan's LFO only exists while it swings: switching it on or off
+// builds a fresh chain, like a filter or distortion type.
+export const kindOf = (insert) => `${insert.filter}|${insert.drive}|${insert.width > 0}`;
+export const isBypass = (insert) => insert.filter === "off" && insert.drive === "off" && !insert.pan && !insert.width;
 
 // Crush: 8 bits at 0 % down to 2 bits at 100 %.
 export const bitsFor = (amount) => Math.round(8 - amount * 6);
@@ -87,7 +100,9 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
   const pre = ctx.createGain();
   const shaper = ctx.createWaveShaper();
   const post = ctx.createGain();
-  input.connect(filter).connect(pre).connect(shaper).connect(post).connect(output);
+  const panner = ctx.createStereoPanner();
+  input.connect(filter).connect(pre).connect(shaper).connect(post).connect(panner).connect(output);
+  panner.pan.value = insert.pan;
 
   const nyquist = ctx.sampleRate / 2;
   // "off" is a lowpass at Nyquist, which the spec defines as an identity.
@@ -111,6 +126,19 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
     lfo.start(at);
   }
 
+  // Autopan: a sine around `pan`, a cycle every `panRate` steps, from the
+  // entry step. The panner clamps whatever passes ±1.
+  let panLfo = null;
+  let width = null;
+  if (insert.width > 0) {
+    panLfo = ctx.createOscillator();
+    panLfo.frequency.value = lfoHz(insert.panRate, stepDur);
+    width = ctx.createGain();
+    width.gain.value = insert.width;
+    panLfo.connect(width).connect(panner.pan);
+    panLfo.start(at);
+  }
+
   let current = insert;
   return {
     input,
@@ -123,6 +151,11 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
         filter.Q.setTargetAtTime(next.res, now, GLIDE);
         depth.gain.setTargetAtTime(next.lfo * LFO_CENTS, now, GLIDE);
         if (next.rate !== current.rate) lfo.frequency.setTargetAtTime(lfoHz(next.rate, stepDur), now, GLIDE);
+      }
+      panner.pan.setTargetAtTime(next.pan, now, GLIDE);
+      if (width) {
+        width.gain.setTargetAtTime(next.width, now, GLIDE);
+        if (next.panRate !== current.panRate) panLfo.frequency.setTargetAtTime(lfoHz(next.panRate, stepDur), now, GLIDE);
       }
       if (next.drive === "crush") {
         if (bitsFor(next.amount) !== bitsFor(current.amount)) shaper.curve = driveCurve("crush", next.amount);
@@ -137,9 +170,11 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
     setStepDur(next, now) {
       stepDur = next;
       lfo?.frequency.setTargetAtTime(lfoHz(current.rate, stepDur), now, 0.05);
+      panLfo?.frequency.setTargetAtTime(lfoHz(current.panRate, stepDur), now, 0.05);
     },
     stop(when) {
       lfo?.stop(when);
+      panLfo?.stop(when);
     },
   };
 }
