@@ -406,14 +406,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   cycle recovers it — so the HA scripts send one command per press and the
   `shell_command` retries 3× at most. Protocol, program table and the measured
   presets in docs/lavarropas-candy.md §8.
-- **psy-sampler — public image, no Pi-hole local record, click-free by lanes.**
+- **psy-sampler — public image, click-free by lanes.**
   `imagePullSecrets: []` because the image only holds what anyone downloads from
   psy.agu.com.ar; GHCR creates the package PRIVATE on the first CI push, so it must
   be flipped to public once by hand (GitHub > Packages > Change visibility) or the
-  pod sits in ImagePullBackOff. The host is deliberately NOT in Pi-hole's
-  `localRecords`: those render into the Pi-hole Deployment's env with
-  `strategy: Recreate`, so every host added there restarts Pi-hole and blips LAN
-  DNS + DHCP — not worth it for 20 kB of static files. Audio: never cancel queued
+  pod sits in ImagePullBackOff. Audio: never cancel queued
   notes one by one; a variant change fades the whole per-layer gain "lane" (30 ms,
   starting on the step where the new lane enters, so it is a grid-aligned
   crossfade) and opens a fresh one that backfills the lookahead window; Parar
