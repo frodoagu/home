@@ -401,6 +401,7 @@ export default {
     "perc.toms": ["Tons tribais", "goa: afinados, com virada"],
     "perc.hat16": ["Hats em semicolcheias", "fechado em todo passo, acento no contratempo"],
     "perc.rim": ["Aro", "rimshot sincopado"],
+    "perc.keys": ["Chaves", "molho de chaves contra uma chapa"],
     "lead.acid": ["Ácido", "303: filtro ressonante, Lá menor"],
     "lead.arp": ["Arpejo", "square, Lá-Dó-Mi-Lá"],
     "lead.arp3": ["Arpejo 3/16", "pluck, ciclo de 3 contra 4"],

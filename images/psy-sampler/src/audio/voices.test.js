@@ -128,8 +128,28 @@ describe("every synth plays any note length click-free", () => {
   }
 });
 
+describe("keys", () => {
+  it("a sheet clang at the hit, then 3-5 keys landing about `spread` apart", () => {
+    VOICES.keys(ctx, out, T, { tone: 3200, decay: 0.09, spread: 0.01 });
+    const sheet = ctx.sources().filter((s) => s.type === "triangle");
+    expect(sheet).toHaveLength(5);
+    expect(sheet.every((s) => s.startTime === T)).toBe(true);
+    const ticks = ctx.sources().filter((s) => s.kind === "buffer").map((s) => s.startTime);
+    expect(ticks.length).toBeGreaterThanOrEqual(3);
+    expect(ticks.length).toBeLessThanOrEqual(5);
+    expect(ticks[0]).toBe(T);
+    for (let i = 1; i < ticks.length; i++) {
+      const gap = ticks[i] - ticks[i - 1];
+      expect(gap).toBeGreaterThanOrEqual(0.006 - 1e-9);
+      expect(gap).toBeLessThanOrEqual(0.014 + 1e-9);
+    }
+    expect(ctx.sources().filter((s) => s.type === "sine")).toHaveLength(ticks.length * 2);
+    expectClickFree(T);
+  });
+});
+
 describe("drum voices stay click-free across their sliders", () => {
-  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride", "rim", ...Object.keys(GLITCH)]) {
+  for (const voice of ["kick", "hat", "chat", "shaker", "clap", "snare", "ride", "rim", "keys", ...Object.keys(GLITCH)]) {
     it(voice, () => {
       const spec = PARAMS[voice];
       const at = (pick) => Object.fromEntries(spec.map((p) => [p.key, p[pick]]));

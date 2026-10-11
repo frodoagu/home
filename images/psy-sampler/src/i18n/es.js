@@ -403,6 +403,7 @@ export default {
     "perc.toms": ["Toms tribales", "goa: afinados, con fill"],
     "perc.hat16": ["Hats 16avos", "cerrado en cada paso, acento en el contratiempo"],
     "perc.rim": ["Rim", "rimshot sincopado"],
+    "perc.keys": ["Llaves", "manojo de llaves contra una chapa"],
     "lead.acid": ["Ácido", "303: filtro resonante, La menor"],
     "lead.arp": ["Arpegio", "square, La-Do-Mi-La"],
     "lead.arp3": ["Arpegio 3/16", "pluck, ciclo de 3 contra 4"],

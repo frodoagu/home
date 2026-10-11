@@ -23,7 +23,7 @@ export const LAYERS = [
     id: "perc",
     variants: [
       "perc.hat", "perc.chat", "perc.shaker", "perc.clap", "perc.snare",
-      "perc.ride", "perc.toms", "perc.hat16", "perc.rim",
+      "perc.ride", "perc.toms", "perc.hat16", "perc.rim", "perc.keys",
     ],
   },
   {
