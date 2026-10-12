@@ -1066,8 +1066,14 @@ html:has(dialog.help[open], dialog.intro[open]) {
   border-color: var(--border);
 }
 
-.queued.is-next {
+.queued.is-next,
+.queued.is-thinking {
   animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.queued.is-thinking {
+  color: var(--current);
+  border-color: var(--current);
 }
 
 .unqueue {
@@ -2825,6 +2831,9 @@ html:has(dialog.help[open], dialog.intro[open]) {
   .variant.is-next,
   .variant.is-leaving,
   .variant::after,
+  .ai.is-thinking,
+  .queued.is-next,
+  .queued.is-thinking,
   .bpm-value,
   .cue.is-armed,
   .drop-btn,
