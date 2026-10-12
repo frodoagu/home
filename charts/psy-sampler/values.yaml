@@ -12,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
-  tag: "latest@sha256:805c22e6e45d26b12cc3ae1da23b41403ec04534732c4cf35eda0c9db024bd2f"
+  tag: "latest@sha256:5cd27e39ecbd63aab15462008cbb1b43fb9d16e77db5ca4febdf70d9a13a7edd"
 # The image is static, public content (anyone can fetch the same files from
 # psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
 # secret. GHCR creates it private on the first push: flip it once in GitHub >
@@ -51,8 +51,8 @@ resources:
 # https page is mixed content) and with its origin listed here.
 ai:
   connectSrc:
-    - "http://localhost:*"
-    - "http://127.0.0.1:*"
+  - "http://localhost:*"
+  - "http://127.0.0.1:*"
   # Origin-Trial tokens, one header each: for Chrome's Prompt API if its web
   # version still needs a trial for this host (register psy.agu.com.ar at
   # https://developer.chrome.com/origintrials). They expire: renew them. Without
