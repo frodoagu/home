@@ -485,3 +485,75 @@ export function newPart(style, factory, rows, rng = Math.random) {
   }
   return dedupe(out);
 }
+
+/* ------------------------------------------------------- the AI's parts -- */
+
+// A plan's part (planner.js `parts`) is written in scale degrees: "1" the
+// part's root, "8" the octave up, "-" a rest.
+export const REST = "-";
+export const DEGREE_MAX = 15;
+export const DEGREES = [REST, ...Array.from({ length: DEGREE_MAX }, (_, i) => String(i + 1))];
+// How many degrees each style writes: a lead's motif and its answer, a pad's
+// chord per bar, a bass's one-beat cell.
+export const PART_LENGTHS = { lead: 16, pad: 2, bass: 4 };
+
+const cycle = (list, n) => Array.from({ length: n }, (_, i) => list[i % list.length]);
+
+/**
+ * The 2-bar part a plan's `degrees` make for a `style` variant over `rows`,
+ * or null when they hold no note. The genre's habits do the rest, as in
+ * improvise(): a lead plays motif, motif (its last note a degree lower),
+ * motif, answer; a lead made of chords or long notes keeps the factory's
+ * rhythm and shapes and walks them onto the degrees instead; a pad holds a
+ * triad on each bar's degree; a bass repeats its cell under every beat.
+ */
+export function writePart(style, degrees, rows, factory = []) {
+  const n = PART_LENGTHS[style];
+  if (!n || !Array.isArray(degrees) || !degrees.length) return null;
+  const asc = [...rows].sort((a, b) => a - b);
+  const roots = asc.filter(isRoot);
+  const base = style === "lead" ? (roots[Math.floor(roots.length / 2) - 1] ?? roots[0]) : roots[0];
+  const from = Math.max(0, asc.indexOf(base ?? asc[0]));
+  const row = (i) => asc[Math.max(0, Math.min(asc.length - 1, i))];
+  const at = (d) => (d === REST ? null : from + Number(d) - 1);
+  const ds = cycle(degrees, n).map(at);
+  const out = [];
+  if (style === "bass") {
+    for (let s = 0; s < LOOP_STEPS; s++) {
+      const i = ds[s % 4];
+      if (i !== null) out.push({ step: s, midi: row(i), len: 1, accent: false });
+    }
+  } else if (style === "pad") {
+    ds.forEach((i, bar) => {
+      if (i === null) return;
+      for (const k of [0, 2, 4]) out.push({ step: bar * BAR_STEPS, midi: row(i + k), len: BAR_STEPS, accent: false });
+    });
+  } else {
+    const sounding = ds.filter((i) => i !== null);
+    if (!sounding.length) return null;
+    const byStep = new Map();
+    for (const note of factory) byStep.set(note.step, [...(byStep.get(note.step) ?? []), note]);
+    const shaped = [...byStep.values()].some((g) => g.length > 1) || factory.some((note) => note.len > 1);
+    if (shaped) {
+      const nearest = (midi) => asc.reduce((best, m, i) => (Math.abs(m - midi) < Math.abs(asc[best] - midi) ? i : best), 0);
+      [...byStep.keys()]
+        .sort((a, b) => a - b)
+        .forEach((step, k) => {
+          const group = byStep.get(step);
+          const shift = sounding[k % sounding.length] - nearest(Math.min(...group.map((note) => note.midi)));
+          for (const note of group) out.push({ ...note, midi: row(nearest(note.midi) + shift) });
+        });
+    } else {
+      const a = ds.slice(0, 8);
+      const last = a.findLastIndex((i) => i !== null);
+      const question = a.map((i, k) => (k === last && i !== null ? i - 1 : i));
+      [a, question, a, ds.slice(8)].forEach((phrase, p) => {
+        const first = phrase.findIndex((i) => i !== null);
+        phrase.forEach((i, k) => {
+          if (i !== null) out.push({ step: p * 8 + k, midi: row(i), len: 1, accent: k === first });
+        });
+      });
+    }
+  }
+  return out.length ? dedupe(out) : null;
+}

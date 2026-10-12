@@ -2348,6 +2348,29 @@ describe("✨ AI", () => {
     expect(ai.asks[1].prompt).toContain('The listener\'s standing wish: "oscuro y largo".'); // a plan followed it
   });
 
+  it("dresses the sounds and writes the parts its plan says, when the section comes", async () => {
+    const plan = {
+      ...BREAK,
+      dress: [{ id: "lead.acid", tone: 0, length: 0, drive: 2, motion: 0, synth: "supersaw" }],
+      parts: { lead: ["1", "-", "3", "-", "5", "-", "-", "-"], pad: ["1", "6"], bass: [] },
+    };
+    const ai = await remountWith(fakeAi({ answers: [plan] }));
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    expect(saved().variants["lead.acid"]?.synth).not.toBe("supersaw"); // not before its section
+    advanceSeconds(8 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    const lead = saved().variants["lead.acid"];
+    expect(lead.synth).toBe("supersaw");
+    expect(lead.insert).toMatchObject({ drive: "hard", amount: 0.75 });
+    expect(lead.notes.filter((n) => n.step < 8).map((n) => n.step)).toEqual([0, 2, 4]);
+    const pad = saved().variants["pad.chord"];
+    expect(pad.notes.filter((n) => n.step === 16)).toHaveLength(3);
+    expect(saved().auto).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"])); // the pilot's: a new run resets them
+    expect(ai.asks[1].prompt).toContain("How you dressed them: lead.acid drive 2 synth supersaw.");
+  });
+
   it("an answer that comes after the section's last loop started is dropped", async () => {
     let answer;
     const ai = await remountWith(fakeAi({ answers: [() => new Promise((resolve) => (answer = resolve))] }));
@@ -2445,7 +2468,13 @@ describe("✨ AI", () => {
   it("🔗 carries the plans it took: the link replays the same track in a browser with no AI", async () => {
     const plans = [
       { section: "groove", bars: 8, layers: { bass: ["bass.gallop"], lead: ["lead.arp"] } },
-      { section: "breakdown", bars: 8, layers: { pad: ["pad.supersaw"], lead: ["lead.vowel"] } },
+      {
+        section: "breakdown",
+        bars: 8,
+        layers: { pad: ["pad.supersaw"], lead: ["lead.vowel"] },
+        dress: [{ id: "lead.vowel", tone: -1, length: 0, drive: 1, motion: 1, synth: "" }],
+        parts: { lead: ["1", "3", "5", "-", "8", "-", "5", "-"], pad: ["1", "4"] },
+      },
       { section: "build", bars: 8, layers: {} },
       { section: "peak", bars: 16, layers: { perc: ["perc.ride", "perc.snare"] } },
     ];
@@ -2470,6 +2499,8 @@ describe("✨ AI", () => {
     aiBtn().click();
     const first = await record(root, ctx);
     expect(first.some((l) => l.startsWith("Break "))).toBe(true);
+    const written = ["lead.vowel", "pad.supersaw"].map((id) => saved().variants[id]);
+    expect(written[0].insert.drive).toBe("soft");
     expect(ai.asks.length).toBeGreaterThanOrEqual(4);
 
     vi.stubGlobal("Blob", NodeBlob); // jsdom's has no stream(), and the link is deflated
@@ -2491,6 +2522,7 @@ describe("✨ AI", () => {
     await vi.waitFor(() => expect(other.querySelector(".status").textContent).toMatch(/goa/));
     vi.useFakeTimers();
     expect(await record(other, c2)).toEqual(first);
+    expect(["lead.vowel", "pad.supersaw"].map((id) => saved().variants[id])).toEqual(written); // dressed and written the same
   });
 });
 

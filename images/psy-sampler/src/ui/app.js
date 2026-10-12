@@ -51,7 +51,7 @@ import {
   toneOf,
   withPlan,
 } from "../autopilot.js";
-import { coin, dress, fillOf } from "../dress.js";
+import { coin, fillOf, restyle } from "../dress.js";
 import { cleanFolds } from "../folds.js";
 import {
   IMPROV_DEFAULT,
@@ -68,6 +68,7 @@ import {
   withBreak,
   withBuildUp,
   withRoll,
+  writePart,
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
@@ -1114,12 +1115,22 @@ export function mountApp(root, engine, opts = {}) {
         changeBars: ws.changeBars,
       });
       const was = state.active;
+      const plan = state.pilot.plan;
       state.pilot = move.pilot;
-      dressIn([...entering(state.active, move.active), ...move.fx]);
+      const sectionStart = move.pilot.left === move.pilot.length;
+      // The plan the new section was built from: its dress and parts land now.
+      const own = sectionStart && plan?.section === move.pilot.section ? plan : null;
+      const playing = new Set(Object.values(move.active));
+      const restyled = (own?.dress ?? []).filter((d) => playing.has(d.id));
+      for (const d of restyled) state.run.dress[d.id] = d;
+      dressIn([...new Set([...entering(state.active, move.active), ...move.fx, ...restyled.map((d) => d.id)])]);
       for (const id of move.rewrite) rewrite(id);
+      for (const [layer, degrees] of Object.entries(own?.parts ?? {})) {
+        const id = own.layers[layer]?.[0];
+        if (playing.has(id) && !(move.pilot.theme ?? []).includes(id)) writeIn(id, degrees);
+      }
       for (const id of move.fx) fire(id, time);
       state.active = move.active;
-      const sectionStart = move.pilot.left === move.pilot.length;
       improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
       if (sectionStart) enterSection();
       else if (state.pilot.left === 1) cancelPlanning(); // too late for a plan now
@@ -1247,15 +1258,31 @@ export function mountApp(root, engine, opts = {}) {
     else openEditor(open.layer, id);
   }
 
-  // The seed's params and synth for each sound the autopilot brings in.
+  // The seed's params and synth for each sound the autopilot brings in, and
+  // the ✨ AI's macros over them where a plan dressed it this run.
   function dressIn(ids) {
     for (const id of ids) {
       if (!tiles.has(id) || owned(id)) continue;
-      const next = { ...dataOf(id), ...dress(id, ws.seed) };
+      const next = { ...dataOf(id), ...restyle(id, ws.seed, state.run?.dress?.[id] ?? null, dataOf(id).insert) };
       if (sameData(next, dataOf(id))) continue;
       setVariant(id, next, { generated: true });
       if (open?.id === id) openEditor(open.layer, id);
     }
+  }
+
+  // A plan's part (planner.js `parts`), in the style's scale, unless the
+  // user owns the sound.
+  function writeIn(id, degrees) {
+    const def = defOf(id);
+    if (def.kind !== "notes" || owned(id)) return;
+    const scale = STYLES[ws.style].scale ?? def.data.scale;
+    const notes = writePart(styleOf(id), degrees, scaleRows(scale, def.low, def.high), def.data.notes);
+    if (!notes) return;
+    const was = dataOf(id);
+    setVariant(id, { ...was, notes, scale }, { generated: true });
+    if (open?.id !== id) return;
+    if (was.scale === scale) open.editor.show(dataOf(id));
+    else openEditor(open.layer, id);
   }
 
   // Improvise toggle: a fresh variation of the anchor on every loop.
@@ -2053,7 +2080,7 @@ export function mountApp(root, engine, opts = {}) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
       state.replay = null; // a link's track only replays from silence
-      state.run = { sections: [], sounds: [], plans: [] };
+      state.run = { sections: [], sounds: [], plans: [], dress: {} };
       adoptDrop();
       dressIn(Object.values(playing).sort());
       mixIn(playing);
@@ -2075,7 +2102,7 @@ export function mountApp(root, engine, opts = {}) {
     state.queuedSnap = null;
     const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
-    state.run = { sections: [], sounds: [], plans: [] };
+    state.run = { sections: [], sounds: [], plans: [], dress: {} };
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
@@ -2282,6 +2309,13 @@ export function mountApp(root, engine, opts = {}) {
       active: state.active,
       sections: state.run.sections,
       sounds: state.run.sounds,
+      dressed: Object.values(state.run.dress),
+      synths: Object.fromEntries(
+        Object.values(ws.lists)
+          .flat()
+          .filter((id) => defOf(id).kind === "notes")
+          .map((id) => [id, dataOf(id).synth]),
+      ),
       bars: p.length * 2,
       vibe,
       fresh,
@@ -2316,7 +2350,7 @@ export function mountApp(root, engine, opts = {}) {
   // or the model's.
   function enterSection() {
     cancelPlanning();
-    state.run ??= { sections: [], sounds: [], plans: [] };
+    state.run ??= { sections: [], sounds: [], plans: [], dress: {} };
     state.run.sections.push(state.pilot.section);
     state.run.sounds[sectionNo()] = [...new Set(Object.values(state.pending ?? state.active))].sort();
     if (!replaying()) {

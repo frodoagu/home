@@ -89,7 +89,7 @@ describe("the schema", () => {
   it("names every section a plan may pick, their lengths and each layer's pool as enums", () => {
     const schema = planSchema(goa);
     expect(Object.keys(schema.properties)[0]).toBe("why"); // said before it picks
-    expect(schema.required).toEqual(["why", "section", "bars", "layers"]);
+    expect(schema.required).toEqual(["why", "section", "bars", "layers", "dress", "parts"]);
     expect(schema.properties.section.enum).toEqual(PLAN_SECTIONS);
     expect(PLAN_SECTIONS).not.toContain("intro");
     expect(schema.properties.bars.enum).toEqual([8, 16, 24]);
@@ -99,6 +99,20 @@ describe("the schema", () => {
     expect(layers.properties.lead.items.enum).toEqual(poolOf(lists, "lead", "goa"));
     expect(layers.properties.perc.maxItems).toBe(3); // the peak's
     expect(layers.properties.kick.maxItems).toBe(1);
+  });
+
+  it("dresses any sound it may name with whole macros, a synth of its group or none", () => {
+    const { dress, parts } = planSchema(goa).properties;
+    const item = dress.items;
+    expect(item.properties.id.enum).toEqual(expect.arrayContaining(poolOf(lists, "lead", "goa")));
+    expect(item.properties.tone.enum).toEqual([-2, -1, 0, 1, 2]);
+    expect(item.required).toEqual(["id", "tone", "length", "drive", "motion", "synth"]);
+    expect(item.properties.synth.enum).toEqual(expect.arrayContaining(["", "acid", "supersaw", "sub", "pad"]));
+    expect(dress.maxItems).toBe(1 + 1 + 3 + 1 + 1 + 1);
+    expect(parts.properties.lead).toMatchObject({ maxItems: 16 });
+    expect(parts.properties.pad).toMatchObject({ maxItems: 2 });
+    expect(parts.properties.bass).toMatchObject({ maxItems: 4 });
+    expect(parts.properties.lead.items.enum).toEqual(["-", ...Array.from({ length: 15 }, (_, i) => String(i + 1))]);
   });
 
   it("only allows the queued section when one is queued, unless a plan cannot pick it", () => {
@@ -115,6 +129,63 @@ describe("the schema", () => {
     } finally {
       delete STYLES[style];
     }
+  });
+});
+
+describe("dress and parts in a plan", () => {
+  const plan = { section: "peak", bars: 16, layers: { kick: ["kick.long"], bass: ["bass.rolling"], lead: ["lead.acid"], pad: [] } };
+
+  it("keeps the macros that move a sound the plan names, in id order", () => {
+    const out = normalizePlan(
+      {
+        ...plan,
+        dress: [
+          { id: "lead.acid", tone: -2, length: 0, drive: 1, motion: 2, synth: "supersaw" },
+          { id: "kick.long", tone: 1, length: 0, drive: 0, motion: 2, synth: "" }, // no motion on a kick
+          { id: "lead.acid", tone: 2 }, // the first one counts
+          { id: "pad.chord", tone: 1 }, // not in the plan
+          { id: "bass.rolling", tone: 3, drive: 1.5, synth: "acid" }, // out of range, not whole, not its group
+          { id: "__proto__", tone: 1 },
+          "lead.acid",
+        ],
+      },
+      goa,
+    );
+    expect(out.dress).toEqual([
+      { id: "kick.long", tone: 1 },
+      { id: "lead.acid", tone: -2, drive: 1, motion: 2, synth: "supersaw" },
+    ]);
+    expect(normalizePlan(out, goa)).toEqual(out);
+    expect(normalizePlan({ ...plan, dress: [{ id: "lead.acid", tone: 0, synth: "" }] }, goa)).not.toHaveProperty("dress");
+  });
+
+  it("keeps a part for each melodic layer the plan names a sound in, at its full length", () => {
+    const out = normalizePlan({ ...plan, parts: { lead: ["1", "-", "3", "-", "5", "-", "-", "-"], pad: ["1", "6"], bass: ["-", "1", "x", "1", "1", "1"] } }, goa);
+    expect(out.parts.lead).toEqual(Array(2).fill(["1", "-", "3", "-", "5", "-", "-", "-"]).flat());
+    expect(out.parts).not.toHaveProperty("pad"); // the plan leaves the pad out
+    expect(out.parts.bass).toEqual(["-", "1", "1", "1"]);
+    expect(normalizePlan(out, goa)).toEqual(out);
+    expect(normalizePlan({ ...plan, parts: { lead: ["-", "-"], kick: ["1"] } }, goa)).not.toHaveProperty("parts");
+    expect(normalizePlan({ ...plan, parts: "1 3 5" }, goa)).not.toHaveProperty("parts");
+  });
+
+  it("tells the model the key, the synths it may switch to and how it dressed what plays", () => {
+    const prompt = planPrompt({
+      ...goa,
+      bpm: 145,
+      active: { lead: "lead.acid" },
+      sections: ["intro"],
+      bars: 8,
+      dressed: [{ id: "lead.acid", tone: -1, synth: "acid" }, { id: "pad.chord", tone: 2 }],
+      synths: { "lead.acid": "acid" },
+    });
+    expect(prompt).toContain("Key: A harmonic minor.");
+    expect(prompt).toContain("How you dressed them: lead.acid tone -1 synth acid.");
+    expect(prompt).not.toContain("pad.chord tone");
+    expect(prompt).toContain("lead.acid (Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving; synth acid)");
+    expect(prompt).toMatch(/^lead: acid \(Acid 303: .*supersaw \(Supersaw/m);
+    expect(prompt).toMatch(/^bass: bass \(Saw pluck/m);
+    expect(SYSTEM).toContain('"-", "1", "1", "1" rolls between the kicks');
   });
 });
 
