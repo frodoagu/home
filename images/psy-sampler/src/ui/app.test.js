@@ -2079,6 +2079,28 @@ describe("autopilot", () => {
     expect(record(other, c2)).toEqual(first);
   });
 
+  it("⊘ bans a sound: a playing one leaves on the next bar and the pilot never plays it again", () => {
+    const ban = (id) => $(`[data-ban="${id}"]`);
+    expect(ban("fx.impact")).not.toBeNull(); // one-shots too: the pilot fires them
+    expect(ban("classic.popcorn")).toBeNull(); // the pilot never plays a manual layer
+    autoBtn().click();
+    const id = pressed().find((v) => v.startsWith("kick."));
+    ban(id).click();
+    expect(saved().banned).toEqual([id]);
+    expect(ban(id).getAttribute("aria-pressed")).toBe("true");
+    expect(ban(id).closest(".tile").classList.contains("is-banned")).toBe(true);
+    expect(pressed()).toContain(id); // until the bar line
+    for (let i = 0; i < 40; i++) {
+      advanceSeconds(BAR);
+      expect(pressed()).not.toContain(id);
+    }
+    $("button.stop").click();
+    click(id);
+    expect(queued()).toContain(id); // by hand it still plays
+    ban(id).click();
+    expect(saved().banned).toEqual([]);
+  });
+
   it("Parar turns it off", () => {
     autoBtn().click();
     $("button.stop").click();

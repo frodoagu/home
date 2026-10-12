@@ -34,6 +34,13 @@ describe("normalize", () => {
     ]);
   });
 
+  it("keeps the banned sounds that exist, once each", () => {
+    expect(normalize({}).banned).toEqual([]);
+    const { banned } = normalize({ banned: ["pad.air", "lead.nope", "lead.acid", "pad.air", 3], lists: {} });
+    expect(banned).toEqual(["lead.acid", "pad.air"]);
+    expect(normalize({ banned: "lead.acid" }).banned).toEqual([]);
+  });
+
   it("keeps the autopilot's style and change rate, and the improvise amounts, within bounds", () => {
     expect(normalize({})).toMatchObject({ style: "psytrance", changeBars: 8, improv: {} });
     expect(normalize({ style: "goa", changeBars: 4 })).toMatchObject({ style: "goa", changeBars: 4 });

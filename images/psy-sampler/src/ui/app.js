@@ -51,6 +51,7 @@ import {
   skip,
   startPilot,
   toneOf,
+  unbanned,
   withPlan,
 } from "../autopilot.js";
 import { coin, fillOf, restyle } from "../dress.js";
@@ -207,6 +208,7 @@ export function mountApp(root, engine, opts = {}) {
     ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
     bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
+    leaving: new Set(), // sounds just banned that the autopilot takes out on the next bar line
     queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
     brush: resume?.brush ?? { ...BRUSH }, // what a click on an editor's grid paints, shared by every editor
@@ -231,6 +233,7 @@ export function mountApp(root, engine, opts = {}) {
   const snapById = (id) => ws.snapshots.find((s) => s.id === id);
   const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
   const owned = (id) => id in ws.variants && !ws.auto.includes(id);
+  const pilotLists = () => unbanned(ws.lists, ws.banned); // what the autopilot and the ✨ AI pick from
 
   // What each variant plays apart from what a bar lays on top of it: a
   // build-up, or the bar's overlay (a drop's gap, a phrase-end fill), which
@@ -531,8 +534,19 @@ export function mountApp(root, engine, opts = {}) {
     const solo = layer.oneShot ? null : soloButton(id);
     const levelBar = layer.oneShot ? null : levelSlider(id, node, detailEl);
     const side = vary ? el("div", { class: "tile-side" }, vary, solo, edit) : edit;
-    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side);
-    tiles.set(id, { layer, node, tile, edit, vary, solo, levelBar, labelEl, detailEl });
+    const ban = layer.manual ? null : el("button", {
+      type: "button",
+      class: "ban-tile",
+      "data-ban": id,
+      "aria-pressed": String(ws.banned.includes(id)),
+      "aria-label": tx.tile.ban(labelOf(id)),
+      title: tx.tile.banTitle,
+      text: "⊘",
+    });
+    ban?.addEventListener("pointerdown", (e) => e.stopPropagation()); // a click, not a reorder
+    ban?.addEventListener("click", () => setBanned(layer, id, !ws.banned.includes(id)));
+    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side, ...(ban ? [ban] : []));
+    tiles.set(id, { layer, node, tile, edit, vary, solo, ban, levelBar, labelEl, detailEl });
     return tile;
   }
 
@@ -862,7 +876,7 @@ export function mountApp(root, engine, opts = {}) {
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
-    for (const [id, { layer, node, tile, vary, solo, levelBar }] of tiles) {
+    for (const [id, { layer, node, tile, vary, solo, ban, levelBar }] of tiles) {
       const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
       const level = `${Math.round((dataOf(id).level / LEVEL.max) * 1000) / 10}%`;
       node.style.setProperty("--level", level);
@@ -882,6 +896,8 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-edited", owned(id) && !isCopy(id));
       tile.classList.toggle("is-auto", ws.auto.includes(id));
       tile.classList.toggle("is-varying", state.varying.has(id));
+      tile.classList.toggle("is-banned", ws.banned.includes(id));
+      ban?.setAttribute("aria-pressed", String(ws.banned.includes(id)));
       solo?.classList.toggle("is-idle", !on && lanes.bgKick !== id);
       if (vary) {
         vary.setAttribute("aria-pressed", String(state.varying.has(id)));
@@ -1135,7 +1151,7 @@ export function mountApp(root, engine, opts = {}) {
         changed = true;
       }
     } else if (state.auto && loopStart) {
-      const move = advance(state.pilot, state.active, ws.lists, state.rng, {
+      const move = advance(state.pilot, state.active, pilotLists(), state.rng, {
         style: ws.style,
         changeBars: ws.changeBars,
       });
@@ -1146,15 +1162,16 @@ export function mountApp(root, engine, opts = {}) {
       // The plan the new section was built from: its dress and parts land now.
       const own = sectionStart && plan?.section === move.pilot.section ? plan : null;
       const playing = new Set(Object.values(move.active));
+      const fx = move.fx.filter((id) => !ws.banned.includes(id)); // drawn all the same: the seed goes on as ever
       const restyled = (own?.dress ?? []).filter((d) => playing.has(d.id));
       for (const d of restyled) state.run.dress[d.id] = d;
-      dressIn([...new Set([...entering(state.active, move.active), ...move.fx, ...restyled.map((d) => d.id)])]);
+      dressIn([...new Set([...entering(state.active, move.active), ...fx, ...restyled.map((d) => d.id)])]);
       for (const id of move.rewrite) rewrite(id);
       for (const [layer, degrees] of Object.entries(own?.parts ?? {})) {
         const id = own.layers[layer]?.[0];
         if (playing.has(id) && !(move.pilot.theme ?? []).includes(id)) writeIn(id, degrees);
       }
-      for (const id of move.fx) fire(id, time);
+      for (const id of fx) fire(id, time);
       state.active = move.active;
       improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
       if (sectionStart) enterSection();
@@ -1162,11 +1179,19 @@ export function mountApp(root, engine, opts = {}) {
       showSection();
       changed = true;
     }
+    if (state.leaving.size) {
+      const kept = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => !state.leaving.has(v)));
+      if (state.auto) {
+        changed ||= Object.values(state.active).some((id) => state.leaving.has(id));
+        state.active = kept(state.active);
+      }
+      state.leaving.clear();
+    }
     // Under the autopilot a mix with no lead and no pad lasts one bar at most.
     if (state.auto) {
       if (!isBare(state.active)) state.bare = 0;
       else if (state.bare++ >= 1) {
-        const full = fillMelodic(state.active, ws.lists, Math.random, ws.style);
+        const full = fillMelodic(state.active, pilotLists(), Math.random, ws.style);
         dressIn(entering(state.active, full));
         state.active = full;
         state.bare = 0;
@@ -1498,6 +1523,18 @@ export function mountApp(root, engine, opts = {}) {
       if (on !== state.varying.has(id)) setVarying(id, on, { pilot: true });
     }
     for (const id of left) if (state.autoVary.has(id) && tiles.has(id)) setVarying(id, false, { pilot: true });
+  }
+
+  // ⊘ keeps a sound away from the autopilot (and the ✨ AI); by hand it
+  // still plays. Banned while the pilot plays it, it leaves on the next bar
+  // line.
+  function setBanned(layer, id, on) {
+    ws.banned = on ? [...ws.banned, id].sort() : ws.banned.filter((x) => x !== id);
+    if (on && state.auto && !layer.oneShot) state.leaving.add(id);
+    else state.leaving.delete(id);
+    persist();
+    status(on ? tx.tile.banned(labelOf(id)) : tx.tile.unbanned(labelOf(id)));
+    renderButtons();
   }
 
   function setImprov(id, amount) {
@@ -1917,6 +1954,7 @@ export function mountApp(root, engine, opts = {}) {
     delete ws.names[id];
     delete ws.improv[id];
     ws.auto = ws.auto.filter((x) => x !== id);
+    ws.banned = ws.banned.filter((x) => x !== id);
     state.varying.delete(id);
     state.newParts.delete(id);
     state.queued.delete(id);
@@ -2128,7 +2166,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.auto = [];
     persist();
     state.queuedSnap = null;
-    const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
+    const start = startPilot(pilotLists(), state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
     cancelPlanning();
     state.run = newRun();
@@ -2396,7 +2434,7 @@ export function mountApp(root, engine, opts = {}) {
     const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
     planning = { at, abort };
-    const ctx = { lists: ws.lists, style: ws.style, next };
+    const ctx = { lists: pilotLists(), style: ws.style, next };
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
@@ -2428,7 +2466,7 @@ export function mountApp(root, engine, opts = {}) {
         (raw) => {
           if (planning?.abort !== abort) return;
           failing = false;
-          const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
+          const plan = normalizePlan(raw, { lists: pilotLists(), style: ws.style });
           // The section it plans may be the next one by now.
           const ahead = state.run.ahead;
           if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
@@ -2474,7 +2512,7 @@ export function mountApp(root, engine, opts = {}) {
     if (planning && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
     if (replaying()) {
       const raw = state.replay[sectionNo()];
-      if (raw) attach(normalizePlan(raw, { lists: ws.lists, style: ws.style }));
+      if (raw) attach(normalizePlan(raw, { lists: pilotLists(), style: ws.style }));
       return;
     }
     if (ahead.length) attach(ahead[0].plan);

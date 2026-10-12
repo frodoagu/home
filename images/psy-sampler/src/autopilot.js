@@ -29,7 +29,8 @@
 //
 // A style narrows each layer to the variants that fit it (copies follow their
 // base) and sets the BPM and the scale new melodies use; a style with no pool
-// for a layer leaves it out. Every choice comes
+// for a layer leaves it out, and so does banning every sound of its pool
+// (`unbanned`: the UI hands the pilot its lists without them). Every choice comes
 // from `rng`, so a seeded rng replays the same track: pools are read in id
 // order (never in the user's tile order). A run from silence starts an intro;
 // over a playing mix it carries on from that mix.
@@ -258,8 +259,15 @@ export const countRange = (section, layerId) => range(SECTIONS[section].shape[la
 export function poolOf(lists, layerId, style = STYLE_DEFAULT) {
   const allowed = STYLES[style]?.pool?.[layerId];
   const list = allowed ? lists[layerId].filter((id) => allowed.includes(baseOf(id))) : lists[layerId];
-  return [...(list.length ? list : lists[layerId])].sort();
+  return [...list].sort();
 }
+
+/**
+ * `lists` without the sounds the user banned from the pilot: what every
+ * pick reads. A layer whose style sounds are all banned sits out.
+ */
+export const unbanned = (lists, banned) =>
+  banned.length ? Object.fromEntries(Object.entries(lists).map(([l, ids]) => [l, ids.filter((id) => !banned.includes(id))])) : lists;
 
 function shuffle(list, rng) {
   const out = [...list];
@@ -439,9 +447,11 @@ export function isBare(active) {
   return layers.some((l) => BEAT.includes(l)) && !layers.some((l) => MELODIC.includes(l));
 }
 
-/** A bare mix with a lead or a pad added. */
+/** A bare mix with a lead or a pad added (as it is when both pools are empty). */
 export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
-  const layer = layerById(pick(MELODIC, rng));
+  const open = MELODIC.filter((id) => poolOf(lists, id, style).length);
+  if (!open.length) return active;
+  const layer = layerById(pick(open, rng));
   const id = pick(poolOf(lists, layer.id, style), rng);
   return { ...active, [laneKey(layer, id)]: id };
 }
