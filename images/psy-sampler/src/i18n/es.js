@@ -148,10 +148,10 @@ export default {
         icon: "🌀",
         title: "Visuales",
         items: [
-          ["🌀 Visuales", "Pone la pantalla en un show de fractales 3D, láseres, mandalas y túneles que sigue lo que suena: cambia de escena con las fases, corta en cada drop y destella en los kicks."],
+          ["🌀 Visuales", "Pone la pantalla en un show de fractales 3D, mandalas y túneles con láseres detrás, que sigue lo que suena: cambia de escena con las fases, corta en cada drop y destella en los kicks."],
           ["⧉ Otra ventana", "Abre el show aparte, para arrastrarlo al TV o al proyector mientras el sampler sigue en tu pantalla."],
           ["🎤 Micrófono", "Abrí psy.agu.com.ar/visuals.html en otro dispositivo y el show sigue la música que escucha."],
-          ["Teclas", "← → cambian de escena, 1-5 eligen una, L la fija, P cambia la paleta, F flash, S estrobo, H oculta los controles."],
+          ["Teclas", "← → cambian de escena, 1-4 eligen una, L la fija, P cambia la paleta, F flash, S estrobo, H oculta los controles."],
           ["Estrobo", "Arranca al máximo; bajalo con su control o la tecla S si te molestan los destellos."],
         ],
       },
@@ -848,7 +848,7 @@ export default {
     title: "Psy Layers · Visuales",
     button: "🌀 Visuales",
     buttonTitle: "Fractales, láseres y mandalas a pantalla completa, al ritmo de lo que suena",
-    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", lasers: "Láseres", mandala: "Mandala", tunnel: "Túnel op-art" },
+    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", tunnel: "Túnel op-art" },
     sources: {
       sampler: "🎛 Siguiendo al sampler",
       stopped: "⏸ El sampler está parado: en reposo hasta que des ▶",
@@ -867,7 +867,7 @@ export default {
     popOut: "Abrir en otra ventana, para llevarla al TV o al proyector",
     fullscreen: "Pantalla completa (Enter o doble clic)",
     close: "Cerrar (Esc)",
-    keys: "← → escena · 1-5 elegir · L fijar · P paleta · F flash · S estrobo · M micrófono · H ocultar · Enter pantalla completa",
+    keys: "← → escena · 1-4 elegir · L fijar · P paleta · F flash · S estrobo · M micrófono · H ocultar · Enter pantalla completa",
     micDenied: "Sin permiso para usar el micrófono",
     noWebgl: "Este navegador no tiene WebGL2: los visuales no pueden correr acá.",
     warning: {

@@ -7,12 +7,15 @@
 //   uKick ... each layer's envelope: 1 on its hit, decaying (stage.js DECAY)
 //   uEnergy   how busy the mix is, uBuild the sweep into a drop, uDrop 1 on
 //             the drop fading over a bar
-//   uLow      the levels heard, low/mid/high
+//   uLow      the levels heard, low/mid/high; uMusic 1 while something
+//             plays, fading to 0 at rest, where nothing may pulse on the beat
 //   uVar      four numbers the director draws per scene: its variant
 //   uPalette  0..PALETTES-1, uQuality 0..1 (raymarch steps, from the frame rate)
 //
 // POST mixes the scene with the previous one (a crossfade), its own last
-// frame (trails), the drop's laser fans and the strobe.
+// frame (trails), the laser layer behind them, the bloom (BLOOM + BLUR) and a
+// haze lit by it, through a lens and a film grade, then the strobe. FINAL
+// puts it on the canvas with FXAA and grain.
 
 export const VERTEX = `#version 300 es
 in vec2 aPos;
@@ -29,7 +32,7 @@ out vec4 outColor;
 uniform vec2 uRes;
 uniform float uTime, uBeats, uBeat, uBar;
 uniform float uKick, uBass, uPerc, uLead, uPad, uGlitch, uFx;
-uniform float uEnergy, uBuild, uDrop, uQuality;
+uniform float uEnergy, uBuild, uDrop, uQuality, uMusic;
 uniform vec3 uLow;
 uniform vec4 uVar;
 uniform int uPalette;
@@ -245,7 +248,7 @@ vec3 scene(vec2 uv) {
     col = base * (0.15 + 0.9 * dif) * ao;
     // Rings of light travelling down the tunnel, one per beat.
     float ring = exp(-abs(fract(p.z * 0.5 - uBeats * 0.5) - 0.5) * 18.0);
-    col += pal(orb.x + uBeats * 0.1) * ring * (0.3 + 1.6 * uKick) * clamp(orb.y * 2.0, 0.0, 1.0);
+    col += pal(orb.x + uBeats * 0.1) * ring * (0.3 * uMusic + 1.6 * uKick) * clamp(orb.y * 2.0, 0.0, 1.0);
   }
   col += pal(0.3 + uTime * 0.02 + uVar.w) * glow * (0.01 + 0.025 * uKick + 0.015 * uPerc);
   return col * exp(-x * (0.28 - 0.1 * uEnergy));
@@ -253,12 +256,12 @@ vec3 scene(vec2 uv) {
 `;
 
 // Laser beams through haze, analytic: each beam is a line, and a pixel glows
-// by how close its view ray passes to it. Three rigs (uVar.x, moving on every
-// fourth bar): a fan from the back, two crossing banks, and a cone that wraps
-// around the camera. Their spots land on the floor.
+// by how close its view ray passes to it. Not a scene of their own: a layer
+// that POST lays behind (and a little through) whatever scene plays. Three
+// rigs (uVar.x, moving on every fourth bar): a fan from the back, two
+// crossing banks, and a cone that wraps around the camera.
 const LASERS = `
 const int BEAMS = 14;
-const float FLOOR = -1.4;
 
 // x: glow of the beam; y: the view-ray distance at its closest point.
 vec2 beam(vec3 ro, vec3 rd, vec3 e, vec3 b, float maxT) {
@@ -306,32 +309,17 @@ vec3 scene(vec2 uv) {
   mat3 cam = camera(ro, vec3(0.0, 0.25, 8.0), 0.04 * sin(uTime * 0.2));
   vec3 rd = cam * normalize(vec3(uv, 1.4));
   float rigId = mod(floor(uVar.x * 3.0) + floor(uBeats / 16.0), 3.0);
-  float tFloor = rd.y < 0.0 ? (FLOOR - ro.y) / rd.y : 1e5;
-  vec3 hitFloor = ro + rd * tFloor;
 
-  // Haze lit from above, thicker where the beams are.
-  vec3 col = pal(0.6 + uTime * 0.01) * 0.03 * (0.5 + noise3(rd * 3.0 + vec3(0.0, 0.0, uTime * 0.1)));
+  vec3 col = vec3(0.0);
   bool mono = uVar.w > 0.7;
-  float power = 0.55 + 0.6 * uKick + 0.35 * uEnergy + 0.3 * uLead;
+  float power = 0.7 + 0.2 * uKick + 0.3 * uEnergy;
   for (int i = 0; i < BEAMS; i++) {
     vec3 e, b;
     rig(i, rigId, e, b);
     // The hats flicker beams off, a different few on each 16th.
     float on = uPerc > 0.3 && hash21(vec2(float(i), floor(uBeats * 4.0))) < 0.25 * uPerc ? 0.2 : 1.0;
     vec3 c = mono ? pal(uVar.z) : pal(float(i) / float(BEAMS) * 0.6 + uTime * 0.03);
-    col += c * beam(ro, rd, e, b, tFloor).x * power * on;
-    // Where the beam lands on the floor.
-    if (b.y < 0.0 && tFloor < 1e4) {
-      vec3 spot = e + b * ((FLOOR - e.y) / b.y);
-      float s = length(hitFloor.xz - spot.xz);
-      col += c * exp(-s * s * 40.0) * 0.5 * power * on * exp(-tFloor * 0.05);
-    }
-  }
-  if (tFloor < 1e4) {
-    // A dark glossy floor with a faint grid.
-    vec2 g = abs(fract(hitFloor.xz * 0.5) - 0.5);
-    float line = exp(-min(g.x, g.y) * 60.0);
-    col += pal(0.5 + hitFloor.z * 0.02) * line * 0.05 * exp(-tFloor * 0.1) * (1.0 + 2.0 * uKick);
+    col += c * beam(ro, rd, e, b, 1e5).x * power * on;
   }
   return col;
 }
@@ -401,8 +389,8 @@ vec3 scene(vec2 uv) {
 `;
 
 // An op-art tunnel: the plane taken to (angle, 1/radius), flying in, with a
-// pattern per variant (uVar.x): checkers, spiral stripes, moiré rings or
-// dots, round or square (uVar.y). A ring of light rolls down it each beat.
+// pattern per variant (uVar.x): spiral stripes, moiré rings or dots,
+// round or square (uVar.y). A ring of light rolls down it each beat.
 const TUNNEL = `
 vec3 scene(vec2 uv) {
   uv *= rot(uTime * 0.12 + 0.4 * sin(uTime * 0.17));
@@ -415,15 +403,12 @@ vec3 scene(vec2 uv) {
   float z = 0.4 / r + uTime * (0.8 + 0.8 * uEnergy);
   a += z * 0.04 * sin(uTime * 0.21) + 0.02 * uBass;
   float n = 4.0 + 4.0 * floor(uVar.z * 3.0);
-  float mode = floor(uVar.x * 4.0);
+  float mode = floor(uVar.x * 3.0);
   float v;
   if (mode < 1.0) {
-    float s = sin(z * PI * 2.0) * sin(a * n * TAU);
-    v = smoothstep(-fwidth(s), fwidth(s), s);
-  } else if (mode < 2.0) {
     float s = sin((a * n + z * 1.5) * TAU);
     v = smoothstep(-fwidth(s) - 0.2, fwidth(s) + 0.2, s);
-  } else if (mode < 3.0) {
+  } else if (mode < 2.0) {
     v = 0.5 + 0.5 * sin(z * 24.0) * sin(z * 25.3 + a * TAU * n);
   } else {
     vec2 cell = fract(vec2(a * n * 2.0, z * 2.0)) - 0.5;
@@ -432,7 +417,7 @@ vec3 scene(vec2 uv) {
   }
   vec3 col = mix(pal(z * 0.04 + a * 0.5 + uVar.w) * 0.06, pal(z * 0.04 + a + uTime * 0.02 + uVar.w), v);
   float ring = exp(-abs(fract(z * 0.25 - uBeats) - 0.5) * 20.0);
-  col += pal(uBeats * 0.1 + 0.5) * ring * (0.4 + 1.6 * uKick);
+  col += pal(uBeats * 0.1 + 0.5) * ring * (0.4 * uMusic + 1.6 * uKick);
   col *= smoothstep(0.0, 0.35, r);
   col += pal(0.1 + uTime * 0.03) * exp(-r * 10.0) * (0.6 + 1.5 * uKick);
   return col;
@@ -445,41 +430,38 @@ void main() {
 }
 `;
 
-export const SCENES = { bulb: BULB, kifs: KIFS, lasers: LASERS, mandala: MANDALA, tunnel: TUNNEL };
+export const SCENES = { bulb: BULB, kifs: KIFS, mandala: MANDALA, tunnel: TUNNEL };
 
 /** The fragment source of scene `id`. */
 export const sceneSource = (id) => COMMON + SCENES[id] + SCENE_MAIN;
 
+/** The laser layer's fragment source: drawn like a scene, on black. */
+export const laserSource = () => COMMON + LASERS + SCENE_MAIN;
+
 export const POST = `${COMMON}
-uniform sampler2D uScene, uPrev, uFeed;
-uniform float uMix, uStrobe, uLasers, uTrails, uInvert;
+uniform sampler2D uScene, uPrev, uFeed, uLaser, uBloom;
+uniform float uMix, uStrobe, uLaserMix, uTrails, uInvert, uHaze;
 
 vec3 sceneAt(sampler2D s, vec2 uv, float split) {
   vec2 dir = (uv - 0.5) * split;
   return vec3(texture(s, uv + dir).r, texture(s, uv).g, texture(s, uv - dir).b);
 }
 
-// The drop's fans: beams from below the screen, opening with uLasers.
-vec3 fans(vec2 p) {
-  vec3 col = vec3(0.0);
-  vec2 o = vec2(0.0, -1.25);
-  float spread = 0.25 + 0.9 * uLasers;
-  for (int i = 0; i < 9; i++) {
-    float fi = float(i) / 8.0;
-    float ang = (fi - 0.5) * spread * 2.0 + 0.3 * sin(uBeats * PI * 0.5 + fi * 2.0);
-    vec2 dir = vec2(sin(ang), cos(ang));
-    vec2 rel = p - o;
-    float along = dot(rel, dir);
-    if (along < 0.0) continue;
-    float d = abs(rel.x * dir.y - rel.y * dir.x);
-    col += pal(fi * 0.5 + uBeats * 0.05) * (exp(-d * d * 30000.0) + 0.15 * exp(-d * 60.0)) * smoothstep(3.0, 0.5, along);
-  }
-  return col;
+// A lens: a touch of barrel distortion, scaled so the corners stay on screen.
+vec2 lens(vec2 uv) {
+  vec2 d = uv - 0.5;
+  return 0.5 + d * (1.0 + 0.06 * dot(d, d)) / 1.03;
+}
+
+float fbm(vec3 p) {
+  return 0.55 * noise3(p) + 0.3 * noise3(p * 2.1 + 7.3) + 0.15 * noise3(p * 4.3 + 1.7);
 }
 
 void main() {
-  vec2 uv = vUv;
-  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop;
+  vec2 uv = lens(vUv);
+  vec2 d = vUv - 0.5;
+  // Colour fringes: always a little towards the edges, more on the kick.
+  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop + 0.012 * dot(d, d);
   vec3 col = sceneAt(uScene, uv, split);
   if (uMix < 1.0) {
     // The scene going out zooms away while the new one comes in.
@@ -487,30 +469,111 @@ void main() {
     col = mix(sceneAt(uPrev, zuv, split), col, smoothstep(0.0, 1.0, uMix));
   }
   // Trails: the last frame, a little zoomed and turned, where it is brighter.
-  vec2 fuv = 0.5 + (uv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
+  vec2 fuv = 0.5 + (vUv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
   col = max(col, texture(uFeed, fuv).rgb * uTrails);
-  col += fans(screen()) * uLasers * (0.6 + 0.8 * uKick);
-  // Glitch: slices of the frame shoved sideways on glitch hits.
-  if (uGlitch > 0.2) {
-    float band = floor(uv.y * 24.0 + floor(uBeats * 8.0) * 7.0);
-    if (hash21(vec2(band, floor(uBeats * 8.0))) < uGlitch * 0.35) {
-      col = sceneAt(uScene, vec2(fract(uv.x + (hash21(vec2(band, 3.0)) - 0.5) * 0.2), uv.y), 0.02);
-    }
-  }
+  // The lasers: a faint layer behind the scene, only where it is dark.
+  float lit = smoothstep(0.03, 0.4, dot(col, vec3(0.299, 0.587, 0.114)));
+  col += texture(uLaser, uv).rgb * uLaserMix * mix(1.0, 0.1, lit);
+
+  // Bloom: light bleeding past the bright parts.
+  vec3 bloom = texture(uBloom, uv).rgb;
+  col += bloom * (0.3 + 0.25 * uKick) * (1.0 - 0.6 * smoothstep(0.5, 1.0, dot(col, vec3(0.333))));
+  // Haze: slow smoke drifting across the screen, lit by the scene's own glow.
+  vec2 p = screen();
+  float smoke = fbm(vec3(p * 1.1 + vec2(uTime * 0.03, -uTime * 0.02), uTime * 0.04));
+  float density = uHaze * smoothstep(0.25, 0.85, smoke);
+  vec3 glow = bloom * 1.1 + pal(0.6 + uTime * 0.01) * 0.03;
+  col = col * (1.0 - 0.2 * density) + glow * density;
+
+  // Film grade: a soft S, blacks lifted a hair, a little less saturation.
+  col = clamp(col, 0.0, 1.0);
+  col = mix(col, col * col * (3.0 - 2.0 * col), 0.35);
+  col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.9);
+  col = col * 0.97 + vec3(0.012, 0.01, 0.02);
+
   col = mix(col, vec3(1.0) - col, uInvert);
   col = mix(col, mix(vec3(1.0), pal(uBeats * 0.25) + 0.5, 0.25), uStrobe);
-  vec2 v = uv - 0.5;
-  col *= 1.0 - 0.45 * dot(v, v);
-  col += (hash21(uv * uRes + fract(uTime)) - 0.5) / 255.0;
+  col *= 1.0 - 0.45 * dot(d, d);
   outColor = vec4(col, 1.0);
 }
 `;
 
-export const COPY = `#version 300 es
-precision mediump float;
+// The bloom's first step: the bright parts of the scene, at a quarter of its
+// size (four bilinear taps cover a 4×4 block).
+export const BLOOM = `#version 300 es
+precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uTex;
+uniform vec2 uTexel;
+
+vec3 bright(vec3 c) {
+  return c * smoothstep(0.45, 1.0, max(c.r, max(c.g, c.b)));
+}
+
 void main() {
-  outColor = texture(uTex, vUv);
+  vec3 c = bright(texture(uTex, vUv + uTexel * vec2(-1.0, -1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(1.0, -1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(-1.0, 1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(1.0, 1.0)).rgb);
+  outColor = vec4(c * 0.25, 1.0);
+}`;
+
+// One direction of a 9-tap Gaussian, in five bilinear fetches.
+export const BLUR = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uTex;
+uniform vec2 uDir;
+
+void main() {
+  vec3 c = texture(uTex, vUv).rgb * 0.2270270;
+  c += texture(uTex, vUv + uDir * 1.3846154).rgb * 0.3162162;
+  c += texture(uTex, vUv - uDir * 1.3846154).rgb * 0.3162162;
+  c += texture(uTex, vUv + uDir * 3.2307692).rgb * 0.0702703;
+  c += texture(uTex, vUv - uDir * 3.2307692).rgb * 0.0702703;
+  outColor = vec4(c, 1.0);
+}`;
+
+// Onto the canvas: FXAA (its luma-edge form) over the upscaled frame, then a
+// fine film grain at screen resolution, after the smoothing so it stays sharp.
+export const FINAL = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uTex;
+uniform vec2 uTexel, uRes;
+uniform float uTime, uGrain;
+
+float luma(vec3 c) {
+  return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+void main() {
+  vec3 m = texture(uTex, vUv).rgb;
+  float nw = luma(texture(uTex, vUv + vec2(-1.0, -1.0) * uTexel).rgb);
+  float ne = luma(texture(uTex, vUv + vec2(1.0, -1.0) * uTexel).rgb);
+  float sw = luma(texture(uTex, vUv + vec2(-1.0, 1.0) * uTexel).rgb);
+  float se = luma(texture(uTex, vUv + vec2(1.0, 1.0) * uTexel).rgb);
+  float lm = luma(m);
+  float lo = min(lm, min(min(nw, ne), min(sw, se)));
+  float hi = max(lm, max(max(nw, ne), max(sw, se)));
+  vec2 dir = vec2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+  float reduce = max((nw + ne + sw + se) * 0.03125, 1.0 / 128.0);
+  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
+  vec3 a = 0.5 * (texture(uTex, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture(uTex, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
+  vec3 b = a * 0.5 + 0.25 * (texture(uTex, vUv - dir * 0.5).rgb + texture(uTex, vUv + dir * 0.5).rgb);
+  float lb = luma(b);
+  vec3 col = lb < lo || lb > hi ? a : b;
+  // Grain, stronger in the mids the way film's is.
+  float g = hash(vUv * uRes + fract(uTime * 13.7) * 91.0) - 0.5;
+  col += g * uGrain * (0.4 + 0.6 * (1.0 - abs(luma(col) * 2.0 - 1.0)));
+  outColor = vec4(col, 1.0);
 }`;

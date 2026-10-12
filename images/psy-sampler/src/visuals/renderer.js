@@ -1,21 +1,24 @@
-// WebGL2 plumbing for the show: one program per scene plus POST and COPY,
-// drawn as a full-screen triangle pair.
+// WebGL2 plumbing for the show: one program per scene plus the laser layer,
+// the bloom (BLOOM + BLUR), POST and FINAL, drawn as a full-screen triangle
+// pair.
 //
-//   scene ──> target "scene"  ┐
-//   previous scene ──> "prev" ┼─> POST ──> feed[i] ──> COPY ──> canvas
-//   feed[1-i] (last frame) ───┘
+//   scene ──> target "scene" ──> BLOOM ─> BLUR ×4 ─> "bloom" ┐
+//   previous scene ──> "prev"                                ┤
+//   lasers ──> "lasers"                                      ┼─> POST ──> feed[i] ──> FINAL ──> canvas
+//   feed[1-i] (last frame) ──────────────────────────────────┘           (FXAA, grain)
 //
 // Scenes render below the canvas resolution: `level` (0..1) sets both that
 // fraction and the raymarch steps, and adapt() moves it with the frame time,
 // so a weak GPU (a phone, a TV) gets a softer picture instead of a slideshow.
 
-import { COPY, POST, VERTEX, sceneSource } from "./shaders.js";
+import { BLOOM, BLUR, FINAL, POST, VERTEX, laserSource, sceneSource } from "./shaders.js";
 
 const MAX_PIXELS = 1920 * 1080; // the canvas never goes past this, whatever the screen
 const SLOW_MS = 22; // frame time above this: drop a notch
 const FAST_MS = 18; // below this for RISE_MS: go up a notch
 const RISE_MS = 1500;
 const INTS = new Set(["uPalette"]);
+const LASER_OFF = 0.003; // below this the laser layer is not drawn at all
 
 export const scaleOf = (level) => 0.3 + 0.7 * level ** 0.8;
 
@@ -103,7 +106,10 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     programs = {
       scenes: Object.fromEntries(sceneIds.map((id) => [id, link(gl, sceneSource(id))])),
       post: link(gl, POST),
-      copy: link(gl, COPY),
+      lasers: link(gl, laserSource()),
+      bloom: link(gl, BLOOM),
+      blur: link(gl, BLUR),
+      final: link(gl, FINAL),
     };
     targets = null;
   }
@@ -166,12 +172,14 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     // Small swings keep their targets: re-allocating every frame would stutter.
     if (targets && Math.abs(targets.scene.w - tw) / tw < 0.08 && targets.w === w && targets.h === h) return;
     if (targets) {
-      for (const t of [targets.scene, targets.prev, ...targets.feed]) {
+      for (const t of [targets.scene, targets.prev, targets.lasers, ...targets.feed, ...targets.bloom]) {
         gl.deleteTexture(t.texture);
         gl.deleteFramebuffer(t.fb);
       }
     }
-    targets = { w, h, scene: target(gl, tw, th), prev: target(gl, tw, th), feed: [target(gl, tw, th), target(gl, tw, th)] };
+    const make = () => target(gl, tw, th);
+    const quarter = () => target(gl, Math.max(8, Math.round(tw / 4)), Math.max(8, Math.round(th / 4)));
+    targets = { w, h, scene: make(), prev: make(), lasers: make(), feed: [make(), make()], bloom: [quarter(), quarter()] };
   }
 
   function draw(into) {
@@ -182,9 +190,10 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
 
   /**
    * One frame. `frame` has the shared uniforms (uTime, uBeats, uKick...),
-   * `scene` / `previous` are { id, palette, vars } and `post` POST's own.
+   * `scene` / `previous` are { id, palette, vars }, `lasers` is { amount,
+   * palette, vars } and `post` POST's own.
    */
-  function render({ uniforms, scene, previous, post }) {
+  function render({ uniforms, scene, previous, lasers, post }) {
     if (lost) return;
     size();
     const res = [targets.scene.w, targets.scene.h];
@@ -197,19 +206,52 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     };
     paint(scene, targets.scene);
     if (previous) paint(previous, targets.prev);
+    const beams = lasers && lasers.amount > LASER_OFF;
+    if (beams) {
+      use(programs.lasers, "lasers");
+      setAll(programs.lasers, { ...shared, uPalette: lasers.palette, uVar: lasers.vars });
+      draw(targets.lasers);
+    }
+
+    // Bloom: the scene's bright parts at a quarter size, blurred twice each
+    // way, the second time twice as wide.
+    const [b0, b1] = targets.bloom;
+    use(programs.bloom, "bloom");
+    sampler(programs.bloom, "uTex", 0, targets.scene);
+    set(programs.bloom, "uTexel", [1 / targets.scene.w, 1 / targets.scene.h]);
+    draw(b0);
+    use(programs.blur, "blur");
+    for (const spread of [1, 2]) {
+      sampler(programs.blur, "uTex", 0, b0);
+      set(programs.blur, "uDir", [spread / b0.w, 0]);
+      draw(b1);
+      sampler(programs.blur, "uTex", 0, b1);
+      set(programs.blur, "uDir", [0, spread / b1.h]);
+      draw(b0);
+    }
 
     const out = targets.feed[flip];
     const last = targets.feed[1 - flip];
-    const { post: pp, copy } = programs;
+    const { post: pp, final } = programs;
     use(pp, "post");
     sampler(pp, "uScene", 0, targets.scene);
     sampler(pp, "uPrev", 1, previous ? targets.prev : targets.scene);
     sampler(pp, "uFeed", 2, last);
-    setAll(pp, { ...shared, uPalette: scene.palette, uVar: scene.vars, ...post, uMix: previous ? post.uMix : 1 });
+    sampler(pp, "uLaser", 3, beams ? targets.lasers : targets.scene);
+    sampler(pp, "uBloom", 4, b0);
+    setAll(pp, {
+      ...shared,
+      uPalette: scene.palette,
+      uVar: scene.vars,
+      ...post,
+      uMix: previous ? post.uMix : 1,
+      uLaserMix: beams ? lasers.amount : 0,
+    });
     draw(out);
 
-    use(copy, "copy");
-    sampler(copy, "uTex", 0, out);
+    use(final, "final");
+    sampler(final, "uTex", 0, out);
+    setAll(final, { uTexel: [1 / out.w, 1 / out.h], uRes: [canvas.width, canvas.height], uTime: uniforms.uTime, uGrain: post.uGrain ?? 0 });
     draw(null);
     flip = 1 - flip;
   }
