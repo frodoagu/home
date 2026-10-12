@@ -2427,20 +2427,69 @@ html:has(dialog.help[open], dialog.intro[open]) {
   display: contents;
 }
 
-.insert {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 8px 12px 10px;
+/* The sections under the sliders fold (editor.js `fold`); the grid never
+   does. The body is its own grid: <details> only takes display: grid in
+   recent browsers. */
+.fold {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-.insert legend {
-  padding: 0 4px;
+.fold summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
+  list-style: none;
+  cursor: pointer;
+  border-radius: 7px;
+  user-select: none;
+}
+
+.fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold summary::before {
+  content: "▸";
+  transition: transform 0.15s;
+}
+
+.fold[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.fold summary:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.fold summary:focus-visible {
+  outline: 2px solid var(--layer);
+  outline-offset: -2px;
+}
+
+/* A folded section that still changes the sound says so. */
+.fold-on {
+  padding: 0 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--on-layer);
+  background: var(--layer);
+  border-radius: 999px;
+}
+
+.fold-on[hidden] {
+  display: none;
+}
+
+.fold-body {
+  display: grid;
+  gap: 8px;
+  padding: 2px 12px 10px;
 }
 
 /* What a click on the grid does: one pressed button among four. */

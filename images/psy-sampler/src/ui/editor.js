@@ -5,6 +5,8 @@
 // Every kind also picks its source (its own voice or one of the user's
 // samples, which swaps the voice's sliders for the sample's) and has a
 // filter + distortion section (the insert).
+// The sections under the sliders (insert, modulation, space, pattern) fold;
+// the header, the source, the sliders and the grid never do.
 // Every change goes out through onChange(next) as fresh data; the editor
 // never talks to the engine itself. The header names the variant (editable)
 // and carries the per-sound actions: duplicate, WAV, reset (the part alone,
@@ -42,6 +44,7 @@ import {
   pruneMods,
   rotatePart,
 } from "../editing.js";
+import { foldActive } from "../folds.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
@@ -63,6 +66,8 @@ export function createEditor({
   data,
   brush = { ...BRUSH }, // the app's, mutated here so every editor shares it
   euclid = { ...EUCLID }, // the same for the euclid picker
+  folds = {}, // which foldable sections are open (folds.js), the app's and shared the same way
+  onFold = () => {}, // one was opened or folded
   onEdit = () => {}, // a part edit that lands on the bar line: "reverse", "euclid"
   onChange,
   onAudition,
@@ -99,12 +104,39 @@ export function createEditor({
   let newPartBtn = null;
   let tone = null; // { hp, lp }: the tone sliders, once the insert box is built
   const cleanups = [];
+  const foldMarks = []; // repaint each section's "on" flag
 
   function set(patch) {
     current = { ...current, ...patch };
     onChange(current);
     showBrush();
+    paintFolds();
   }
+
+  /* ---- a foldable section: a <details> whose summary flags it while it
+     still changes the sound, so folding never hides a filter that is on ---- */
+  function fold(key, title, ...children) {
+    const on = el("span", { class: "fold-on", text: tx.foldOn });
+    const box = el(
+      "details",
+      { class: `fold ${key}`, "data-fold": key },
+      el("summary", {}, el("span", { text: title }), on),
+      el("div", { class: "fold-body" }, ...children),
+    );
+    box.open = Boolean(folds[key]);
+    box.addEventListener("toggle", () => {
+      if (folds[key] === box.open) return; // the initial open above fires one too
+      folds[key] = box.open;
+      onFold(key, box.open);
+    });
+    const paint = () => {
+      on.hidden = !foldActive(key, current);
+    };
+    foldMarks.push(paint);
+    paint();
+    return box;
+  }
+  const paintFolds = () => foldMarks.forEach((paint) => paint());
 
   // Improvise: a toggle and a slider in one. A click turns it on or off (the
   // app varies the part on every loop while it is on); dragging across it,
@@ -272,7 +304,7 @@ export function createEditor({
     ];
     const rows = [el("div", { class: "pickers" }, speed, iter, echo, semis), el("div", { class: "editor-actions" }, ...tools)];
     if (def.kind === "drum") rows.push(euclidControls(button));
-    return el("fieldset", { class: "insert pattern" }, el("legend", { text: tx.pattern }), ...rows, legend(tx.patternLegend));
+    return fold("pattern", tx.pattern, ...rows, legend(tx.patternLegend));
   }
 
   function euclidControls(button) {
@@ -447,10 +479,9 @@ export function createEditor({
     const filterType = pick(tx.filter, FILTER_TYPES, "filter", tx.filterTypes, "filter", () => show());
     const driveType = pick(tx.drive, DRIVE_TYPES, "drive", tx.driveTypes, "drive", () => show());
     show();
-    return el(
-      "fieldset",
-      { class: "insert" },
-      el("legend", { text: tx.insert }),
+    return fold(
+      "insert",
+      tx.insert,
       el("div", { class: "pickers" }, filterType, vowel, rate, shape, driveType),
       el("div", { class: "knobs" }, cutoff, ...filterKnobs, envDecay, drive, hp, lp),
     );
@@ -475,10 +506,9 @@ export function createEditor({
       rate.hidden = !current.insert[key];
       return el("div", { class: "mod-pair" }, amount, rate);
     };
-    return el(
-      "fieldset",
-      { class: "insert modulation" },
-      el("legend", { text: tx.modulation }),
+    return fold(
+      "modulation",
+      tx.modulation,
       el("div", { class: "knobs" }, pair("phaser", "phaserRate", LFO_RATES, tx.lfoRates), pair("trem", "tremRate", TREM_RATES, tx.tremRates)),
       legend(tx.modulationLegend),
     );
@@ -512,10 +542,9 @@ export function createEditor({
         : GROOVE_PARAMS.filter((p) => !(p.key === "duck" && def.voice === "kick")).map((spec) =>
             slider(localized(spec), current[spec.key], (v) => set({ [spec.key]: v })),
           );
-    return el(
-      "fieldset",
-      { class: "insert space" },
-      el("legend", { text: def.kind === "fx" ? tx.spaceFx : tx.space }),
+    return fold(
+      "space",
+      def.kind === "fx" ? tx.spaceFx : tx.space,
       el("div", { class: "knobs" }, ...groove, panKnob("pan"), panKnob("width")),
       el("div", { class: "pickers" }, panRate),
       legend(def.kind === "fx" ? tx.spaceFxLegend : tx.spaceLegend),
@@ -800,6 +829,7 @@ export function createEditor({
       current = data;
       refreshGrid();
       showBrush();
+      paintFolds();
     },
     // The volume, set from the tile's fill.
     showLevel: (v) => {
@@ -811,6 +841,7 @@ export function createEditor({
     showTone: (insert) => {
       current = { ...current, insert: { ...current.insert, hp: insert.hp, lp: insert.lp } };
       for (const key of ["hp", "lp"]) tone?.[key].setValue(insert[key]);
+      paintFolds();
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),

@@ -90,6 +90,7 @@ export default {
         title: "Editar um som (▾)",
         items: [
           ["▾", "Abre o editor embaixo da camada; fica um aberto por vez."],
+          ["Seções recolhíveis", "Filtro e distorção, Modulação, Groove e espaço e Padrão abrem com um clique no título, e a que você abre fica aberta em todos os editores. «ativo» marca a que continua mudando o som mesmo fechada."],
           ["Batidas", "Kick, percussão e glitch: clique num passo para batida → acento → vazio. Com o loop parado, cada batida soa ao marcar; rodando, não se mete no que está tocando."],
           ["Piano roll", "Baixo, lead e pad: clique para nota → acento → apagar. No celular cada toque põe uma nota do tamanho de «Nota nova». Como as batidas, a nota soa só com o loop parado."],
           ["Synth, Escala, Oitava", "Mudam a voz, as notas que o piano roll mostra e a altura da parte."],
@@ -620,6 +621,7 @@ export default {
     octave: "Oitava",
     newNote: "Nota nova",
     lengths: { 1: "1/16", 2: "1/8", 4: "1/4", 8: "1/2", 16: "1 compasso", 32: "2 compassos" },
+    foldOn: "ativo",
     insert: "Filtro e distorção",
     filter: "Filtro",
     filterTypes: { off: "Desligado", lowpass: "Passa-baixas", highpass: "Passa-altas", bandpass: "Passa-banda", vowel: "Vogal (formantes)" },

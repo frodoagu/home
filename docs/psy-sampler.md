@@ -419,6 +419,19 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
   dark mode) and the tile being edited sits above it with an outline; the veil
   lets clicks through, so the other sounds still play live. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
   4 shaded, and a rule between the two bars.
+- **Foldable sections.** *Filter and distortion*, *Modulation*, *Groove and
+  space* and *Pattern* are `<details>` (`fold` in `editor.js`), folded by
+  default; the header, the source, the voice's sliders, the Click row, the grid
+  and its actions never fold. Which ones are open is app state shared by every
+  editor (open Pattern on the kick and it is open on the bass too), carried
+  across a remount and kept per browser in its own `localStorage` key
+  (`psy-sampler:folds`, not the workspace: it never reaches the cloud or a
+  share link). A section that still changes the sound shows an **on** pill in
+  its summary, folded or not, so folding never hides a filter that is on
+  (`foldActive` in [`folds.js`](../images/psy-sampler/src/folds.js)). It means
+  off the NEUTRAL value, not off the factory's: `lead.bits` ships with a
+  lowpass, so it is flagged, while the knobs of a filter that is off are not.
+  The autopilot's tone ride flags the insert while it closes the filter.
 
 ### Mods: chance, condition, ratchet
 

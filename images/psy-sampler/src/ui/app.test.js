@@ -901,6 +901,72 @@ describe("groove and space", () => {
   });
 });
 
+describe("foldable sections", () => {
+  const fold = (variant, key) => editor(variant).querySelector(`[data-fold="${key}"]`);
+  const flagged = (variant, key) => !fold(variant, key).querySelector(".fold-on").hidden;
+  const toggleFold = (variant, key) => {
+    fold(variant, key).querySelector("summary").click();
+    vi.advanceTimersByTime(1); // <details> fires its toggle as a task
+  };
+
+  it("the sections under the sliders start folded; the header, sliders and grid never fold", () => {
+    openEditor("kick.punchy");
+    const folds = [...editor("kick.punchy").querySelectorAll("details")];
+    expect(folds.map((d) => d.dataset.fold)).toEqual(["insert", "modulation", "space", "pattern"]);
+    expect(folds.some((d) => d.open)).toBe(false);
+    for (const sel of ['[data-action="name"]', '[data-control="source"]', 'input[data-param="level"]', ".brush", ".grid"]) {
+      expect(editor("kick.punchy").querySelector(sel).closest("details"), sel).toBeNull();
+    }
+    openEditor("fx.riser");
+    expect([...editor("fx.riser").querySelectorAll("details")].map((d) => d.dataset.fold)).toEqual(["insert", "modulation", "space"]);
+  });
+
+  it("an opened section stays open in every editor and on the next visit, apart from the workspace", () => {
+    openEditor("kick.punchy");
+    toggleFold("kick.punchy", "pattern");
+    expect(JSON.parse(localStorage.getItem("psy-sampler:folds"))).toEqual({
+      insert: false,
+      modulation: false,
+      space: false,
+      pattern: true,
+    });
+    expect(saved()?.folds).toBeUndefined();
+    openEditor("lead.acid");
+    expect(fold("lead.acid", "pattern").open).toBe(true);
+    expect(fold("lead.acid", "insert").open).toBe(false);
+    toggleFold("lead.acid", "pattern");
+    openEditor("kick.punchy");
+    expect(fold("kick.punchy", "pattern").open).toBe(false);
+
+    toggleFold("kick.punchy", "space");
+    root = document.createElement("div");
+    document.body.replaceChildren(root);
+    mount(root, newEngine());
+    openEditor("bass.offbeat");
+    expect(fold("bass.offbeat", "space").open).toBe(true);
+  });
+
+  it("a section flags that it still changes the sound, folded or not", () => {
+    openEditor("perc.hat");
+    expect(["insert", "modulation", "space", "pattern"].filter((k) => flagged("perc.hat", k))).toEqual([]);
+    const filter = editor("perc.hat").querySelector('[data-control="filter"]');
+    filter.value = "lowpass";
+    filter.dispatchEvent(new Event("change"));
+    expect(flagged("perc.hat", "insert")).toBe(true);
+    filter.value = "off";
+    filter.dispatchEvent(new Event("change"));
+    expect(flagged("perc.hat", "insert")).toBe(false);
+    const speed = editor("perc.hat").querySelector('[data-control="speed"]');
+    speed.value = "2";
+    speed.dispatchEvent(new Event("change"));
+    expect(flagged("perc.hat", "pattern")).toBe(true);
+    expect(fold("perc.hat", "pattern").querySelector(".fold-on").textContent).toBe("activo");
+    // A factory sound that ships with a filter has it on.
+    openEditor("lead.bits");
+    expect(flagged("lead.bits", "insert")).toBe(true);
+  });
+});
+
 describe("insert extras", () => {
   const pick = (variant, control, value) => {
     const sel = editor(variant).querySelector(`[data-control="${control}"]`);
@@ -2625,6 +2691,7 @@ describe("filter, distortion and the DJ filter", () => {
     expect(lp).toBeLessThan(20000);
     const shown = knob(pad, "lp").closest(".knob").querySelector("output").textContent;
     expect(shown).toBe(lp >= 1000 ? `${(lp / 1000).toFixed(1)} kHz` : `${lp} Hz`);
+    expect(editor(pad).querySelector('[data-fold="insert"] .fold-on').hidden).toBe(false);
   });
 
   it("the DJ knob filters the master, reads out its cutoff and recentres on a double click", () => {
