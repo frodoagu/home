@@ -992,6 +992,22 @@ html:has(dialog.help[open], dialog.intro[open]) {
   width: 26ch;
 }
 
+.ai-model-pick {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+#ai-model {
+  min-width: 0;
+  max-width: 32ch;
+}
+
+.ai-models {
+  padding: 2px 8px;
+}
+
 #ai-model {
   width: 20ch;
 }

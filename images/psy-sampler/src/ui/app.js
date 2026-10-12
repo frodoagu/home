@@ -394,16 +394,11 @@ export function mountApp(root, engine, opts = {}) {
     placeholder: LMSTUDIO_URL,
   });
   const endpointBox = field("ai-endpoint", tx.ai.endpoint, endpointInput, tx.ai.endpointTitle);
-  const modelInput = el("input", {
-    type: "text",
-    id: "ai-model",
-    class: "ai-input",
-    maxlength: "120",
-    spellcheck: "false",
-    autocomplete: "off",
-    placeholder: tx.ai.modelAuto,
-  });
-  const modelBox = field("ai-model", tx.ai.model, modelInput, tx.ai.modelTitle);
+  // The models LM Studio lists (ai.js known), read again on every start or ↻.
+  const modelInput = el("select", { id: "ai-model", "data-control": "ai-model" });
+  const modelsBtn = el("button", { type: "button", class: "ghost ai-models", "aria-label": tx.ai.modelsRefresh, text: "↻" });
+  modelsBtn.title = tx.ai.modelsRefresh;
+  const modelBox = field("ai-model", tx.ai.model, el("span", { class: "ai-model-pick" }, modelInput, modelsBtn), tx.ai.modelTitle);
   const vibeInput = el("input", {
     type: "text",
     id: "ai-vibe",
@@ -2183,9 +2178,26 @@ export function mountApp(root, engine, opts = {}) {
     endpointBox.hidden = engine !== "lmstudio";
     modelBox.hidden = engine !== "lmstudio";
     if (document.activeElement !== endpointInput) endpointInput.value = endpoint;
-    if (document.activeElement !== modelInput) modelInput.value = model;
+    showModels();
     if (document.activeElement !== vibeInput) vibeInput.value = vibe;
     showSection();
+  }
+
+  // Automatic, then what LM Studio has; a saved model it no longer lists
+  // stays, marked, until another is picked.
+  function showModels() {
+    const { endpoint, model } = state.aiPrefs;
+    const known = ai?.lmstudio.known?.(endpoint) ?? null;
+    const ids = [...(known ?? []), ...(model && !known?.includes(model) ? [model] : [])];
+    const key = JSON.stringify([known, ids]);
+    if (modelInput.dataset.key !== key) {
+      modelInput.dataset.key = key;
+      modelInput.replaceChildren(
+        el("option", { value: "", text: tx.ai.modelAuto }),
+        ...ids.map((id) => el("option", { value: id, text: known && !known.includes(id) ? `${id} ${tx.ai.modelMissing}` : id })),
+      );
+    }
+    modelInput.value = model;
   }
 
   function setPrefs(changes) {
@@ -2216,11 +2228,15 @@ export function mountApp(root, engine, opts = {}) {
       () => {
         if (engine === "chrome") state.chrome = "available"; // downloaded now
         if (!alive || !state.aiPrefs.on) return;
-        status(tx.ai.ready(name));
+        showModels();
+        const known = engine === "lmstudio" ? ai.lmstudio.known?.(endpoint) : null;
+        if (model && known && !known.includes(model)) status(tx.ai.modelGone(model));
+        else status(tx.ai.ready(name));
         planAhead();
       },
       () => {
         if (!alive || !state.aiPrefs.on) return;
+        showModels();
         status(engine === "chrome" ? tx.ai.chromeFailed : tx.ai.unreachable(endpoint));
       },
     );
@@ -2328,9 +2344,10 @@ export function mountApp(root, engine, opts = {}) {
     startAi();
   });
   modelInput.addEventListener("change", () => {
-    setPrefs({ model: modelInput.value.replace(/\s+/g, " ").trim().slice(0, 120) });
+    setPrefs({ model: modelInput.value });
     startAi();
   });
+  modelsBtn.addEventListener("click", startAi);
   aiPanel.addEventListener("toggle", () => {
     if (aiPanel.open !== state.aiPrefs.open) setPrefs({ open: aiPanel.open });
   });

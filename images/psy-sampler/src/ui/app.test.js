@@ -2193,10 +2193,11 @@ describe("autopilot", () => {
 describe("✨ AI", () => {
   const RealURL = globalThis.URL;
   // The models ai.js would hand over; `answers` are what the model plans, in turn.
-  function fakeAi({ chrome = "available", answers = [], fail = false } = {}) {
+  function fakeAi({ chrome = "available", answers = [], fail = false, models = ["gemma-3-4b", "qwen"] } = {}) {
     const asks = [];
     const engine = (name) => ({
       supported: () => true,
+      known: vi.fn(() => (name === "lmstudio" ? models : undefined)),
       availability: vi.fn(async () => chrome),
       start: vi.fn(async () => name),
       plan: vi.fn((prompt, schema, opts) => {
@@ -2249,6 +2250,7 @@ describe("✨ AI", () => {
   it("its settings fold away, say what they hold in the summary, and stay folded", async () => {
     await remountWith(fakeAi({ chrome: "unavailable" }));
     aiBtn().click();
+    await flushPromises();
     const panel = $("details.ai-panel");
     expect(panel.open).toBe(true);
     $("#ai-model").value = "qwen";
@@ -2281,12 +2283,40 @@ describe("✨ AI", () => {
     endpoint.dispatchEvent(new Event("change"));
     expect($(".status").textContent).toMatch(/URL http\(s\) válida/);
     expect(endpoint.value).toBe("http://pc.lan:1234/v1");
+    await flushPromises();
     ai.lmstudio.start.mockRejectedValueOnce(new Error("refused"));
-    $("#ai-model").value = " qwen  2.5 ";
+    $("#ai-model").value = "qwen";
     $("#ai-model").dispatchEvent(new Event("change"));
     await flushPromises();
-    expect(ai.lmstudio.start).toHaveBeenLastCalledWith({ endpoint: "http://pc.lan:1234/v1", model: "qwen 2.5" });
+    expect(ai.lmstudio.start).toHaveBeenLastCalledWith({ endpoint: "http://pc.lan:1234/v1", model: "qwen" });
     expect($(".status").textContent).toMatch(/LM Studio no responde en http:\/\/pc.lan:1234\/v1/);
+  });
+
+  it("LM Studio: the model is picked from what the server lists, read again with ↻", async () => {
+    const models = ["gemma-3-4b", "qwen"];
+    const ai = await remountWith(fakeAi({ chrome: "unavailable", models }));
+    const options = () => [...root.querySelectorAll("#ai-model option")].map((o) => [o.value, o.textContent]);
+    aiBtn().click();
+    await flushPromises();
+    expect($("#ai-model").tagName).toBe("SELECT");
+    expect(options()).toEqual([["", "Automático (el primero)"], ["gemma-3-4b", "gemma-3-4b"], ["qwen", "qwen"]]);
+    $("#ai-model").value = "qwen";
+    $("#ai-model").dispatchEvent(new Event("change"));
+    expect(ai.lmstudio.start).toHaveBeenLastCalledWith({ endpoint: "http://localhost:1234/v1", model: "qwen" });
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/LM Studio listo/);
+    models.splice(1, 1, "mistral-nemo"); // qwen deleted, another downloaded
+    $(".ai-models").click();
+    expect(ai.lmstudio.start).toHaveBeenCalledTimes(3);
+    await flushPromises();
+    expect(options()).toEqual([
+      ["", "Automático (el primero)"],
+      ["gemma-3-4b", "gemma-3-4b"],
+      ["mistral-nemo", "mistral-nemo"],
+      ["qwen", "qwen (no está en LM Studio)"],
+    ]);
+    expect($("#ai-model").value).toBe("qwen");
+    expect($(".status").textContent).toBe("LM Studio no tiene «qwen»: bajalo o elegí otro modelo.");
   });
 
   it("plans the section after each one, and the pilot plays it", async () => {
