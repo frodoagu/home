@@ -146,10 +146,10 @@ export default {
         icon: "🌀",
         title: "Visuals",
         items: [
-          ["🌀 Visuals", "Turns the screen into a show of 3D fractals, lasers, mandalas and tunnels that follows what plays: it changes scene with the sections, cuts on every drop and flashes on the kicks."],
+          ["🌀 Visuals", "Turns the screen into a show of 3D fractals, mandalas and tunnels with lasers behind them, that follows what plays: it changes scene with the sections, cuts on every drop and flashes on the kicks."],
           ["⧉ Another window", "Opens the show on its own, to drag onto the TV or the projector while the sampler stays on your screen."],
           ["🎤 Microphone", "Open psy.agu.com.ar/visuals.html on another device and the show follows the music it hears."],
-          ["Keys", "← → change scene, 1-5 pick one, L holds it, P changes the palette, F flash, S strobe, H hides the controls."],
+          ["Keys", "← → change scene, 1-4 pick one, L holds it, P changes the palette, F flash, S strobe, H hides the controls."],
           ["Strobe", "It starts at full; turn it down with its control or the S key if the flashes bother you."],
         ],
       },
@@ -846,7 +846,7 @@ export default {
     title: "Psy Layers · Visuals",
     button: "🌀 Visuals",
     buttonTitle: "Full-screen fractals, lasers and mandalas, in time with what plays",
-    scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", lasers: "Lasers", mandala: "Mandala", tunnel: "Op-art tunnel" },
+    scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", tunnel: "Op-art tunnel" },
     sources: {
       sampler: "🎛 Following the sampler",
       stopped: "⏸ The sampler is stopped: at rest until you press ▶",
@@ -865,7 +865,7 @@ export default {
     popOut: "Open in another window, to take it to the TV or the projector",
     fullscreen: "Full screen (Enter or double click)",
     close: "Close (Esc)",
-    keys: "← → scene · 1-5 pick · L hold · P palette · F flash · S strobe · M microphone · H hide · Enter full screen",
+    keys: "← → scene · 1-4 pick · L hold · P palette · F flash · S strobe · M microphone · H hide · Enter full screen",
     micDenied: "No permission to use the microphone",
     noWebgl: "This browser has no WebGL2: the visuals cannot run here.",
     warning: {

@@ -120,10 +120,16 @@ describe("moods, strobe and lasers", () => {
     expect(strobeOf(frame({ time: 2000, layers: new Set() }), 1000)).toBeLessThan(0.01);
   });
 
-  it("lays the fans over the peak, fading as it goes", () => {
-    expect(lasersOf(frame({ sinceDrop: 1, env: { kick: 1 } }))).toBeGreaterThan(0.9);
-    expect(lasersOf(frame({ sinceDrop: 60, env: { kick: 1 } }))).toBeLessThan(0.1);
-    expect(lasersOf(frame())).toBe(0);
+  it("keeps the lasers faint at rest, fuller with a kick, full on the drop and rising with a build", () => {
+    const rest = lasersOf(frame({ playing: false, layers: new Set() }));
+    const breakdown = lasersOf(frame({ layers: new Set(["pad"]) }));
+    const groove = lasersOf(frame());
+    expect(rest).toBeGreaterThan(0);
+    expect(rest).toBeLessThan(breakdown);
+    expect(breakdown).toBeLessThan(groove);
+    expect(lasersOf(frame({ sinceDrop: 0 }))).toBe(1);
+    expect(lasersOf(frame({ sinceDrop: 60 }))).toBeLessThan(lasersOf(frame({ sinceDrop: 1 })));
+    expect(lasersOf(frame({ build: 0.9 }))).toBeGreaterThan(groove);
   });
 
   it("hashes text into 0..1", () => {

@@ -9,7 +9,6 @@
 export const SCENES = [
   { id: "bulb", moods: ["calm", "high", "peak"] },
   { id: "kifs", moods: ["high", "peak"] },
-  { id: "lasers", moods: ["calm", "high", "peak"] },
   { id: "mandala", moods: ["calm", "high"] },
   { id: "tunnel", moods: ["high", "peak"] },
 ];
@@ -21,6 +20,7 @@ const MAX_BARS = { calm: 16, high: 16, peak: 8 };
 const FADE_BEATS = 1;
 const MANUAL_FADE_BEATS = 0.5;
 const FLASH_MS = 140;
+const LASER_LEVEL = 0.2; // the lasers stay a hint behind the scene, never the show
 
 // FNV-1a, 0..1.
 export function hash(text) {
@@ -56,16 +56,23 @@ export function strobeOf(s, flashAt = -Infinity) {
   return clamp01(f);
 }
 
-/** How much of the drop's laser fans to lay over a scene, 0..1. */
+/**
+ * How bright the laser layer behind every scene is, 0..1: faint at rest and
+ * through breakdowns, more with a kick, full on a drop (easing back over its
+ * peak) and rising with a build.
+ */
 export function lasersOf(s) {
-  const peak = s.sinceDrop >= 0 && s.sinceDrop < PEAK_BEATS ? 1 - s.sinceDrop / PEAK_BEATS : 0;
-  return clamp01(Math.max(peak * (0.55 + 0.45 * s.env.kick), s.build * 0.6));
+  const base = !s.playing ? 0.25 : moodOf(s) === "calm" ? 0.35 : 0.6;
+  const peak = s.sinceDrop >= 0 && s.sinceDrop < PEAK_BEATS ? 1 - 0.4 * (s.sinceDrop / PEAK_BEATS) : 0;
+  const build = s.build > 0 ? 0.5 + 0.5 * s.build : 0;
+  return clamp01(Math.max(base, peak, build));
 }
 
 const variation = (key) => [hash(`${key}:a`), hash(`${key}:b`), hash(`${key}:c`), hash(`${key}:d`)];
 
 export function createDirector({ scenes = SCENES } = {}) {
-  const look = (index, palette, key) => ({ index, id: scenes[index].id, palette, vars: variation(key) });
+  // A scene and the laser rig behind it, each with its own variant.
+  const look = (index, palette, key) => ({ index, id: scenes[index].id, palette, vars: variation(key), rig: variation(`${key}:l`) });
   let current = look(0, 0, "start");
   let previous = null;
   let fade = { start: -Infinity, ms: 1 };
@@ -118,7 +125,7 @@ export function createDirector({ scenes = SCENES } = {}) {
       mood,
       locked,
       strobe,
-      lasers: current.id === "lasers" ? 0 : lasersOf(s),
+      lasers: { amount: lasersOf(s) * LASER_LEVEL, palette: current.palette, vars: current.rig },
     };
   }
 

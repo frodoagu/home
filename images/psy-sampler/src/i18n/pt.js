@@ -146,10 +146,10 @@ export default {
         icon: "🌀",
         title: "Visuais",
         items: [
-          ["🌀 Visuais", "Transforma a tela num show de fractais 3D, lasers, mandalas e túneis que segue o que toca: muda de cena com as fases, corta em cada drop e pisca nos kicks."],
+          ["🌀 Visuais", "Transforma a tela num show de fractais 3D, mandalas e túneis com lasers atrás, que segue o que toca: muda de cena com as fases, corta em cada drop e pisca nos kicks."],
           ["⧉ Outra janela", "Abre o show à parte, para arrastar até a TV ou o projetor enquanto o sampler fica na sua tela."],
           ["🎤 Microfone", "Abra psy.agu.com.ar/visuals.html em outro dispositivo e o show segue a música que ouve."],
-          ["Teclas", "← → mudam de cena, 1-5 escolhem uma, L fixa, P muda a paleta, F flash, S estrobo, H esconde os controles."],
+          ["Teclas", "← → mudam de cena, 1-4 escolhem uma, L fixa, P muda a paleta, F flash, S estrobo, H esconde os controles."],
           ["Estrobo", "Começa no máximo; baixe com o controle ou a tecla S se os flashes incomodarem."],
         ],
       },
@@ -846,7 +846,7 @@ export default {
     title: "Psy Layers · Visuais",
     button: "🌀 Visuais",
     buttonTitle: "Fractais, lasers e mandalas em tela cheia, no ritmo do que toca",
-    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", lasers: "Lasers", mandala: "Mandala", tunnel: "Túnel op-art" },
+    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", tunnel: "Túnel op-art" },
     sources: {
       sampler: "🎛 Seguindo o sampler",
       stopped: "⏸ O sampler está parado: em repouso até você dar ▶",
@@ -865,7 +865,7 @@ export default {
     popOut: "Abrir em outra janela, para levar à TV ou ao projetor",
     fullscreen: "Tela cheia (Enter ou duplo clique)",
     close: "Fechar (Esc)",
-    keys: "← → cena · 1-5 escolher · L fixar · P paleta · F flash · S estrobo · M microfone · H ocultar · Enter tela cheia",
+    keys: "← → cena · 1-4 escolher · L fixar · P paleta · F flash · S estrobo · M microfone · H ocultar · Enter tela cheia",
     micDenied: "Sem permissão para usar o microfone",
     noWebgl: "Este navegador não tem WebGL2: os visuais não rodam aqui.",
     warning: {

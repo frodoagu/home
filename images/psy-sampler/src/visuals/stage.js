@@ -8,7 +8,8 @@
 // keeps them until frame() reaches their time.
 //
 //   { kind: "hit", layer, time, accent }      one lane's notes on one step
-//   { kind: "bar", time, bar, bpm }           a bar line (bar counts from ▶)
+//   { kind: "bar", time, bar, bpm, rest }     a bar line (bar counts from ▶);
+//                                             `rest` keeps time with no music
 //   { kind: "lanes", time, variants }         what plays from `time` on
 //   { kind: "build", time, end }              the sweep up into a drop
 //   { kind: "drop", time }                    the drop
@@ -62,7 +63,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
         break;
       case "bar":
         bar = { time: e.time, bar: e.bar, bpm: e.bpm > 0 ? e.bpm : bar.bpm };
-        playing = true;
+        if (!e.rest) playing = true;
         break;
       case "lanes":
         variants = [...e.variants];

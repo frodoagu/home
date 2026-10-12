@@ -16,8 +16,9 @@ const SETTINGS_KEY = "psy-sampler:visuals";
 const HUD_MS = 2500; // the HUD and the cursor hide after this long without a move
 const STROBE_STEPS = [1, 0.5, 0];
 // How much of the last frame stays as a trail, per scene, before the energy.
-const TRAILS = { bulb: 0.55, kifs: 0.7, lasers: 0.86, mandala: 0.78, tunnel: 0.5 };
+const TRAILS = { bulb: 0.55, kifs: 0.7, mandala: 0.78, tunnel: 0.5 };
 const SWIPE_PX = 60;
+const MUSIC_MS = 800; // how fast the beat's pulse fades in and out with the music
 
 // The key that does each thing; digits pick a scene.
 export const KEYS = {
@@ -82,6 +83,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   const director = createDirector();
   let last = null; // the latest stage frame, for the keys
   let time = 0;
+  let music = 0; // 1 while something plays, eased so a stop fades the beat out
   let prevNow = performance.now();
   let raf = 0;
   let closed = false;
@@ -283,6 +285,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     last = s;
     const d = director.frame(s);
     time += (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
+    music += ((s.playing ? 1 : 0) - music) * (1 - Math.exp(-dt / MUSIC_MS));
     if (now - labelAt > 500) {
       labelAt = now;
       sceneName.textContent = `${tx.scenes[d.scene.id]}${d.locked ? " 🔒" : ""}`;
@@ -308,14 +311,15 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
         uBuild: s.build,
         uDrop: s.sinceDrop >= 0 ? Math.exp(-s.sinceDrop / 4) : 0,
         uLow: [s.levels.low, s.levels.mid, s.levels.high],
+        uMusic: music,
       },
       scene: d.scene,
       previous: d.previous,
+      lasers: d.lasers,
       post: {
         uMix: d.mix,
         uStrobe: d.strobe * strobeLevel,
         uInvert: invert,
-        uLasers: d.lasers,
         uTrails: Math.min(0.92, TRAILS[d.scene.id] + 0.08 * s.energy),
       },
     });

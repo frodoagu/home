@@ -7,12 +7,13 @@
 //   uKick ... each layer's envelope: 1 on its hit, decaying (stage.js DECAY)
 //   uEnergy   how busy the mix is, uBuild the sweep into a drop, uDrop 1 on
 //             the drop fading over a bar
-//   uLow      the levels heard, low/mid/high
+//   uLow      the levels heard, low/mid/high; uMusic 1 while something
+//             plays, fading to 0 at rest, where nothing may pulse on the beat
 //   uVar      four numbers the director draws per scene: its variant
 //   uPalette  0..PALETTES-1, uQuality 0..1 (raymarch steps, from the frame rate)
 //
 // POST mixes the scene with the previous one (a crossfade), its own last
-// frame (trails), the drop's laser fans and the strobe.
+// frame (trails), the laser layer behind them and the strobe.
 
 export const VERTEX = `#version 300 es
 in vec2 aPos;
@@ -29,7 +30,7 @@ out vec4 outColor;
 uniform vec2 uRes;
 uniform float uTime, uBeats, uBeat, uBar;
 uniform float uKick, uBass, uPerc, uLead, uPad, uGlitch, uFx;
-uniform float uEnergy, uBuild, uDrop, uQuality;
+uniform float uEnergy, uBuild, uDrop, uQuality, uMusic;
 uniform vec3 uLow;
 uniform vec4 uVar;
 uniform int uPalette;
@@ -245,7 +246,7 @@ vec3 scene(vec2 uv) {
     col = base * (0.15 + 0.9 * dif) * ao;
     // Rings of light travelling down the tunnel, one per beat.
     float ring = exp(-abs(fract(p.z * 0.5 - uBeats * 0.5) - 0.5) * 18.0);
-    col += pal(orb.x + uBeats * 0.1) * ring * (0.3 + 1.6 * uKick) * clamp(orb.y * 2.0, 0.0, 1.0);
+    col += pal(orb.x + uBeats * 0.1) * ring * (0.3 * uMusic + 1.6 * uKick) * clamp(orb.y * 2.0, 0.0, 1.0);
   }
   col += pal(0.3 + uTime * 0.02 + uVar.w) * glow * (0.01 + 0.025 * uKick + 0.015 * uPerc);
   return col * exp(-x * (0.28 - 0.1 * uEnergy));
@@ -253,12 +254,12 @@ vec3 scene(vec2 uv) {
 `;
 
 // Laser beams through haze, analytic: each beam is a line, and a pixel glows
-// by how close its view ray passes to it. Three rigs (uVar.x, moving on every
-// fourth bar): a fan from the back, two crossing banks, and a cone that wraps
-// around the camera. Their spots land on the floor.
+// by how close its view ray passes to it. Not a scene of their own: a layer
+// that POST lays behind (and a little through) whatever scene plays. Three
+// rigs (uVar.x, moving on every fourth bar): a fan from the back, two
+// crossing banks, and a cone that wraps around the camera.
 const LASERS = `
 const int BEAMS = 14;
-const float FLOOR = -1.4;
 
 // x: glow of the beam; y: the view-ray distance at its closest point.
 vec2 beam(vec3 ro, vec3 rd, vec3 e, vec3 b, float maxT) {
@@ -306,32 +307,17 @@ vec3 scene(vec2 uv) {
   mat3 cam = camera(ro, vec3(0.0, 0.25, 8.0), 0.04 * sin(uTime * 0.2));
   vec3 rd = cam * normalize(vec3(uv, 1.4));
   float rigId = mod(floor(uVar.x * 3.0) + floor(uBeats / 16.0), 3.0);
-  float tFloor = rd.y < 0.0 ? (FLOOR - ro.y) / rd.y : 1e5;
-  vec3 hitFloor = ro + rd * tFloor;
 
-  // Haze lit from above, thicker where the beams are.
-  vec3 col = pal(0.6 + uTime * 0.01) * 0.03 * (0.5 + noise3(rd * 3.0 + vec3(0.0, 0.0, uTime * 0.1)));
+  vec3 col = vec3(0.0);
   bool mono = uVar.w > 0.7;
-  float power = 0.55 + 0.6 * uKick + 0.35 * uEnergy + 0.3 * uLead;
+  float power = 0.7 + 0.2 * uKick + 0.3 * uEnergy;
   for (int i = 0; i < BEAMS; i++) {
     vec3 e, b;
     rig(i, rigId, e, b);
     // The hats flicker beams off, a different few on each 16th.
     float on = uPerc > 0.3 && hash21(vec2(float(i), floor(uBeats * 4.0))) < 0.25 * uPerc ? 0.2 : 1.0;
     vec3 c = mono ? pal(uVar.z) : pal(float(i) / float(BEAMS) * 0.6 + uTime * 0.03);
-    col += c * beam(ro, rd, e, b, tFloor).x * power * on;
-    // Where the beam lands on the floor.
-    if (b.y < 0.0 && tFloor < 1e4) {
-      vec3 spot = e + b * ((FLOOR - e.y) / b.y);
-      float s = length(hitFloor.xz - spot.xz);
-      col += c * exp(-s * s * 40.0) * 0.5 * power * on * exp(-tFloor * 0.05);
-    }
-  }
-  if (tFloor < 1e4) {
-    // A dark glossy floor with a faint grid.
-    vec2 g = abs(fract(hitFloor.xz * 0.5) - 0.5);
-    float line = exp(-min(g.x, g.y) * 60.0);
-    col += pal(0.5 + hitFloor.z * 0.02) * line * 0.05 * exp(-tFloor * 0.1) * (1.0 + 2.0 * uKick);
+    col += c * beam(ro, rd, e, b, 1e5).x * power * on;
   }
   return col;
 }
@@ -401,8 +387,8 @@ vec3 scene(vec2 uv) {
 `;
 
 // An op-art tunnel: the plane taken to (angle, 1/radius), flying in, with a
-// pattern per variant (uVar.x): checkers, spiral stripes, moiré rings or
-// dots, round or square (uVar.y). A ring of light rolls down it each beat.
+// pattern per variant (uVar.x): spiral stripes, moiré rings or dots,
+// round or square (uVar.y). A ring of light rolls down it each beat.
 const TUNNEL = `
 vec3 scene(vec2 uv) {
   uv *= rot(uTime * 0.12 + 0.4 * sin(uTime * 0.17));
@@ -415,15 +401,12 @@ vec3 scene(vec2 uv) {
   float z = 0.4 / r + uTime * (0.8 + 0.8 * uEnergy);
   a += z * 0.04 * sin(uTime * 0.21) + 0.02 * uBass;
   float n = 4.0 + 4.0 * floor(uVar.z * 3.0);
-  float mode = floor(uVar.x * 4.0);
+  float mode = floor(uVar.x * 3.0);
   float v;
   if (mode < 1.0) {
-    float s = sin(z * PI * 2.0) * sin(a * n * TAU);
-    v = smoothstep(-fwidth(s), fwidth(s), s);
-  } else if (mode < 2.0) {
     float s = sin((a * n + z * 1.5) * TAU);
     v = smoothstep(-fwidth(s) - 0.2, fwidth(s) + 0.2, s);
-  } else if (mode < 3.0) {
+  } else if (mode < 2.0) {
     v = 0.5 + 0.5 * sin(z * 24.0) * sin(z * 25.3 + a * TAU * n);
   } else {
     vec2 cell = fract(vec2(a * n * 2.0, z * 2.0)) - 0.5;
@@ -432,7 +415,7 @@ vec3 scene(vec2 uv) {
   }
   vec3 col = mix(pal(z * 0.04 + a * 0.5 + uVar.w) * 0.06, pal(z * 0.04 + a + uTime * 0.02 + uVar.w), v);
   float ring = exp(-abs(fract(z * 0.25 - uBeats) - 0.5) * 20.0);
-  col += pal(uBeats * 0.1 + 0.5) * ring * (0.4 + 1.6 * uKick);
+  col += pal(uBeats * 0.1 + 0.5) * ring * (0.4 * uMusic + 1.6 * uKick);
   col *= smoothstep(0.0, 0.35, r);
   col += pal(0.1 + uTime * 0.03) * exp(-r * 10.0) * (0.6 + 1.5 * uKick);
   return col;
@@ -445,36 +428,21 @@ void main() {
 }
 `;
 
-export const SCENES = { bulb: BULB, kifs: KIFS, lasers: LASERS, mandala: MANDALA, tunnel: TUNNEL };
+export const SCENES = { bulb: BULB, kifs: KIFS, mandala: MANDALA, tunnel: TUNNEL };
 
 /** The fragment source of scene `id`. */
 export const sceneSource = (id) => COMMON + SCENES[id] + SCENE_MAIN;
 
+/** The laser layer's fragment source: drawn like a scene, on black. */
+export const laserSource = () => COMMON + LASERS + SCENE_MAIN;
+
 export const POST = `${COMMON}
-uniform sampler2D uScene, uPrev, uFeed;
-uniform float uMix, uStrobe, uLasers, uTrails, uInvert;
+uniform sampler2D uScene, uPrev, uFeed, uLaser;
+uniform float uMix, uStrobe, uLaserMix, uTrails, uInvert;
 
 vec3 sceneAt(sampler2D s, vec2 uv, float split) {
   vec2 dir = (uv - 0.5) * split;
   return vec3(texture(s, uv + dir).r, texture(s, uv).g, texture(s, uv - dir).b);
-}
-
-// The drop's fans: beams from below the screen, opening with uLasers.
-vec3 fans(vec2 p) {
-  vec3 col = vec3(0.0);
-  vec2 o = vec2(0.0, -1.25);
-  float spread = 0.25 + 0.9 * uLasers;
-  for (int i = 0; i < 9; i++) {
-    float fi = float(i) / 8.0;
-    float ang = (fi - 0.5) * spread * 2.0 + 0.3 * sin(uBeats * PI * 0.5 + fi * 2.0);
-    vec2 dir = vec2(sin(ang), cos(ang));
-    vec2 rel = p - o;
-    float along = dot(rel, dir);
-    if (along < 0.0) continue;
-    float d = abs(rel.x * dir.y - rel.y * dir.x);
-    col += pal(fi * 0.5 + uBeats * 0.05) * (exp(-d * d * 30000.0) + 0.15 * exp(-d * 60.0)) * smoothstep(3.0, 0.5, along);
-  }
-  return col;
 }
 
 void main() {
@@ -489,14 +457,9 @@ void main() {
   // Trails: the last frame, a little zoomed and turned, where it is brighter.
   vec2 fuv = 0.5 + (uv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
   col = max(col, texture(uFeed, fuv).rgb * uTrails);
-  col += fans(screen()) * uLasers * (0.6 + 0.8 * uKick);
-  // Glitch: slices of the frame shoved sideways on glitch hits.
-  if (uGlitch > 0.2) {
-    float band = floor(uv.y * 24.0 + floor(uBeats * 8.0) * 7.0);
-    if (hash21(vec2(band, floor(uBeats * 8.0))) < uGlitch * 0.35) {
-      col = sceneAt(uScene, vec2(fract(uv.x + (hash21(vec2(band, 3.0)) - 0.5) * 0.2), uv.y), 0.02);
-    }
-  }
+  // The lasers: a faint layer behind the scene, only where it is dark.
+  float lit = smoothstep(0.03, 0.4, dot(col, vec3(0.299, 0.587, 0.114)));
+  col += texture(uLaser, uv).rgb * uLaserMix * mix(1.0, 0.1, lit);
   col = mix(col, vec3(1.0) - col, uInvert);
   col = mix(col, mix(vec3(1.0), pal(uBeats * 0.25) + 0.5, 0.25), uStrobe);
   vec2 v = uv - 0.5;
