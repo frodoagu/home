@@ -2109,11 +2109,13 @@ export function mountApp(root, engine, opts = {}) {
     }
   }
 
-  // The queue's head changed: the ✨ AI arranges what now comes next, not the
-  // section it had picked (in the last loop that is decided already).
-  function replan() {
+  // The queue's head or the vibe changed: the ✨ AI arranges what now comes
+  // next, not the section it had picked (in the last loop that is decided
+  // already). A new vibe drops the plan even when its section still fits.
+  function replan({ vibe = false } = {}) {
     const p = state.pilot;
-    if (!p || !state.aiPrefs.on || replaying() || p.left <= 1 || (p.plan && p.plan.section === p.queue[0])) return;
+    if (!p || !state.aiPrefs.on || replaying() || p.left <= 1) return;
+    if (!vibe && p.plan && p.plan.section === p.queue[0]) return;
     if (p.plan) {
       const { plan: _dropped, ...rest } = p;
       state.pilot = rest;
@@ -2320,7 +2322,11 @@ export function mountApp(root, engine, opts = {}) {
     if (aiPanel.open !== state.aiPrefs.open) setPrefs({ open: aiPanel.open });
   });
   vibeInput.addEventListener("change", () => {
-    setPrefs({ vibe: vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200) });
+    const vibe = vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200);
+    if (vibe === state.aiPrefs.vibe) return;
+    setPrefs({ vibe });
+    replan({ vibe: true });
+    showSection();
   });
   if (ai?.chrome.supported()) {
     ai.chrome.availability(lang()).then((can) => {

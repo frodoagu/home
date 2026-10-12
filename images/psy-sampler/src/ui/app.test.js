@@ -2349,6 +2349,42 @@ describe("✨ AI", () => {
     expect(queue()).toEqual(["breakdown"]);
   });
 
+  it("a new vibe asks again for what comes next, until the section's last loop", async () => {
+    const PEAK = { section: "peak", bars: 16, layers: {} };
+    let answer;
+    const ai = await remountWith(
+      fakeAi({ answers: [BREAK, PEAK, () => new Promise((resolve) => (answer = resolve)), BREAK] }),
+    );
+    const vibe = (value) => {
+      $("#ai-vibe").value = value;
+      $("#ai-vibe").dispatchEvent(new Event("change"));
+    };
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown"]);
+    vibe("a full peak"); // the plan taken goes, the new one comes in
+    expect(queue()).toEqual([]);
+    expect(ai.asks[1].prompt).toContain('The listener asks for: "a full peak".');
+    await flushPromises();
+    expect(queue()).toEqual(["peak"]);
+    vibe(" a full  peak "); // the same words: nothing to ask
+    expect(ai.asks).toHaveLength(2);
+    vibe("dark"); // the ask on its way is dropped
+    vibe("darker");
+    expect(ai.asks[2].opts.signal.aborted).toBe(true);
+    expect(ai.asks[3].prompt).toContain('The listener asks for: "darker".');
+    answer(PEAK);
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown"]);
+    advanceSeconds(6 * BAR + 0.05); // the last loop: what comes next is decided
+    vibe("calm");
+    expect(ai.asks).toHaveLength(4);
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    expect(ai.asks[4].prompt).toContain('The listener asks for: "calm".');
+  });
+
   it("when the model fails it says so once, and the pilot carries on alone", async () => {
     await remountWith(fakeAi({ fail: true }));
     aiBtn().click();

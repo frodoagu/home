@@ -1232,6 +1232,10 @@ kick, every section plays a lead or a pad).
 - A section queued by hand is the one the model is asked to arrange (the
   schema allows only that section); queuing one when a plan for another is in
   drops that plan and asks again.
+- A new **Vibe** does the same (`replan`): the plan already taken and any ask
+  on its way are dropped and the model is asked again with the new words, so
+  the very next section follows them. In the section's last loop that section
+  is decided already, so the new vibe starts with the one after it.
 - Requests run off the main thread's critical path: the Prompt API answers
   from Chrome's own process and LM Studio over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.
