@@ -1280,7 +1280,8 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 ## ✨ AI: a model plans the sections
 
 **✨ AI** (next to 🤖) hands one decision of the autopilot to a language model:
-**the sections ahead of the one playing**, kept **3 deep** (`AHEAD`) — for each,
+**the sections ahead of the one playing**, kept **3 deep** (`AHEAD`), and from
+silence **the opening** the track starts with (see [The opening](#the-opening)) — for each,
 which one, how many bars, which sounds each layer plays, how those sounds are
 dressed and what their melodic parts play, following the listener's **Vibe**
 (free text). The FX and the swaps inside
@@ -1359,8 +1360,8 @@ breakdown has no kick, every section plays a lead or a pad).
   queue.
 - **From silence the ✨ AI plans before ▶.** Turning ✨ on with nothing playing
   or queued arms the autopilot (🤖 lit, ▶ Arrancar, ■ to let go of it): the
-  intro is drawn but not played, and the model plans the first `AHEAD`
-  sections from what the intro will play (`state.pending`). The status line
+  intro is drawn but not played, the model plans the **opening** over it, then
+  the first `AHEAD` sections from what the intro will play (`state.pending`). The status line
   counts the asks and says when they are in; ▶ plays. 🤖 from silence with ✨
   on does the same and then plays by itself once the asks stop
   (`cueWhenPlanned`: all planned, a failure, or nothing it can ask); ▶ or 🤖
@@ -1372,8 +1373,8 @@ breakdown has no kick, every section plays a lead or a pad).
   model plans again with the new ones, even when the words are the same.
   Playing, the **next section's plan stays** as a buffer: the model gets that
   whole section to answer, so no section plays unplanned while it thinks, and
-  the vibe starts with the one after it (armed, nothing plays yet, so every
-  plan goes). Typing alone (leaving the field) only keeps the words for the
+  the vibe starts with the one after it (armed, nothing plays yet, so the
+  track starts over from the seed and the opening is asked for again too). Typing alone (leaving the field) only keeps the words for the
   asks to come. The status line says what happened: asking again (and which
   section stays), applied (from the section it picked), too late for this
   one, or just saved (autopilot off).
@@ -1384,6 +1385,36 @@ breakdown has no kick, every section plays a lead or a pad).
 - Requests run off the main thread's critical path: the Prompt API answers
   from Chrome's own process, LM Studio and the providers over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.
+
+### The opening
+
+The intro is the first impression of the track (and of a show), so with ✨ on
+it isn't left to the seed: from silence, armed, the **first ask is the
+opening** (`planOpening` in `app.js`, `openingPrompt` / `openingSchema` /
+`normalizeOpening` in `planner.js`), before any section ahead. It is a plan
+for the section the track starts with (the intro, or the one a phase button
+started) and the prompt asks for it to be **powerful, beautiful or both**:
+
+- **More room than the pilot's intro.** `OPENING` widens the intro's shape to
+  kick 0-1, bass 0-1, perc 0-2, **lead 0-1**, pad 0-2, glitch 0-1, and
+  `OPENING_BARS` lets it last **8 or 16 bars**, so it can open on a pad and a
+  lead stating the first motif with the kick held back, or on the kick, a
+  glitch and a hit. `SECTIONS.intro` itself is untouched, so seeds replay.
+- **A hit on the 1**: `fx`, one of `OPENING_FX` (impact, crash, sweep, siren,
+  reverse cymbal) or none, fired on the first bar line ▶ plays (`state.openFx`).
+- **Laid over the seed's draw** (`openWith`): each layer the opening names is
+  set to its sounds, the rest stay as drawn, and it draws nothing from the PRNG,
+  so a link replays it. A lead or a pad always plays. Dress and parts land as
+  in any plan; a lead it brings in without a part gets the pilot's `rewrite`.
+  The intro's mix and tone rides still apply (its pads and percussion open up
+  across it).
+- **Only while armed.** An answer that lands after ▶ is dropped (▶ aborts the
+  ask and moves on to the sections ahead), so the order of PRNG draws never
+  depends on timing. A failed ask says so and plans nothing more: armed by 🤖,
+  the pilot then plays alone.
+- The status line counts it as the first of `AHEAD + 1` asks; the section
+  badge's tooltip shows its `why`. The prompt for the sections ahead then sees
+  it as what plays now, and a vibe it followed is **standing** for them.
 
 ### Dress and parts
 
@@ -1428,7 +1459,8 @@ theme.
 A model's answers can't come back from a seed, so the run records the plans it
 took, one per section (`state.run.plans`, holes where a section had none), and
 🔗 Share adds them as `&ai=…` (JSON, deflate-raw, base64url, like `&s=`, at most
-`PLAN_MAX` = 256 sections). Opening such a link keeps them as the **replay**:
+`PLAN_MAX` = 256 sections), and the opening as `&open=…` (same packing; a
+replay lays it over the intro from silence, `normalizeOpening()` as the gate). Opening such a link keeps them as the **replay**:
 from silence, each section takes its recorded plan at its start instead of
 asking a model — in any browser, with a model or without. That is exact because
 a plan only matters at two moments (the last loop and the section change):

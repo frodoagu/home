@@ -4,11 +4,16 @@ import { DEFAULTS } from "./audio/patterns.js";
 import { SECTIONS, STYLES, countRange, poolOf } from "./autopilot.js";
 import {
   CHARACTER,
+  OPENING_FX,
   PLAN_MAX,
   PLAN_SECTIONS,
   SYSTEM,
   keptAhead,
+  normalizeOpening,
   normalizePlan,
+  openWith,
+  openingPrompt,
+  openingSchema,
   planPrompt,
   planSchema,
   readPlans,
@@ -324,5 +329,74 @@ describe("readPlans", () => {
     expect(readPlans("[]")).toBeNull();
     expect(readPlans([{ section: "peak" }, null, 3, [], "x"])).toEqual([{ section: "peak" }, null, null, null, null]);
     expect(readPlans(Array.from({ length: PLAN_MAX + 1 }, () => null))).toHaveLength(PLAN_MAX);
+  });
+});
+
+describe("the opening", () => {
+  const psy = { lists, style: "psytrance", section: "intro" };
+
+  it("asks for the section the track starts with, with room to make it count", () => {
+    const prompt = openingPrompt({ ...psy, bpm: 145, active: { kick: "kick.punchy", "pad.chord": "pad.chord" }, vibe: "épico" });
+    expect(prompt).toContain("Style: Psytrance, 145 BPM.");
+    expect(prompt).toContain("This is the opening of the track and of the show");
+    expect(prompt).toContain("Plan the intro it opens with: 8 or 16 bars; kick 0-1, bass 0-1, perc 0-2, lead 0-1, pad 0-2, glitch 0-1.");
+    expect(prompt).toContain("The seed drew: kick.punchy, pad.chord.");
+    for (const id of poolOf(lists, "lead", "psytrance")) expect(prompt).toContain(`${id} (`);
+    for (const id of OPENING_FX) expect(prompt).toContain(`${id} (`);
+    expect(prompt).toContain('The listener asked for: "épico".');
+    expect(prompt.trim().endsWith("Plan the opening intro.")).toBe(true);
+    expect(openingPrompt({ ...psy, bpm: 145 })).not.toContain("listener");
+    expect(SYSTEM).toContain("or, when asked, the opening the track starts with");
+  });
+
+  it("its schema names only that section, its lengths, a lead and the hits", () => {
+    const schema = openingSchema(psy);
+    expect(schema.properties.section.enum).toEqual(["intro"]);
+    expect(schema.properties.bars.enum).toEqual([8, 16]);
+    expect(schema.properties.layers.properties.lead.maxItems).toBe(1);
+    expect(schema.properties.layers.properties.pad.maxItems).toBe(2);
+    expect(schema.properties.fx.enum).toEqual(["", ...OPENING_FX]);
+    expect(schema.required).toContain("fx");
+    expect(planSchema(psy).properties).not.toHaveProperty("fx");
+    // another section opens within its own shape
+    expect(openingSchema({ ...psy, section: "peak" }).properties.bars.enum).toEqual([16, 24]);
+  });
+
+  it("keeps a good opening, with its hit, and is idempotent", () => {
+    const raw = {
+      why: "soaring",
+      section: "intro",
+      bars: 16,
+      layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw", "pad.chord", "pad.prog"] },
+      parts: { lead: ["8", "5"] },
+      fx: "fx.impact",
+    };
+    const opening = normalizeOpening(raw, psy);
+    expect(opening).toEqual({
+      section: "intro",
+      bars: 16,
+      layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw", "pad.chord"] },
+      parts: { lead: Array.from({ length: 16 }, (_, i) => (i % 2 ? "5" : "8")) },
+      fx: "fx.impact",
+    });
+    expect(normalizeOpening(opening, psy)).toEqual(opening);
+    expect(normalizeOpening({ ...raw, fx: "fx.tapeStop" }, psy)).not.toHaveProperty("fx");
+    expect(normalizeOpening({ ...raw, bars: 24 }, psy).bars).toBeNull();
+  });
+
+  it("refuses an opening for another section, or what is not one", () => {
+    expect(normalizeOpening({ section: "groove", layers: {} }, psy)).toBeNull();
+    expect(normalizeOpening([], psy)).toBeNull();
+    expect(normalizeOpening(null, psy)).toBeNull();
+    expect(normalizeOpening({ section: "intro", layers: {} }, { ...psy, section: "nope" })).toBeNull();
+  });
+
+  it("is laid over the seed's draw, layer by layer, and always keeps a lead or a pad", () => {
+    const drawn = { kick: "kick.punchy", "perc.hat": "perc.hat", "pad.chord": "pad.chord" };
+    const over = (layers) => openWith(drawn, { section: "intro", bars: null, layers }, lists, "psytrance");
+    expect(over({ kick: [], lead: ["lead.soaring"] })).toEqual({ "perc.hat": "perc.hat", "pad.chord": "pad.chord", "lead.soaring": "lead.soaring" });
+    expect(over({ kick: ["kick.fullon"], pad: ["pad.supersaw"] })).toEqual({ kick: "kick.fullon", "perc.hat": "perc.hat", "pad.supersaw": "pad.supersaw" });
+    expect(over({ pad: [] })).toEqual(drawn); // no lead, no pad: the draw's pad stays
+    expect(over({ lead: ["lead.techno"] })).toEqual(drawn); // not psytrance's
   });
 });

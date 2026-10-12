@@ -8,12 +8,13 @@
 // goes through (the model's, or one from a share link) before the pilot takes
 // it (autopilot.js withPlan). FX and the swaps inside a section still come
 // from the seed.
-import { LAYERS, layerOfVariant } from "./catalog.js";
+import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
 import { MACROS, MACRO_MAX, moves, synthsFor } from "./dress.js";
 import { DEGREES, PART_LENGTHS, REST } from "./editing.js";
+import { laneKey } from "./selection.js";
 import en from "./i18n/en.js";
 
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
@@ -95,11 +96,23 @@ export const CHARACTER = {
 };
 
 const barsOf = (section) => SECTIONS[section].loops.map((n) => n * 2);
-const counts = (section) =>
+const counts = (section, range = countRange) =>
   LOOP_LAYERS.map((l) => {
-    const [lo, hi] = countRange(section, l.id);
+    const [lo, hi] = range(section, l.id);
     return `${l.id} ${lo === hi ? lo : `${lo}-${hi}`}`;
   }).join(", ");
+
+// What an opening may play and last, past the pilot's shape for its section:
+// an intro may state a lead, stack pads, bring a glitch or hold the kick
+// back, and breathe for 16 bars. SECTIONS stays as it is, so seeds replay.
+export const OPENING = {
+  intro: { kick: [0, 1], bass: [0, 1], perc: [0, 2], lead: [0, 1], pad: [0, 2], glitch: [0, 1] },
+};
+export const OPENING_BARS = { intro: [8, 16] };
+// The hits an opening may fire on its first beat.
+export const OPENING_FX = ["fx.impact", "fx.crash", "fx.sweep", "fx.siren", "fx.reverse"];
+const openRange = (section, layerId) => OPENING[section]?.[layerId] ?? countRange(section, layerId);
+const openBars = (section) => OPENING_BARS[section] ?? barsOf(section);
 
 // "peak", or "peak; now and then breakdown" where the pilot rarely goes.
 function follows(section) {
@@ -120,7 +133,7 @@ export const SYSTEM = [
   "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
   "The lead a breakdown plays is the track's theme: it stays through the build and the peak after it.",
   "Every section plays a lead or a pad. With no wishes from the listener, keep some of the sounds of the section before it and change a layer or two at each section: continuity first, contrast from the section's form.",
-  "You plan one section, the one after the one playing now or, when some are already planned, after the last of them: which section, its length in bars (one of the lengths that section has) and the sounds of every layer, using only the ids listed for each layer. An empty list leaves that layer out.",
+  "You plan one section, the one after the one playing now or, when some are already planned, after the last of them (or, when asked, the opening the track starts with): which section, its length in bars (one of the lengths that section has) and the sounds of every layer, using only the ids listed for each layer. An empty list leaves that layer out.",
   "Each sound comes with its name, how it is made and its character in a few words: match the listener's words to those.",
   "The listener's wishes come first, before the usual counts and continuity. Leave out every layer that does not fit them (minimal: no pad, little percussion, no glitch; ambient or deep: no kick, long pads; full or euphoric: every layer at its most) and pick the sounds, the section and the length that match their words. A wish they just made, follow boldly, so the change is clearly heard; a standing one already shapes the track: keep to it while the sections still rise and fall.",
   `You may also dress the sounds you plan, in dress: four macros from -${MACRO_MAX} to ${MACRO_MAX}, 0 leaving the sound as it is: tone (dark to bright), length (short to long; drums and glitches), drive (clean to distorted), motion (still to a sweeping filter and phaser; never on kick or bass). A melodic sound may also switch synth within its group ("" keeps it). Dress only the sounds the wish or the section asks for; leave the others out of dress.`,
@@ -165,6 +178,29 @@ function synthGroups(lists, style) {
   return groups;
 }
 
+// Every sound the style lets the model use, by layer, and the synths the
+// melodic ones can switch to.
+function soundLines(lists, style, names, synths) {
+  const lines = ["Sounds you can use, by layer:"];
+  for (const layer of LOOP_LAYERS) {
+    if (leftOut(style, layer.id)) continue;
+    lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map((id) => describe(id, names, synths)).join("; ")}`);
+  }
+  const groups = synthGroups(lists, style);
+  if (groups.size) {
+    lines.push("Synths a melodic sound can switch to, by group:");
+    for (const [group, ids] of groups) {
+      lines.push(`${group}: ${ids.map((id) => `${id} (${en.synths[id].join(": ")})`).join("; ")}`);
+    }
+  }
+  return lines;
+}
+
+const keyLine = (style, bpm) => {
+  const scale = STYLES[style]?.scale;
+  return `Style: ${en.styles[style] ?? style}, ${Math.round(bpm)} BPM. Key: ${scale ? en.scales[scale] : "A, each sound in its own scale (most in A minor)"}.`;
+};
+
 /**
  * What to ask for the section after the one playing, or after the `planned`
  * ones (normalized plans, in order) when there are some. `sections` are the ones
@@ -196,9 +232,8 @@ export function planPrompt({
   const now = sections.at(-1);
   const last = planned.at(-1)?.section ?? now;
   const playing = [...new Set(Object.values(active))].sort();
-  const scale = STYLES[style]?.scale;
   const lines = [
-    `Style: ${en.styles[style] ?? style}, ${Math.round(bpm)} BPM. Key: ${scale ? en.scales[scale] : "A, each sound in its own scale (most in A minor)"}.`,
+    keyLine(style, bpm),
     `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${now}, ${bars} bars.`,
   ];
   const recalled = sections
@@ -217,18 +252,7 @@ export function planPrompt({
   if (theme.length && into && (!next || next === into)) {
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
-  lines.push("Sounds you can use, by layer:");
-  for (const layer of LOOP_LAYERS) {
-    if (leftOut(style, layer.id)) continue;
-    lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map((id) => describe(id, names, synths)).join("; ")}`);
-  }
-  const groups = synthGroups(lists, style);
-  if (groups.size) {
-    lines.push("Synths a melodic sound can switch to, by group:");
-    for (const [group, ids] of groups) {
-      lines.push(`${group}: ${ids.map((id) => `${id} (${en.synths[id].join(": ")})`).join("; ")}`);
-    }
-  }
+  lines.push(...soundLines(lists, style, names, synths));
   if (vibe && fresh) {
     lines.push(`The listener just asked for: ${JSON.stringify(vibe)}. That comes first: shape this section to it boldly, so the change is clearly heard, and leave out the layers that do not fit.`);
   } else if (vibe) {
@@ -241,6 +265,37 @@ export function planPrompt({
 }
 
 /**
+ * What to ask for the opening: the section the track starts with, from
+ * silence (`section`), asked before any plan ahead. It is the show's first
+ * impression, so it gets more room than the pilot's intro (OPENING) and a
+ * hit on the 1; the UI lays it over the seed's draw (openWith). `active` is
+ * that draw, `vibe` the listener's words; `synths` and `names` as in
+ * planPrompt().
+ */
+export function openingPrompt({ style, bpm, lists, section, active = {}, vibe = "", names = {}, synths = {} }) {
+  const drawn = [...new Set(Object.values(active))].sort();
+  const lines = [
+    keyLine(style, bpm),
+    "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Make it count: powerful, or beautiful, or both, so it grabs them from the first beat.",
+    `Plan the ${section} it opens with: ${openBars(section).join(" or ")} bars; ${counts(section, openRange)}.`,
+  ];
+  if (section === "intro") {
+    lines.push(
+      "An intro grows into the groove after it. It may open beautiful, on a pad and a lead stating the track's first motif with the kick held back, or powerful, on the kick with a glitch and a hit on the 1; the bass usually waits for the groove, so the groove lands. Its pads and percussion start muffled and open across it.",
+    );
+  }
+  lines.push(`The seed drew: ${drawn.length ? drawn.join(", ") : "nothing"}. Keep what serves the opening, change the rest.`);
+  lines.push(...soundLines(lists, style, names, synths));
+  lines.push(
+    `fx: one hit on the very first beat, or "" for none: ${OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ")}.`,
+    "Write the parts of the melodic sounds you pick: the lead's motif is the first melody they hear, make it one they remember; dress the sounds to the opening's mood.",
+  );
+  if (vibe) lines.push(`The listener asked for: ${JSON.stringify(vibe)}. That comes first: open the track on it boldly, and leave out the layers that do not fit.`);
+  lines.push(`Plan the opening ${section}.`);
+  return lines.join("\n");
+}
+
+/**
  * The JSON Schema of an answer: a sentence on why, then the section, its
  * bars, each layer's ids, how to dress them and the melodic parts, all as
  * enums, so a model that decodes against it cannot name what is not there
@@ -248,15 +303,31 @@ export function planPrompt({
  * normalizePlan() checks it all again, and keeps no `why`.
  */
 export function planSchema({ lists, style, next = null }) {
+  const sections = PLAN_SECTIONS.includes(next) ? [next] : PLAN_SECTIONS;
+  const bars = [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
+  return schemaOf({ lists, style, sections, bars, range: countRange, most: PLAN_SECTIONS });
+}
+
+/**
+ * The JSON Schema of an opening: a plan for `section` alone, with the room
+ * OPENING gives it, its lengths and a hit for its first beat ("" for none).
+ */
+export function openingSchema({ lists, style, section }) {
+  const schema = schemaOf({ lists, style, sections: [section], bars: openBars(section), range: openRange, most: [section] });
+  schema.properties.fx = { type: "string", enum: ["", ...OPENING_FX] };
+  schema.required.push("fx");
+  return schema;
+}
+
+function schemaOf({ lists, style, sections, bars, range, most: over }) {
   const layers = {};
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue;
     const pool = poolOf(lists, layer.id, style);
     if (!pool.length) continue;
-    const most = Math.max(...PLAN_SECTIONS.map((s) => countRange(s, layer.id)[1]));
+    const most = Math.max(...over.map((s) => range(s, layer.id)[1]));
     layers[layer.id] = { type: "array", items: { type: "string", enum: pool }, maxItems: most };
   }
-  const bars = [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
   const ids = Object.values(layers).flatMap((l) => l.items.enum);
   const synths = [...new Set(ids.flatMap(synthsFor))];
   const unit = { type: "integer", enum: UNITS };
@@ -283,7 +354,7 @@ export function planSchema({ lists, style, next = null }) {
     type: "object",
     properties: {
       why: { type: "string", maxLength: WHY_MAX },
-      section: { type: "string", enum: PLAN_SECTIONS.includes(next) ? [next] : PLAN_SECTIONS },
+      section: { type: "string", enum: sections },
       bars: { type: "integer", enum: bars },
       layers: { type: "object", properties: layers, required: Object.keys(layers), additionalProperties: false },
       dress,
@@ -373,16 +444,52 @@ function cleanParts(raw, layers) {
  * plan comes back the same, which is what lets a share link replay one.
  */
 export function normalizePlan(raw, { lists, style }) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!isObject(raw)) return null;
   const section = PLAN_SECTIONS.find((id) => id === raw.section);
   if (!section) return null;
-  const bars = barsOf(section).includes(raw.bars) ? raw.bars : null;
+  return cleanPlan(raw, { lists, style }, section, barsOf(section), countRange);
+}
+
+/**
+ * Anyone's opening -> { section, bars, layers, dress?, parts?, fx? } or
+ * null: normalizePlan() for `section` only, the section the track starts
+ * with, within OPENING, plus a hit of OPENING_FX. Idempotent too.
+ */
+export function normalizeOpening(raw, { lists, style, section }) {
+  if (!isObject(raw) || raw.section !== section || !SECTIONS[section]) return null;
+  const plan = cleanPlan(raw, { lists, style }, section, openBars(section), openRange);
+  return OPENING_FX.includes(raw.fx) ? { ...plan, fx: raw.fx } : plan;
+}
+
+/**
+ * The mix an opening (normalizeOpening) starts with: the seed's draw
+ * (`active`), with each layer the opening names set to its sounds still in
+ * the pool. Draws nothing, so a link replays it. A lead or a pad always
+ * plays: one the opening left out comes back from the draw.
+ */
+export function openWith(active, opening, lists, style) {
+  const out = {};
+  for (const [lane, id] of Object.entries(active)) {
+    if (!Object.hasOwn(opening.layers, layerOfVariant(id))) out[lane] = id;
+  }
+  for (const [layerId, ids] of Object.entries(opening.layers)) {
+    const pool = poolOf(lists, layerId, style);
+    for (const id of ids) if (pool.includes(id)) out[laneKey(layerById(layerId), id)] = id;
+  }
+  const melodic = (mix) => Object.values(mix).some((id) => ["lead", "pad"].includes(layerOfVariant(id)));
+  if (melodic(out)) return out;
+  for (const [lane, id] of Object.entries(active)) if (["lead", "pad"].includes(layerOfVariant(id))) out[lane] = id;
+  return out;
+}
+
+function cleanPlan(raw, { lists, style }, section, lengths, range) {
+  const bars = lengths.includes(raw.bars) ? raw.bars : null;
   const given = raw.layers && typeof raw.layers === "object" && !Array.isArray(raw.layers) ? raw.layers : {};
   const layers = {};
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id) || !Object.hasOwn(given, layer.id) || !Array.isArray(given[layer.id])) continue;
     const pool = poolOf(lists, layer.id, style);
-    const hi = countRange(section, layer.id)[1];
+    const hi = range(section, layer.id)[1];
     const ids = [...new Set(given[layer.id].filter((id) => typeof id === "string" && pool.includes(id)))].slice(0, hi);
     if (ids.length || !given[layer.id].length) layers[layer.id] = ids;
   }

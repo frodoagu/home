@@ -48,6 +48,7 @@ describe("share links", () => {
       bpm: 150,
       sounds: null,
       plans: null,
+      opening: null,
     });
   });
 
