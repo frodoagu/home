@@ -2231,22 +2231,28 @@ describe("autopilot", () => {
 describe("✨ AI", () => {
   const RealURL = globalThis.URL;
   // The models ai.js would hand over; `answers` are what the model plans, in
-  // turn (a function gets the ask's opts, schema and prompt).
-  function fakeAi({ chrome = "available", answers = [], fail = false, models = ["gemma-3-4b", "qwen"] } = {}) {
+  // turn (a function gets the ask's opts, schema and prompt). Asks for the
+  // opening (their schema has fx) go to `openings` and get `opening`.
+  function fakeAi({ chrome = "available", answers = [], opening = null, fail = false, models = ["gemma-3-4b", "qwen"] } = {}) {
     const asks = [];
+    const openings = [];
     const engine = (name) => ({
       supported: () => true,
       known: vi.fn(() => (name === "lmstudio" || name === "openai" ? models : undefined)),
       availability: vi.fn(async () => chrome),
       start: vi.fn(async () => name),
       plan: vi.fn((prompt, schema, opts) => {
-        asks.push({ name, prompt, schema, opts });
         if (fail) return Promise.reject(new Error("no"));
+        if (schema.properties.fx) {
+          openings.push({ name, prompt, schema, opts });
+          return typeof opening === "function" ? opening(opts, schema, prompt) : Promise.resolve(opening);
+        }
+        asks.push({ name, prompt, schema, opts });
         const answer = answers[Math.min(asks.length - 1, answers.length - 1)];
         return typeof answer === "function" ? answer(opts, schema, prompt) : Promise.resolve(answer);
       }),
     });
-    const ai = { asks };
+    const ai = { asks, openings };
     for (const name of ["chrome", "lmstudio", "openai", "anthropic", "gemini"]) ai[name] = engine(name);
     return ai;
   }
@@ -2641,6 +2647,64 @@ describe("✨ AI", () => {
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
   });
 
+  it("✨ in silence plans the opening first: the intro starts on its sounds, length, parts and hit", async () => {
+    const opening = {
+      why: "a soaring opener, no kick yet",
+      section: "intro",
+      bars: 16,
+      layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw"] },
+      dress: [{ id: "pad.supersaw", tone: 2, length: 0, drive: 0, motion: 2, synth: "" }],
+      parts: { lead: ["8", "-", "5", "-", "3", "-", "1", "-"] },
+      fx: "fx.impact",
+    };
+    const ai = await remountWith(fakeAi({ answers: [BUILD], opening }));
+    const fx = vi.spyOn(engine, "triggerFx");
+    vibe("épico");
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.openings).toHaveLength(1);
+    const [ask] = ai.openings;
+    expect(ask.prompt).toContain("This is the opening of the track and of the show");
+    expect(ask.prompt).toContain("Plan the intro it opens with: 8 or 16 bars;");
+    expect(ask.prompt).toContain('The listener asked for: "épico".');
+    expect(ask.schema.properties.section.enum).toEqual(["intro"]);
+    expect(ai.asks[0].prompt).toContain("Now playing: intro, 16 bars.");
+    expect(ai.asks[0].prompt).toMatch(/Sounds playing now: .*lead\.soaring/);
+    expect(ai.asks[0].prompt).toContain('standing wish: "épico"'); // the opening followed it
+    expect(engine.isRunning()).toBe(false);
+    expect($(".section-left").textContent).toBe("16 compases");
+    expect($(".section-badge").title).toBe("Lo eligió la IA: a soaring opener, no kick yet");
+    expect($(".status").textContent).toBe("✨ Las primeras 4 fases están planeadas: ▶ para arrancar.");
+    const motif = saved().variants["lead.soaring"].notes.filter((n) => n.step < 8).map((n) => n.midi);
+    expect(motif).toEqual([69, 64, 60]); // its part: 8, 5, 3 walking down A minor
+    expect(saved().variants["pad.supersaw"].insert.lp).toBeLessThan(3000); // dressed, and muffled by the intro's ride
+    cue().click();
+    expect(pressed()).toEqual(expect.arrayContaining(["lead.soaring", "pad.supersaw"]));
+    expect(pressed().some((id) => id.startsWith("kick."))).toBe(false);
+    advanceSeconds(0.05);
+    expect(fx).toHaveBeenCalledWith("fx.impact", expect.any(Number));
+    expect(fx).toHaveBeenCalledTimes(1);
+    advanceSeconds(14 * BAR);
+    expect($(".section-badge").textContent).toBe("Intro"); // 16 bars, not 8
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Subida");
+  });
+
+  it("an opening that comes after ▶ is dropped, and the sections ahead are asked for", async () => {
+    let answer;
+    const ai = await remountWith(fakeAi({ answers: [BREAK], opening: () => new Promise((resolve) => (answer = resolve)) }));
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.asks).toHaveLength(0);
+    cue().click();
+    expect(ai.openings[0].opts.signal.aborted).toBe(true);
+    answer({ section: "intro", bars: 16, layers: { lead: ["lead.soaring"] } });
+    await flushPromises();
+    expect(ai.asks.length).toBeGreaterThan(0);
+    expect(pressed()).not.toContain("lead.soaring");
+    expect($(".section-left").textContent).toBe("8 compases");
+  });
+
   it("■ lets go of the armed autopilot", async () => {
     await remountWith(fakeAi({ answers: [BREAK] }));
     aiBtn().click();
@@ -2658,9 +2722,9 @@ describe("✨ AI", () => {
     const ai = await remountWith(fakeAi({ answers: [BREAK, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
     $("button.auto").click();
     expect(engine.isRunning()).toBe(false);
-    expect($(".status").textContent).toBe("✨ Planeando la fase 1 de 3 antes de arrancar… ▶ para arrancar ya.");
+    expect($(".status").textContent).toBe("✨ Planeando la fase 1 de 4 antes de arrancar… ▶ para arrancar ya.");
     await flushPromises();
-    expect($(".status").textContent).toBe("✨ Planeando la fase 2 de 3 antes de arrancar… ▶ para arrancar ya.");
+    expect($(".status").textContent).toBe("✨ Planeando la fase 3 de 4 antes de arrancar… ▶ para arrancar ya.");
     expect(engine.isRunning()).toBe(false);
     answer(BUILD);
     await flushPromises();
@@ -2721,12 +2785,20 @@ describe("✨ AI", () => {
       node.querySelector("button.stop").click();
       return log;
     };
-    const ai = await remountWith(fakeAi({ answers: plans }));
+    const opening = {
+      section: "intro",
+      bars: 16,
+      layers: { kick: [], lead: ["lead.soaring"] },
+      parts: { lead: ["8", "-", "5", "-", "3", "-", "1", "-"] },
+      fx: "fx.crash",
+    };
+    const ai = await remountWith(fakeAi({ answers: plans, opening }));
     $("#seed").value = "goa";
     $("#seed").dispatchEvent(new Event("change"));
     aiBtn().click();
     const first = await record(root, ctx);
     expect(first.some((l) => l.startsWith("Break "))).toBe(true);
+    expect(first[0]).toMatch(/^Intro .*lead\.soaring/);
     const written = ["lead.vowel", "pad.supersaw"].map((id) => saved().variants[id]);
     expect(written[0].insert.drive).toBe("soft");
     expect(ai.asks.length).toBeGreaterThanOrEqual(4);
@@ -2740,6 +2812,7 @@ describe("✨ AI", () => {
     const link = writeText.mock.calls[0][0];
     const hash = link.slice(link.indexOf("#"));
     expect(hash).toMatch(/&ai=/);
+    expect(hash).toMatch(/&open=/);
 
     localStorage.clear();
     history.replaceState(null, "", `/${hash}`);

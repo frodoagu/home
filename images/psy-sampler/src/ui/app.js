@@ -14,8 +14,9 @@
 // The ✨ AI (planner.js, ai.js) asks a model for the sections ahead, one after
 // another until AHEAD of them are planned; the pilot takes the next one's plan
 // before the playing section's last loop. From silence it plans before ▶: the
-// autopilot waits armed until the first AHEAD are in. A share link's plans
-// stand in for it section by section.
+// opening first (the section the track starts with, laid over the seed's
+// draw), then the first AHEAD, while the autopilot waits armed. A share
+// link's opening and plans stand in for it section by section.
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
@@ -75,7 +76,20 @@ import {
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
-import { AHEAD, PLAN_SECTIONS, keptAhead, normalizePlan, planPrompt, planSchema, themeAfter, whyOf } from "../planner.js";
+import {
+  AHEAD,
+  PLAN_SECTIONS,
+  keptAhead,
+  normalizeOpening,
+  normalizePlan,
+  openWith,
+  openingPrompt,
+  openingSchema,
+  planPrompt,
+  planSchema,
+  themeAfter,
+  whyOf,
+} from "../planner.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import {
   hasCustomSounds,
@@ -85,6 +99,7 @@ import {
   readSnapFragment,
   shareFragment,
   snapFragment,
+  unpackOpening,
   unpackPlans,
   unpackSnap,
   unpackSounds,
@@ -147,7 +162,8 @@ const stamp = (d = new Date()) => {
 // An autopilot run: the sections walked, what each opened with, the plan each
 // one took for the next (🔗 carries them), each sound's last dress, and the
 // ✨ AI's plans for the sections ahead ({ plan, why, queued }, in order; the
-// first is the one the pilot holds).
+// first is the one the pilot holds). From silence it also gets `opening`
+// (planner.js normalizeOpening; null once asked for in vain) and its `why`.
 const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [] });
 
 // Everything tied to the old workspace, dropped when another one replaces it.
@@ -160,6 +176,7 @@ const fresh = () => ({
   armed: false,
   tour: null,
   replay: null,
+  replayOpening: null,
 });
 
 export function mountApp(root, engine, opts = {}) {
@@ -194,9 +211,11 @@ export function mountApp(root, engine, opts = {}) {
     tour: resume?.tour ?? null, // the snapshot autopilot (snapshots.js), never on with `auto`
     run: resume?.run ?? null, // newRun(): the sections the pilot walked since it started, the plans it took and those ahead
     replay: resume?.replay ?? null, // a share link's plans, one per section, taken again from silence
+    replayOpening: resume?.replayOpening ?? null, // a share link's opening, laid over the intro from silence
     aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe, open (ai.js)
     chrome: resume?.chrome ?? "unavailable", // what Chrome's built-in model said it can do here
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
+    openFx: null, // the ✨ AI opening's hit, fired on the first bar line ▶ plays
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
     drop: resume?.drop ?? null, // { phase: "armed" | "roll" | "gap", hand }: a drop on its way (see stepDrop)
     bar: resume?.bar ?? null, // { from, kinds: { variant: "gap" | "break" | "roll" } }: this bar's overlays
@@ -957,6 +976,8 @@ export function mountApp(root, engine, opts = {}) {
     for (const { node } of snapTiles.values()) node.classList.remove("is-next");
     sectionBadge.textContent = p ? tx.sections[p.section] : "";
     sectionBadge.hidden = !p;
+    const opened = Boolean(p && state.run?.opening) && sectionNo() === 0; // the ✨ AI's opening plays
+    sectionBadge.title = !opened ? "" : state.run.why ? `${tx.ai.planned}: ${state.run.why}` : tx.ai.planned;
     sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
     const chips = (p?.queue ?? []).map((id, i) => {
       const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
@@ -1139,6 +1160,10 @@ export function mountApp(root, engine, opts = {}) {
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
     if (bar === 0 && state.drop?.phase !== "armed") state.drop = null; // a fresh run: no drop left halfway
+    if (bar === 0 && state.openFx) {
+      fire(state.openFx, time); // the opening's hit, on the track's first beat
+      state.openFx = null;
+    }
     if (loopStart) {
       for (const id of state.newParts) writeNewPart(id);
       state.newParts.clear();
@@ -2086,23 +2111,24 @@ export function mountApp(root, engine, opts = {}) {
     const { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
     const { drop, bar, autoVary, folds } = state;
     const carried = { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary, folds };
-    Object.assign(carried, { run: state.run, replay: state.replay, aiPrefs: state.aiPrefs, chrome: state.chrome });
+    Object.assign(carried, { run: state.run, replay: state.replay, replayOpening: state.replayOpening });
+    Object.assign(carried, { aiPrefs: state.aiPrefs, chrome: state.chrome });
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });
   }
 
-  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds, plans }) {
+  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds, plans, opening }) {
     history.replaceState(null, "", location.pathname + location.search);
     let next = { ...ws, seed, style: sharedStyle ?? ws.style, bpm: sharedBpm ?? ws.bpm };
     let replay = null;
-    if (plans) {
-      try {
-        replay = await unpackPlans(plans);
-      } catch {
-        status(tx.share.badLink);
-        return;
-      }
+    let replayOpening = null;
+    try {
+      if (plans) replay = await unpackPlans(plans);
+      if (opening) replayOpening = await unpackOpening(opening);
+    } catch {
+      status(tx.share.badLink);
+      return;
     }
     if (sounds) {
       try {
@@ -2117,7 +2143,7 @@ export function mountApp(root, engine, opts = {}) {
     state.varying = new Map();
     // With the ✨ AI on, a seed-only link plays on as the model's track.
     const text = !replay && ai && state.aiPrefs.on ? `${tx.share.loaded(seed)} ${tx.ai.varies}` : tx.share.loaded(seed);
-    remount({ ws: normalize(next), ...fresh(), replay, pending: null, status: text, open: null });
+    remount({ ws: normalize(next), ...fresh(), replay, replayOpening, pending: null, status: text, open: null });
   }
 
   // A snapshot link adds its snapshot after yours, like ⬆ Importar does,
@@ -2161,6 +2187,7 @@ export function mountApp(root, engine, opts = {}) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
       state.replay = null; // a link's track only replays from silence
+      state.replayOpening = null;
       cancelPlanning();
       state.run = newRun();
       adoptDrop();
@@ -2196,6 +2223,10 @@ export function mountApp(root, engine, opts = {}) {
     if (cueWhenPlanned) engine.ensureContext(); // inside the click: the mix starts once planned
     state.armed = wait;
     commit(start.active);
+    if (state.replayOpening) {
+      const opening = normalizeOpening(state.replayOpening, { lists: pilotLists(), style: ws.style, section: start.pilot.section });
+      if (opening) openOn(opening);
+    }
     enterSection();
     showSection();
     if (cueWhenPlanned && !planning) cue();
@@ -2241,10 +2272,15 @@ export function mountApp(root, engine, opts = {}) {
 
   // A vibe applied: the plans made with the old words go and the ✨ AI plans
   // again with the new ones. Playing, the next section's plan stays, so the
-  // model has a section's time to answer and none plays unplanned.
+  // model has a section's time to answer and none plays unplanned. Armed,
+  // the track starts over from the seed, so the opening follows them too.
   function revibe() {
     const p = state.pilot;
     if (!p || !state.run || !state.aiPrefs.on || replaying()) return;
+    if (state.armed) {
+      engageAuto(state.run.sections[0]);
+      return;
+    }
     dropAhead(state.armed ? 0 : 1);
     planAhead();
   }
@@ -2278,6 +2314,7 @@ export function mountApp(root, engine, opts = {}) {
   function setSeed(value) {
     ws.seed = cleanSeed(value) || randomSeed();
     state.replay = null; // another track: a link's plans were for its own seed
+    state.replayOpening = null;
     seedInput.value = ws.seed;
     persist();
     if (state.auto) engageAuto();
@@ -2434,6 +2471,91 @@ export function mountApp(root, engine, opts = {}) {
     return true;
   }
 
+  // Each melodic sound's synth now.
+  const synthsNow = () =>
+    Object.fromEntries(
+      Object.values(ws.lists)
+        .flat()
+        .filter((id) => defOf(id).kind === "notes")
+        .map((id) => [id, dataOf(id).synth]),
+    );
+
+  // The opening (planner.js normalizeOpening) laid over the armed intro: its
+  // sounds, length, dress and parts, and a hit on the first beat. A lead it
+  // brings in with no part gets a new one, like any lead the pilot brings.
+  function openOn(opening) {
+    state.run.opening = opening;
+    const from = state.pending ?? state.active;
+    const next = openWith(from, opening, pilotLists(), ws.style);
+    if (opening.bars) state.pilot = { ...state.pilot, left: opening.bars / 2, length: opening.bars / 2 };
+    const dressed = opening.dress ?? [];
+    for (const d of dressed) state.run.dress[d.id] = d;
+    const playing = new Set(Object.values(next));
+    const brought = entering(from, next);
+    dressIn([...new Set([...brought, ...dressed.filter((d) => playing.has(d.id)).map((d) => d.id)])]);
+    for (const id of brought) if (layerOf(id).id === "lead" && !opening.parts?.lead) rewrite(id);
+    for (const [layer, degrees] of Object.entries(opening.parts ?? {})) {
+      const id = opening.layers[layer]?.[0];
+      if (playing.has(id)) writeIn(id, degrees);
+    }
+    state.openFx = opening.fx && !ws.banned.includes(opening.fx) ? opening.fx : null;
+    mixIn(next);
+    toneIn(next);
+    improviseIn(Object.values(next));
+    commit(next);
+    if (state.run.sounds.length) state.run.sounds[0] = [...playing].sort();
+  }
+
+  // From silence, armed, the first ask is the opening; then planAhead().
+  // Once ▶ plays, an answer comes too late and is dropped.
+  const wantsOpening = () => state.armed && sectionNo() === 0 && state.run.opening === undefined;
+  function planOpening() {
+    const p = state.pilot;
+    const engine = engineNow();
+    if (isCloud(engine) && !keyOf(engine)) return;
+    const abort = new AbortController();
+    planning = { at: sectionNo(), abort, opening: true };
+    const ctx = { lists: pilotLists(), style: ws.style, section: p.section };
+    const { vibe } = state.aiPrefs;
+    const prompt = openingPrompt({
+      ...ctx,
+      bpm: state.tempo,
+      active: state.pending ?? state.active,
+      vibe,
+      names: ws.names,
+      synths: synthsNow(),
+    });
+    ai[engine]
+      .plan(prompt, openingSchema(ctx), { ...reach(engine), signal: abort.signal })
+      .then(
+        (raw) => {
+          if (planning?.abort !== abort) return;
+          failing = false;
+          const opening = normalizeOpening(raw, ctx);
+          if (!opening || !state.armed || state.pilot.left !== state.pilot.length) return;
+          openOn(opening);
+          state.run.why = whyOf(raw);
+          vibeFresh = false;
+        },
+        () => {
+          if (planning?.abort !== abort) return;
+          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
+          failing = true;
+        },
+      )
+      .finally(() => {
+        if (planning?.abort !== abort) return;
+        planning = null;
+        state.run.opening ??= null;
+        if (!alive) return;
+        showAi();
+        if (!failing) planAhead();
+        else if (state.auto && state.armed && cueWhenPlanned) cue(); // the model is down: the pilot plays alone
+      });
+    status(tx.ai.arming(1, AHEAD + 1));
+    showAi();
+  }
+
   // Asks the model for the first section ahead with no plan, until AHEAD of
   // them have one: each answer asks for the next. The next section's own
   // plan only while the pilot can still take it, before this one's last loop.
@@ -2441,6 +2563,10 @@ export function mountApp(root, engine, opts = {}) {
   function planAhead() {
     const p = state.pilot;
     if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
+    if (wantsOpening()) {
+      planOpening();
+      return;
+    }
     const slot = state.run.ahead.length;
     if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
     const engine = engineNow();
@@ -2464,12 +2590,7 @@ export function mountApp(root, engine, opts = {}) {
       sections: state.run.sections,
       sounds: state.run.sounds,
       dressed: Object.values(state.run.dress),
-      synths: Object.fromEntries(
-        Object.values(ws.lists)
-          .flat()
-          .filter((id) => defOf(id).kind === "notes")
-          .map((id) => [id, dataOf(id).synth]),
-      ),
+      synths: synthsNow(),
       bars: p.length * 2,
       vibe,
       fresh,
@@ -2507,11 +2628,12 @@ export function mountApp(root, engine, opts = {}) {
         showAi();
         if (more) planAhead();
         if (planning || !state.auto || !state.armed) return;
-        const { length } = state.run.ahead;
+        const length = state.run.ahead.length + (state.run.opening ? 1 : 0);
         if (cueWhenPlanned) cue();
         else status(length ? tx.ai.armed(length) : tx.ai.failed);
       });
-    if (state.armed) status(tx.ai.arming(slot + 1, AHEAD));
+    const opened = state.run.opening !== undefined ? 1 : 0;
+    if (state.armed) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
     showAi();
   }
 
@@ -2762,6 +2884,11 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = null;
     state.queuedSnap = null;
     sync();
+    if (planning?.opening) {
+      cancelPlanning(); // too late for an opening: on with the sections ahead
+      state.run.opening = null;
+      planAhead();
+    }
     showSection();
   }
   cueBtn.addEventListener("click", () => {
@@ -2833,7 +2960,7 @@ export function mountApp(root, engine, opts = {}) {
   }
   shareBtn.addEventListener("click", async () => {
     stats?.count("shares");
-    copyLink(await shareFragment(ws, state.run?.plans ?? []), tx.share.copied);
+    copyLink(await shareFragment(ws, state.run?.plans ?? [], state.run?.opening ?? state.replayOpening), tx.share.copied);
   });
   recBtn.addEventListener("click", async () => {
     if (recStopping) return;

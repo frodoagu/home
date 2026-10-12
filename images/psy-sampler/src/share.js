@@ -5,9 +5,9 @@
 // deflated preset), since the track is only the same with the same sounds
 // (and the same banned ones: they leave the pilot's pools).
 // What the autopilot wrote is left out: the seed writes it again. A track the
-// ✨ AI planned also carries the plans the pilot took (planner.js), since no
-// seed can bring a model's answers back: any browser replays them, with a
-// model or without. A snapshot travels on its own link: a one-snapshot file,
+// ✨ AI planned also carries the plans the pilot took and the opening it
+// started with (planner.js), since no seed can bring a model's answers back:
+// any browser replays them, with a model or without. A snapshot travels on its own link: a one-snapshot file,
 // deflated the same way.
 import { PLAN_MAX, readPlans } from "./planner.js";
 import { cleanSeed, parsePreset, toPreset, toSnapshotFile } from "./workspace.js";
@@ -91,13 +91,15 @@ export const hasCustomSounds = (ws) =>
   Object.keys(ownVariants(ws)).length > 0 || Object.keys(ws.names).length > 0 || ws.banned.length > 0;
 
 /**
- * "#seed=…&style=…&bpm=…[&s=…][&ai=…]" for `ws` (async: compressing). `plans`
- * are the run's, one per section (holes where it had none).
+ * "#seed=…&style=…&bpm=…[&s=…][&ai=…][&open=…]" for `ws` (async:
+ * compressing). `plans` are the run's, one per section (holes where it had
+ * none); `opening`, the one it started with (planner.js normalizeOpening).
  */
-export async function shareFragment(ws, plans = []) {
+export async function shareFragment(ws, plans = [], opening = null) {
   const params = new URLSearchParams({ seed: ws.seed, style: ws.style, bpm: String(ws.bpm) });
   if (hasCustomSounds(ws)) params.set("s", await packSounds(ws));
   if (plans.some(Boolean)) params.set("ai", await pack(Array.from(plans.slice(0, PLAN_MAX), (p) => p ?? null)));
+  if (opening) params.set("open", await pack(opening));
   return `#${params}`;
 }
 
@@ -106,6 +108,13 @@ export async function unpackPlans(text, max = SOUNDS_MAX) {
   const plans = readPlans(JSON.parse(await unpack(text, max)));
   if (!plans) throw new Error("not a list of plans");
   return plans;
+}
+
+/** A link's packed opening -> its raw object (normalizeOpening() is the gate); throws on a broken one. */
+export async function unpackOpening(text, max = SOUNDS_MAX) {
+  const opening = JSON.parse(await unpack(text, max));
+  if (!opening || typeof opening !== "object" || Array.isArray(opening)) throw new Error("not an opening");
+  return opening;
 }
 
 /** "#snap=…": `snap` alone, as a snapshots file with the names of the copies it plays. */
@@ -119,7 +128,7 @@ export const readSnapFragment = (hash) => new URLSearchParams(String(hash ?? "")
 /** A packed snapshot -> the file's text, for importSnapshots() (the gate). */
 export const unpackSnap = (text, max = SOUNDS_MAX) => unpack(text, max);
 
-/** The fragment of a share link -> { seed, style, bpm, sounds?, plans? } or null. */
+/** The fragment of a share link -> { seed, style, bpm, sounds?, plans?, opening? } or null. */
 export function readFragment(hash) {
   const params = new URLSearchParams(String(hash ?? "").replace(/^#/, ""));
   const seed = cleanSeed(params.get("seed"));
@@ -131,5 +140,6 @@ export function readFragment(hash) {
     bpm: Number.isFinite(bpm) && bpm > 0 ? bpm : null,
     sounds: params.get("s"),
     plans: params.get("ai"),
+    opening: params.get("open"),
   };
 }
