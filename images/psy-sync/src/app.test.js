@@ -210,6 +210,59 @@ describe("API", () => {
   });
 });
 
+describe("one device per account", () => {
+  const LAPTOP = "laptop-0000000000000001";
+  const PHONE = "phone-00000000000000002";
+  const beat = (cookie, device, extra = {}) => call("PUT", "/api/device", { cookie, body: { device, ...extra } });
+
+  it("the first device takes it; another one hears whether it plays, and takes it on purpose", async () => {
+    const cookie = await signIn();
+    expect((await beat(cookie, LAPTOP, { playing: true })).status).toBe(200);
+    expect((await beat(cookie, LAPTOP, { playing: true })).status).toBe(200);
+    const asked = await beat(cookie, PHONE);
+    expect(asked.status).toBe(409);
+    expect(await asked.json()).toEqual({ playing: true });
+    expect((await beat(cookie, PHONE, { take: true })).status).toBe(200);
+    const lost = await beat(cookie, LAPTOP);
+    expect(lost.status).toBe(409);
+    expect(await lost.json()).toEqual({ playing: false });
+  });
+
+  it("a device that stops beating, or lets go, leaves it free", async () => {
+    const cookie = await signIn();
+    await beat(cookie, LAPTOP);
+    clock += 69_000;
+    expect((await beat(cookie, PHONE)).status).toBe(409);
+    clock += 2000;
+    expect((await beat(cookie, PHONE)).status).toBe(200);
+    const off = (device) => call("DELETE", "/api/device", { cookie, body: { device } });
+    expect((await off(LAPTOP)).status).toBe(204); // not its own: nothing changes
+    expect((await beat(cookie, LAPTOP)).status).toBe(409);
+    await off(PHONE);
+    expect((await beat(cookie, LAPTOP)).status).toBe(200);
+  });
+
+  it("each account has its own, and only the holder saves", async () => {
+    const ana = await signIn();
+    const bob = await signIn({ sub: "2002", email: "bob@example.com" });
+    await beat(ana, LAPTOP);
+    expect((await beat(bob, PHONE)).status).toBe(200);
+    const put = (device) => call("PUT", "/api/state", { cookie: ana, body: { state: { bpm: 1 }, base: null, force: true, device } });
+    const taken = await put(PHONE);
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toEqual({ taken: true });
+    expect((await put(LAPTOP)).status).toBe(200);
+    expect((await put(undefined)).status).toBe(200); // an older page sends no device
+  });
+
+  it("needs a session, an id and our origin", async () => {
+    expect((await beat(undefined, LAPTOP)).status).toBe(401);
+    const cookie = await signIn();
+    expect((await beat(cookie, "short")).status).toBe(400);
+    expect((await call("PUT", "/api/device", { cookie, body: { device: LAPTOP }, origin: "https://evil.example" })).status).toBe(403);
+  });
+});
+
 describe("samples", () => {
   // A minimal WAV header and some bytes after it.
   const wav = (size = 64) => {

@@ -59,8 +59,19 @@ describe("createCloud", () => {
       return reply(204);
     }
     if (url === "/api/state" && method === "GET") return server.state ? reply(200, server.state) : reply(404, {});
+    if (url === "/api/device" && method === "PUT") {
+      const { device, playing, take } = JSON.parse(body);
+      if (server.lease && server.lease.device !== device && !take) return reply(409, { playing: server.lease.playing });
+      server.lease = { device, playing };
+      return reply(200, { ok: true });
+    }
+    if (url === "/api/device" && method === "DELETE") {
+      if (server.lease?.device === JSON.parse(body).device) server.lease = null;
+      return reply(204);
+    }
     if (url === "/api/state" && method === "PUT") {
-      const { state, base, force } = JSON.parse(body);
+      const { state, base, force, device } = JSON.parse(body);
+      if (server.lease && device && server.lease.device !== device) return reply(409, { taken: true });
       if (server.state && !force && server.state.updatedAt !== base) return reply(409, server.state);
       server.state = { state, updatedAt: (server.state?.updatedAt ?? 0) + 1 };
       return reply(200, { updatedAt: server.state.updatedAt });
@@ -70,7 +81,7 @@ describe("createCloud", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    server = { user: null, state: null, down: false, visitors: new Set() };
+    server = { user: null, state: null, down: false, visitors: new Set(), lease: null };
     storage = new Map();
     storage.getItem = (k) => storage.get(k) ?? null;
     storage.setItem = (k, v) => storage.set(k, v);
@@ -78,7 +89,7 @@ describe("createCloud", () => {
     calls = [];
   });
 
-  const make = () => createCloud({ fetch: fakeFetch, storage, debounceMs: 100 });
+  const make = (opts) => createCloud({ fetch: fakeFetch, storage, debounceMs: 100, ...opts });
 
   it("init reports availability and the signed-in user", async () => {
     const cloud = make();
@@ -194,5 +205,89 @@ describe("createCloud", () => {
     await cloud.deleteAccount();
     expect(server.state).toBeNull();
     expect(cloud.info.user).toBeNull();
+  });
+
+  describe("one device per account", () => {
+    const OTHER = "other-device-0000000001";
+
+    it("a free account is taken without asking, and beats while held", async () => {
+      const ask = vi.fn();
+      const cloud = make({ ask, playing: () => true, beatMs: 1000 });
+      await cloud.signIn("token");
+      expect(ask).not.toHaveBeenCalled();
+      expect(server.lease).toEqual({ device: storage.get("psy-sampler:visitor"), playing: true });
+      const beats = () => calls.filter((c) => c === "PUT /api/device").length;
+      const before = beats();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(beats()).toBe(before + 3);
+    });
+
+    it("with another device on it, nothing syncs until you take it over", async () => {
+      server.user = { email: "ana@example.com" };
+      server.lease = { device: OTHER, playing: true };
+      let take;
+      const ask = vi.fn(() => new Promise((resolve) => (take = resolve)));
+      const cloud = make({ ask });
+      const ready = cloud.init();
+      await vi.waitFor(() => expect(ask).toHaveBeenCalledWith({ playing: true }));
+      expect(cloud.info.user).toBeNull();
+      expect(cloud.init()).toBe(ready); // a remount meanwhile asks no second time
+      take();
+      expect((await ready).user).toEqual({ email: "ana@example.com" });
+      expect(server.lease.device).not.toBe(OTHER);
+      expect(ask).toHaveBeenCalledOnce();
+    });
+
+    it("the device that lost it hears so on its next beat, stops uploading and forfeits what never went up", async () => {
+      const onDropped = vi.fn();
+      const cloud = make({ onDropped, beatMs: 1000, debounceMs: 5000 });
+      await cloud.signIn("token");
+      cloud.changed({ bpm: 150 });
+      await vi.advanceTimersByTimeAsync(5000);
+      server.lease = { device: OTHER, playing: true }; // taken elsewhere
+      server.state = { state: { bpm: 99 }, updatedAt: 50 };
+      cloud.changed({ bpm: 151 });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(onDropped).toHaveBeenCalledOnce();
+      expect(calls.filter((c) => c === "PUT /api/state")).toHaveLength(1);
+      // Its next load pulls the other device's copy instead of asking.
+      expect((await cloud.check({ bpm: 151 }, false)).action).toBe("pull");
+      cloud.changed({ bpm: 152 });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(calls.filter((c) => c === "PUT /api/state")).toHaveLength(1);
+      expect(onDropped).toHaveBeenCalledOnce();
+    });
+
+    it("an upload refused as taken drops it too", async () => {
+      const onDropped = vi.fn();
+      const cloud = make({ onDropped });
+      await cloud.signIn("token");
+      server.lease = { device: OTHER, playing: false };
+      cloud.changed({ bpm: 150 });
+      await vi.advanceTimersByTimeAsync(150);
+      expect(onDropped).toHaveBeenCalledOnce();
+      expect(server.state).toBeNull();
+    });
+
+    it("release and sign out let go, so the next device takes it without asking", async () => {
+      const cloud = make();
+      await cloud.signIn("token");
+      await cloud.release();
+      expect(server.lease).toBeNull();
+      await cloud.signIn("token");
+      await cloud.signOut();
+      expect(server.lease).toBeNull();
+    });
+
+    it("a server without leases (404) or offline counts as held", async () => {
+      const ask = vi.fn();
+      const old = (url, opts) => (url === "/api/device" ? Promise.reject(new TypeError("offline")) : fakeFetch(url, opts));
+      const cloud = createCloud({ fetch: old, storage, debounceMs: 100, ask });
+      await cloud.signIn("token");
+      cloud.changed({ bpm: 150 });
+      await vi.advanceTimersByTimeAsync(150);
+      expect(server.state.state).toEqual({ bpm: 150 });
+      expect(ask).not.toHaveBeenCalled();
+    });
   });
 });
