@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   CHANGE_BARS,
   IMPROVISE,
+  OPENING_MIX,
+  OPENING_TONE,
   PHRASE_LOOPS,
   PUMP,
   SECTIONS,
@@ -417,6 +419,44 @@ describe("autopilot", () => {
       const lps = [4, 1].map((left) => toneOf(pilot("breakdown", left), mix)["lead.acid"].lp);
       expect(lps[0]).toBeLessThan(2000);
       expect(lps[1]).toBe(6000);
+    });
+  });
+
+  describe("an opening (✨ AI)", () => {
+    const opening = (loop, length = 8) => ({ section: "intro", length, left: length - loop, queue: [], opening: true });
+    const mix = { kick: "kick.punchy", bass: "bass.rolling", "lead.soaring": "lead.soaring", "pad.chord": "pad.chord" };
+
+    it("fades the kick in from 40 % of the way and the bass from halfway, the rest from the start", () => {
+      const levels = (id) => [0, 1, 2, 3, 4, 5, 6, 7].map((loop) => mixOf(opening(loop), mix)[id]);
+      expect(levels("kick.punchy")).toEqual([0, 0, 0, 0.15, 0.3, 0.5, 0.65, 0.85]);
+      expect(levels("bass.rolling")).toEqual([0, 0, 0, 0, 0.2, 0.4, 0.6, 0.8]);
+      expect(levels("lead.soaring")[0]).toBeGreaterThan(0);
+      expect(OPENING_MIX.bass[1]).toBeLessThan(1); // the groove's full level is the explosion
+      expect(mixOf({ section: "intro", length: 4, left: 4, queue: [] }, { kick: "kick.punchy" })).toEqual({ "kick.punchy": 0.85 }); // the seed's intro as ever
+    });
+
+    it("filters kick and bass shut until they come in, then opens them in octaves, short of open", () => {
+      const lps = [0, 3, 5, 7].map((loop) => toneOf(opening(loop), mix)["bass.rolling"].lp);
+      expect(lps[0]).toBe(120);
+      expect(lps[1]).toBe(120);
+      expect(lps[2]).toBeGreaterThan(120);
+      expect(lps[3]).toBe(OPENING_TONE.bass.lp[1]);
+      expect(toneOf(opening(7), mix)["kick.punchy"].lp).toBe(2500);
+      expect(Object.keys(toneOf({ section: "intro", length: 4, left: 1, queue: [] }, mix))).not.toContain("bass.rolling");
+    });
+
+    it("its last loop is a drop with a riser, and only an opening's", () => {
+      const rng = seeded(7);
+      let pilot = { ...opening(6), plan: null };
+      const move = advance(pilot, mix, lists, rng);
+      expect(move.pilot.opening).toBe(true);
+      expect(move.fx).toHaveLength(1);
+      expect(dropping(move.pilot)).toBe(true);
+      const { opening: _o, ...plain } = pilot;
+      expect(advance(plain, mix, lists, seeded(7)).fx).toEqual([]);
+      pilot = advance(move.pilot, mix, lists, rng).pilot;
+      expect(pilot.section).toBe("groove");
+      expect(pilot.opening).toBeUndefined();
     });
   });
 

@@ -108,14 +108,15 @@ const counts = (section, range = countRange) =>
   }).join(", ");
 
 // What an opening may play and last, past the pilot's shape for its section:
-// an intro may state a lead, stack pads, bring a glitch or hold the kick
-// back, and breathe for 16 bars. SECTIONS stays as it is, so seeds replay.
+// an intro may float a distant lead over stacked pads and a glitch, bring a
+// bass in, leave the kick out, and drift for 16 to 32 bars (autopilot.js
+// OPENING_MIX fades them in). SECTIONS stays as it is, so seeds replay.
 export const OPENING = {
   intro: { kick: [0, 1], bass: [0, 1], perc: [0, 2], lead: [0, 1], pad: [0, 2], glitch: [0, 1] },
 };
-export const OPENING_BARS = { intro: [8, 16] };
-// The hits an opening may fire on its first beat.
-export const OPENING_FX = ["fx.impact", "fx.crash", "fx.sweep", "fx.siren", "fx.reverse"];
+export const OPENING_BARS = { intro: [16, 24, 32] };
+// The soft swells an opening may start on; no impact or crash out of silence.
+export const OPENING_FX = ["fx.sweep", "fx.reverse", "fx.siren"];
 const openRange = (section, layerId) => OPENING[section]?.[layerId] ?? countRange(section, layerId);
 const openBars = (section) => OPENING_BARS[section] ?? barsOf(section);
 
@@ -277,8 +278,9 @@ export function planPrompt({
 /**
  * What to ask for the opening: the section the track starts with, from
  * silence (`section`), asked before any plan ahead. It is the show's first
- * impression, so it gets more room than the pilot's intro (OPENING) and a
- * hit on the 1; the UI lays it over the seed's draw (openWith). `active` is
+ * impression, so it gets more room and time than the pilot's intro
+ * (OPENING) and maybe a swell on the 1; the UI lays it over the seed's draw
+ * (openWith). `active` is
  * that draw, `vibe` the listener's words; `synths` and `names` as in
  * planPrompt().
  */
@@ -286,19 +288,19 @@ export function openingPrompt({ style, bpm, lists, section, active = {}, vibe = 
   const drawn = [...new Set(Object.values(active))].sort();
   const lines = [
     keyLine(style, bpm),
-    "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Make it count: powerful, or beautiful, or both, so it grabs them from the first beat.",
+    "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Let it rise slowly and pull them in: spacey, hypnotic, trippy, never a jolt.",
     `Plan the ${section} it opens with: ${openBars(section).join(" or ")} bars; ${counts(section, openRange)}.`,
   ];
   if (section === "intro") {
     lines.push(
-      "An intro grows into the groove after it. It may open beautiful, on a pad and a lead stating the track's first motif with the kick held back, or powerful, on the kick with a glitch and a hit on the 1; the bass usually waits for the groove, so the groove lands. Its pads and percussion start muffled and open across it.",
+      "An intro drifts in like the first track of a festival set: atmosphere first, deep or airy pads, a subtle glitch texture, at most a distant lead floating a slow motif or a melody that tells a story. The pilot then fades the kick in muffled from 40 % of the way and the bass from halfway, quiet and filtered, opening up little by little, and ends the intro in a drop: the groove explodes with the bass wide open. So pick a kick and a bass for that (a rolling one builds best), or leave the kick out for an intro with no beat at all. Take the longest lengths: it has time.",
     );
   }
   lines.push(`The seed drew: ${drawn.length ? drawn.join(", ") : "nothing"}. Keep what serves the opening, change the rest.`);
   lines.push(...soundLines(lists, style, names, synths));
   lines.push(
-    `fx: one hit on the very first beat, or "" for none: ${OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ")}.`,
-    "Write the parts of the melodic sounds you pick: the lead's motif is the first melody they hear, make it one they remember; dress the sounds to the opening's mood.",
+    `fx: a soft swell on the very first beat, or "" for none (usually none): ${OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ")}.`,
+    "Write the parts of the melodic sounds you pick: sparse and slow, long notes and rests, a lead motif that hangs in the air; dress the sounds to the mood (long, with motion, never driven).",
   );
   if (vibe) lines.push(`The listener asked for: ${JSON.stringify(vibe)}. That comes first: open the track on it boldly, and leave out the layers that do not fit.`);
   lines.push(`Plan the opening ${section}.`);
@@ -355,7 +357,7 @@ export function planSchema({ lists, style, next = null }) {
 
 /**
  * The JSON Schema of an opening: a plan for `section` alone, with the room
- * OPENING gives it, its lengths and a hit for its first beat ("" for none).
+ * OPENING gives it, its lengths and a swell for its first beat ("" for none).
  */
 export function openingSchema({ lists, style, section }) {
   const schema = schemaOf({ lists, style, sections: [section], bars: openBars(section), range: openRange, most: [section] });
@@ -498,7 +500,7 @@ export function normalizePlan(raw, { lists, style }) {
 /**
  * Anyone's opening -> { section, bars, layers, dress?, parts?, fx? } or
  * null: normalizePlan() for `section` only, the section the track starts
- * with, within OPENING, plus a hit of OPENING_FX. Idempotent too.
+ * with, within OPENING, plus a swell of OPENING_FX. Idempotent too.
  */
 export function normalizeOpening(raw, { lists, style, section }) {
   if (!isObject(raw) || raw.section !== section || !SECTIONS[section]) return null;

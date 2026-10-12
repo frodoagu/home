@@ -208,6 +208,32 @@ export const TONE = {
 };
 export const TONE_LAYERS = ["perc", "lead", "pad", "glitch"];
 
+// An intro the ✨ AI opened (planner.js OPENING, `pilot.opening`) rides its
+// own curves, the way a track's intro builds: the atmosphere first, then the
+// kick comes in muffled from 40 % of the way and the bass from halfway,
+// quiet and filtered, both opening up as they go; its last loop drops into
+// what follows (`dropping`). [from, to, start]: `from` holds until `start`
+// of the way, then it moves. Kick and bass reach the groove open
+// (OPENING_OPEN), which is the explosion.
+export const OPENING_MIX = {
+  kick: [0, 0.85, 0.4],
+  bass: [0, 0.8, 0.5],
+  perc: [0.3, 0.8, 0.2],
+  lead: [0.5, 0.95],
+  pad: [0.8, 1.1],
+  glitch: [0.4, 0.85],
+};
+export const OPENING_TONE = {
+  kick: { lp: [150, 2500, 0.4] },
+  bass: { lp: [120, 1500, 0.5] },
+  perc: { lp: [1500, 9000] },
+  lead: { lp: [700, 4000] },
+  pad: { lp: [700, 3000] },
+  glitch: { lp: [1200, 6000] },
+};
+// The layers an opening filters that no section rides: they open when it ends.
+export const OPENING_OPEN = ["kick", "bass"];
+
 // The chance a sound improvises (🔀) in each section, per layer, drawn per
 // seed, section and sound (dress.js coin), never from rng. None in the
 // intro, the most in the build; the breakdown lays its theme out as written.
@@ -450,7 +476,10 @@ export function dropNext(pilot) {
  * moves on without one.
  */
 export const dropping = (pilot) =>
-  Boolean(pilot) && pilot.left === 1 && pilot.next !== undefined && (pilot.next === "peak" || pilot.section === "build");
+  Boolean(pilot) &&
+  pilot.left === 1 &&
+  pilot.next !== undefined &&
+  (pilot.next === "peak" || pilot.section === "build" || Boolean(pilot.opening));
 
 /** This loop's number in its section (from 1) when it ends a phrase and is not a drop; else 0. */
 export function phraseEnd(pilot) {
@@ -493,7 +522,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     let upcoming;
     if (left === 1) {
       upcoming = queue[0] ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
-      if (upcoming === "peak" || pilot.section === "build") fx.push(pick(BUILD_FX, rng));
+      if (upcoming === "peak" || pilot.section === "build" || pilot.opening) fx.push(pick(BUILD_FX, rng));
     }
     return {
       pilot: {
@@ -505,6 +534,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         ...(upcoming ? { next: upcoming } : {}),
         ...(pilot.theme ? { theme: pilot.theme } : {}),
         ...(plan ? { plan } : {}),
+        ...(pilot.opening ? { opening: true } : {}),
       },
       active: next,
       fx,
@@ -559,18 +589,25 @@ export function mixOf(pilot, active) {
   const out = {};
   for (const id of ids) {
     const layer = layerOfVariant(id);
-    const [from, to] = range(MIX[pilot.section][layer] ?? 1);
-    let level = (from + (to - from) * at) * count[layer] ** -STACK;
+    const [from, to, t] = span((pilot.opening ? OPENING_MIX : MIX[pilot.section])[layer] ?? 1, at);
+    let level = (from + (to - from) * t) * count[layer] ** -STACK;
     if (layer === "pad" && count.lead) level *= DUCK;
     out[id] = Number(Math.min(LEVEL.max, Math.round(level / LEVEL.step) * LEVEL.step).toFixed(2));
   }
   return out;
 }
 
+// [from, to, how far between them] at `at` of the way: a spec's `start`
+// holds `from` until then.
+function span(spec, at) {
+  const [from, to, start = 0] = range(spec);
+  return [from, to, Math.max(0, (at - start) / (1 - start))];
+}
+
 // [from, to] at `at` of the way, in ratios (octaves).
 const along = (spec, open, at) => {
-  const [from, to] = range(spec ?? open);
-  return Math.round(from * (to / from) ** at);
+  const [from, to, t] = span(spec ?? open, at);
+  return Math.round(from * (to / from) ** t);
 };
 
 /** { variant id: { hp, lp } } for the sounds whose tone the pilot rides, as its current loop ends. */
@@ -579,8 +616,9 @@ export function toneOf(pilot, active) {
   const out = {};
   for (const id of new Set(Object.values(active))) {
     const layer = layerOfVariant(id);
-    if (!TONE_LAYERS.includes(layer)) continue;
-    const spec = TONE[pilot.section][layer] ?? {};
+    const tones = pilot.opening ? OPENING_TONE : TONE[pilot.section];
+    if (!(pilot.opening ? Object.hasOwn(OPENING_TONE, layer) : TONE_LAYERS.includes(layer))) continue;
+    const spec = tones[layer] ?? {};
     out[id] = { hp: along(spec.hp, HP_OPEN, at), lp: along(spec.lp, LP_OPEN, at) };
   }
   return out;

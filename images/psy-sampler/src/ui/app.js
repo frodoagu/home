@@ -31,6 +31,7 @@ import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
+  OPENING_OPEN,
   PUMP,
   SECTION_IDS,
   STYLES,
@@ -137,7 +138,7 @@ import {
   toPreset,
   toSnapshotFile,
 } from "../workspace.js";
-import { djCutoffs } from "../audio/insert.js";
+import { HP_OPEN, LP_OPEN, djCutoffs } from "../audio/insert.js";
 import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
 import { mountAccount } from "./account.js";
 import { BRUSH, EUCLID, createEditor } from "./editor.js";
@@ -224,7 +225,7 @@ export function mountApp(root, engine, opts = {}) {
     aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe, open (ai.js)
     chrome: resume?.chrome ?? "unavailable", // what Chrome's built-in model said it can do here
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
-    openFx: null, // the ✨ AI opening's hit, fired on the first bar line ▶ plays
+    openFx: null, // the ✨ AI opening's swell, fired on the first bar line ▶ plays
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
     drop: resume?.drop ?? null, // { phase: "armed" | "roll" | "gap", hand }: a drop on its way (see stepDrop)
     bar: resume?.bar ?? null, // { from, kinds: { variant: "gap" | "break" | "roll" } }: this bar's overlays
@@ -1198,7 +1199,7 @@ export function mountApp(root, engine, opts = {}) {
     const loopStart = step === 0 && bar > 0;
     if (bar === 0 && state.drop?.phase !== "armed") state.drop = null; // a fresh run: no drop left halfway
     if (bar === 0 && state.openFx) {
-      fire(state.openFx, time); // the opening's hit, on the track's first beat
+      fire(state.openFx, time); // the opening's swell, on the track's first beat
       state.openFx = null;
     }
     if (loopStart) {
@@ -1302,7 +1303,7 @@ export function mountApp(root, engine, opts = {}) {
     if (d?.phase === "gap") {
       state.drop = null;
       engine.sweepOff(time);
-      if (d.hand) fire(DROP_HIT, time);
+      if (d.hit) fire(DROP_HIT, time);
       showDrop();
       return {};
     }
@@ -1314,7 +1315,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     const byPilot = state.auto && loopStart && dropping(state.pilot);
     if (!byPilot && !(d?.phase === "armed" && !state.auto)) return null;
-    state.drop = { phase: "roll", hand: !byPilot };
+    state.drop = { phase: "roll", hand: !byPilot, hit: !byPilot || Boolean(state.pilot.opening) }; // an opening explodes too
     const kick = Object.values(laneMap()).find((id) => layerOf(id).id === "kick");
     if (kick) {
       setBuildUp(kick, true);
@@ -1569,16 +1570,25 @@ export function mountApp(root, engine, opts = {}) {
   // The autopilot's tone filters on every sound it rides (autopilot.js
   // toneOf): an exponential line over the loop, like the faders. Yours too:
   // the rest of your edit stays.
+  // The kick and bass an opening filtered open at once when it ends.
   function toneIn(active = state.active) {
     let moved = false;
+    const opening = Boolean(state.pilot.opening);
     for (const [id, tone] of Object.entries(toneOf(state.pilot, active))) {
+      if (opening && OPENING_OPEN.includes(layerOf(id).id)) openRidden.add(id);
       const ins = dataOf(id).insert;
       if (!tiles.has(id) || (ins.hp === tone.hp && ins.lp === tone.lp)) continue;
       setTone(id, tone, stepDuration(state.tempo) * LOOP_STEPS);
       moved = true;
     }
+    if (!opening && openRidden.size) {
+      for (const id of openRidden) if (tiles.has(id)) setTone(id, { hp: HP_OPEN, lp: LP_OPEN }, 0);
+      openRidden.clear();
+      moved = true;
+    }
     if (moved) persist();
   }
+  const openRidden = new Set();
 
   function setTone(id, { hp, lp }, glide) {
     if (!(id in ws.variants)) ws.auto.push(id);
@@ -2524,13 +2534,13 @@ export function mountApp(root, engine, opts = {}) {
     );
 
   // The opening (planner.js normalizeOpening) laid over the armed intro: its
-  // sounds, length, dress and parts, and a hit on the first beat. A lead it
+  // sounds, length, dress and parts, and a swell on the first beat. A lead it
   // brings in with no part gets a new one, like any lead the pilot brings.
   function openOn(opening) {
     state.run.opening = opening;
     const from = state.pending ?? state.active;
     const next = openWith(from, opening, pilotLists(), ws.style);
-    if (opening.bars) state.pilot = { ...state.pilot, left: opening.bars / 2, length: opening.bars / 2 };
+    state.pilot = { ...state.pilot, opening: true, ...(opening.bars ? { left: opening.bars / 2, length: opening.bars / 2 } : {}) };
     const dressed = opening.dress ?? [];
     for (const d of dressed) state.run.dress[d.id] = d;
     const playing = new Set(Object.values(next));
