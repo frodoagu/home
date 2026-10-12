@@ -23,6 +23,10 @@ export default defineConfig(({ command }) => {
     server: {
       proxy: { "/api": "http://localhost:8787" },
     },
+    // Two pages: the sampler and its visuals in a window of their own.
+    build: {
+      rolldownOptions: { input: { main: "index.html", visuals: "visuals.html" } },
+    },
     test: {
       environment: "node", // DOM tests opt in with @vitest-environment jsdom
       css: false,

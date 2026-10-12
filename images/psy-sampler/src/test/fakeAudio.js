@@ -94,6 +94,14 @@ export class FakeAudioContext {
   createGain() {
     return withParams(new FakeNode(this, "gain"), { gain: 1 });
   }
+  createAnalyser() {
+    const n = new FakeNode(this, "analyser");
+    n.context = this;
+    n.fftSize = 2048;
+    Object.defineProperty(n, "frequencyBinCount", { get: () => n.fftSize / 2 });
+    n.getByteFrequencyData = (array) => array.fill(0);
+    return n;
+  }
   createOscillator() {
     const n = withParams(new FakeSource(this, "oscillator"), { frequency: 440, detune: 0 });
     n.type = "sine";

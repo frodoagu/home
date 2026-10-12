@@ -923,3 +923,54 @@ describe("filter envelope", () => {
     opens.forEach((t, i) => expect(t).toBeCloseTo(notes[i], 9));
   });
 });
+
+describe("listen", () => {
+  it("reports each lane's hits with their layer and audio time, and the bar lines", () => {
+    const events = [];
+    engine.listen((e) => events.push(e));
+    engine.setLanes({ kick: "kick.punchy" });
+    run(stepDuration(145) * 20);
+    const kicks = events.filter((e) => e.kind === "hit");
+    expect(kicks.length).toBeGreaterThan(3);
+    expect(kicks.every((e) => e.layer === "kick" && e.variant === "kick.punchy")).toBe(true);
+    // Four on the floor: one kick every four steps.
+    expect(kicks[1].time - kicks[0].time).toBeCloseTo(stepDuration(145) * 4, 6);
+    const bars = events.filter((e) => e.kind === "bar");
+    expect(bars.map((e) => e.bar)).toEqual([0, 1]);
+    expect(bars[0]).toMatchObject({ bpm: 145, time: kicks[0].time });
+    expect(events.find((e) => e.kind === "lanes")).toMatchObject({ variants: ["kick.punchy"] });
+  });
+
+  it("reports the build's sweep and the drop, but not a sweep lowered by a stop", () => {
+    const events = [];
+    engine.listen((e) => events.push(e));
+    engine.setLanes({ kick: "kick.punchy" });
+    engine.sweep(1, 3);
+    engine.sweepOff(3);
+    engine.sweep(4, 5);
+    engine.stop();
+    const kinds = events.map((e) => e.kind).filter((k) => k !== "hit" && k !== "bar" && k !== "lanes");
+    expect(kinds).toEqual(["build", "drop", "build", "stop"]);
+    expect(events.find((e) => e.kind === "build")).toMatchObject({ time: 1, end: 3 });
+    expect(events.find((e) => e.kind === "drop")).toMatchObject({ time: 3 });
+  });
+
+  it("stops reporting once unsubscribed, and hands out one analyser off the output", () => {
+    const fn = vi.fn();
+    const off = engine.listen(fn);
+    expect(engine.levels()).toBe(null); // no context yet
+    off();
+    engine.setLanes({ kick: "kick.punchy" });
+    run(0.5);
+    expect(fn).not.toHaveBeenCalled();
+    const analyser = engine.levels();
+    expect(analyser.kind).toBe("analyser");
+    expect(engine.levels()).toBe(analyser);
+  });
+
+  it("maps an audio time to the moment it leaves the speakers", () => {
+    engine.setLanes({ kick: "kick.punchy" });
+    ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5000 });
+    expect(engine.perfTimeOf(2.5)).toBe(5500);
+  });
+});
