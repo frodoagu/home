@@ -73,3 +73,13 @@ describe("energyOf", () => {
     expect(energyOf(layersOf(["kick.a~2", "bass.b", "perc.c", "lead.d", "glitch.e"]), 1)).toBe(1);
   });
 });
+
+describe("rest", () => {
+  it("keeps time on rest bars without counting them as music", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "bar", time: 0, bar: 2, bpm: 150, rest: true });
+    const s = stage.frame(BEAT);
+    expect(s.playing).toBe(false);
+    expect(s.beats).toBeCloseTo(9);
+  });
+});

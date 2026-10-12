@@ -1,21 +1,23 @@
-// WebGL2 plumbing for the show: one program per scene plus POST and COPY,
-// drawn as a full-screen triangle pair.
+// WebGL2 plumbing for the show: one program per scene plus the laser layer,
+// POST and COPY, drawn as a full-screen triangle pair.
 //
 //   scene ──> target "scene"  ┐
-//   previous scene ──> "prev" ┼─> POST ──> feed[i] ──> COPY ──> canvas
+//   previous scene ──> "prev" ┤
+//   lasers ──> "lasers"       ┼─> POST ──> feed[i] ──> COPY ──> canvas
 //   feed[1-i] (last frame) ───┘
 //
 // Scenes render below the canvas resolution: `level` (0..1) sets both that
 // fraction and the raymarch steps, and adapt() moves it with the frame time,
 // so a weak GPU (a phone, a TV) gets a softer picture instead of a slideshow.
 
-import { COPY, POST, VERTEX, sceneSource } from "./shaders.js";
+import { COPY, POST, VERTEX, laserSource, sceneSource } from "./shaders.js";
 
 const MAX_PIXELS = 1920 * 1080; // the canvas never goes past this, whatever the screen
 const SLOW_MS = 22; // frame time above this: drop a notch
 const FAST_MS = 18; // below this for RISE_MS: go up a notch
 const RISE_MS = 1500;
 const INTS = new Set(["uPalette"]);
+const LASER_OFF = 0.003; // below this the laser layer is not drawn at all
 
 export const scaleOf = (level) => 0.3 + 0.7 * level ** 0.8;
 
@@ -103,6 +105,7 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     programs = {
       scenes: Object.fromEntries(sceneIds.map((id) => [id, link(gl, sceneSource(id))])),
       post: link(gl, POST),
+      lasers: link(gl, laserSource()),
       copy: link(gl, COPY),
     };
     targets = null;
@@ -166,12 +169,13 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     // Small swings keep their targets: re-allocating every frame would stutter.
     if (targets && Math.abs(targets.scene.w - tw) / tw < 0.08 && targets.w === w && targets.h === h) return;
     if (targets) {
-      for (const t of [targets.scene, targets.prev, ...targets.feed]) {
+      for (const t of [targets.scene, targets.prev, targets.lasers, ...targets.feed]) {
         gl.deleteTexture(t.texture);
         gl.deleteFramebuffer(t.fb);
       }
     }
-    targets = { w, h, scene: target(gl, tw, th), prev: target(gl, tw, th), feed: [target(gl, tw, th), target(gl, tw, th)] };
+    const make = () => target(gl, tw, th);
+    targets = { w, h, scene: make(), prev: make(), lasers: make(), feed: [make(), make()] };
   }
 
   function draw(into) {
@@ -182,9 +186,10 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
 
   /**
    * One frame. `frame` has the shared uniforms (uTime, uBeats, uKick...),
-   * `scene` / `previous` are { id, palette, vars } and `post` POST's own.
+   * `scene` / `previous` are { id, palette, vars }, `lasers` is { amount,
+   * palette, vars } and `post` POST's own.
    */
-  function render({ uniforms, scene, previous, post }) {
+  function render({ uniforms, scene, previous, lasers, post }) {
     if (lost) return;
     size();
     const res = [targets.scene.w, targets.scene.h];
@@ -197,6 +202,12 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     };
     paint(scene, targets.scene);
     if (previous) paint(previous, targets.prev);
+    const beams = lasers && lasers.amount > LASER_OFF;
+    if (beams) {
+      use(programs.lasers, "lasers");
+      setAll(programs.lasers, { ...shared, uPalette: lasers.palette, uVar: lasers.vars });
+      draw(targets.lasers);
+    }
 
     const out = targets.feed[flip];
     const last = targets.feed[1 - flip];
@@ -205,7 +216,15 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     sampler(pp, "uScene", 0, targets.scene);
     sampler(pp, "uPrev", 1, previous ? targets.prev : targets.scene);
     sampler(pp, "uFeed", 2, last);
-    setAll(pp, { ...shared, uPalette: scene.palette, uVar: scene.vars, ...post, uMix: previous ? post.uMix : 1 });
+    sampler(pp, "uLaser", 3, beams ? targets.lasers : targets.scene);
+    setAll(pp, {
+      ...shared,
+      uPalette: scene.palette,
+      uVar: scene.vars,
+      ...post,
+      uMix: previous ? post.uMix : 1,
+      uLaserMix: beams ? lasers.amount : 0,
+    });
     draw(out);
 
     use(copy, "copy");

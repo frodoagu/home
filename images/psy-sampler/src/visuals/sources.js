@@ -105,22 +105,18 @@ export async function micSource({ media = navigator.mediaDevices, createContext 
   };
 }
 
-// A pad every two bars and a lead on the offbeats at IDLE_BPM, so the show
-// breathes while nothing plays: calm, no kick, no drops.
+// Bar lines at IDLE_BPM and nothing else while nothing plays: the show keeps
+// drifting and changing scene, but no hit means nothing pulses on the beat.
+// They are `rest` bars: the stage does not count them as music.
 export function idleSource({ bpm = IDLE_BPM, now = performance.now() } = {}) {
-  const beatMs = 60000 / bpm;
-  let next = 0; // next beat to send
-  const start = now;
-  const sent = [{ kind: "lanes", time: now, variants: ["pad", "lead"] }];
+  const barMs = (4 * 60000) / bpm;
+  let next = 0; // next bar to send
   return {
     kind: "idle",
     poll(t) {
-      const out = sent.splice(0);
-      while (start + next * beatMs <= t + 100) {
-        const time = start + next * beatMs;
-        if (next % 4 === 0) out.push({ kind: "bar", time, bar: next / 4, bpm });
-        if (next % 8 === 0) out.push({ kind: "hit", layer: "pad", time });
-        out.push({ kind: "hit", layer: "lead", time: time + beatMs / 2 });
+      const out = [];
+      while (now + next * barMs <= t + 100) {
+        out.push({ kind: "bar", time: now + next * barMs, bar: next, bpm, rest: true });
         next++;
       }
       return out;
