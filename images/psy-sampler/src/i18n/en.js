@@ -89,6 +89,7 @@ export default {
         title: "Editing a sound (▾)",
         items: [
           ["▾", "Opens the editor under the layer; one is open at a time."],
+          ["Foldable sections", "Filter and distortion, Modulation, Groove and space and Pattern open with a click on their title, and one you open stays open in every editor. «on» marks one that still changes the sound while folded."],
           ["Hits", "Kick, percussion and glitch: click a step for hit → accent → empty. With the loop stopped, each hit sounds as you set it; while it runs, nothing cuts into what is playing."],
           ["Piano roll", "Bass, lead and pad: click for note → accent → erase. On a phone each tap places a note of the «New note» length. Like hits, the note sounds only with the loop stopped."],
           ["Synth, Scale, Octave", "Change the voice, the notes the piano roll shows and the pitch of the part."],
@@ -594,6 +595,7 @@ export default {
     octave: "Octave",
     newNote: "New note",
     lengths: { 1: "1/16", 2: "1/8", 4: "1/4", 8: "1/2", 16: "1 bar", 32: "2 bars" },
+    foldOn: "on",
     insert: "Filter and distortion",
     filter: "Filter",
     filterTypes: { off: "Off", lowpass: "Lowpass", highpass: "Highpass", bandpass: "Bandpass", vowel: "Vowel (formants)" },

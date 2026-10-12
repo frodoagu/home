@@ -49,3 +49,23 @@ export function markIntroSeen(storage) {
     // Blocked: it shows again next visit.
   }
 }
+
+// Which of the editor's boxes are open (folds.js): a per-browser habit, kept
+// apart from the workspace so it never reaches a share link or the cloud.
+const FOLDS_KEY = "psy-sampler:folds";
+
+export function loadFolds(storage) {
+  try {
+    return JSON.parse(storage?.getItem(FOLDS_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+export function saveFolds(storage, folds) {
+  try {
+    storage?.setItem(FOLDS_KEY, JSON.stringify(folds));
+  } catch {
+    // Blocked: every box starts folded again next visit.
+  }
+}

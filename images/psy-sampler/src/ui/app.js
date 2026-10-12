@@ -47,6 +47,7 @@ import {
   toneOf,
 } from "../autopilot.js";
 import { coin, dress, fillOf } from "../dress.js";
+import { cleanFolds } from "../folds.js";
 import {
   IMPROV_DEFAULT,
   doubleSteps,
@@ -91,7 +92,7 @@ import {
   tourDue,
   tourLeft,
 } from "../snapshots.js";
-import { browserStorage, loadState, saveState } from "../storage.js";
+import { browserStorage, loadFolds, loadState, saveFolds, saveState } from "../storage.js";
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
   SNAP_PANEL,
@@ -180,6 +181,7 @@ export function mountApp(root, engine, opts = {}) {
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
     brush: resume?.brush ?? { ...BRUSH }, // what a click on an editor's grid paints, shared by every editor
     euclid: resume?.euclid ?? { ...EUCLID }, // the drum editors' euclid(k, n, rot), shared like the brush
+    folds: resume?.folds ?? cleanFolds(loadFolds(storage)), // the editors' open sections, per browser
   };
   let open = null; // the one open editor: { layer, id, editor }
   const veil = el("div", { class: "editor-veil", hidden: "" }); // dims the page around the open editor
@@ -1632,6 +1634,8 @@ export function mountApp(root, engine, opts = {}) {
       onDouble: () => askEdit(layer, id, "double"),
       onEdit: (action) => askEdit(layer, id, action),
       euclid: state.euclid,
+      folds: state.folds,
+      onFold: () => saveFolds(storage, state.folds),
       onReset: () => askEdit(layer, id, "reset"),
       onResetPart: () => askEdit(layer, id, "reset-part"),
       queued: state.queued.get(id) ?? new Set(),
@@ -1882,8 +1886,8 @@ export function mountApp(root, engine, opts = {}) {
 
   function remount(changes = {}) {
     const { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
-    const { drop, bar, autoVary } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary };
+    const { drop, bar, autoVary, folds } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary, folds };
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });
