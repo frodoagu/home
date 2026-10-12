@@ -2256,6 +2256,7 @@ describe("✨ AI", () => {
     $("#ai-vibe").value = "dark";
     $("#ai-vibe").dispatchEvent(new Event("change"));
     expect($(".ai-summary").textContent).toBe("LM Studio (qwen) · «dark»");
+    expect($(".status").textContent).toBe("Onda «dark» guardada: la IA la usa en la próxima fase que planee.");
     panel.open = false;
     panel.dispatchEvent(new Event("toggle"));
     expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).open).toBe(false);
@@ -2295,8 +2296,10 @@ describe("✨ AI", () => {
     $("#ai-vibe").dispatchEvent(new Event("change"));
     $("button.auto").click();
     expect(aiBtn().classList.contains("is-thinking")).toBe(true);
+    expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…");
     await flushPromises();
     expect(aiBtn().classList.contains("is-thinking")).toBe(false);
+    expect($(".section-queue .is-thinking")).toBeNull();
     const [ask] = ai.asks;
     expect(ask.name).toBe("chrome");
     expect(ask.prompt).toContain("Now playing: intro, 8 bars.");
@@ -2335,7 +2338,9 @@ describe("✨ AI", () => {
     $('[data-section="peak"]').click();
     expect(ai.asks[1].schema.properties.section.enum).toEqual(["peak"]);
     expect(ai.asks[1].prompt).toContain("The listener queued peak next");
+    expect($('.section-queue [data-queued="peak"]').classList.contains("is-thinking")).toBe(true);
     await flushPromises();
+    expect($(".section-queue .is-thinking")).toBeNull();
     expect(queue()).toEqual(["peak"]);
     $('[data-section="groove"]').click(); // behind peak: the head is the same
     expect(ai.asks).toHaveLength(2);
@@ -2365,9 +2370,12 @@ describe("✨ AI", () => {
     expect(queue()).toEqual(["breakdown"]);
     vibe("a full peak"); // the plan taken goes, the new one comes in
     expect(queue()).toEqual([]);
+    expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…");
+    expect($(".status").textContent).toBe("✨ Onda «a full peak»: la IA vuelve a planear lo que viene…");
     expect(ai.asks[1].prompt).toContain('The listener asks for: "a full peak".');
     await flushPromises();
     expect(queue()).toEqual(["peak"]);
+    expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada: sigue Pico.");
     vibe(" a full  peak "); // the same words: nothing to ask
     expect(ai.asks).toHaveLength(2);
     vibe("dark"); // the ask on its way is dropped
@@ -2380,6 +2388,7 @@ describe("✨ AI", () => {
     advanceSeconds(6 * BAR + 0.05); // the last loop: what comes next is decided
     vibe("calm");
     expect(ai.asks).toHaveLength(4);
+    expect($(".status").textContent).toBe("Onda «calm»: la próxima fase ya está decidida, entra en la que sigue.");
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
     expect(ai.asks[4].prompt).toContain('The listener asks for: "calm".');

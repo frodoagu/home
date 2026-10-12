@@ -894,8 +894,14 @@ export function mountApp(root, engine, opts = {}) {
     cueBtn.classList.toggle("is-armed", state.armed);
   }
 
+  // The ✨ AI's answer for the section after section n, on its way
+  // ({ n, abort, vibe }: `vibe` when a new vibe asked for it). Up here because
+  // showSection() shows it.
+  let planning = null;
+
   // Now: the section and the bars it has left, then the queue (✕ drops one
-  // before it plays). In its last loop the section coming next pulses.
+  // before it plays). In its last loop the section coming next pulses; while
+  // the ✨ AI thinks, so does the section it arranges, or a chip saying so.
   function showSection() {
     const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
@@ -926,6 +932,11 @@ export function mountApp(root, engine, opts = {}) {
       const li = el("li", { class: `queued is-auto${p.plan ? " is-ai" : ""}`, "data-queued": upcoming }, el("span", { text }));
       if (p.plan) li.title = tx.ai.planned;
       chips.push(li);
+    }
+    if (p && planning) {
+      if (!chips.length) chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking })));
+      chips[0].classList.add("is-thinking");
+      chips[0].title = tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -2147,7 +2158,6 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- ✨ AI ---- */
   let alive = true;
-  let planning = null; // { n, abort }: the model's answer for the section after section n, on its way
   let failing = false; // the last ask failed: said once, until one works
   const sectionNo = () => state.run.sections.length - 1;
   // Chrome's model where it runs, unless LM Studio was picked.
@@ -2175,6 +2185,7 @@ export function mountApp(root, engine, opts = {}) {
     if (document.activeElement !== endpointInput) endpointInput.value = endpoint;
     if (document.activeElement !== modelInput) modelInput.value = model;
     if (document.activeElement !== vibeInput) vibeInput.value = vibe;
+    showSection();
   }
 
   function setPrefs(changes) {
@@ -2216,14 +2227,15 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // The pilot takes a plan for the section after this one (it records it, so
-  // 🔗 Compartir can carry it), unless it comes too late.
+  // 🔗 Compartir can carry it), unless it comes too late. Returns the plan taken.
   function attach(raw) {
     const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
     const next = withPlan(state.pilot, plan);
-    if (!plan || next === state.pilot) return;
+    if (!plan || next === state.pilot) return null;
     state.pilot = next;
     state.run.plans[sectionNo()] = plan;
     showSection();
+    return plan;
   }
 
   // Asks the model for the section after this one, while the pilot can still
@@ -2259,7 +2271,8 @@ export function mountApp(root, engine, opts = {}) {
         (raw) => {
           if (planning?.abort !== abort) return;
           failing = false;
-          attach(raw);
+          const plan = attach(raw);
+          if (plan && planning.vibe) status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
         },
         () => {
           if (planning?.abort !== abort) return;
@@ -2326,6 +2339,12 @@ export function mountApp(root, engine, opts = {}) {
     if (vibe === state.aiPrefs.vibe) return;
     setPrefs({ vibe });
     replan({ vibe: true });
+    const p = state.auto ? state.pilot : null;
+    if (planning) {
+      planning.vibe = true;
+      status(tx.ai.vibeAsking(vibe));
+    } else if (p && !replaying() && p.left <= 1) status(tx.ai.vibeLater(vibe));
+    else status(tx.ai.vibeSaved(vibe));
     showSection();
   });
   if (ai?.chrome.supported()) {
