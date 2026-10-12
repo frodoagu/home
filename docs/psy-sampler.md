@@ -1720,7 +1720,9 @@ Scenes: **Mandelbulb** (power drifting, orbit breathing with the kick),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
 fold, rings of light per beat), **mandala** (mirrored sectors, petal rings
 blooming in log scale, a flower of life) and **op-art tunnel** (spirals, moiré
-or dots). Each takes four numbers from the director (`uVar`) for its variant.
+or dots in relief: ribs, ripples or domes, lit by a lamp circling behind the
+eye and grazed by each beat's ring of light). Each takes four numbers from the
+director (`uVar`) for its variant.
 
 The **lasers** are not a scene but a layer behind every scene: analytic beams
 in haze from one of three rigs (a fan from the back, two crossing banks, a cone

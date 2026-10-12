@@ -388,17 +388,29 @@ vec3 scene(vec2 uv) {
 }
 `;
 
-// An op-art tunnel: the plane taken to (angle, 1/radius), flying in, with a
-// pattern per variant (uVar.x): spiral stripes, moiré rings or dots,
-// round or square (uVar.y). A ring of light rolls down it each beat.
+// An op-art tunnel: the plane taken to (angle, 1/radius), which is a
+// cylinder (or a square duct, uVar.y) seen from its axis, flying in. Its wall
+// carries a pattern per variant (uVar.x) in relief: spiral ribs, moiré
+// ripples or domed studs, deeper with the bass. A lamp circles behind the
+// eye, and the ring of light rolling down each beat grazes the relief as it
+// passes.
 const TUNNEL = `
+// The wall's height at (angle, depth): 0 in the grooves, 1 on top.
+float relief(float a, float z, float n, float mode) {
+  if (mode < 1.0) return smoothstep(-0.9, 0.9, sin((a * n + z * 1.5) * TAU));
+  if (mode < 2.0) return 0.5 + 0.5 * sin(z * 24.0) * sin(z * 25.3 + a * TAU * n);
+  vec2 cell = fract(vec2(a * n * 2.0, z * 2.0)) - 0.5;
+  float R = 0.32 + 0.08 * uKick;
+  return smoothstep(0.0, 1.0, 1.0 - dot(cell, cell) / (R * R));
+}
+
 vec3 scene(vec2 uv) {
   uv *= rot(uTime * 0.12 + 0.4 * sin(uTime * 0.17));
   uv += 0.08 * vec2(sin(uTime * 0.3), cos(uTime * 0.23));
   float round_ = length(uv);
   float square = max(abs(uv.x), abs(uv.y));
-  float r = mix(round_, square, step(0.6, uVar.y));
-  r = max(r, 1e-3);
+  bool squared = uVar.y >= 0.6;
+  float r = max(squared ? square : round_, 1e-3);
   float a = atan(uv.y, uv.x) / TAU + 0.5;
   float z = 0.4 / r + uTime * (0.8 + 0.8 * uEnergy);
   a += z * 0.04 * sin(uTime * 0.21) + 0.02 * uBass;
@@ -415,9 +427,50 @@ vec3 scene(vec2 uv) {
     float d = length(cell);
     v = smoothstep(0.32 + 0.08 * uKick, 0.28, d);
   }
-  vec3 col = mix(pal(z * 0.04 + a * 0.5 + uVar.w) * 0.06, pal(z * 0.04 + a + uTime * 0.02 + uVar.w), v);
-  float ring = exp(-abs(fract(z * 0.25 - uBeats) - 0.5) * 20.0);
-  col += pal(uBeats * 0.1 + 0.5) * ring * (0.4 * uMusic + 1.6 * uKick);
+
+  // The wall point and its frame: outward normal, around, and down the tube.
+  vec3 P = vec3(uv, 0.4) / r;
+  vec2 out_ = squared ? (abs(uv.x) > abs(uv.y) ? vec2(sign(uv.x), 0.0) : vec2(0.0, sign(uv.y))) : uv / max(round_, 1e-3);
+  vec3 N = vec3(-out_, 0.0);
+  vec3 Ta = vec3(-out_.y, out_.x, 0.0);
+  // The relief's slope, flattened where a pixel spans many cells.
+  float h = relief(a, z, n, mode);
+  float ea = 0.004 / n, ez = 0.004;
+  vec2 grad = vec2((relief(a + ea, z, n, mode) - h) / ea / TAU, (relief(a, z + ez, n, mode) - h) / ez);
+  float freq = mode < 1.0 ? 1.5 : mode < 2.0 ? 25.0 : 2.0;
+  float depth = (mode < 1.0 ? 0.07 : mode < 2.0 ? 0.025 : 0.05) * (1.0 + 0.8 * uBass);
+  depth /= 1.0 + 8.0 * freq * fwidth(z);
+  vec3 nor = normalize(N - depth * (grad.x * Ta + vec3(0.0, 0.0, grad.y)));
+  vec3 V = -normalize(P);
+
+  // Colour around the tube, mirrored so it meets itself where atan wraps.
+  float hue = abs(fract(a) * 2.0 - 1.0);
+  vec3 ink = pal(z * 0.04 + hue + uTime * 0.02 + uVar.w);
+  vec3 base = mix(pal(z * 0.04 + hue * 0.5 + uVar.w) * 0.12, ink, v);
+  float ao = mix(0.4, 1.0, h);
+
+  vec3 lamp = vec3(0.5 * cos(uTime * 0.6 + uVar.w * TAU), 0.5 * sin(uTime * 0.6 + uVar.w * TAU), -0.25);
+  vec3 L = lamp - P;
+  float dl = length(L);
+  L /= dl;
+  float fall = 1.6 / (1.0 + 0.25 * dl * dl);
+  float dif = max(dot(nor, L), 0.0) * fall;
+  float spec = pow(max(dot(nor, normalize(L + V)), 0.0), 40.0) * fall;
+
+  // The nearest beat ring, on the axis at its depth.
+  float u = z * 0.25 - uBeats;
+  float dz = (floor(u) + 0.5 - u) * 4.0;
+  vec3 R = normalize(vec3(-P.xy, dz));
+  float ringPow = (0.4 * uMusic + 1.6 * uKick) * exp(-abs(dz) * 1.2);
+  float ringDif = max(dot(nor, R), 0.0) * ringPow;
+  float ringSpec = pow(max(dot(nor, normalize(R + V)), 0.0), 24.0) * ringPow;
+  vec3 ringCol = pal(uBeats * 0.1 + 0.5);
+
+  vec3 col = base * (0.2 + 1.3 * dif) * ao + base * ringCol * ringDif * 1.5 * ao;
+  col += mix(vec3(1.0), ink, 0.4) * spec * (0.5 + 0.6 * uLead + 0.5 * uKick);
+  col += ringCol * ringSpec * 0.8;
+  float ring = exp(-abs(fract(u) - 0.5) * 20.0);
+  col += ringCol * ring * (0.4 * uMusic + 1.6 * uKick) * 0.6;
   col *= smoothstep(0.0, 0.35, r);
   col += pal(0.1 + uTime * 0.03) * exp(-r * 10.0) * (0.6 + 1.5 * uKick);
   return col;
