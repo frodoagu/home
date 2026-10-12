@@ -1189,9 +1189,10 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 ## ✨ AI: a model plans the sections
 
 **✨ AI** (next to 🤖) hands one decision of the autopilot to a language model:
-**the section after the one playing** — which one, how many bars, which sounds
-each layer plays, how those sounds are dressed and what their melodic parts
-play, following the listener's **Vibe** (free text). The FX and the swaps inside
+**the sections ahead of the one playing**, kept **3 deep** (`AHEAD`) — for each,
+which one, how many bars, which sounds each layer plays, how those sounds are
+dressed and what their melodic parts play, following the listener's **Vibe**
+(free text). The FX and the swaps inside
 a section still come from the seed, and the section forms still hold (a
 breakdown has no kick, every section plays a lead or a pad).
 
@@ -1205,8 +1206,15 @@ breakdown has no kick, every section plays a lead or a pad).
 
 ### How a plan gets in
 
-- At the start of every section (`enterSection` in `app.js`) the page asks for
-  the next one (`planAhead`). The prompt (`planner.js` `planPrompt`) carries the
+- The page asks for one section at a time (`planAhead` in `app.js`), the first
+  one ahead with no plan, and each answer asks for the one after it until
+  `AHEAD` (3) are planned (`run.ahead`: `{ plan, why, queued }`, in order). At
+  the start of every section (`enterSection`) the plan made for it leaves the
+  list, the next one's goes to the pilot and the model is asked to refill the
+  third; if the pilot went somewhere else, every plan ahead goes. Each ask past
+  the first lists the sections already planned ("Already planned to follow
+  it": section, bars, the ids each names, the layers it leaves out) and asks
+  for the one after the last. The prompt (`planner.js` `planPrompt`) carries the
   style and BPM, the last 8 sections and what the 3 before the current one
   opened with (`run.sounds`), what plays, where the pilot usually goes from
   here (read off `SECTIONS[…].next` and its `odds`), the vibe, and every id the
@@ -1217,7 +1225,9 @@ breakdown has no kick, every section plays a lead or a pad).
   system prompt (`SYSTEM`) teaches the section forms, read off `SECTIONS`.
 - The theme line appears only where the pilot holds it (`THEME_PATH`: the
   build after a breakdown, the peak after a build), and says so plainly: the
-  pilot keeps that lead whatever the plan picks for the layer.
+  pilot keeps that lead whatever the plan picks for the layer. Past planned
+  sections, `themeAfter()` follows the hold through them (a planned
+  breakdown's theme is the lead it names).
 - The answer must follow `planSchema()`. It opens with **`why`**, one short
   sentence, so a small model gets a few tokens to reason before it commits to
   a section; the ✨ chip shows it as its tooltip, and `normalizePlan()` drops
@@ -1241,26 +1251,32 @@ breakdown has no kick, every section plays a lead or a pad).
 - The pilot takes a plan only **before the section's last loop**
   (`withPlan`): that loop announces what comes next and fires the riser into a
   peak, so a later answer would change a decision already made. An answer that
-  comes later is thrown away (the request is aborted when the last loop
-  starts) and the pilot picks as usual. A model that fails says so once in the
-  status line and the pilot carries on alone.
+  comes later is thrown away (the request for it is aborted when the last
+  loop starts) and the pilot picks as usual; the plans further ahead don't
+  care, and an ask still on its way when its section becomes the next one goes
+  to the pilot when it lands. A model that fails says so once in the status
+  line and the pilot carries on alone until the next section asks again.
 - In `advance()` a plan stands in for the `pick` of the next section — the
   queue still goes first — and for `arrange()`'s draws on the layers it names.
   **With no plan every draw is the one it always was**: a seed shared before
   the AI existed plays the same track.
-- A section queued by hand is the one the model is asked to arrange (the
-  schema allows only that section); queuing one when a plan for another is in
-  drops that plan and asks again.
-- A new **Vibe** does the same (`replan`): the plan already taken and any ask
-  on its way are dropped and the model is asked again with the new words, so
-  the very next section follows them. In the section's last loop that section
-  is decided already, so the new vibe starts with the one after it. The vibe
+- A section queued by hand is the one the model is asked to arrange in its
+  slot (the schema allows only that section). When the queue changes
+  (`requeue`), the plans ahead stay as long as the queued sections are theirs
+  (`keptAhead`); from the first that isn't, they go and the model plans again.
+  A plan asked for a queued section goes once that section is taken off the
+  queue.
+- A new **Vibe** drops every plan ahead (`revibe`) and any ask on its way, and
+  the model plans again with the new words, so the very next section follows
+  them. In the section's last loop that section is decided already, so its
+  plan stays and the new vibe starts with the one after it. The vibe
   applies on Enter (or leaving the field), and the status line says which of
   those happened: asking again, applied (with the section it picked), too late
   for this one, or just saved (autopilot off).
-- While an ask is on its way, ✨ pulses and so does the queue: the section
-  queued by hand the model is arranging, or a **✨ thinking…** chip where its
-  pick will show.
+- The queue shows the sections queued by hand, then a **✨** chip for each
+  planned one past them (its tooltip, the model's `why`). While an ask is on
+  its way, ✨ pulses and so does the queue: the section queued by hand the
+  model is arranging, or a **✨ thinking…** chip where its pick will show.
 - Requests run off the main thread's critical path: the Prompt API answers
   from Chrome's own process and LM Studio over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.

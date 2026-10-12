@@ -7,10 +7,12 @@ import {
   PLAN_MAX,
   PLAN_SECTIONS,
   SYSTEM,
+  keptAhead,
   normalizePlan,
   planPrompt,
   planSchema,
   readPlans,
+  themeAfter,
   whyOf,
 } from "./planner.js";
 import { normalize } from "./workspace.js";
@@ -82,6 +84,53 @@ describe("the prompt", () => {
     expect(planPrompt({ ...base, sections: ["breakdown"], next: "groove" })).not.toContain("theme");
     expect(planPrompt({ ...base, sections: ["breakdown"], next: "build" })).toContain(held);
     expect(planPrompt({ ...base, sections: ["peak"] })).not.toContain("theme");
+  });
+});
+
+describe("planning ahead", () => {
+  const base = { ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8 };
+  const planned = [
+    { section: "groove", bars: 16, layers: { kick: ["kick.long"], bass: ["bass.rolling"], pad: [] } },
+    { section: "build", bars: null, layers: {} },
+  ];
+
+  it("lists the sections already planned and asks for the one after the last", () => {
+    const prompt = planPrompt({ ...base, planned });
+    expect(prompt).toContain("Already planned to follow it, in order:\n- groove, 16 bars: kick.long, bass.rolling; no pad\n- build\n");
+    expect(prompt).toContain("After the planned build, the usual next is peak; now and then breakdown. Plan the section after it.");
+    expect(prompt).not.toContain("Plan the next section.");
+    expect(planPrompt({ ...base, planned, next: "breakdown" })).toContain("The listener queued breakdown after the planned build: plan that section.");
+    expect(SYSTEM).toContain("after the last of them");
+  });
+
+  it("says the theme where the last planned section leads into its hold", () => {
+    const prompt = planPrompt({ ...base, sections: ["peak"], planned: [{ section: "breakdown", bars: 8, layers: {} }], theme: ["lead.acid"] });
+    expect(prompt).toContain("If you plan a build, its lead is the theme, lead.acid");
+  });
+
+  it("follows the theme the pilot will hold through the planned sections", () => {
+    const active = { kick: "kick.long", "lead.arp": "lead.arp" };
+    const plan = (section, lead) => ({ section, bars: null, layers: lead ? { lead } : {} });
+    expect(themeAfter({ section: "breakdown" }, active)).toEqual(["lead.arp"]);
+    expect(themeAfter({ section: "build", theme: ["lead.bell"] }, active)).toEqual(["lead.bell"]);
+    expect(themeAfter({ section: "peak" }, active)).toEqual([]);
+    expect(themeAfter({ section: "breakdown" }, active, [plan("build")])).toEqual(["lead.arp"]); // held into the peak
+    expect(themeAfter({ section: "breakdown" }, active, [plan("build"), plan("peak")])).toEqual([]);
+    expect(themeAfter({ section: "peak" }, active, [plan("breakdown", ["lead.acid"])])).toEqual(["lead.acid"]);
+    expect(themeAfter({ section: "peak" }, active, [plan("breakdown")])).toEqual([]); // the pilot draws it
+    expect(themeAfter({ section: "groove" }, active, [plan("build")])).toEqual([]); // no breakdown before it
+  });
+
+  it("keeps the plans ahead that the queue still leads to", () => {
+    const entry = (section, queued = false) => ({ plan: { section }, queued });
+    const ahead = [entry("peak", true), entry("breakdown"), entry("build")];
+    expect(keptAhead(ahead, ["peak"])).toBe(3);
+    expect(keptAhead(ahead, ["peak", "breakdown"])).toBe(3);
+    expect(keptAhead(ahead, ["peak", "groove"])).toBe(1);
+    expect(keptAhead(ahead, ["groove"])).toBe(0);
+    expect(keptAhead(ahead, [])).toBe(0); // the peak was only planned because it was queued
+    expect(keptAhead([entry("groove"), entry("build")], [])).toBe(2);
+    expect(keptAhead([], ["peak"])).toBe(0);
   });
 });
 

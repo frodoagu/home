@@ -231,7 +231,7 @@ export default {
     vibeTitle: "What you are after, in your own words (Enter to apply): the AI keeps it in mind for every section",
     vibePlaceholder: "dark, hypnotic, long breaks…",
     thinking: "✨ thinking…",
-    thinkingTitle: "The AI is planning the next section",
+    thinkingTitle: "The AI is planning the sections ahead",
     vibeAsking: (vibe) => (vibe ? `✨ Vibe «${vibe}»: the AI is planning what comes next again…` : "✨ No vibe: the AI is planning what comes next again…"),
     vibeApplied: (vibe, section) => (vibe ? `✨ Vibe «${vibe}» applied: ${section} comes next.` : `✨ No vibe: ${section} comes next.`),
     vibeLater: (vibe) => `${vibe ? `Vibe «${vibe}»` : "No vibe"}: the next section is decided already, it starts with the one after.`,
