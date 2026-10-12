@@ -2563,7 +2563,7 @@ export function mountApp(root, engine, opts = {}) {
     if (saveVibe()) status(tx.ai.vibeSaved(state.aiPrefs.vibe));
   });
   vibeInput.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
+    if (e.key !== "Enter" || e.isComposing) return; // an IME's Enter picks a word
     e.preventDefault();
     applyVibe();
   });
