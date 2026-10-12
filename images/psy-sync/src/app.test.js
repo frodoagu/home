@@ -255,6 +255,15 @@ describe("one device per account", () => {
     expect((await put(undefined)).status).toBe(200); // an older page sends no device
   });
 
+  it("a save with no lease (expired, or a restart) takes it back instead of failing", async () => {
+    const cookie = await signIn();
+    await beat(cookie, LAPTOP);
+    clock += 71_000;
+    const put = await call("PUT", "/api/state", { cookie, body: { state: { bpm: 1 }, base: null, device: LAPTOP } });
+    expect(put.status).toBe(200);
+    expect((await beat(cookie, PHONE)).status).toBe(409);
+  });
+
   it("needs a session, an id and our origin", async () => {
     expect((await beat(undefined, LAPTOP)).status).toBe(401);
     const cookie = await signIn();

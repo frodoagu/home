@@ -146,8 +146,12 @@ export function createApp({
     const { state, base = null, force = false, device = null } = body ?? {};
     if (!state || typeof state !== "object" || Array.isArray(state)) return json({ error: "state must be an object" }, 400);
     // A device that lost the account must not save over the one playing now.
+    // With no lease (expired, or the pod restarted) nobody else claimed it:
+    // the save takes it back, like a beat, rather than cutting off the only
+    // device there is.
     const lease = holder(user.sub);
     if (device && lease && lease.device !== device) return json({ taken: true }, 409);
+    if (device && !lease && VISITOR_ID.test(device)) leases.set(user.sub, { device, playing: false, seenAt: now() });
     const stored = db.state(user.sub);
     if (stored && !force && stored.updated_at !== base) {
       return json({ state: JSON.parse(stored.data), updatedAt: stored.updated_at }, 409);
