@@ -28,12 +28,13 @@ const counts = (section) =>
 // Read off SECTIONS, so the model learns the same forms the pilot keeps.
 export const SYSTEM = [
   "You arrange a live electronic dance track (psytrance, techno) made of 2-bar loops grouped in sections.",
-  "Sections, their lengths in bars and how many sounds each layer plays in them:",
+  "Sections, their lengths in bars and how many sounds each layer usually plays in them:",
   ...SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} bars; ${counts(s)}`),
   "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
   "The lead a breakdown plays is the track's theme: it stays through the build and the peak after it.",
-  "Every section plays a lead or a pad. Keep some of the sounds playing now and change a layer or two at each section: continuity first, contrast from the section's form.",
-  "You plan the section after the one playing now: which section, its length in bars and the sounds of every layer, using only the ids listed for each layer. Follow the listener's wishes when there are any.",
+  "Every section plays a lead or a pad. With no wishes from the listener, keep some of the sounds playing now and change a layer or two at each section: continuity first, contrast from the section's form.",
+  "You plan the section after the one playing now: which section, its length in bars and the sounds of every layer, using only the ids listed for each layer. An empty list leaves that layer out.",
+  "The listener's wishes come first, before the usual counts and continuity: follow them boldly, so the change is clearly heard. Leave out every layer that does not fit them (minimal: no pad, little percussion, no glitch; ambient or deep: no kick, long pads; full or euphoric: every layer at its most) and pick the sounds, the section and the length that match their words.",
 ].join("\n");
 
 // "kick.dark (Dark tok: 250→62 Hz…)", with a copy's own name when it has one.
@@ -57,11 +58,13 @@ export function planPrompt({ style, bpm, lists, active, sections, bars, vibe = "
     `Sounds playing now: ${playing.length ? playing.join(", ") : "none"}.`,
   ];
   if (theme.length) lines.push(`The theme, which stays in the lead layer: ${theme.join(", ")}.`);
-  if (vibe) lines.push(`The listener asks for: ${JSON.stringify(vibe)}.`);
   lines.push("Sounds you can use, by layer:");
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue;
     lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map((id) => describe(id, names)).join("; ")}`);
+  }
+  if (vibe) {
+    lines.push(`The listener asks for: ${JSON.stringify(vibe)}. That comes first: shape the section to it and leave out the layers that do not fit.`);
   }
   lines.push(next ? `The listener queued ${next} next: plan that section.` : "Plan the next section.");
   return lines.join("\n");
@@ -100,9 +103,11 @@ export function planSchema({ lists, style, next = null }) {
  * Anyone's answer -> { section, bars, layers } or null. The section must be
  * one a plan may pick; `bars` that the section cannot last turn null (the
  * pilot draws a length); a layer keeps only ids in its pool, at most as many
- * as the section plays, and drops out (the pilot draws it) when that leaves
- * fewer than the section needs. Idempotent: a normalized plan comes back the
- * same, which is what lets a share link replay one.
+ * as the section plays. Fewer than the section usually plays is the plan's
+ * call, down to none: that is how a vibe leaves a layer out (the pilot still
+ * plays a lead or a pad). A layer named with nothing usable left (ids that
+ * are all foreign) drops out and the pilot draws it. Idempotent: a normalized
+ * plan comes back the same, which is what lets a share link replay one.
  */
 export function normalizePlan(raw, { lists, style }) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -114,9 +119,9 @@ export function normalizePlan(raw, { lists, style }) {
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id) || !Object.hasOwn(given, layer.id) || !Array.isArray(given[layer.id])) continue;
     const pool = poolOf(lists, layer.id, style);
-    const [lo, hi] = countRange(section, layer.id);
+    const hi = countRange(section, layer.id)[1];
     const ids = [...new Set(given[layer.id].filter((id) => typeof id === "string" && pool.includes(id)))].slice(0, hi);
-    if (ids.length >= lo) layers[layer.id] = ids;
+    if (ids.length || !given[layer.id].length) layers[layer.id] = ids;
   }
   return { section, bars, layers };
 }

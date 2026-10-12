@@ -10,6 +10,8 @@ describe("the prompt", () => {
   it("teaches the sections' forms, read off the autopilot", () => {
     expect(SYSTEM).toContain("- peak: 16 or 24 bars; kick 1, bass 1, perc 2-3, lead 1, pad 1, glitch 1");
     expect(SYSTEM).toContain("- breakdown: 8 or 16 bars; kick 0, bass 0, perc 0-1, lead 1, pad 1, glitch 0-1");
+    expect(SYSTEM).toContain("An empty list leaves that layer out.");
+    expect(SYSTEM).toContain("The listener's wishes come first");
   });
 
   it("says the style, what played, what plays now, the vibe and every sound it may use", () => {
@@ -26,7 +28,8 @@ describe("the prompt", () => {
     expect(prompt).toContain("Sections so far: build, peak, breakdown, build, peak, groove, build, peak."); // the last 8
     expect(prompt).toContain("Now playing: peak, 16 bars.");
     expect(prompt).toContain("Sounds playing now: kick.long, lead.acid~1.");
-    expect(prompt).toContain('The listener asks for: "oscuro \\"y\\" largo".');
+    expect(prompt).toContain('The listener asks for: "oscuro \\"y\\" largo". That comes first');
+    expect(prompt.indexOf("The listener asks for")).toBeGreaterThan(prompt.indexOf("Sounds you can use")); // last, so it weighs
     for (const id of poolOf(lists, "lead", "goa")) expect(prompt).toContain(`${id} (`);
     expect(prompt).toContain('lead.acid~1 ("Mi ácido", a copy of Acid: ');
     expect(prompt).not.toContain("kick.punchy"); // not goa's
@@ -119,11 +122,16 @@ describe("normalizePlan", () => {
     expect({}.kick).toBeUndefined();
   });
 
-  it("drops a layer left with fewer sounds than the section needs: the pilot draws it", () => {
+  it("keeps fewer sounds than the section usually plays, down to none: the vibe's call", () => {
     const out = normalizePlan({ section: "peak", layers: { kick: [], perc: ["perc.hat"], pad: [] } }, goa);
-    expect(out.layers).toEqual({});
+    expect(out.layers).toEqual({ kick: [], perc: ["perc.hat"], pad: [] });
     const bd = normalizePlan({ section: "breakdown", layers: { kick: [], perc: [], glitch: [] } }, goa);
-    expect(bd.layers).toEqual({ kick: [], perc: [], glitch: [] }); // a breakdown plays none of those
+    expect(bd.layers).toEqual({ kick: [], perc: [], glitch: [] });
+  });
+
+  it("drops a layer whose sounds are all foreign: the pilot draws it", () => {
+    const out = normalizePlan({ section: "peak", layers: { pad: ["pad.nope"], kick: ["kick.punchy"] } }, goa);
+    expect(out.layers).toEqual({});
   });
 
   it("every plan it keeps fits its section's shape", () => {
@@ -131,9 +139,7 @@ describe("normalizePlan", () => {
       const all = Object.fromEntries(Object.entries(lists).map(([layer, ids]) => [layer, ids]));
       const out = normalizePlan({ section, bars: SECTIONS[section].loops[0] * 2, layers: all }, { lists, style: "all" });
       for (const [layer, ids] of Object.entries(out.layers)) {
-        const [lo, hi] = countRange(section, layer);
-        expect(ids.length).toBeGreaterThanOrEqual(lo);
-        expect(ids.length).toBeLessThanOrEqual(hi);
+        expect(ids.length).toBeLessThanOrEqual(countRange(section, layer)[1]);
       }
     }
   });

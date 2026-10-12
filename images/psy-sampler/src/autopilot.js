@@ -267,19 +267,22 @@ function shuffle(list, rng) {
 }
 
 // A plan's variants for a layer that are still in its pool (the style may
-// have changed since), or null when the plan leaves the layer to the rng.
+// have changed since), or null when the plan leaves the layer to the rng:
+// it does not name it, or none of the sounds it names are left. An empty
+// list is the plan's own: the layer sits out.
 function planned(fixed, layerId, lists, style) {
   if (!Object.hasOwn(fixed, layerId)) return null;
   const pool = poolOf(lists, layerId, style);
-  return fixed[layerId].filter((id) => pool.includes(id));
+  const ids = fixed[layerId].filter((id) => pool.includes(id));
+  return ids.length || !fixed[layerId].length ? ids : null;
 }
 
 /**
  * The variants a section plays, built from what plays now. A playing variant
  * in `hold` (the theme) is always kept, after the same draws as any other.
- * `fixed` (a plan's layers) sets a layer outright when its count fits the
- * section; the other layers draw as usual, and with no plan every draw is the
- * same as ever.
+ * `fixed` (a plan's layers) sets a layer outright, at most as many as the
+ * section plays and as few as none; the other layers draw as usual, and with
+ * no plan every draw is the same as ever.
  */
 export function arrange(section, active, lists, rng, style = STYLE_DEFAULT, hold = [], fixed = {}) {
   const { shape } = SECTIONS[section];
@@ -296,7 +299,7 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT, hold
       given = [...held, ...given].slice(0, hi);
     }
     if (leftOut(style, layer.id)) wants[layer.id] = 0;
-    else if (given && given.length >= lo && given.length <= hi) {
+    else if (given) {
       own[layer.id] = given;
       wants[layer.id] = given.length;
     } else wants[layer.id] = lo + Math.floor(rng() * (hi - lo + 1));
