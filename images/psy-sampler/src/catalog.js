@@ -48,6 +48,16 @@ export const LAYERS = [
       "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape", "glitch.lasers",
     ],
   },
+  // Hooks from famous tracks (audio/classics.js), played by hand: the
+  // autopilot and the ✨ AI leave this layer alone.
+  {
+    id: "classic",
+    manual: true,
+    variants: [
+      "classic.sandstorm", "classic.axelF", "classic.popcorn", "classic.tetris", "classic.mountainKing",
+      "classic.furElise", "classic.toccata", "classic.funkytown", "classic.misirlou",
+    ],
+  },
   {
     id: "fx",
     oneShot: true,
@@ -70,6 +80,7 @@ export const SAMPLE_TEMPLATES = {
   lead: { from: "lead.melodic", transpose: -12 },
   pad: { from: "pad.chord" },
   glitch: { from: "glitch.blips" },
+  classic: { from: "classic.popcorn", transpose: -12 },
   fx: { from: "fx.impact" },
 };
 

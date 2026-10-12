@@ -30,7 +30,7 @@ describe("the prompt", () => {
   });
 
   it("knows the character of every looping sound, and of nothing else", () => {
-    const loops = new Set(LAYERS.filter((l) => !l.oneShot).map((l) => l.id));
+    const loops = new Set(LAYERS.filter((l) => !l.oneShot && !l.manual).map((l) => l.id));
     const ids = Object.keys(DEFAULTS).filter((id) => loops.has(id.split(".")[0]));
     expect(Object.keys(CHARACTER).sort()).toEqual(ids.sort());
   });

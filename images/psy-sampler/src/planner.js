@@ -16,7 +16,7 @@ import { MACROS, MACRO_MAX, moves, synthsFor } from "./dress.js";
 import { DEGREES, PART_LENGTHS, REST } from "./editing.js";
 import en from "./i18n/en.js";
 
-const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
+const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
 // An intro opens a track; a plan always picks what follows one.
 export const PLAN_SECTIONS = SECTION_IDS.filter((id) => id !== "intro");
 // Plans a share link carries at most: one per section, about 6 h of track.

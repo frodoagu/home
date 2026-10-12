@@ -179,7 +179,7 @@ describe("layout", () => {
   });
 
   it("has one row per layer plus the snapshots, and a 16-cell bar with the 4 beats marked", () => {
-    expect(root.querySelectorAll("section.layer")).toHaveLength(8);
+    expect(root.querySelectorAll("section.layer")).toHaveLength(9);
     expect(root.querySelector("section.layer:last-of-type").dataset.layer).toBe("snap");
     expect(root.querySelectorAll(".cell")).toHaveLength(16);
     expect([...root.querySelectorAll(".cell.beat")].map((c) => c.textContent)).toEqual(["1", "2", "3", "4"]);
