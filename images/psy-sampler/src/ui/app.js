@@ -13,8 +13,9 @@
 // everything rebuild the app through remount(), carrying what is playing.
 // The ✨ AI (planner.js, ai.js) asks a model for the sections ahead, one after
 // another until AHEAD of them are planned; the pilot takes the next one's plan
-// before the playing section's last loop. A share link's plans stand in for
-// it section by section.
+// before the playing section's last loop. From silence it plans before ▶: the
+// autopilot waits armed until the first AHEAD are in. A share link's plans
+// stand in for it section by section.
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
@@ -427,7 +428,9 @@ export function mountApp(root, engine, opts = {}) {
     autocomplete: "off",
     placeholder: tx.ai.vibePlaceholder,
   });
-  const vibeBox = field("ai-vibe", tx.ai.vibe, vibeInput, tx.ai.vibeTitle);
+  const vibeBtn = el("button", { type: "button", class: "ghost ai-apply", text: tx.ai.apply });
+  vibeBtn.title = tx.ai.applyTitle;
+  const vibeBox = field("ai-vibe", tx.ai.vibe, el("span", { class: "ai-model-pick" }, vibeInput, vibeBtn), tx.ai.vibeTitle);
   // Its settings fold away (remembered), with what they say in the summary.
   const aiSummary = el("span", { class: "ai-summary" });
   const aiPanel = el(
@@ -902,7 +905,7 @@ export function mountApp(root, engine, opts = {}) {
   // plays what was queued.
   function showCue() {
     mediaKeys?.setPlaying(engine.isRunning());
-    stopBtn.hidden = !engine.isRunning();
+    stopBtn.hidden = !engine.isRunning() && !(state.auto && state.armed); // ■ also lets go of an armed autopilot
     cueBtn.hidden = engine.isRunning();
     cueBtn.textContent = state.armed ? tx.transport.play : tx.transport.arm;
     cueBtn.title = state.armed ? tx.transport.playTitle : tx.transport.armTitle;
@@ -910,10 +913,10 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // The ✨ AI's answer for section number `at` of the run, on its way
-  // ({ at, abort, vibe }: `vibe` when a new vibe asked for it). Up here because
-  // showSection() shows it.
+  // ({ at, abort }). Up here because showSection() shows it.
   let planning = null;
   let vibeFresh = false; // the vibe changed and no plan has followed it yet
+  let cueWhenPlanned = false; // the armed autopilot plays once the ✨ AI stops asking
 
   // Now: the section and the bars it has left, then the queue (✕ drops one
   // before it plays) and the sections the ✨ AI planned past it. In its last
@@ -2089,10 +2092,12 @@ export function mountApp(root, engine, opts = {}) {
   // Over a playing mix the autopilot takes it as it is and carries on from
   // there (in `section`, when one was asked for); the background kick becomes
   // a real kick so it does not drop out. From silence it starts an intro, or
-  // `section`.
-  function engageAuto(section = null) {
+  // `section`; with the ✨ AI on it waits armed while the model plans the
+  // first sections and then plays (`arm`: until ▶).
+  function engageAuto(section = null, { arm = false } = {}) {
     if (!state.auto) stats?.count("autopilot"); // a new seed re-engages: not a start
-    const playing = { ...(state.pending ?? state.active) };
+    const rearm = state.auto && state.armed; // still from silence
+    const playing = rearm ? {} : { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
     state.tour = null;
@@ -2132,9 +2137,14 @@ export function mountApp(root, engine, opts = {}) {
     mixIn(start.active);
     toneIn(start.active);
     improviseIn(Object.values(start.active));
+    const wait = !engine.isRunning() && Boolean(ai) && state.aiPrefs.on && !state.replay;
+    cueWhenPlanned = wait && (rearm ? cueWhenPlanned : !arm);
+    if (cueWhenPlanned) engine.ensureContext(); // inside the click: the mix starts once planned
+    state.armed = wait;
     commit(start.active);
     enterSection();
     showSection();
+    if (cueWhenPlanned && !planning) cue();
   }
 
   // The snapshot autopilot starts from the snapshot queued or playing, or
@@ -2175,12 +2185,13 @@ export function mountApp(root, engine, opts = {}) {
     planAhead();
   }
 
-  // A new vibe: every plan made with the old words goes, but the one the
-  // last loop already announced, and the ✨ AI plans again with the new ones.
+  // A vibe applied: the plans made with the old words go and the ✨ AI plans
+  // again with the new ones. Playing, the next section's plan stays, so the
+  // model has a section's time to answer and none plays unplanned.
   function revibe() {
     const p = state.pilot;
     if (!p || !state.run || !state.aiPrefs.on || replaying()) return;
-    dropAhead(p.left > 1 ? 0 : 1);
+    dropAhead(state.armed ? 0 : 1);
     planAhead();
   }
 
@@ -2306,10 +2317,14 @@ export function mountApp(root, engine, opts = {}) {
     if (alive) showAi();
   }
 
+  // Stopped with nothing queued: the ✨ AI may arm the autopilot.
+  const silent = () => !state.auto && !state.tour && !state.armed && !engine.isRunning();
+
   // A click on ✨ (or a new engine, endpoint, key or model): gets the model
   // going, so the user hears now whether it answers: Chrome's may download
-  // first; an account must be linked.
-  function startAi() {
+  // first; an account must be linked. `arm`: in silence the autopilot then
+  // waits armed for ▶ while the model plans the first sections.
+  function startAi({ arm = false } = {}) {
     cancelPlanning();
     failing = false;
     const engine = engineNow();
@@ -2334,7 +2349,8 @@ export function mountApp(root, engine, opts = {}) {
         const known = knownOf(engine);
         if (model && known && !known.includes(model)) status(cloud ? tx.ai.modelGoneCloud(model, name) : tx.ai.modelGone(model));
         else status(tx.ai.ready(name));
-        planAhead();
+        if (arm && silent()) engageAuto(null, { arm: true });
+        else planAhead();
       },
       (err) => {
         if (!alive || !state.aiPrefs.on) return;
@@ -2367,6 +2383,7 @@ export function mountApp(root, engine, opts = {}) {
   // Asks the model for the first section ahead with no plan, until AHEAD of
   // them have one: each answer asks for the next. The next section's own
   // plan only while the pilot can still take it, before this one's last loop.
+  // An armed autopilot plays when the asks stop, or says it is ready.
   function planAhead() {
     const p = state.pilot;
     if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
@@ -2383,12 +2400,13 @@ export function mountApp(root, engine, opts = {}) {
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
+    const mix = state.pending ?? state.active; // armed, what ▶ plays
     const prompt = planPrompt({
       ...ctx,
       planned,
-      theme: themeAfter(p, state.active, planned),
+      theme: themeAfter(p, mix, planned),
       bpm: state.tempo,
-      active: state.active,
+      active: mix,
       sections: state.run.sections,
       sounds: state.run.sounds,
       dressed: Object.values(state.run.dress),
@@ -2416,8 +2434,10 @@ export function mountApp(root, engine, opts = {}) {
           if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
           ahead.push({ plan, why: whyOf(raw), queued: Boolean(next) });
           more = true;
-          if (fresh) vibeFresh = false;
-          if (planning.vibe) status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
+          if (fresh) {
+            vibeFresh = false;
+            status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
+          }
         },
         () => {
           if (planning?.abort !== abort) return;
@@ -2432,7 +2452,12 @@ export function mountApp(root, engine, opts = {}) {
         if (!alive) return;
         showAi();
         if (more) planAhead();
+        if (planning || !state.auto || !state.armed) return;
+        const { length } = state.run.ahead;
+        if (cueWhenPlanned) cue();
+        else status(length ? tx.ai.armed(length) : tx.ai.failed);
       });
+    if (state.armed) status(tx.ai.arming(slot + 1, AHEAD));
     showAi();
   }
 
@@ -2460,10 +2485,11 @@ export function mountApp(root, engine, opts = {}) {
     if (state.aiPrefs.on) {
       setPrefs({ on: false });
       cancelPlanning();
+      if (cueWhenPlanned) cue();
       return;
     }
     setPrefs({ on: true });
-    startAi();
+    startAi({ arm: true });
   });
   engineInput.addEventListener("change", () => {
     const engine = engineInput.value;
@@ -2512,19 +2538,38 @@ export function mountApp(root, engine, opts = {}) {
   aiPanel.addEventListener("toggle", () => {
     if (aiPanel.open !== state.aiPrefs.open) setPrefs({ open: aiPanel.open });
   });
-  vibeInput.addEventListener("change", () => {
+  // The vibe's words, kept as typed: the next plans asked follow them.
+  function saveVibe() {
     const vibe = vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200);
-    if (vibe === state.aiPrefs.vibe) return;
+    if (vibe === state.aiPrefs.vibe) return false;
     setPrefs({ vibe });
+    vibeFresh = Boolean(vibe);
+    return true;
+  }
+  // Aplicar (or Enter): the words now, even the same ones again.
+  function applyVibe() {
+    saveVibe();
+    const { vibe } = state.aiPrefs;
     vibeFresh = Boolean(vibe);
     revibe();
     const p = state.auto ? state.pilot : null;
-    if (planning) {
-      planning.vibe = true;
-      status(tx.ai.vibeAsking(vibe));
-    } else if (p && !replaying() && p.left <= 1) status(tx.ai.vibeLater(vibe));
-    else status(tx.ai.vibeSaved(vibe));
+    const kept = state.run?.ahead[0]?.plan.section;
+    if (planning && !state.armed) status(tx.ai.vibeAsking(vibe, p && kept ? tx.sections[kept] : null));
+    else if (p && state.aiPrefs.on && !replaying() && !planning && !state.armed) status(tx.ai.vibeLater(vibe));
+    else if (!planning) status(tx.ai.vibeSaved(vibe));
     showSection();
+  }
+  vibeInput.addEventListener("change", () => {
+    if (saveVibe()) status(tx.ai.vibeSaved(state.aiPrefs.vibe));
+  });
+  vibeInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    applyVibe();
+  });
+  vibeBtn.addEventListener("click", (e) => {
+    e.preventDefault(); // inside the field's label
+    applyVibe();
   });
   if (ai?.chrome.supported()) {
     ai.chrome.availability(lang()).then((can) => {
@@ -2629,6 +2674,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pilot = null;
     state.tour = null;
     cancelPlanning();
+    cueWhenPlanned = false;
     state.queuedSnap = null;
     state.ramp = null;
     state.newParts.clear();
@@ -2651,23 +2697,34 @@ export function mountApp(root, engine, opts = {}) {
   });
   // The keyboard's play/pause and stop keys press the same buttons.
   mediaKeys?.bind({ playing: engine.isRunning, play: () => cueBtn.click(), stop: () => stopBtn.click() });
+  // What was queued plays: ▶, or the armed autopilot once its plans are in.
+  function cue() {
+    if (!state.armed) return;
+    engine.ensureContext(); // inside ▶: the queued mix starts now
+    state.armed = false;
+    cueWhenPlanned = false;
+    if (state.queuedSnap) load(state.queuedSnap);
+    if (state.pending) state.active = state.pending;
+    state.pending = null;
+    state.queuedSnap = null;
+    sync();
+    showSection();
+  }
   cueBtn.addEventListener("click", () => {
     if (!state.armed) {
       state.armed = true;
       renderButtons();
       return;
     }
-    engine.ensureContext(); // inside the click: the queued mix starts now
-    state.armed = false;
-    if (state.queuedSnap) load(state.queuedSnap);
-    if (state.pending) state.active = state.pending;
-    state.pending = null;
-    state.queuedSnap = null;
-    sync();
+    cue();
   });
   autoBtn.addEventListener("click", () => {
     if (!state.auto) {
       engageAuto();
+      return;
+    }
+    if (state.armed) {
+      cue(); // armed, it starts now with the plans it has
       return;
     }
     state.auto = false;

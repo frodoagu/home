@@ -513,8 +513,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   melodic `parts` in scale degrees for the sounds it names — applied when that
   section starts, from factory/seed values so a replay lands the same, never on
   the held theme or an owned sound); a queue change keeps only the plans its
-  sections still lead to (`keptAhead`), a new vibe drops them all but the one
-  the last loop announced; the pilot takes the next section's plan
+  sections still lead to (`keptAhead`), an applied vibe (Aplicar/Enter) drops
+  them all but the next section's, a buffer so none plays unplanned while the
+  model thinks; from silence ✨ arms the autopilot and plans `AHEAD` before ▶
+  (🤖 plays by itself once they are in); the pilot takes the next section's plan
   only before the playing section's last loop (`withPlan`, else it is dropped),
   and with no plan `advance()`/`arrange()` must draw exactly as before (old
   seeds). A model's answer is untrusted like a link: `normalizePlan()` is its
