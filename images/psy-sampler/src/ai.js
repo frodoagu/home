@@ -225,7 +225,7 @@ const PROVIDERS = {
           max_tokens: 1024,
           system: SYSTEM,
           messages: [{ role: "user", content: prompt }],
-          tools: [{ name: "section_plan", description: "Plays the next section.", input_schema: schema }],
+          tools: [{ name: "section_plan", description: "Plays what you planned.", input_schema: schema }],
           tool_choice: { type: "tool", name: "section_plan" },
         }),
       );

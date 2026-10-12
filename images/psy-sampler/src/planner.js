@@ -7,7 +7,9 @@
 // Schema the answer must follow, and normalizePlan() is the gate every plan
 // goes through (the model's, or one from a share link) before the pilot takes
 // it (autopilot.js withPlan). FX and the swaps inside a section still come
-// from the seed.
+// from the seed. Before those, a run asks once for the form of the whole
+// track (formPrompt): the order of its next FORM sections, which the pilot
+// walks (autopilot.js withForm) and each section's plan then fills in.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
@@ -24,6 +26,9 @@ export const PLAN_SECTIONS = SECTION_IDS.filter((id) => id !== "intro");
 export const PLAN_MAX = 256;
 // Sections the ✨ AI keeps planned past the one playing.
 export const AHEAD = 3;
+// Sections the form of a track lays out: some 7 minutes at 145 BPM, a whole
+// track. Past it the ✨ AI picks each section as it plans it.
+export const FORM = 20;
 const HISTORY = 8; // sections the prompt recalls
 const RECALLED = 3; // of those, the ones it lists the sounds of
 const WHY_MAX = 200;
@@ -139,6 +144,7 @@ export const SYSTEM = [
   `You may also dress the sounds you plan, in dress: four macros from -${MACRO_MAX} to ${MACRO_MAX}, 0 leaving the sound as it is: tone (dark to bright), length (short to long; drums and glitches), drive (clean to distorted), motion (still to a sweeping filter and phaser; never on kick or bass). A melodic sound may also switch synth within its group ("" keeps it). Dress only the sounds the wish or the section asks for; leave the others out of dress.`,
   `And you may write the melodic parts, in parts, in scale degrees of the key: "1" the root, "8" the octave up, up to "${DEGREES.at(-1)}"; "${REST}" a rest. lead: ${PART_LENGTHS.lead} sixteenths, an 8-step motif and its answer, played motif, motif, motif, answer over the 2 bars (a lead made of chords walks them onto the degrees). pad: the degree of each bar's chord, ${PART_LENGTHS.pad} of them ("1", "6": i to VI). bass: the ${PART_LENGTHS.bass} sixteenths of one beat, repeated under every beat; the first lands on the kick, so "${REST}", "1", "1", "1" rolls between the kicks. A part goes to the sound you plan in that layer; an empty list leaves it as it is, and the theme's always stays.`,
   "Start the answer with why: one short sentence on what you picked and the reason.",
+  "Asked for the form of the track instead, you lay out only the order of its sections, from the one after those already coming: a whole track that rises and falls.",
 ].join("\n");
 
 // "kick.dark (Dark tok: 250→62 Hz…; dark, sharp, minimal)", with a copy's
@@ -226,6 +232,8 @@ export function planPrompt({
   fresh = false,
   names = {},
   next = null,
+  formed = false,
+  form = [],
   theme = [],
   planned = [],
 }) {
@@ -258,7 +266,9 @@ export function planPrompt({
   } else if (vibe) {
     lines.push(`The listener's standing wish: ${JSON.stringify(vibe)}. That comes first: keep the track true to it and leave out the layers that do not fit, while the sections still rise and fall.`);
   }
-  if (next) lines.push(`The listener queued ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  if (form.length) lines.push(`After it, the track goes on with: ${form.join(", ")}.`);
+  if (next && formed) lines.push(`Your form of the track has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  else if (next) lines.push(`The listener queued ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
   else if (planned.length) lines.push(`After the planned ${last}, the usual next is ${follows(last)}. Plan the section after it.`);
   else lines.push(`After the ${now}, the usual next is ${follows(now)}. Plan the next section.`);
   return lines.join("\n");
@@ -293,6 +303,41 @@ export function openingPrompt({ style, bpm, lists, section, active = {}, vibe = 
   if (vibe) lines.push(`The listener asked for: ${JSON.stringify(vibe)}. That comes first: open the track on it boldly, and leave out the layers that do not fit.`);
   lines.push(`Plan the opening ${section}.`);
   return lines.join("\n");
+}
+
+/**
+ * What to ask for the form of the track: the order of the FORM sections
+ * after the one playing (`sections` so far, the last one playing) and
+ * the ones `coming` already (queued by hand, or a form kept).
+ */
+export function formPrompt({ style, bpm, sections, coming = [], vibe = "" }) {
+  const lines = [
+    keyLine(style, bpm),
+    `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}.`,
+  ];
+  if (coming.length) lines.push(`Already coming after it, in order: ${coming.join(", ")}.`);
+  if (vibe) lines.push(`The listener's wish: ${JSON.stringify(vibe)}. Shape the form to it: which sections, how often.`);
+  lines.push(
+    `Lay out the form of the track: the next ${FORM} sections, in order, after ${coming.length ? `the ${coming.at(-1)} already coming` : `the ${sections.at(-1)}`}. Each one may be any of ${PLAN_SECTIONS.join(", ")}.`,
+  );
+  return lines.join("\n");
+}
+
+/** The JSON Schema of a form: why, then the sections in order. */
+export const formSchema = () => ({
+  type: "object",
+  properties: {
+    why: { type: "string", maxLength: WHY_MAX },
+    sections: { type: "array", items: { type: "string", enum: PLAN_SECTIONS }, maxItems: FORM },
+  },
+  required: ["why", "sections"],
+  additionalProperties: false,
+});
+
+/** Anyone's form -> the section ids it lays out that a plan may pick, at most FORM. */
+export function normalizeForm(raw) {
+  const given = raw && typeof raw === "object" && Array.isArray(raw.sections) ? raw.sections : [];
+  return given.filter((id) => PLAN_SECTIONS.includes(id)).slice(0, FORM);
 }
 
 /**
