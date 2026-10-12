@@ -2,8 +2,8 @@
 
 A live electronic music machine at `https://psy.agu.com.ar`. Each button loops a
 layer (kick, bass, percussion, lead, pad, glitch; 9-15 sounds per layer) over a
-grid of 32 sixteenths (2 bars), plus a layer of classics (hooks from famous
-tracks) played by hand; FX are one-shots outside the loop. **Everything
+grid of 32 sixteenths (2 bars), plus a layer of classics (famous melodies,
+whole, several loops long) played by hand; FX are one-shots outside the loop. **Everything
 is editable**: every button has a ▾ that opens its editor (steps, notes, synth,
 knobs, filter and distortion), any sound can be duplicated and renamed, and a
 signed-in user can upload samples to their profile and play any sound through
@@ -512,6 +512,22 @@ and wait for the bar line like ×2 (`reshape` in `app.js`); like any edit they
 switch a silent sound on. The euclid's k / n / rot are app state like the
 Click row. *Reset hits / notes* puts speed, iter and echo back too, and the
 kick's build-up bar plays in place, without them.
+
+### Parts longer than a loop
+
+A notes part can run 1, 2, 3, 4, 6 or 8 loops (`loops`, *Length* in the
+editor: 2 to 16 bars); its notes live on steps up to `loops × 32` and may cross
+a loop line. `positionAt` reads it from the bar its lane came in on (the
+engine's `lane.from`, absolute steps from ▶, floored to a bar), so a melody
+always starts from its beginning, wherever the loop is; a 2-bar part still
+counts from ▶, so nothing that existed before plays differently. Speed and
+iter apply over the whole part (×½ plays it over twice its loops). The piano
+roll shows one loop at a time, with a tab per pair of bars; its cells carry
+the part step, so clicks, drags, the brushes and ◀ ▶ ⇆ see the whole part
+(`size` in `editing.js`). A shorter *Length* drops the notes that no longer
+fit. 🎲 New part writes a 2-bar part, and *Reset notes* puts the factory length
+back. A loop WAV export (⤓) spans the longest part playing. Data saved before
+this (no `loops`) loads as a 2-bar part.
 
 ### Groove and space: swing, nudge, duck, pan
 
@@ -1553,15 +1569,15 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 | | Bwip | a square rising 3 octaves in 80 ms, before each offbeat |
 | | Tape stop | a saw slowing to 4 % of its pitch, the filter closing with it, at the end of the loop |
 | | Lasers | a saw diving from 4 kHz to 60 Hz in 150 ms on every off-beat 8th, the last of the bar accented |
-| Classics (stack, by hand) | Sandstorm | supersaw, Darude's runs (5, 7, 7, 7 sixteenths, each ending long) on A-D-C-G |
-| | Axel F | saw lead, Harold Faltermeyer's hook (and Crazy Frog's) |
-| | Popcorn | pluck, Gershon Kingsley's staccato bar, twice |
-| | Tetris | bit lead, Korobeiniki at speed ×½ (4 bars) |
-| | Mountain King | pluck, Grieg's theme in sixteenths, the top note sliding down E → D♯ → D |
-| | Für Elise | FM bell, Beethoven's theme at speed ×½ |
-| | Toccata | analog, Bach's mordent, held E and the run down to G♯ → A |
-| | Funkytown | rubber, Lipps Inc.'s riff, twice |
-| | Misirlou | acid, up and down A Phrygian dominant (Pump It) |
+| Classics (one at a time, by hand) | Sandstorm | supersaw, Darude's lead: the runs (5, 7, 7, 7 sixteenths, each ending long) on A-D-C-G, then A×5, A×7, D D twice. 4 bars |
+| | Axel F | saw lead, Harold Faltermeyer's hook (and Crazy Frog's), both phrases. 4 bars |
+| | Popcorn | pluck, Gershon Kingsley's staccato riff twice and its answer, twice, then all of it on the dominant. 16 bars |
+| | Tetris | bit lead, Korobeiniki parts A and B, in eighths at speed ×½. 16 bars |
+| | Mountain King | pluck, Grieg's theme in sixteenths, the top note sliding down E → D♯ → D. 2 bars |
+| | Für Elise | FM bell, Beethoven's A, A' into the bridge, A' and the bridge again, in its own 3/8 at speed ×½: 32 bars of 3/8 |
+| | Toccata | analog, Bach's mordent and run in three octaves, then the diminished chord rolled up over the pedal onto A major. 8 bars |
+| | Funkytown | funky, Lipps Inc.'s riff on A, again, on E, and on A with the pickup back into it. 8 bars |
+| | Misirlou | lead, up and down A Phrygian dominant (Dick Dale's; Pump It). 6 bars |
 | FX | Riser | BP noise 300 Hz → "To" (9 kHz) over "Length" (2 bars) |
 | | Riser + impact | the impact lands right at the end of the riser |
 | | Downlifter | BP noise "From" (8 kHz) → 150 Hz + sine 400→40 Hz |
@@ -1574,9 +1590,16 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 | | Tape stop | saw + sub falling from "From" (600 Hz) to 3 % over "Decay" (0.8 s), LP closing |
 
 The classics ([`classics.js`](../images/psy-sampler/src/audio/classics.js)) are
-moved to A like every other sound, so they sit on top of any mix; one that needs
-4 bars ships at speed ×½. Their scale is the piano roll's: the ones with notes
-outside A minor (D♯, B♭, C♯) open on the chromatic rows.
+moved to A like every other sound, so they sit on top of any mix, and run whole:
+each part is as many loops long as its melody (`loops`, see *Parts longer than a
+loop*). The ones written in eighths play at speed ×½. Their piano roll is
+chromatic and spans the melody, from the A below it to the A above. The notes
+come from published transcriptions (Ultimate Guitar tabs, with their rhythm
+where the tab gives it) checked against the recordings' structure, not from
+memory: Funkytown's rhythm is Slowhand's 128 BPM transcription, its synth
+Syntorial's patch recipe. Like a kick, a click replaces the classic playing;
+Ctrl+click (⌘) stacks another. The layer level is 0.4, above the lead's 0.3:
+a classic plays alone in its layer and carries the tune.
 
 FX length follows the BPM at the moment they fire. While the loop runs they come
 in on the next beat; with the loop stopped, right away.
@@ -1597,6 +1620,7 @@ cutoff, capped at 18 kHz):
 | Leads | Acid 303 | saw + LP Q 14 with an envelope on the drifting cutoff |
 | | Supersaw | 5 saws at ±9/±18 cents (Wavetable style) |
 | | Analog | 2 squares ±6 cents, enveloped LP (Analog style) |
+| | Funky | 2 squares two octaves apart + a sub square an octave down at 5 %, LP 9 kHz, full sustain, 20 ms release (Funkytown's lead) |
 | | Pluck | saw + square, LP 6 kHz → 300 Hz (Drift style) |
 | | Square | percussive square |
 | | Saw lead | sustained saw with delayed vibrato |

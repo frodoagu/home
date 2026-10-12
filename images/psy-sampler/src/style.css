@@ -2928,3 +2928,28 @@ html:has(dialog.help[open], dialog.intro[open]) {
     animation: none !important;
   }
 }
+
+/* A part longer than a loop: which 2 bars the piano roll shows. */
+.roll-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 4px;
+}
+
+.roll-pages[hidden] {
+  display: none;
+}
+
+.roll-pages button {
+  min-width: 44px;
+  padding: 4px 8px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.roll-pages button[aria-pressed="true"] {
+  color: var(--on-current);
+  background: var(--current);
+  border-color: var(--current);
+}

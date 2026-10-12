@@ -374,7 +374,7 @@ describe("autopilot", () => {
     for (const style of ["all", "psytrance"]) {
       for (const { active } of run(6, 120, { style })) expect(count(active, "classic"), style).toBe(0);
     }
-    const hand = { "classic.popcorn": "classic.popcorn" };
+    const hand = { classic: "classic.popcorn" };
     for (const [i, m] of run(7, 60).entries()) {
       const was = advance(m.pilot, m.active, lists, seeded(100 + i));
       const now = advance(m.pilot, { ...m.active, ...hand }, lists, seeded(100 + i));

@@ -48,10 +48,12 @@ export const LAYERS = [
       "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape", "glitch.lasers",
     ],
   },
-  // Hooks from famous tracks (audio/classics.js), played by hand: the
-  // autopilot and the ✨ AI leave this layer alone.
+  // Famous melodies, whole (audio/classics.js), played by hand: the
+  // autopilot and the ✨ AI leave this layer alone. One at a time, like a
+  // kick: Ctrl+click stacks another.
   {
     id: "classic",
+    exclusive: true,
     manual: true,
     variants: [
       "classic.sandstorm", "classic.axelF", "classic.popcorn", "classic.tetris", "classic.mountainKing",

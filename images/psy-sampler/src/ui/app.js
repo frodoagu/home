@@ -22,7 +22,7 @@
 import { CLOUDS, CLOUD_IDS, LMSTUDIO_URL, cleanEndpoint, cleanKey, isCloud, loadPrefs, savePrefs } from "../ai.js";
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
-import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
+import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
 import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
@@ -887,7 +887,14 @@ export function mountApp(root, engine, opts = {}) {
         levelBar.setAttribute("aria-valuenow", String(Math.round(dataOf(id).level * 100)));
         levelBar.setAttribute("aria-valuetext", LEVEL.fmt(dataOf(id).level));
       }
-      node.title = on && !layer.oneShot ? tx.tile.levelTitle : id === BG_KICK_VARIANT ? tx.tile.bgKick : "";
+      node.title =
+        on && !layer.oneShot
+          ? tx.tile.levelTitle
+          : id === BG_KICK_VARIANT
+            ? tx.tile.bgKick
+            : layer.exclusive
+              ? tx.tile.stackTitle
+              : "";
       const next = !layer.oneShot && isOn(target, id);
       node.classList.toggle("is-active", on);
       node.classList.toggle("is-queued", Boolean(state.pending) && next && !on);
@@ -1010,9 +1017,18 @@ export function mountApp(root, engine, opts = {}) {
     nextBtn.disabled = Boolean(tour.skip) || left <= 2;
   }
 
+  // What the open editor's playhead shows: the step, or the part step for a
+  // part longer than a loop (a snapshot's editor has no part).
+  function rollStep(id, step) {
+    if (step === null || defOf(id)?.kind !== "notes") return step;
+    const data = dataNow(id);
+    if ((data.loops ?? 1) === 1) return step;
+    return Math.floor(positionAt(step, engine.visibleLoop() ?? 0, data, engine.fromOf(id)));
+  }
+
   let shownStep = null;
   function paintStep(step) {
-    open?.editor.paint(step);
+    if (open) open.editor.paint(rollStep(open.id, step));
     if (step === shownStep) return;
     if (shownStep !== null) cells[shownStep % BAR_STEPS].classList.remove("is-current");
     if (step !== null) cells[step % BAR_STEPS].classList.add("is-current");
@@ -1039,7 +1055,7 @@ export function mountApp(root, engine, opts = {}) {
     if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
     const loop = engine.visibleLoop() ?? 0;
     for (const id of Object.values(lanes)) {
-      const events = eventsAt(id, step, false, live.get(id) ?? dataNow(id), loop);
+      const events = eventsAt(id, step, false, live.get(id) ?? dataNow(id), loop, engine.fromOf(id));
       const t = tiles.get(id);
       if (events.length && t) strike(t.node, events.some((ev) => ev.accent));
     }
@@ -1371,7 +1387,7 @@ export function mountApp(root, engine, opts = {}) {
   function writeNewPart(id) {
     const def = defOf(id);
     const data = dataOf(id);
-    setVariant(id, { ...data, notes: improvise(styleOf(id), scaleRows(data.scale, def.low, def.high)) });
+    setVariant(id, { ...data, loops: 1, notes: improvise(styleOf(id), scaleRows(data.scale, def.low, def.high)) });
     if (open?.id === id) {
       open.editor.show(dataNow(id));
       open.editor.showNewPart(false);
@@ -1416,7 +1432,7 @@ export function mountApp(root, engine, opts = {}) {
     },
     // Only the factory notes (or hits): the voice, the insert and the volume stay.
     "reset-part": (layer, id) => {
-      const keys = [...(defOf(id).kind === "drum" ? ["steps", "mods"] : ["notes"]), "speed", "iter", "echo"];
+      const keys = [...(defOf(id).kind === "drum" ? ["steps", "mods"] : ["notes", "loops"]), "speed", "iter", "echo"];
       const factory = defaultData(id);
       state.newParts.delete(id);
       setVariant(id, { ...dataOf(id), ...Object.fromEntries(keys.map((k) => [k, structuredClone(factory[k])])) });
@@ -1842,7 +1858,7 @@ export function mountApp(root, engine, opts = {}) {
     });
     open = { layer, id, editor };
     showEditor(editor.node);
-    editor.paint(engine.visibleStep());
+    editor.paint(rollStep(id, engine.visibleStep()));
     if (focusName) editor.focusName();
   }
 

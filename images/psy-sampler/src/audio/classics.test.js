@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLASSICS, CLASSIC_IDS, midiOf } from "./classics.js";
+import { CLASSICS, CLASSIC_IDS, line, midiOf } from "./classics.js";
 import { DEFAULTS } from "./patterns.js";
 import { layerById } from "../catalog.js";
 
@@ -22,13 +22,31 @@ describe("classics", () => {
     }
   });
 
-  it("never overlap themselves: one note at a time", () => {
+  it("run as many loops as the melody, to its last one", () => {
+    const loops = Object.fromEntries(CLASSIC_IDS.map((id) => [id, DEFAULTS[`classic.${id}`].data.loops]));
+    expect(loops).toEqual({
+      sandstorm: 2, axelF: 2, popcorn: 8, tetris: 4, mountainKing: 1, furElise: 6, toccata: 4, funkytown: 4, misirlou: 3,
+    });
+    for (const id of CLASSIC_IDS) {
+      const { notes, loops: n } = DEFAULTS[`classic.${id}`].data;
+      const end = Math.max(...notes.map((x) => x.step + x.len));
+      expect(end, id).toBeGreaterThan((n - 1) * 32);
+      expect(end, id).toBeLessThanOrEqual(n * 32);
+    }
+  });
+
+  it("never overlap a note on its own row", () => {
     for (const id of CLASSIC_IDS) {
       const notes = [...DEFAULTS[`classic.${id}`].data.notes].sort((a, b) => a.step - b.step);
-      for (let i = 1; i < notes.length; i++) {
-        expect(notes[i].step, id).toBeGreaterThanOrEqual(notes[i - 1].step + notes[i - 1].len);
+      for (const [i, n] of notes.entries()) {
+        const next = notes.slice(i + 1).find((m) => m.midi === n.midi);
+        if (next) expect(next.step, `${id} ${n.step}`).toBeGreaterThanOrEqual(n.step + n.len);
       }
     }
+  });
+
+  it("write a melody one note after the other", () => {
+    expect(line([["A4", 2], [null, 1], ["C5", 1]], 4)).toEqual([[4, "A4", 2], [7, "C5", 1]]);
   });
 
   it("start on the downbeat", () => {

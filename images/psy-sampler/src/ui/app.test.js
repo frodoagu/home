@@ -442,6 +442,22 @@ describe("editors", () => {
     expect(root.querySelectorAll(".stepbar .cell")).toHaveLength(16);
   });
 
+  it("a part longer than a loop pages its piano roll; Largo trims it", () => {
+    openEditor("classic.popcorn");
+    const pages = () => [...editor("classic.popcorn").querySelectorAll(".roll-pages button")];
+    const steps = () => [...editor("classic.popcorn").querySelectorAll(".roll [data-step]")].map((c) => Number(c.dataset.step));
+    expect(pages().map((b) => b.textContent)).toEqual(["1-2", "3-4", "5-6", "7-8", "9-10", "11-12", "13-14", "15-16"]);
+    expect(Math.max(...steps())).toBe(31);
+    pages()[2].click();
+    expect(Math.min(...steps())).toBe(64);
+    expect(pages()[2].getAttribute("aria-pressed")).toBe("true");
+    const loops = editor("classic.popcorn").querySelector('[data-control="loops"]');
+    loops.value = "2";
+    loops.dispatchEvent(new Event("change"));
+    expect(pages().map((b) => b.textContent)).toEqual(["1-2", "3-4"]);
+    expect(Math.min(...steps())).toBe(0);
+  });
+
   it("Cerrar closes the panel", () => {
     openEditor("pad.chord");
     editor("pad.chord").querySelector('[data-action="close"]').click();
