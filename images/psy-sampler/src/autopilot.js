@@ -45,6 +45,8 @@
 // after this one: which, how long, and the variants of the layers it names.
 // The pilot takes it before the section's last loop (`withPlan`), where it
 // stands in for the pick of the next section; the queue still goes first.
+// The ✨ AI may also lay out the form of the whole track (`withForm`): the
+// sections to walk, in order, after whatever is queued by hand.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { LEVEL } from "./audio/params.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
@@ -371,7 +373,13 @@ export const entering = (prev, next) => {
 const newLeads = (prev, next) => entering(prev, next).filter((id) => layerOfVariant(id) === "lead");
 
 const lengthOf = (section, rng) => pick(SECTIONS[section].loops, rng);
-const fresh = (section, length, queue = []) => ({ section, left: length, length, queue });
+const fresh = (section, length, queue = [], form = []) => ({
+  section,
+  left: length,
+  length,
+  queue,
+  ...(form.length ? { form } : {}),
+});
 
 /** Engaging from silence: `section` (an intro unless one was asked for). */
 export function startPilot(lists, rng, style = STYLE_DEFAULT, section = "intro") {
@@ -400,7 +408,7 @@ export function joinPilot(active, section = null) {
 }
 
 /** Jumps the pilot to `section` (a recalled snapshot's), keeping the queue. */
-export const moveTo = (pilot, section) => ({ ...fresh(section, SECTIONS[section].loops[0], pilot.queue) });
+export const moveTo = (pilot, section) => ({ ...fresh(section, SECTIONS[section].loops[0], pilot.queue, pilot.form) });
 
 /**
  * Hands the pilot a plan (planner.js normalizePlan) for the section after
@@ -410,10 +418,20 @@ export const moveTo = (pilot, section) => ({ ...fresh(section, SECTIONS[section]
  */
 export const withPlan = (pilot, plan) => (pilot && plan && pilot.left > 1 ? { ...pilot, plan } : pilot);
 
+/** The pilot walks `form` (section ids) after the queue, in place of its own picks. */
+export function withForm(pilot, form) {
+  const { form: _old, ...rest } = pilot;
+  return form.length ? { ...rest, form } : rest;
+}
+
+/** The sections coming after this one, as far as the queue and the form say. */
+export const sequence = (pilot) => [...pilot.queue, ...(pilot.form ?? [])];
+
 /* ---- by hand: the queue, "next", a new style ---- */
 
 export const enqueue = (pilot, section) => ({ ...pilot, queue: [...pilot.queue, section] });
 export const dequeue = (pilot, index) => ({ ...pilot, queue: pilot.queue.filter((_, i) => i !== index) });
+export const unform = (pilot, index) => withForm(pilot, (pilot.form ?? []).filter((_, i) => i !== index));
 // The current loop is the section's last: the next one moves on.
 export const skip = (pilot) => ({ ...pilot, left: 1, next: undefined });
 // The next loop rearranges the section with the new style's sounds.
@@ -462,6 +480,7 @@ export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
  */
 export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, changeBars = CHANGE_DEFAULT } = {}) {
   const queue = pilot.queue ?? [];
+  const form = pilot.form ?? [];
   const hold = pilot.theme ?? [];
   const plan = pilot.plan ?? null;
   if (pilot.left > 1) {
@@ -473,7 +492,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     const fx = [];
     let upcoming;
     if (left === 1) {
-      upcoming = queue[0] ?? plan?.section ?? nextOf(pilot.section, rng);
+      upcoming = queue[0] ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
       if (upcoming === "peak" || pilot.section === "build") fx.push(pick(BUILD_FX, rng));
     }
     return {
@@ -482,6 +501,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         left,
         length: pilot.length,
         queue,
+        ...(form.length ? { form } : {}),
         ...(upcoming ? { next: upcoming } : {}),
         ...(pilot.theme ? { theme: pilot.theme } : {}),
         ...(plan ? { plan } : {}),
@@ -491,7 +511,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       rewrite: newLeads(active, next),
     };
   }
-  const section = queue[0] ?? pilot.next ?? plan?.section ?? nextOf(pilot.section, rng);
+  const section = queue[0] ?? pilot.next ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
   const own = plan?.section === section ? plan : null; // a queued section beats the plan's
   const theme = themeOf(pilot, section, active);
   const next = arrange(section, active, lists, rng, style, theme, own?.layers);
@@ -507,7 +527,12 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
   }
   return {
     pilot: {
-      ...fresh(section, own?.bars ? own.bars / 2 : lengthOf(section, rng), queue[0] ? queue.slice(1) : queue),
+      ...fresh(
+        section,
+        own?.bars ? own.bars / 2 : lengthOf(section, rng),
+        queue[0] ? queue.slice(1) : queue,
+        !queue[0] && form[0] === section ? form.slice(1) : form,
+      ),
       ...(theme.length ? { theme } : {}),
     },
     active: next,

@@ -1284,7 +1284,8 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 silence **the opening** the track starts with (see [The opening](#the-opening)) — for each,
 which one, how many bars, which sounds each layer plays, how those sounds are
 dressed and what their melodic parts play, following the listener's **Vibe**
-(free text). The FX and the swaps inside
+(free text). Before those, it lays out **the form of the whole track** once
+per run: the order of its next 20 sections (`FORM`). The FX and the swaps inside
 a section still come from the seed, and the section forms still hold (a
 breakdown has no kick, every section plays a lead or a pad).
 
@@ -1295,6 +1296,38 @@ breakdown has no kick, every section plays a lead or a pad).
 | Runs | on the listener's machine; Chrome downloads it once for every site, and starting that download needs a click (✨) | wherever LM Studio runs; the page fetches it directly | at the provider; the page fetches it directly (all three allow browser CORS) |
 | Schema | `responseConstraint` (the JSON Schema) | `response_format: {type: "json_schema", …}` | OpenAI `response_format` (strict); Anthropic a forced tool (`tool_choice`) whose `input_schema` is the schema; Gemini `responseJsonSchema` |
 | Server cost | none | none: the Pi never sees the request | none for the Pi; the provider bills the listener's account |
+
+### The form of the track
+
+- The first ask of a run (`planForm` in `app.js`; from silence, right after
+  the opening, and before any `planAhead`) is for the **form**: `formPrompt()` gives the style, BPM, the sections so far,
+  those already coming (the queue, a form kept, the plans past them) and the
+  vibe, and asks for the next `FORM` (20) sections in order. 20 sections are
+  some 7 minutes at 145 BPM (about 13 bars each on average): a whole track,
+  not so long that the vibe can't change it. The answer follows `formSchema()`
+  (`why`, then `sections`: an enum list, `maxItems: FORM`) and
+  `normalizeForm()` is its gate: only sections a plan may pick (never `intro`),
+  at most `FORM`, any length down to none. An empty form, or a failed ask,
+  leaves the pilot picking as before; either way the run is `formed` and the
+  plans follow.
+- The pilot keeps it as `pilot.form` (`autopilot.js` `withForm`) and walks it
+  **after the hand queue** (`sequence()` = queue + form): in `advance()` it
+  stands between the queue and the plan, and each section it enters drops off
+  the front. A section queued by hand (or 💥's peak) plays first and the form
+  resumes after it; ⏭ and a snapshot jump keep it. Past its end the pilot and
+  the model pick each section as they always did.
+- Each section of the form is planned like a queued one: the schema allows
+  only that section, and the prompt says it is the form's ("Your form of the
+  track has groove next") and what follows it ("After it, the track goes on
+  with: …"). The queue shows the form as ✨ chips, the first 8 and then `+n`
+  (its tooltip lists the rest); each chip's tooltip is the plan's `why` once it
+  has one, else the form's. ✕ drops a section of the form (`unform`), and the
+  plans ahead re-plan from there (`keptAhead` against the whole `sequence()`).
+- **Aplicar** lays out the form again with the new vibe: what stays planned (the
+  next section, playing) stays, the rest of the form goes and the model is
+  asked for a new one after it, then plans its sections.
+- A share link doesn't carry the form: the plans it carries name each section,
+  so a replay walks the same ones.
 
 ### How a plan gets in
 

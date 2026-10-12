@@ -524,7 +524,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   first plans the opening from silence, armed (`openingPrompt`: more room
   than `SECTIONS.intro` via `OPENING`, a hit on the 1, laid over the seed's
   draw by `openWith`, dropped if it lands after ▶; 🔗 carries it as `&open=`),
-  then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
+  then lays out the form of the track once per run (`planForm`: the next
+  `FORM` (20) sections, walked as `pilot.form` after the hand queue, re-asked
+  by Aplicar), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
   which, bars, per-layer ids, plus `dress` macros and
   melodic `parts` in scale degrees for the sounds it names — applied when that
   section starts, from factory/seed values so a replay lands the same, never on

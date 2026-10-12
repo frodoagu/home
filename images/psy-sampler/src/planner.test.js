@@ -4,11 +4,15 @@ import { DEFAULTS } from "./audio/patterns.js";
 import { SECTIONS, STYLES, countRange, poolOf } from "./autopilot.js";
 import {
   CHARACTER,
+  FORM,
   OPENING_FX,
   PLAN_MAX,
   PLAN_SECTIONS,
   SYSTEM,
+  formPrompt,
+  formSchema,
   keptAhead,
+  normalizeForm,
   normalizeOpening,
   normalizePlan,
   openWith,
@@ -320,6 +324,38 @@ describe("normalizePlan", () => {
         expect(ids.length).toBeLessThanOrEqual(countRange(section, layer)[1]);
       }
     }
+  });
+});
+
+describe("the form of the track", () => {
+  it("asks for the next FORM sections after the ones coming, following the vibe", () => {
+    const prompt = formPrompt({ style: "goa", bpm: 145, sections: ["intro"], vibe: "dark, long breaks" });
+    expect(prompt).toContain("Style: Goa, 145 BPM. Key: ");
+    expect(prompt).toContain("Now playing: intro.");
+    expect(prompt).toContain('The listener\'s wish: "dark, long breaks".');
+    expect(prompt).toContain(`the next ${FORM} sections, in order, after the intro.`);
+    const after = formPrompt({ style: "goa", bpm: 145, sections: ["intro", "groove"], coming: ["build", "peak"] });
+    expect(after).toContain("Already coming after it, in order: build, peak.");
+    expect(after).toContain("after the peak already coming.");
+    expect(after).not.toContain("wish");
+    expect(SYSTEM).toContain("Asked for the form of the track");
+  });
+
+  it("is a list of the sections a plan may pick, at most FORM", () => {
+    const schema = formSchema();
+    expect(Object.keys(schema.properties)).toEqual(["why", "sections"]);
+    expect(schema.properties.sections).toMatchObject({ items: { enum: PLAN_SECTIONS }, maxItems: FORM });
+    expect(normalizeForm({ sections: ["groove", "intro", "nope", 3, "peak"] })).toEqual(["groove", "peak"]);
+    expect(normalizeForm({ sections: Array(FORM + 5).fill("build") })).toHaveLength(FORM);
+    expect(normalizeForm(null)).toEqual([]);
+    expect(normalizeForm({ sections: "groove" })).toEqual([]);
+  });
+
+  it("tells a plan where the form goes on", () => {
+    const prompt = planPrompt({ ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8, next: "groove", formed: true, form: ["build", "peak"] });
+    expect(prompt).toContain("After it, the track goes on with: build, peak.");
+    expect(prompt).toContain("Your form of the track has groove next: plan that section.");
+    expect(prompt).not.toContain("The listener queued");
   });
 });
 

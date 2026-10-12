@@ -11,7 +11,8 @@
 // snapshot autopilot plays the snapshots one after another instead.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
-// The ✨ AI (planner.js, ai.js) asks a model for the sections ahead, one after
+// The ✨ AI (planner.js, ai.js) first asks a model for the form of the track
+// (the order of its next FORM sections), then for the sections ahead, one after
 // another until AHEAD of them are planned; the pilot takes the next one's plan
 // before the playing section's last loop. From silence it plans before ▶: the
 // opening first (the section the track starts with, laid over the seed's
@@ -52,7 +53,10 @@ import {
   skip,
   startPilot,
   toneOf,
+  sequence,
   unbanned,
+  unform,
+  withForm,
   withPlan,
 } from "../autopilot.js";
 import { coin, fillOf, restyle } from "../dress.js";
@@ -79,7 +83,10 @@ import { langSwitch } from "./langSwitch.js";
 import {
   AHEAD,
   PLAN_SECTIONS,
+  formPrompt,
+  formSchema,
   keptAhead,
+  normalizeForm,
   normalizeOpening,
   normalizePlan,
   openWith,
@@ -164,7 +171,9 @@ const stamp = (d = new Date()) => {
 // ✨ AI's plans for the sections ahead ({ plan, why, queued }, in order; the
 // first is the one the pilot holds). From silence it also gets `opening`
 // (planner.js normalizeOpening; null once asked for in vain) and its `why`.
-const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [] });
+const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "" });
+// Form chips the queue shows before folding the rest into "+n".
+const FORM_SHOWN = 8;
 
 // Everything tied to the old workspace, dropped when another one replaces it.
 const fresh = () => ({
@@ -954,8 +963,9 @@ export function mountApp(root, engine, opts = {}) {
     cueBtn.classList.toggle("is-armed", state.armed);
   }
 
-  // The ✨ AI's answer for section number `at` of the run, on its way
-  // ({ at, abort }). Up here because showSection() shows it.
+  // The ✨ AI's answer for section number `at` of the run, or for the form
+  // (`form` set, no `at`), on its way ({ at, abort, form }). Up here because
+  // showSection() shows it.
   let planning = null;
   let vibeFresh = false; // the vibe changed and no plan has followed it yet
   let cueWhenPlanned = false; // the armed autopilot plays once the ✨ AI stops asking
@@ -988,22 +998,49 @@ export function mountApp(root, engine, opts = {}) {
       });
       return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), drop);
     });
-    // What comes after the queue: the plans (✨) as soon as there are some,
+    // What comes after the queue: the ✨ AI's form of the track (✕ drops a
+    // section of it too), then the plans past it as soon as there are some,
     // else the pilot's pick in its last loop.
     const ahead = p ? (state.run?.ahead ?? []) : [];
-    for (const { plan, why } of ahead.slice(p?.queue.length ?? 0)) {
-      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }));
-      li.title = why ? `${tx.ai.planned}: ${why}` : tx.ai.planned;
+    const form = p?.form ?? [];
+    const coming = p ? sequence(p) : [];
+    const why = (i, fallback) => {
+      const e = ahead[i];
+      const said = e && (i >= coming.length || e.plan.section === coming[i]) ? e.why : "";
+      return said ? `${tx.ai.planned}: ${said}` : fallback;
+    };
+    form.slice(0, FORM_SHOWN).forEach((id, i) => {
+      const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
+      drop.addEventListener("click", () => {
+        state.pilot = unform(state.pilot, i);
+        requeue();
+        showSection();
+      });
+      const formWhy = state.run?.formWhy;
+      const li = el("li", { class: "queued is-ai", "data-queued": id }, el("span", { text: `✨ ${tx.sections[id]}` }), drop);
+      li.title = why(p.queue.length + i, formWhy ? `${tx.ai.formed}: ${formWhy}` : tx.ai.formed);
+      chips.push(li);
+    });
+    if (form.length > FORM_SHOWN) {
+      const rest = form.slice(FORM_SHOWN);
+      const li = el("li", { class: "queued is-auto is-ai" }, el("span", { text: `+${rest.length}` }));
+      li.title = rest.map((id) => tx.sections[id]).join(" → ");
       chips.push(li);
     }
+    const shown = (p?.queue.length ?? 0) + form.length;
+    ahead.slice(shown).forEach(({ plan }, i) => {
+      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }));
+      li.title = why(shown + i, tx.ai.planned);
+      chips.push(li);
+    });
     if (p && !chips.length && p.left === 1 && p.next) {
       chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
     }
     if (p && planning) {
-      const slot = planning.at - sectionNo() - 1;
+      const slot = planning.form ? chips.length : planning.at - sectionNo() - 1;
       const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
       chip.classList.add("is-thinking");
-      chip.title = tx.ai.thinkingTitle;
+      chip.title = planning.form ? tx.ai.formingTitle : tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -1016,7 +1053,7 @@ export function mountApp(root, engine, opts = {}) {
   // pilot's next loop.
   function showDrop() {
     const p = state.auto ? state.pilot : null;
-    const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (p.queue[0] === "peak" && p.left <= 2)));
+    const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
     dropBtn.disabled = !engine.isRunning();
   }
@@ -2266,22 +2303,28 @@ export function mountApp(root, engine, opts = {}) {
   // the ✨ AI plans what now does.
   function requeue() {
     if (!state.pilot || !state.run || replaying()) return;
-    dropAhead(keptAhead(state.run.ahead, state.pilot.queue));
+    dropAhead(keptAhead(state.run.ahead, sequence(state.pilot)));
     planAhead();
   }
 
   // A vibe applied: the plans made with the old words go and the ✨ AI plans
-  // again with the new ones. Playing, the next section's plan stays, so the
-  // model has a section's time to answer and none plays unplanned. Armed,
-  // the track starts over from the seed, so the opening follows them too.
+  // again with the new ones, the form of the track first. Playing, the next
+  // section's plan stays (and its place in the form), so the model has a
+  // section's time to answer and none plays unplanned. Armed, the track
+  // starts over from the seed, so the opening follows them too.
   function revibe() {
-    const p = state.pilot;
-    if (!p || !state.run || !state.aiPrefs.on || replaying()) return;
+    if (!state.pilot || !state.run || !state.aiPrefs.on || replaying()) return;
     if (state.armed) {
       engageAuto(state.run.sections[0]);
       return;
     }
-    dropAhead(state.armed ? 0 : 1);
+    dropAhead(1);
+    if (planning?.form) cancelPlanning();
+    const p = state.pilot;
+    const decided = p.left === 1 && p.next ? 1 : 0; // its last loop already announced it
+    const kept = Math.max(state.run.ahead.length, decided) - p.queue.length;
+    state.pilot = withForm(p, (p.form ?? []).slice(0, Math.max(0, kept)));
+    state.run.formed = false;
     planAhead();
   }
 
@@ -2567,11 +2610,16 @@ export function mountApp(root, engine, opts = {}) {
       planOpening();
       return;
     }
-    const slot = state.run.ahead.length;
-    if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
-    const next = p.queue[slot] ?? null; // queued by hand: the model arranges that one
+    if (!state.run.formed) {
+      planForm(engine);
+      return;
+    }
+    const slot = state.run.ahead.length;
+    if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
+    const coming = sequence(p);
+    const next = coming[slot] ?? null; // queued by hand or by the form: the model arranges that one
     if (next && !PLAN_SECTIONS.includes(next)) return;
     const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
@@ -2583,6 +2631,8 @@ export function mountApp(root, engine, opts = {}) {
     const mix = state.pending ?? state.active; // armed, what ▶ plays
     const prompt = planPrompt({
       ...ctx,
+      formed: slot >= p.queue.length,
+      form: coming.slice(slot + 1),
       planned,
       theme: themeAfter(p, mix, planned),
       bpm: state.tempo,
@@ -2627,13 +2677,68 @@ export function mountApp(root, engine, opts = {}) {
         if (!alive) return;
         showAi();
         if (more) planAhead();
-        if (planning || !state.auto || !state.armed) return;
-        const length = state.run.ahead.length + (state.run.opening ? 1 : 0);
-        if (cueWhenPlanned) cue();
-        else status(length ? tx.ai.armed(length) : tx.ai.failed);
+        settle();
       });
     const opened = state.run.opening !== undefined ? 1 : 0;
-    if (state.armed) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
+    if (state.armed && !failing) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
+    showAi();
+  }
+
+  // An armed autopilot plays once the ✨ AI stops asking, or says it is ready.
+  function settle() {
+    if (planning || !state.auto || !state.armed) return;
+    const length = state.run.ahead.length + (state.run.opening ? 1 : 0);
+    if (cueWhenPlanned) cue();
+    else status(length ? tx.ai.armed(length) : tx.ai.failed);
+  }
+
+  // Asks the model once per run for the form of the track: the order of the
+  // sections after the queue (and the form kept, after a vibe), which the
+  // pilot walks and each plan then fills in. Answered or not, the plans follow.
+  function planForm(engine) {
+    const abort = new AbortController();
+    planning = { form: true, abort };
+    // The sections coming already: the queue, the form kept, the plans past them.
+    const comingNow = () => {
+      const coming = sequence(state.pilot);
+      for (const e of state.run.ahead.slice(coming.length)) coming.push(e.plan.section);
+      return coming;
+    };
+    const prompt = formPrompt({
+      style: ws.style,
+      bpm: state.tempo,
+      sections: state.run.sections,
+      coming: comingNow(),
+      vibe: state.aiPrefs.vibe,
+    });
+    ai[engine]
+      .plan(prompt, formSchema(), { ...reach(engine), signal: abort.signal })
+      .then(
+        (raw) => {
+          if (planning?.abort !== abort) return;
+          failing = false;
+          const form = normalizeForm(raw);
+          if (!form.length) return;
+          state.pilot = withForm(state.pilot, [...comingNow().slice(state.pilot.queue.length), ...form]);
+          state.run.formWhy = whyOf(raw);
+          if (!state.armed) status(tx.ai.formReady(form.length));
+        },
+        () => {
+          if (planning?.abort !== abort) return;
+          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
+          failing = true;
+        },
+      )
+      .finally(() => {
+        if (planning?.abort !== abort) return;
+        planning = null;
+        if (!alive || !state.run) return;
+        state.run.formed = true;
+        showAi();
+        planAhead();
+        settle();
+      });
+    if (state.armed) status(tx.ai.forming);
     showAi();
   }
 
@@ -2647,7 +2752,7 @@ export function mountApp(root, engine, opts = {}) {
     const ahead = state.run.ahead;
     const head = ahead.shift();
     if (head && head.plan.section !== state.pilot.section) ahead.length = 0;
-    if (planning && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
+    if (planning && !planning.form && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
     if (replaying()) {
       const raw = state.replay[sectionNo()];
       if (raw) attach(normalizePlan(raw, { lists: pilotLists(), style: ws.style }));
