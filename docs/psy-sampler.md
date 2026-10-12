@@ -1275,13 +1275,26 @@ breakdown has no kick, every section plays a lead or a pad).
   (`keptAhead`); from the first that isn't, they go and the model plans again.
   A plan asked for a queued section goes once that section is taken off the
   queue.
-- A new **Vibe** drops every plan ahead (`revibe`) and any ask on its way, and
-  the model plans again with the new words, so the very next section follows
-  them. In the section's last loop that section is decided already, so its
-  plan stays and the new vibe starts with the one after it. The vibe
-  applies on Enter (or leaving the field), and the status line says which of
-  those happened: asking again, applied (with the section it picked), too late
-  for this one, or just saved (autopilot off).
+- **From silence the ✨ AI plans before ▶.** Turning ✨ on with nothing playing
+  or queued arms the autopilot (🤖 lit, ▶ Arrancar, ■ to let go of it): the
+  intro is drawn but not played, and the model plans the first `AHEAD`
+  sections from what the intro will play (`state.pending`). The status line
+  counts the asks and says when they are in; ▶ plays. 🤖 from silence with ✨
+  on does the same and then plays by itself once the asks stop
+  (`cueWhenPlanned`: all planned, a failure, or nothing it can ask); ▶ or 🤖
+  again plays sooner with the plans it has. 🤖 resumes the AudioContext inside
+  its click, so the later start needs no gesture. A share link's replay and a
+  mix already playing or queued never wait.
+- **Aplicar** (or Enter in the field) applies the **Vibe** (`revibe`): the
+  plans made with the old words go, with any ask on its way for them, and the
+  model plans again with the new ones, even when the words are the same.
+  Playing, the **next section's plan stays** as a buffer: the model gets that
+  whole section to answer, so no section plays unplanned while it thinks, and
+  the vibe starts with the one after it (armed, nothing plays yet, so every
+  plan goes). Typing alone (leaving the field) only keeps the words for the
+  asks to come. The status line says what happened: asking again (and which
+  section stays), applied (from the section it picked), too late for this
+  one, or just saved (autopilot off).
 - The queue shows the sections queued by hand, then a **✨** chip for each
   planned one past them (its tooltip, the model's `why`). While an ask is on
   its way, ✨ pulses and so does the queue: the section queued by hand the

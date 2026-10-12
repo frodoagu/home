@@ -2235,6 +2235,16 @@ describe("✨ AI", () => {
     $("#ai-vibe").value = value;
     $("#ai-vibe").dispatchEvent(new Event("change"));
   };
+  const apply = (value) => {
+    if (value !== undefined) vibe(value);
+    $(".ai-apply").click();
+  };
+  const cue = () => $('[data-action="cue"]');
+  // A mix playing: ✨ has no silence to arm the autopilot in.
+  const playing = () => {
+    immediate();
+    click("kick.long");
+  };
 
   it("has no button without models", () => {
     expect(aiBtn().hidden).toBe(true);
@@ -2242,6 +2252,7 @@ describe("✨ AI", () => {
 
   it("offers Chrome's model where it runs and LM Studio always; the settings show while it is on", async () => {
     await remountWith(fakeAi());
+    playing();
     expect(aiBtn().hidden).toBe(false);
     expect($(".ai-panel").hidden).toBe(true);
     aiBtn().click();
@@ -2310,6 +2321,7 @@ describe("✨ AI", () => {
   it("LM Studio: the model is picked from what the server lists, read again with ↻", async () => {
     const models = ["gemma-3-4b", "qwen"];
     const ai = await remountWith(fakeAi({ chrome: "unavailable", models }));
+    playing();
     const options = () => [...root.querySelectorAll("#ai-model option")].map((o) => [o.value, o.textContent]);
     aiBtn().click();
     await flushPromises();
@@ -2336,6 +2348,7 @@ describe("✨ AI", () => {
 
   it("links an account with its API key, picks its model, and unlinks it", async () => {
     const ai = await remountWith(fakeAi());
+    playing();
     aiBtn().click();
     await flushPromises();
     expect($("#ai-key").closest("label").hidden).toBe(true);
@@ -2460,12 +2473,13 @@ describe("✨ AI", () => {
     const ai = await remountWith(fakeAi({ answers: [() => new Promise((resolve) => (answer = resolve))] }));
     aiBtn().click();
     $("button.auto").click();
+    cue().click(); // not waiting for the plans
     advanceSeconds(6 * BAR + 0.05); // into the intro's last loop
     expect(ai.asks[0].opts.signal.aborted).toBe(true);
     answer(BREAK);
     await flushPromises();
     expect(queue()).not.toContain("breakdown");
-    vibe("calm");
+    apply("calm");
     expect($(".status").textContent).toBe("Onda «calm»: la próxima fase ya está decidida, entra en la que sigue.");
     expect(ai.asks).toHaveLength(1);
     advanceSeconds(2 * BAR);
@@ -2479,6 +2493,8 @@ describe("✨ AI", () => {
     const ai = await remountWith(fakeAi({ answers: [BREAK, () => new Promise((resolve) => (answer = resolve)), GROOVE] }));
     aiBtn().click();
     $("button.auto").click();
+    $("button.auto").click(); // armed, 🤖 again starts it with the plans it has
+    expect(engine.isRunning()).toBe(true);
     await flushPromises();
     expect(ai.asks).toHaveLength(2); // the one after the breakdown, on its way
     advanceSeconds(8 * BAR);
@@ -2524,40 +2540,104 @@ describe("✨ AI", () => {
     expect(queue()).toEqual(["breakdown", "breakdown", "breakdown"]);
   });
 
-  it("a new vibe drops the plans made with the old one; in the last loop, all but the decided one", async () => {
+  it("Aplicar plans again with the vibe, keeping the next section's plan as a buffer", async () => {
     // The model follows the vibe: a full peak, or a break.
     const follows = (opts, schema, prompt) => Promise.resolve(prompt.includes("full peak") ? PEAK : BREAK);
     const ai = await remountWith(fakeAi({ answers: [follows] }));
     aiBtn().click();
     $("button.auto").click();
     await flushPromises();
+    expect(engine.isRunning()).toBe(true);
     expect(queue()).toEqual(["breakdown", "breakdown", "breakdown"]);
-    vibe("a full peak");
-    expect(queue()).toEqual([]);
+    vibe("a full peak"); // typed: kept for the next asks, nothing dropped
+    expect(ai.asks).toHaveLength(3);
+    expect($(".status").textContent).toBe("Onda «a full peak» guardada: la IA la usa en la próxima fase que planee.");
+    apply();
+    expect(queue()).toEqual(["breakdown"]);
     expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…");
-    expect($(".status").textContent).toBe("✨ Onda «a full peak»: la IA vuelve a planear lo que viene…");
+    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Break queda como estaba y la IA vuelve a planear lo que sigue…");
     expect(ai.asks[3].prompt).toContain('The listener just asked for: "a full peak".');
+    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- breakdown, 16 bars");
     await flushPromises();
-    expect(queue()).toEqual(["peak", "peak", "peak"]);
-    expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada: sigue Pico.");
+    expect(queue()).toEqual(["breakdown", "peak", "peak"]);
+    expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada desde Pico.");
     expect(ai.asks[4].prompt).toContain('The listener\'s standing wish: "a full peak".');
-    vibe(" a full  peak "); // the same words: nothing to ask
+    apply(" a full  peak "); // the same words: asked again all the same
     expect(ai.asks).toHaveLength(6);
-    vibe("dark"); // the ask on its way is dropped
-    vibe("darker");
+    expect(ai.asks[5].prompt).toContain('The listener just asked for: "a full peak".');
+    apply("dark"); // the ask on its way is dropped
+    apply("darker");
     expect(ai.asks[6].opts.signal.aborted).toBe(true);
     expect(ai.asks[7].prompt).toContain('The listener just asked for: "darker".');
     await flushPromises();
     expect(queue()).toEqual(["breakdown", "breakdown", "breakdown"]);
     advanceSeconds(6 * BAR + 0.05); // the last loop: what comes next is decided
-    vibe("a full peak");
-    expect($(".status").textContent).toBe("✨ Onda «a full peak»: la IA vuelve a planear lo que viene…");
+    $("#ai-vibe").value = "a full peak";
+    $("#ai-vibe").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); // Enter applies too
+    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Break queda como estaba y la IA vuelve a planear lo que sigue…");
     expect(queue()).toEqual(["breakdown"]);
-    expect(ai.asks.at(-1).prompt).toContain("Already planned to follow it, in order:\n- breakdown, 16 bars");
     await flushPromises();
     expect(queue()).toEqual(["breakdown", "peak", "peak"]);
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
+  });
+
+  it("✨ in silence arms the autopilot and plans the first sections before ▶", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK] }));
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.asks).toHaveLength(3);
+    expect(ai.asks[0].prompt).toContain("Now playing: intro, 8 bars.");
+    expect(ai.asks[0].prompt).not.toContain("Sounds playing now: none.");
+    expect(engine.isRunning()).toBe(false);
+    expect($("button.auto").getAttribute("aria-pressed")).toBe("true");
+    expect($(".section-badge").textContent).toBe("Intro");
+    expect(queue()).toEqual(["breakdown", "build", "peak"]);
+    expect($(".status").textContent).toBe("✨ Las primeras 3 fases están planeadas: ▶ para arrancar.");
+    expect(cue().textContent).toBe("▶ Arrancar");
+    expect($(".stop").hidden).toBe(false);
+    cue().click();
+    expect(engine.isRunning()).toBe(true);
+    advanceSeconds(8 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
+  });
+
+  it("■ lets go of the armed autopilot", async () => {
+    await remountWith(fakeAi({ answers: [BREAK] }));
+    aiBtn().click();
+    await flushPromises();
+    $(".stop").click();
+    expect($("button.auto").getAttribute("aria-pressed")).toBe("false");
+    expect($(".stop").hidden).toBe(true);
+    expect(cue().textContent).toBe("⏺ Armar");
+    expect(queue()).toEqual([]);
+  });
+
+  it("🤖 with ✨ on waits for the first sections' plans, then plays", async () => {
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ on: true }));
+    let answer;
+    const ai = await remountWith(fakeAi({ answers: [BREAK, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
+    $("button.auto").click();
+    expect(engine.isRunning()).toBe(false);
+    expect($(".status").textContent).toBe("✨ Planeando la fase 1 de 3 antes de arrancar… ▶ para arrancar ya.");
+    await flushPromises();
+    expect($(".status").textContent).toBe("✨ Planeando la fase 2 de 3 antes de arrancar… ▶ para arrancar ya.");
+    expect(engine.isRunning()).toBe(false);
+    answer(BUILD);
+    await flushPromises();
+    expect(ai.asks).toHaveLength(3);
+    expect(engine.isRunning()).toBe(true);
+    expect(queue()).toEqual(["breakdown", "build", "peak"]);
+  });
+
+  it("🤖 with ✨ on plays at once when the model fails", async () => {
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ on: true }));
+    await remountWith(fakeAi({ fail: true }));
+    $("button.auto").click();
+    await flushPromises();
+    expect(engine.isRunning()).toBe(true);
+    expect($(".status").textContent).toMatch(/La IA no respondió/);
   });
 
   it("when the model fails it says so once, and the pilot carries on alone", async () => {

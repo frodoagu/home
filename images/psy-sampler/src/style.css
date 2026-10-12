@@ -1014,7 +1014,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.ai-unlink {
+.ai-unlink,
+.ai-apply {
   padding: 2px 8px;
 }
 
