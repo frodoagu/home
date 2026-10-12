@@ -71,7 +71,7 @@ import {
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
-import { PLAN_SECTIONS, normalizePlan, planPrompt, planSchema } from "../planner.js";
+import { PLAN_SECTIONS, normalizePlan, planPrompt, planSchema, whyOf } from "../planner.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import {
   hasCustomSounds,
@@ -893,6 +893,8 @@ export function mountApp(root, engine, opts = {}) {
   // ({ n, abort, vibe }: `vibe` when a new vibe asked for it). Up here because
   // showSection() shows it.
   let planning = null;
+  let planWhy = ""; // what the model said of the plan the pilot holds
+  let vibeFresh = false; // the vibe changed and no plan has followed it yet
 
   // Now: the section and the bars it has left, then the queue (✕ drops one
   // before it plays). In its last loop the section coming next pulses; while
@@ -925,7 +927,7 @@ export function mountApp(root, engine, opts = {}) {
     if (upcoming) {
       const text = p.plan ? `✨ ${tx.sections[upcoming]}` : tx.sections[upcoming];
       const li = el("li", { class: `queued is-auto${p.plan ? " is-ai" : ""}`, "data-queued": upcoming }, el("span", { text }));
-      if (p.plan) li.title = tx.ai.planned;
+      if (p.plan) li.title = planWhy ? `${tx.ai.planned}: ${planWhy}` : tx.ai.planned;
       chips.push(li);
     }
     if (p && planning) {
@@ -2051,7 +2053,7 @@ export function mountApp(root, engine, opts = {}) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
       state.replay = null; // a link's track only replays from silence
-      state.run = { sections: [], plans: [] };
+      state.run = { sections: [], sounds: [], plans: [] };
       adoptDrop();
       dressIn(Object.values(playing).sort());
       mixIn(playing);
@@ -2073,7 +2075,7 @@ export function mountApp(root, engine, opts = {}) {
     state.queuedSnap = null;
     const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
-    state.run = { sections: [], plans: [] };
+    state.run = { sections: [], sounds: [], plans: [] };
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
@@ -2244,11 +2246,12 @@ export function mountApp(root, engine, opts = {}) {
 
   // The pilot takes a plan for the section after this one (it records it, so
   // 🔗 Compartir can carry it), unless it comes too late. Returns the plan taken.
-  function attach(raw) {
+  function attach(raw, why = "") {
     const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
     const next = withPlan(state.pilot, plan);
     if (!plan || next === state.pilot) return null;
     state.pilot = next;
+    planWhy = why;
     state.run.plans[sectionNo()] = plan;
     showSection();
     return plan;
@@ -2268,6 +2271,7 @@ export function mountApp(root, engine, opts = {}) {
     planning = { n, abort };
     const ctx = { lists: ws.lists, style: ws.style, next };
     const { endpoint, model, vibe } = state.aiPrefs;
+    const fresh = vibeFresh;
     // The lead the pilot will hold through what comes (autopilot.js themeOf).
     const leads = Object.values(state.active).filter((id) => id.startsWith("lead."));
     const theme = p.section === "breakdown" ? leads : p.section === "build" ? (p.theme ?? []) : [];
@@ -2277,8 +2281,10 @@ export function mountApp(root, engine, opts = {}) {
       bpm: state.tempo,
       active: state.active,
       sections: state.run.sections,
+      sounds: state.run.sounds,
       bars: p.length * 2,
       vibe,
+      fresh,
       names: ws.names,
     });
     ai[engineNow()]
@@ -2287,7 +2293,8 @@ export function mountApp(root, engine, opts = {}) {
         (raw) => {
           if (planning?.abort !== abort) return;
           failing = false;
-          const plan = attach(raw);
+          const plan = attach(raw, whyOf(raw));
+          if (plan && fresh) vibeFresh = false;
           if (plan && planning.vibe) status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
         },
         () => {
@@ -2309,8 +2316,9 @@ export function mountApp(root, engine, opts = {}) {
   // or the model's.
   function enterSection() {
     cancelPlanning();
-    state.run ??= { sections: [], plans: [] };
+    state.run ??= { sections: [], sounds: [], plans: [] };
     state.run.sections.push(state.pilot.section);
+    state.run.sounds[sectionNo()] = [...new Set(Object.values(state.pending ?? state.active))].sort();
     if (!replaying()) {
       planAhead();
       return;
@@ -2355,6 +2363,7 @@ export function mountApp(root, engine, opts = {}) {
     const vibe = vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200);
     if (vibe === state.aiPrefs.vibe) return;
     setPrefs({ vibe });
+    vibeFresh = Boolean(vibe);
     replan({ vibe: true });
     const p = state.auto ? state.pilot : null;
     if (planning) {

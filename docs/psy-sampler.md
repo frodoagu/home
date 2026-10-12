@@ -1207,10 +1207,21 @@ kick, every section plays a lead or a pad).
 
 - At the start of every section (`enterSection` in `app.js`) the page asks for
   the next one (`planAhead`). The prompt (`planner.js` `planPrompt`) carries the
-  style and BPM, the last 8 sections, what plays, the vibe, and every id the
-  style allows per layer with its English name; the system prompt (`SYSTEM`)
-  teaches the section forms, read off `SECTIONS`.
-- The answer must follow `planSchema()`: the section, the bars and every
+  style and BPM, the last 8 sections and what the 3 before the current one
+  opened with (`run.sounds`), what plays, where the pilot usually goes from
+  here (read off `SECTIONS[…].next` and its `odds`), the vibe, and every id the
+  style allows per layer with its English name and a few words of character
+  (`CHARACTER`: "dark, tense, ominous"; the i18n names say how a sound is made,
+  which doesn't map a vibe like "darker" to anything). A test keeps
+  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words. The
+  system prompt (`SYSTEM`) teaches the section forms, read off `SECTIONS`.
+- The theme line appears only where the pilot holds it (`THEME_PATH`: the
+  build after a breakdown, the peak after a build), and says so plainly: the
+  pilot keeps that lead whatever the plan picks for the layer.
+- The answer must follow `planSchema()`. It opens with **`why`**, one short
+  sentence, so a small model gets a few tokens to reason before it commits to
+  a section; the ✨ chip shows it as its tooltip, and `normalizePlan()` drops
+  it (links never carry it). Then the section, the bars and every
   layer's ids are **enums**, so a model that decodes against the schema can't
   name a sound that isn't there. Engines differ in how much of a schema they
   enforce, so **`normalizePlan()` is the gate**, as `normalize()` is for
@@ -1223,7 +1234,10 @@ kick, every section plays a lead or a pad).
   pilot draws it. Outside names are looked up with `Object.hasOwn`.
 - The vibe weighs: the system prompt puts the listener's wishes before the
   usual counts and continuity (with examples of what to leave out), and the
-  prompt ends on the vibe, right before asking for the plan.
+  prompt ends on the vibe, right before asking for the plan. A vibe no plan has
+  followed yet is **just asked** ("follow boldly, so the change is heard");
+  after that it is **standing** ("keep to it while the sections rise and
+  fall"), so a kept vibe doesn't push every section into a new contrast.
 - The pilot takes a plan only **before the section's last loop**
   (`withPlan`): that loop announces what comes next and fires the riser into a
   peak, so a later answer would change a decision already made. An answer that

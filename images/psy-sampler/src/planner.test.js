@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { LAYERS } from "./catalog.js";
+import { DEFAULTS } from "./audio/patterns.js";
 import { SECTIONS, STYLES, countRange, poolOf } from "./autopilot.js";
-import { PLAN_MAX, PLAN_SECTIONS, SYSTEM, normalizePlan, planPrompt, planSchema, readPlans } from "./planner.js";
+import {
+  CHARACTER,
+  PLAN_MAX,
+  PLAN_SECTIONS,
+  SYSTEM,
+  normalizePlan,
+  planPrompt,
+  planSchema,
+  readPlans,
+  whyOf,
+} from "./planner.js";
 import { normalize } from "./workspace.js";
 
 const { lists } = normalize({ lists: { lead: ["lead.acid~1"] } });
@@ -12,6 +24,13 @@ describe("the prompt", () => {
     expect(SYSTEM).toContain("- breakdown: 8 or 16 bars; kick 0, bass 0, perc 0-1, lead 1, pad 1, glitch 0-1");
     expect(SYSTEM).toContain("An empty list leaves that layer out.");
     expect(SYSTEM).toContain("The listener's wishes come first");
+    expect(SYSTEM).toContain("its length in bars (one of the lengths that section has)");
+  });
+
+  it("knows the character of every looping sound, and of nothing else", () => {
+    const loops = new Set(LAYERS.filter((l) => !l.oneShot).map((l) => l.id));
+    const ids = Object.keys(DEFAULTS).filter((id) => loops.has(id.split(".")[0]));
+    expect(Object.keys(CHARACTER).sort()).toEqual(ids.sort());
   });
 
   it("says the style, what played, what plays now, the vibe and every sound it may use", () => {
@@ -20,35 +39,57 @@ describe("the prompt", () => {
       bpm: 145.4,
       active: { kick: "kick.long", "lead.acid~1": "lead.acid~1" },
       sections: ["intro", "groove", "build", "peak", "breakdown", "build", "peak", "groove", "build", "peak"],
+      sounds: [[], [], [], [], [], [], ["kick.long", "pad.prog"], ["kick.long", "bass.rolling"], [], ["kick.long"]],
       bars: 16,
       vibe: 'oscuro "y" largo',
+      fresh: true,
       names: { "lead.acid~1": "Mi ácido" },
     });
     expect(prompt).toContain("Style: Goa, 145 BPM.");
     expect(prompt).toContain("Sections so far: build, peak, breakdown, build, peak, groove, build, peak."); // the last 8
     expect(prompt).toContain("Now playing: peak, 16 bars.");
     expect(prompt).toContain("Sounds playing now: kick.long, lead.acid~1.");
-    expect(prompt).toContain('The listener asks for: "oscuro \\"y\\" largo". That comes first');
-    expect(prompt.indexOf("The listener asks for")).toBeGreaterThan(prompt.indexOf("Sounds you can use")); // last, so it weighs
+    // the 3 before the one playing, those that opened with something
+    expect(prompt).toContain("What the sections before it opened with:\n- peak: kick.long, pad.prog\n- groove: kick.long, bass.rolling\n");
+    expect(prompt).toContain('The listener just asked for: "oscuro \\"y\\" largo". That comes first');
+    expect(prompt.indexOf("The listener just asked")).toBeGreaterThan(prompt.indexOf("Sounds you can use")); // last, so it weighs
     for (const id of poolOf(lists, "lead", "goa")) expect(prompt).toContain(`${id} (`);
-    expect(prompt).toContain('lead.acid~1 ("Mi ácido", a copy of Acid: ');
+    expect(prompt).toContain('lead.acid~1 ("Mi ácido", a copy of Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving)');
+    expect(prompt).toContain("After the peak, the usual next is breakdown or groove.");
     expect(prompt).not.toContain("kick.punchy"); // not goa's
     expect(prompt.trim().endsWith("Plan the next section.")).toBe(true);
   });
 
   it("leaves the vibe out when there is none, and asks for the queued section when there is one", () => {
     const base = { ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8 };
-    expect(planPrompt(base)).not.toContain("listener asks");
+    expect(planPrompt(base)).not.toContain("listener");
+    expect(planPrompt({ ...base, vibe: "dark" })).toContain('The listener\'s standing wish: "dark".');
+    expect(planPrompt(base)).not.toContain("What the sections before it");
+    expect(planPrompt(base)).toContain("After the intro, the usual next is groove. Plan the next section.");
+    expect(planPrompt({ ...base, sections: ["groove", "build"] })).toContain("the usual next is peak; now and then breakdown.");
     expect(planPrompt(base)).toContain("Sounds playing now: none.");
-    expect(planPrompt({ ...base, next: "breakdown" })).toContain("The listener queued breakdown next: plan that section.");
+    const queued = planPrompt({ ...base, next: "breakdown" });
+    expect(queued).toContain("The listener queued breakdown next: plan that section.");
+    expect(queued).not.toContain("usual next");
     expect(planPrompt(base)).not.toContain("theme");
-    expect(planPrompt({ ...base, theme: ["lead.acid"] })).toContain("The theme, which stays in the lead layer: lead.acid.");
+  });
+
+  it("says the theme only where the pilot holds it: the step after a breakdown or a build", () => {
+    const base = { ...goa, bpm: 145, active: {}, bars: 8, theme: ["lead.acid"] };
+    const held = "If you plan a build, its lead is the theme, lead.acid: the pilot keeps it there whatever you pick.";
+    expect(planPrompt({ ...base, sections: ["breakdown"] })).toContain(held);
+    expect(planPrompt({ ...base, sections: ["build"] })).toContain("If you plan a peak, its lead is the theme");
+    expect(planPrompt({ ...base, sections: ["breakdown"], next: "groove" })).not.toContain("theme");
+    expect(planPrompt({ ...base, sections: ["breakdown"], next: "build" })).toContain(held);
+    expect(planPrompt({ ...base, sections: ["peak"] })).not.toContain("theme");
   });
 });
 
 describe("the schema", () => {
   it("names every section a plan may pick, their lengths and each layer's pool as enums", () => {
     const schema = planSchema(goa);
+    expect(Object.keys(schema.properties)[0]).toBe("why"); // said before it picks
+    expect(schema.required).toEqual(["why", "section", "bars", "layers"]);
     expect(schema.properties.section.enum).toEqual(PLAN_SECTIONS);
     expect(PLAN_SECTIONS).not.toContain("intro");
     expect(schema.properties.bars.enum).toEqual([8, 16, 24]);
@@ -74,6 +115,18 @@ describe("the schema", () => {
     } finally {
       delete STYLES[style];
     }
+  });
+});
+
+describe("whyOf", () => {
+  it("keeps the model's sentence on one short line, and nothing else", () => {
+    expect(whyOf({ why: "  a dark\n break " })).toBe("a dark break");
+    expect(whyOf({ why: "x".repeat(500) })).toHaveLength(200);
+    for (const raw of [null, {}, { why: 3 }, "why"]) expect(whyOf(raw)).toBe("");
+  });
+
+  it("is not part of a plan", () => {
+    expect(normalizePlan({ why: "because", section: "groove", bars: 8 }, goa)).toEqual({ section: "groove", bars: 8, layers: {} });
   });
 });
 

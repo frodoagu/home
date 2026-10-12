@@ -2219,7 +2219,7 @@ describe("✨ AI", () => {
     await flushPromises();
     return ai;
   };
-  const BREAK = { section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
+  const BREAK = { why: "a dark break", section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
 
   it("has no button without models", () => {
     expect(aiBtn().hidden).toBe(true);
@@ -2333,16 +2333,19 @@ describe("✨ AI", () => {
     const [ask] = ai.asks;
     expect(ask.name).toBe("chrome");
     expect(ask.prompt).toContain("Now playing: intro, 8 bars.");
-    expect(ask.prompt).toContain('The listener asks for: "oscuro y largo".');
+    expect(ask.prompt).toContain('The listener just asked for: "oscuro y largo".');
     expect(ask.schema.properties.section.enum).toContain("breakdown");
     expect(queue()).toEqual(["breakdown"]);
     expect($(".section-queue .is-ai").textContent).toBe("✨ Break");
+    expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: a dark break");
     advanceSeconds(8 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
     expect($(".section-left").textContent).toBe("16 compases");
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
     expect(ai.asks).toHaveLength(2); // and now the one after the breakdown
     expect(ai.asks[1].prompt).toContain("Sections so far: intro, breakdown.");
+    expect(ai.asks[1].prompt).toMatch(/What the sections before it opened with:\n- intro: kick\./);
+    expect(ai.asks[1].prompt).toContain('The listener\'s standing wish: "oscuro y largo".'); // a plan followed it
   });
 
   it("an answer that comes after the section's last loop started is dropped", async () => {
@@ -2402,7 +2405,7 @@ describe("✨ AI", () => {
     expect(queue()).toEqual([]);
     expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…");
     expect($(".status").textContent).toBe("✨ Onda «a full peak»: la IA vuelve a planear lo que viene…");
-    expect(ai.asks[1].prompt).toContain('The listener asks for: "a full peak".');
+    expect(ai.asks[1].prompt).toContain('The listener just asked for: "a full peak".');
     await flushPromises();
     expect(queue()).toEqual(["peak"]);
     expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada: sigue Pico.");
@@ -2411,7 +2414,7 @@ describe("✨ AI", () => {
     vibe("dark"); // the ask on its way is dropped
     vibe("darker");
     expect(ai.asks[2].opts.signal.aborted).toBe(true);
-    expect(ai.asks[3].prompt).toContain('The listener asks for: "darker".');
+    expect(ai.asks[3].prompt).toContain('The listener just asked for: "darker".');
     answer(PEAK);
     await flushPromises();
     expect(queue()).toEqual(["breakdown"]);
@@ -2421,7 +2424,7 @@ describe("✨ AI", () => {
     expect($(".status").textContent).toBe("Onda «calm»: la próxima fase ya está decidida, entra en la que sigue.");
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
-    expect(ai.asks[4].prompt).toContain('The listener asks for: "calm".');
+    expect(ai.asks[4].prompt).toContain('The listener just asked for: "calm".'); // no plan followed it yet
   });
 
   it("when the model fails it says so once, and the pilot carries on alone", async () => {
