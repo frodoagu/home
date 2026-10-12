@@ -8,8 +8,15 @@
 //                         is recorded for the anonymous-visitor metrics
 //   DELETE /api/session   sign out
 //   GET    /api/state     { state, updatedAt } or 404
-//   PUT    /api/state     { state, base, force? } -> { updatedAt }, or 409 with
-//                         the newer stored copy when `base` is stale
+//   PUT    /api/state     { state, base, force?, device? } -> { updatedAt }, or
+//                         409 with the newer stored copy when `base` is stale,
+//                         or 409 { taken: true } when another device holds the
+//                         account (see /api/device)
+//   PUT    /api/device    { device, playing, take? }: claim the account for this
+//                         device, and every beat after it -> { ok }, or 409
+//                         { playing } while another device holds it (`take`
+//                         takes it anyway)
+//   DELETE /api/device    { device }: let go of it (the tab is closing)
 //   DELETE /api/account   forget the user and their data
 //   GET    /api/samples   { samples: [{ id, name, type, bytes, createdAt }], used, limits }
 //   POST   /api/samples?name=…   the raw audio file -> 201 { id, … }; 413 too
@@ -25,6 +32,11 @@
 // The server never interprets a workspace: it stores an opaque JSON object
 // (size-capped) and the page runs it through normalize() on the way back in.
 // Samples are opaque too, past a check that they start like an audio file.
+//
+// An account plays on one device at a time. The device holding it beats
+// every few seconds; one that has not beaten for ACTIVE_MS has left. The
+// leases live in memory: a restart frees them all and the next beat takes
+// each one back, so they never touch the SD card.
 import { USAGE, dayOf } from "./db.js";
 import { verifyIdToken } from "./google.js";
 import { requestCounter } from "./metrics.js";
@@ -35,6 +47,7 @@ const MAX_BYTES = 256 * 1024;
 const MAX_VISITORS = 100_000;
 const MAX_USAGE_ROWS = 5000; // browsers reporting in one day
 const VISITOR_ID = /^[\w-]{16,64}$/;
+export const ACTIVE_MS = 70_000; // past a hidden tab's once-a-minute timers
 const ROUTES = new Set([
   "GET /api/health",
   "POST /api/session",
@@ -42,6 +55,8 @@ const ROUTES = new Set([
   "DELETE /api/session",
   "GET /api/state",
   "PUT /api/state",
+  "PUT /api/device",
+  "DELETE /api/device",
   "DELETE /api/account",
   "GET /api/samples",
   "POST /api/samples",
@@ -76,10 +91,19 @@ export function createApp({
   maxUsers = 5000,
   maxVisitors = MAX_VISITORS,
   maxUsageRows = MAX_USAGE_ROWS,
+  activeMs = ACTIVE_MS,
   samples: sampleLimits = {},
 }) {
   const sampleMax = { ...SAMPLE_LIMITS, ...sampleLimits };
   const requests = requestCounter();
+  const leases = new Map(); // sub -> { device, playing, seenAt }
+
+  function holder(sub) {
+    const lease = leases.get(sub);
+    if (lease && now() - lease.seenAt < activeMs) return lease;
+    leases.delete(sub);
+    return null;
+  }
 
   async function currentUser(req) {
     const sub = await readSession(key, cookieValue(req), now());
@@ -119,8 +143,15 @@ export function createApp({
   async function putState(req, user) {
     const { body, error } = await readBody(req);
     if (error) return empty(error);
-    const { state, base = null, force = false } = body ?? {};
+    const { state, base = null, force = false, device = null } = body ?? {};
     if (!state || typeof state !== "object" || Array.isArray(state)) return json({ error: "state must be an object" }, 400);
+    // A device that lost the account must not save over the one playing now.
+    // With no lease (expired, or the pod restarted) nobody else claimed it:
+    // the save takes it back, like a beat, rather than cutting off the only
+    // device there is.
+    const lease = holder(user.sub);
+    if (device && lease && lease.device !== device) return json({ taken: true }, 409);
+    if (device && !lease && VISITOR_ID.test(device)) leases.set(user.sub, { device, playing: false, seenAt: now() });
     const stored = db.state(user.sub);
     if (stored && !force && stored.updated_at !== base) {
       return json({ state: JSON.parse(stored.data), updatedAt: stored.updated_at }, 409);
@@ -129,6 +160,24 @@ export function createApp({
     const updatedAt = Math.max(now(), (stored?.updated_at ?? 0) + 1);
     db.putState(user.sub, JSON.stringify(state), updatedAt);
     return json({ updatedAt });
+  }
+
+  async function putDevice(req, user) {
+    const { body, error } = await readBody(req);
+    if (error) return empty(error);
+    const { device, playing = false, take = false } = body ?? {};
+    if (!VISITOR_ID.test(device ?? "")) return json({ error: "bad device" }, 400);
+    const lease = holder(user.sub);
+    if (lease && lease.device !== device && !take) return json({ playing: lease.playing }, 409);
+    leases.set(user.sub, { device, playing: playing === true, seenAt: now() });
+    return json({ ok: true });
+  }
+
+  async function deleteDevice(req, user) {
+    const { body, error } = await readBody(req);
+    if (error) return empty(error);
+    if (leases.get(user.sub)?.device === body?.device) leases.delete(user.sub);
+    return empty(204);
   }
 
   // Usage numbers come from the page, so anyone can send them: each one is
@@ -210,8 +259,11 @@ export function createApp({
       return stored ? json({ state: JSON.parse(stored.data), updatedAt: stored.updated_at }) : json({ error: "none" }, 404);
     }
     if (route === "PUT /api/state") return putState(req, user);
+    if (route === "PUT /api/device") return putDevice(req, user);
+    if (route === "DELETE /api/device") return deleteDevice(req, user);
     if (route === "DELETE /api/account") {
       db.deleteUser(user.sub);
+      leases.delete(user.sub);
       return empty(204, { "set-cookie": setCookie("", 0) });
     }
     if (route === "GET /api/samples") return listSamples(user);

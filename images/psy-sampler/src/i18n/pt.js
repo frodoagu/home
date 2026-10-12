@@ -436,12 +436,21 @@ export default {
     reload: "Recarregar",
     later: "Mais tarde",
   },
-  tab: {
-    playing: "Tem outra aba tocando",
-    open: "O sampler já está aberto em outra aba",
-    text: "Se você usar aqui, a outra é cortada: para de tocar e fica em espera. O que você editou lá já está salvo.",
-    close: "Para continuar na outra, feche esta aba.",
-    take: "Usar esta aba",
+  elsewhere: {
+    tab: {
+      playing: "Tem outra aba tocando",
+      open: "O sampler já está aberto em outra aba",
+      text: "Se você usar aqui, a outra é cortada: para de tocar e fica em espera. O que você editou lá já está salvo.",
+      close: "Para continuar na outra, feche esta aba.",
+      take: "Usar esta aba",
+    },
+    device: {
+      playing: "Sua conta está tocando em outro dispositivo",
+      open: "Sua conta está com o sampler aberto em outro dispositivo",
+      text: "Se você usar aqui, o outro é cortado: para de tocar e fica em espera, e aqui você continua do último que foi salvo lá.",
+      close: "Para continuar lá, feche esta aba.",
+      take: "Usar aqui",
+    },
   },
   intro: {
     title: "Isto é o Psy Layers",

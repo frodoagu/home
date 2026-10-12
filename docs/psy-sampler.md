@@ -791,7 +791,9 @@ the token itself and issues its own session cookie.
 | `GET /api/session` | `{ email }` (`null` when signed out: not an error on every visit); records the `X-Psy-Visitor` header |
 | `DELETE /api/session` | sign out |
 | `GET /api/state` | `{ state, updatedAt }` or 404 |
-| `PUT /api/state` | `{ state, base, force? }` → `{ updatedAt }`, or **409** with the stored copy when `base` is stale |
+| `PUT /api/state` | `{ state, base, force?, device? }` → `{ updatedAt }`, or **409** with the stored copy when `base` is stale, or **409** `{ taken: true }` when another device holds the account |
+| `PUT /api/device` | `{ device, playing, take? }`: claim the account for this device, and every beat after → `{ ok }`, or **409** `{ playing }` while another device holds it (`take` takes it anyway) |
+| `DELETE /api/device` | `{ device }`: let go of it (the tab is closing) |
 | `DELETE /api/account` | deletes the user and their workspace |
 | `POST /api/stats` | `{ visitor, played?, recordings?, … }`: usage since the last report, added to the browser's day (see *Usage* below) |
 
@@ -825,6 +827,36 @@ Each local save uploads 2.5 s after the last change, with `base` = the version i
 was built on; a 409 (another device saved in between) asks the same question.
 Hiding the tab uploads anything pending with `keepalive`. Offline, it stays local
 and uploads with the next change.
+
+### One device per account
+
+Two devices on one account kept saving over each other, and every stale one
+woke up to the "changed on another device" question. So an account plays on
+one device at a time, the way a browser runs one tab (*One tab at a time*):
+
+- **The lease** lives in psy-sync's memory, per account: `{ device, playing,
+  seenAt }`. The device id is the browser's visitor id, so the tabs of one
+  browser are one device (the tab lock already keeps them to one). The holder
+  beats `PUT /api/device` every 10 s with whether it plays; one that hasn't
+  beaten for 70 s (past a hidden tab's once-a-minute timers) has left. Nothing
+  touches SQLite, so the beats cost the SD card nothing; a restart frees every
+  account and the next beat takes it back.
+- **Signing in, or loading signed in**, claims it before anything syncs
+  (`cloud.init()` / `signIn()` wait for it). Free, or already this device's: on
+  with no question. Another device on it: "Your account is playing on another
+  device" (or "has it open"), the same modal as for a tab (`ui/elsewhere.js`),
+  and **Use it here** takes it (`take: true`). Playback stops while it asks.
+- **The device that lost it** hears so on its next beat, or when an upload
+  comes back `409 { taken: true }` (psy-sync refuses saves from a device that
+  doesn't hold the account). It stops, and reloads into the same question, so
+  it can take it back. What it never uploaded is **forfeited**: it marks its
+  last local save as synced, so taking it back pulls the other device's copy
+  instead of asking which one to keep.
+- Coming back to the tab beats at once, so a laptop that slept learns right
+  away. Closing the tab lets go (`DELETE /api/device`, `keepalive`), so the
+  next device takes it without asking; a page kept for back/forward keeps it.
+- An older psy-sync without the routes (404), or one that doesn't answer, counts
+  as held: the cloud save works as before.
 
 ### Samples
 

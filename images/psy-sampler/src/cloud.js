@@ -6,6 +6,11 @@
 //   - on sign-in / page load, reconcile() decides between pulling, pushing,
 //     doing nothing, or asking (both sides changed)
 //   - a 409 on upload means another device saved meanwhile: same question
+//   - the account plays on one device at a time: signing in (or a page load
+//     signed in) claims it from psy-sync, and with another device on it,
+//     ask() waits for you to take it over before anything syncs. The holder
+//     beats every BEAT_MS; the one that lost it hears so (on a beat or an
+//     upload), forfeits what it never uploaded and calls onDropped()
 //
 // What was last synced is remembered per browser (META_KEY) as the server's
 // updatedAt plus a hash of the content, so "dirty" survives a reload.
@@ -17,6 +22,7 @@ import { hashSeed } from "./share.js";
 const META_KEY = "psy-sampler:cloud";
 const VISITOR_KEY = "psy-sampler:visitor";
 const DEBOUNCE_MS = 2500;
+const BEAT_MS = 10_000;
 
 export const contentHash = (state) => hashSeed(JSON.stringify(state ?? null));
 
@@ -51,7 +57,16 @@ export function visitorId(storage) {
   }
 }
 
-export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storage, base = "/api", debounceMs = DEBOUNCE_MS } = {}) {
+export function createCloud({
+  fetch = globalThis.fetch?.bind(globalThis),
+  storage,
+  base = "/api",
+  debounceMs = DEBOUNCE_MS,
+  beatMs = BEAT_MS,
+  playing = () => false,
+  ask = async () => {},
+  onDropped = () => {},
+} = {}) {
   // checking: the first init() has not answered yet. savedAt: last time the
   // cloud copy matched this browser (ms), for the top bar.
   const info = { checking: true, available: false, clientId: null, user: null, phase: "idle", savedAt: null };
@@ -59,6 +74,11 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
   let timer = null;
   let pending = null; // the snapshot waiting for the debounce
   let busy = null; // the PUT in flight
+  let initing = null; // the init() on its way: a remount meanwhile joins it
+  let device; // this browser's id (the visitor id), the account's lease is on it
+  let holding = false; // this device has the account: it may upload
+  let beat = null;
+  let latest = null; // the last local save, for what a drop forfeits
 
   const emit = (event, data) => listeners.forEach((fn) => fn(event, data));
   const setPhase = (phase) => {
@@ -95,6 +115,61 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     return { status: res.status, data: type.includes("application/json") ? await res.json() : null };
   }
 
+  const deviceId = () => {
+    if (device === undefined) device = visitorId(storage) ?? globalThis.crypto?.randomUUID?.() ?? null;
+    return device;
+  };
+
+  async function sendBeat(take = false) {
+    const { status, data } = await call("PUT", "/device", { device: deviceId(), playing: Boolean(playing()), take });
+    return status === 409 ? { taken: true, playing: data?.playing === true } : { taken: false };
+  }
+
+  // Resolves once this device holds the account. A server without leases
+  // (older, or unreachable) answers anything but 409: held.
+  async function hold() {
+    if (deviceId()) {
+      const first = await sendBeat().catch(() => ({ taken: false }));
+      if (first.taken) {
+        await ask({ playing: first.playing });
+        await sendBeat(true).catch(() => {});
+      }
+    }
+    holding = true;
+    clearInterval(beat);
+    beat = setInterval(heartbeat, beatMs);
+  }
+
+  function letGo() {
+    holding = false;
+    clearInterval(beat);
+    beat = null;
+  }
+
+  async function heartbeat() {
+    if (!holding) return;
+    try {
+      if ((await sendBeat()).taken) drop();
+    } catch {
+      // Offline: the next beat tries again.
+    }
+  }
+
+  // Another device took the account. What never went up stays out: marking
+  // the last local save as synced makes the next load pull the other
+  // device's copy instead of asking which one to keep.
+  function drop() {
+    if (!holding) return;
+    letGo();
+    clearTimeout(timer);
+    timer = null;
+    pending = null;
+    const meta = readMeta();
+    if (meta && latest) writeMeta({ at: meta.at, hash: contentHash(latest) });
+    setPhase("idle");
+    onDropped();
+  }
+
   async function push(snapshot, { force = false, keepalive = false } = {}) {
     const meta = readMeta();
     setPhase("saving");
@@ -102,7 +177,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
       const { status, data } = await call(
         "PUT",
         "/state",
-        { state: snapshot, base: meta?.at ?? null, force },
+        { state: snapshot, base: meta?.at ?? null, force, device: deviceId() },
         { keepalive },
       );
       if (status === 200) {
@@ -110,6 +185,10 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
         info.savedAt = Date.now();
         setPhase("saved");
         return { ok: true };
+      }
+      if (status === 409 && data?.taken) {
+        drop();
+        return { taken: true };
       }
       if (status === 409) {
         setPhase("conflict");
@@ -129,7 +208,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     timer = null;
     const snapshot = pending;
     pending = null;
-    if (!snapshot || !info.user) return;
+    if (!snapshot || !info.user || !holding) return;
     await busy;
     busy = push(snapshot, opts).then((result) => {
       if (result.conflict) emit("conflict", result.conflict);
@@ -145,29 +224,35 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
       return () => listeners.delete(fn);
     },
 
-    /** Is the API there, and who is signed in. Never throws. */
-    async init() {
-      try {
-        const health = await call("GET", "/health");
-        info.available = Boolean(health.data?.ok);
-        if (info.available) {
-          info.clientId = health.data.clientId;
-          const visitor = visitorId(storage);
-          const me = await call("GET", "/session", undefined, visitor ? { headers: { "x-psy-visitor": visitor } } : {});
-          info.user = me.data?.email ? me.data : null;
+    /** Is the API there, and who is signed in (holding the account). Never throws. */
+    init() {
+      initing ??= (async () => {
+        try {
+          const health = await call("GET", "/health");
+          info.available = Boolean(health.data?.ok);
+          if (info.available) {
+            info.clientId = health.data.clientId;
+            const visitor = visitorId(storage);
+            const me = await call("GET", "/session", undefined, visitor ? { headers: { "x-psy-visitor": visitor } } : {});
+            if (me.data?.email) await hold();
+            info.user = me.data?.email ? me.data : null;
+          }
+        } catch {
+          info.available = false;
+        } finally {
+          info.checking = false;
+          initing = null;
         }
-      } catch {
-        info.available = false;
-      } finally {
-        info.checking = false;
-      }
-      emit("info", info);
-      return info;
+        emit("info", info);
+        return info;
+      })();
+      return initing;
     },
 
     async signIn(credential) {
       const { status, data } = await call("POST", "/session", { credential });
       if (status !== 200) throw new Error(data?.error ?? `HTTP ${status}`);
+      await hold();
       info.user = data;
       emit("user", data);
       return data;
@@ -175,6 +260,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
 
     async signOut() {
       await flushPending();
+      await this.release();
       await call("DELETE", "/session").catch(() => {});
       writeMeta(null);
       info.user = null;
@@ -185,6 +271,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
     async deleteAccount() {
       clearTimeout(timer);
       pending = null;
+      letGo();
       const { status } = await call("DELETE", "/account");
       if (status !== 204) throw new Error(`HTTP ${status}`);
       writeMeta(null);
@@ -212,6 +299,7 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
 
     /** A local save: upload it after a quiet moment, if it changed. */
     changed(snapshot) {
+      latest = snapshot;
       if (!info.user) return;
       if (readMeta()?.hash === contentHash(snapshot)) return;
       pending = snapshot;
@@ -222,5 +310,15 @@ export function createCloud({ fetch = globalThis.fetch?.bind(globalThis), storag
 
     /** Upload now (the page is being hidden: keepalive survives the unload). */
     flush: () => flushPending({ keepalive: true }),
+
+    /** Beat now (the tab came back: a device that lost it hears so at once). */
+    beat: heartbeat,
+
+    /** Let go of the account (the tab is closing): the next device takes it without asking. */
+    async release() {
+      if (!holding) return;
+      letGo();
+      if (deviceId()) await call("DELETE", "/device", { device: deviceId() }, { keepalive: true }).catch(() => {});
+    },
   };
 }

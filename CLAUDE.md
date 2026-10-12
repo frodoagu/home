@@ -501,7 +501,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (same shape, enforced by a test). One browser runs ONE sampler (`src/tabs.js`): the tab in use holds a
   Web Lock and the app mounts only once a new tab steals it (the notice
   asks first); the robbed tab stops, flushes and reloads. Don't mount the app
-  before `claimTab()` resolves. Cloud save is deliberately NOT behind
+  before `claimTab()` resolves. Likewise one DEVICE per account: psy-sync
+  keeps an in-memory lease (`PUT /api/device` beats, 70 s timeout, never
+  SQLite) and refuses saves from a device that lost it; `cloud.js` only
+  uploads while holding it. Cloud save is deliberately NOT behind
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through
   oauth2-proxy. The server stores the workspace opaquely; the page's

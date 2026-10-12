@@ -10,15 +10,35 @@ import { browserStorage, loadState } from "./storage.js";
 import { claimTab } from "./tabs.js";
 import { mountApp } from "./ui/app.js";
 import { showIntro } from "./ui/intro.js";
-import { askForTab } from "./ui/tabNotice.js";
+import { askToTake } from "./ui/elsewhere.js";
 import { showUpdate } from "./ui/updateNotice.js";
 import { watchVersion } from "./update.js";
 
 // The AudioContext is NOT created here: the engine builds it on the first
 // click (autoplay policy).
-const cloud = createCloud({ storage: browserStorage() });
 const samples = createSamples();
 const engine = createEngine({ sampleBuffer: samples.get });
+// Stop the way the button does, so the transport shows it.
+const stopPlaying = () => {
+  if (engine.isRunning()) document.querySelector("button.stop")?.click();
+};
+let leaving = false; // cut off: reloading, and the account is not ours to let go
+// The account plays on one device: with another one on it, this one asks
+// before taking it; one that lost it stops and reloads into that question.
+const cloud = createCloud({
+  storage: browserStorage(),
+  playing: engine.isRunning,
+  ask: ({ playing }) => {
+    stopPlaying();
+    return askToTake({ where: "device", playing });
+  },
+  onDropped: () => {
+    leaving = true;
+    stopPlaying();
+    stats.report();
+    location.reload();
+  },
+});
 // Seconds played and a few counts for psy-sync's usage numbers (stats.js).
 const stats = createStats({ engine, storage: browserStorage() });
 stats.start();
@@ -33,8 +53,9 @@ const ai = createAi();
 setLang(detectLang(loadState(browserStorage()).lang, navigator.languages ?? []));
 claimTab({
   playing: engine.isRunning,
-  ask: askForTab,
+  ask: ({ playing }) => askToTake({ where: "tab", playing }),
   onDropped: () => {
+    leaving = true;
     engine.stop();
     stats.report();
     cloud.flush().finally(() => location.reload());
@@ -49,10 +70,16 @@ claimTab({
 });
 // A save still waiting for its debounce goes up before the tab disappears,
 // and so does the usage since the last report.
+// Back in view, a beat tells at once whether another device took the account.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "hidden") return;
+  if (document.visibilityState !== "hidden") return void cloud.beat();
   cloud.flush();
   stats.report();
+});
+// Closing the tab frees the account for the next device; a page kept for
+// back/forward still holds it and beats again if it comes back.
+addEventListener("pagehide", (e) => {
+  if (!e.persisted && !leaving) cloud.release();
 });
 // A deploy while you play: offer the new version without cutting the loop.
 watchVersion({

@@ -436,12 +436,21 @@ export default {
     reload: "Reload",
     later: "Later",
   },
-  tab: {
-    playing: "Another tab is playing",
-    open: "The sampler is already open in another tab",
-    text: "If you use it here, the other one is cut off: it stops playing and waits. What you edited there is already saved.",
-    close: "To stay in the other one, close this tab.",
-    take: "Use this tab",
+  elsewhere: {
+    tab: {
+      playing: "Another tab is playing",
+      open: "The sampler is already open in another tab",
+      text: "If you use it here, the other one is cut off: it stops playing and waits. What you edited there is already saved.",
+      close: "To stay in the other one, close this tab.",
+      take: "Use this tab",
+    },
+    device: {
+      playing: "Your account is playing on another device",
+      open: "Your account has the sampler open on another device",
+      text: "If you use it here, the other one is cut off: it stops playing and waits, and you go on here from the last thing it saved.",
+      close: "To stay there, close this tab.",
+      take: "Use it here",
+    },
   },
   intro: {
     title: "This is Psy Layers",

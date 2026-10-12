@@ -14,6 +14,11 @@ Deployment + PVC behind `/api/`. Full story in
 - `GET` / `PUT /api/state` read and write the workspace. A `PUT` carries the
   `updatedAt` it was based on; if the stored copy has moved on, it gets a 409
   with that copy instead, unless it sets `force`.
+- `PUT /api/device` holds the account for one device at a time: the holder
+  beats every 10 s, another device gets a 409 (`{ playing }`) unless it sends
+  `take`, and a `PUT /api/state` from a device that lost it gets
+  `409 { taken: true }`. The leases live in memory (70 s without a beat frees
+  one; a restart frees all), so they never write to the SD card.
 - `POST /api/stats` adds what a browser did since its last report (seconds
   played, exports, shares, autopilot starts) to its row for the UTC day; the
   totals and the top players go out on `/metrics`.

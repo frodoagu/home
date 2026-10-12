@@ -438,12 +438,21 @@ export default {
     reload: "Recargar",
     later: "Más tarde",
   },
-  tab: {
-    playing: "Hay otra pestaña sonando",
-    open: "El sampler ya está abierto en otra pestaña",
-    text: "Si lo usás acá, la otra se corta: deja de sonar y queda en espera. Lo que editaste allá ya está guardado.",
-    close: "Si querés seguir en la otra, cerrá esta pestaña.",
-    take: "Usar esta pestaña",
+  elsewhere: {
+    tab: {
+      playing: "Hay otra pestaña sonando",
+      open: "El sampler ya está abierto en otra pestaña",
+      text: "Si lo usás acá, la otra se corta: deja de sonar y queda en espera. Lo que editaste allá ya está guardado.",
+      close: "Si querés seguir en la otra, cerrá esta pestaña.",
+      take: "Usar esta pestaña",
+    },
+    device: {
+      playing: "Tu cuenta está sonando en otro dispositivo",
+      open: "Tu cuenta tiene el sampler abierto en otro dispositivo",
+      text: "Si lo usás acá, allá se corta: deja de sonar y queda en espera, y acá seguís desde lo último que se guardó allá.",
+      close: "Si querés seguir allá, cerrá esta pestaña.",
+      take: "Usarlo acá",
+    },
   },
   intro: {
     title: "Esto es Psy Layers",
