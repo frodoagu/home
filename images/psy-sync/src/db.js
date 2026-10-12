@@ -75,7 +75,7 @@ export function openDb(path) {
   );
   const count = (sql, ...args) => db.query(sql).get(...args).n;
   return {
-    user: (sub) => db.query("SELECT sub, email FROM users WHERE sub = ?").get(sub),
+    user: (sub) => db.query("SELECT sub, email, created_at FROM users WHERE sub = ?").get(sub),
     countUsers: () => count("SELECT COUNT(*) AS n FROM users"),
     upsertUser: (sub, email, now) =>
       db
