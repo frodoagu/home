@@ -2219,7 +2219,7 @@ describe("✨ AI", () => {
     await flushPromises();
     return ai;
   };
-  const BREAK = { section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
+  const BREAK = { why: "a dark break", section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
 
   it("has no button without models", () => {
     expect(aiBtn().hidden).toBe(true);
@@ -2333,16 +2333,42 @@ describe("✨ AI", () => {
     const [ask] = ai.asks;
     expect(ask.name).toBe("chrome");
     expect(ask.prompt).toContain("Now playing: intro, 8 bars.");
-    expect(ask.prompt).toContain('The listener asks for: "oscuro y largo".');
+    expect(ask.prompt).toContain('The listener just asked for: "oscuro y largo".');
     expect(ask.schema.properties.section.enum).toContain("breakdown");
     expect(queue()).toEqual(["breakdown"]);
     expect($(".section-queue .is-ai").textContent).toBe("✨ Break");
+    expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: a dark break");
     advanceSeconds(8 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
     expect($(".section-left").textContent).toBe("16 compases");
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
     expect(ai.asks).toHaveLength(2); // and now the one after the breakdown
     expect(ai.asks[1].prompt).toContain("Sections so far: intro, breakdown.");
+    expect(ai.asks[1].prompt).toMatch(/What the sections before it opened with:\n- intro: kick\./);
+    expect(ai.asks[1].prompt).toContain('The listener\'s standing wish: "oscuro y largo".'); // a plan followed it
+  });
+
+  it("dresses the sounds and writes the parts its plan says, when the section comes", async () => {
+    const plan = {
+      ...BREAK,
+      dress: [{ id: "lead.acid", tone: 0, length: 0, drive: 2, motion: 0, synth: "supersaw" }],
+      parts: { lead: ["1", "-", "3", "-", "5", "-", "-", "-"], pad: ["1", "6"], bass: [] },
+    };
+    const ai = await remountWith(fakeAi({ answers: [plan] }));
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    expect(saved().variants["lead.acid"]?.synth).not.toBe("supersaw"); // not before its section
+    advanceSeconds(8 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    const lead = saved().variants["lead.acid"];
+    expect(lead.synth).toBe("supersaw");
+    expect(lead.insert).toMatchObject({ drive: "hard", amount: 0.75 });
+    expect(lead.notes.filter((n) => n.step < 8).map((n) => n.step)).toEqual([0, 2, 4]);
+    const pad = saved().variants["pad.chord"];
+    expect(pad.notes.filter((n) => n.step === 16)).toHaveLength(3);
+    expect(saved().auto).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"])); // the pilot's: a new run resets them
+    expect(ai.asks[1].prompt).toContain("How you dressed them: lead.acid drive 2 synth supersaw.");
   });
 
   it("an answer that comes after the section's last loop started is dropped", async () => {
@@ -2402,7 +2428,7 @@ describe("✨ AI", () => {
     expect(queue()).toEqual([]);
     expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…");
     expect($(".status").textContent).toBe("✨ Onda «a full peak»: la IA vuelve a planear lo que viene…");
-    expect(ai.asks[1].prompt).toContain('The listener asks for: "a full peak".');
+    expect(ai.asks[1].prompt).toContain('The listener just asked for: "a full peak".');
     await flushPromises();
     expect(queue()).toEqual(["peak"]);
     expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada: sigue Pico.");
@@ -2411,7 +2437,7 @@ describe("✨ AI", () => {
     vibe("dark"); // the ask on its way is dropped
     vibe("darker");
     expect(ai.asks[2].opts.signal.aborted).toBe(true);
-    expect(ai.asks[3].prompt).toContain('The listener asks for: "darker".');
+    expect(ai.asks[3].prompt).toContain('The listener just asked for: "darker".');
     answer(PEAK);
     await flushPromises();
     expect(queue()).toEqual(["breakdown"]);
@@ -2421,7 +2447,7 @@ describe("✨ AI", () => {
     expect($(".status").textContent).toBe("Onda «calm»: la próxima fase ya está decidida, entra en la que sigue.");
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Break");
-    expect(ai.asks[4].prompt).toContain('The listener asks for: "calm".');
+    expect(ai.asks[4].prompt).toContain('The listener just asked for: "calm".'); // no plan followed it yet
   });
 
   it("when the model fails it says so once, and the pilot carries on alone", async () => {
@@ -2442,7 +2468,13 @@ describe("✨ AI", () => {
   it("🔗 carries the plans it took: the link replays the same track in a browser with no AI", async () => {
     const plans = [
       { section: "groove", bars: 8, layers: { bass: ["bass.gallop"], lead: ["lead.arp"] } },
-      { section: "breakdown", bars: 8, layers: { pad: ["pad.supersaw"], lead: ["lead.vowel"] } },
+      {
+        section: "breakdown",
+        bars: 8,
+        layers: { pad: ["pad.supersaw"], lead: ["lead.vowel"] },
+        dress: [{ id: "lead.vowel", tone: -1, length: 0, drive: 1, motion: 1, synth: "" }],
+        parts: { lead: ["1", "3", "5", "-", "8", "-", "5", "-"], pad: ["1", "4"] },
+      },
       { section: "build", bars: 8, layers: {} },
       { section: "peak", bars: 16, layers: { perc: ["perc.ride", "perc.snare"] } },
     ];
@@ -2467,6 +2499,8 @@ describe("✨ AI", () => {
     aiBtn().click();
     const first = await record(root, ctx);
     expect(first.some((l) => l.startsWith("Break "))).toBe(true);
+    const written = ["lead.vowel", "pad.supersaw"].map((id) => saved().variants[id]);
+    expect(written[0].insert.drive).toBe("soft");
     expect(ai.asks.length).toBeGreaterThanOrEqual(4);
 
     vi.stubGlobal("Blob", NodeBlob); // jsdom's has no stream(), and the link is deflated
@@ -2488,6 +2522,7 @@ describe("✨ AI", () => {
     await vi.waitFor(() => expect(other.querySelector(".status").textContent).toMatch(/goa/));
     vi.useFakeTimers();
     expect(await record(other, c2)).toEqual(first);
+    expect(["lead.vowel", "pad.supersaw"].map((id) => saved().variants[id])).toEqual(written); // dressed and written the same
   });
 });
 

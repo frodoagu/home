@@ -33,6 +33,7 @@ import {
   withBreak,
   withBuildUp,
   withRoll,
+  writePart,
 } from "./editing.js";
 
 const n = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
@@ -461,5 +462,58 @@ describe("pattern tools", () => {
   it("moved notes stay inside the loop and clear of the next one on their row", () => {
     const out = rotatePart({ notes: [n(28, 60, 4), n(30, 60, 1)] }, "notes", 2).notes;
     expect(out).toEqual([n(0, 60, 1), n(30, 60, 2)]);
+  });
+});
+
+describe("writePart: the AI's degrees as a 2-bar part", () => {
+  const rows = (low, high, scale = "minor") => scaleRows(scale, low, high);
+  const LEAD_ROWS = rows(45, 81); // A2..A5
+  const at = (notes, step) => notes.filter((n) => n.step === step).map((n) => n.midi);
+
+  it("plays a lead's motif, motif with its last note a degree lower, motif, answer", () => {
+    const motif = ["1", "-", "3", "-", "5", "-", "-", "-"];
+    const answer = ["8", "-", "-", "-", "7", "-", "-", "-"];
+    const notes = writePart("lead", [...motif, ...answer], LEAD_ROWS);
+    expect(at(notes, 0)).toEqual([57]); // degree 1: A3, the root below the middle one
+    expect(at(notes, 2)).toEqual([60]); // C4
+    expect(at(notes, 4)).toEqual([64]); // E4
+    expect(at(notes, 12)).toEqual([62]); // the second motif ends a degree lower: D4
+    expect(at(notes, 20)).toEqual([64]);
+    expect(at(notes, 24)).toEqual([69]); // the answer: A4
+    expect(at(notes, 28)).toEqual([67]);
+    expect(notes.filter((n) => n.accent).map((n) => n.step)).toEqual([0, 8, 16, 24]);
+    expect(notes.every((n) => inScale(n.midi, "minor"))).toBe(true);
+  });
+
+  it("repeats what is short, and writes nothing from rests", () => {
+    expect(writePart("lead", ["1", "-", "3", "-", "5", "-", "-", "-"], LEAD_ROWS)).toEqual(
+      writePart("lead", Array(2).fill(["1", "-", "3", "-", "5", "-", "-", "-"]).flat(), LEAD_ROWS),
+    );
+    expect(writePart("lead", ["-", "-"], LEAD_ROWS)).toBeNull();
+    expect(writePart("lead", [], LEAD_ROWS)).toBeNull();
+    expect(writePart("perc", ["1"], LEAD_ROWS)).toBeNull();
+  });
+
+  it("holds a triad on each bar's degree for a pad", () => {
+    const notes = writePart("pad", ["1", "6"], rows(45, 69));
+    expect(at(notes, 0)).toEqual([45, 48, 52]); // Am
+    expect(at(notes, 16)).toEqual([53, 57, 60]); // F
+    expect(notes.every((n) => n.len === 16)).toBe(true);
+  });
+
+  it("repeats a bass's one-beat cell under every beat", () => {
+    const notes = writePart("bass", ["-", "1", "1", "5"], rows(33, 57));
+    expect(notes).toHaveLength(24);
+    expect(notes.some((n) => n.step % 4 === 0)).toBe(false);
+    expect(at(notes, 1)).toEqual([33]);
+    expect(at(notes, 31)).toEqual([40]); // E2
+  });
+
+  it("walks a lead made of chords onto the degrees, keeping its rhythm and shapes", () => {
+    const factory = [0, 8].flatMap((s) => [57, 60, 64].map((midi) => ({ step: s, midi, len: 4, accent: false })));
+    const notes = writePart("lead", ["1", "4"], LEAD_ROWS, factory);
+    expect(at(notes, 0)).toEqual([57, 60, 64]);
+    expect(at(notes, 8)).toEqual([62, 65, 69]); // the same shape on D
+    expect(notes.every((n) => n.len === 4)).toBe(true);
   });
 });

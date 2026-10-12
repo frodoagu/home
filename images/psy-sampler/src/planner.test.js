@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { LAYERS } from "./catalog.js";
+import { DEFAULTS } from "./audio/patterns.js";
 import { SECTIONS, STYLES, countRange, poolOf } from "./autopilot.js";
-import { PLAN_MAX, PLAN_SECTIONS, SYSTEM, normalizePlan, planPrompt, planSchema, readPlans } from "./planner.js";
+import {
+  CHARACTER,
+  PLAN_MAX,
+  PLAN_SECTIONS,
+  SYSTEM,
+  normalizePlan,
+  planPrompt,
+  planSchema,
+  readPlans,
+  whyOf,
+} from "./planner.js";
 import { normalize } from "./workspace.js";
 
 const { lists } = normalize({ lists: { lead: ["lead.acid~1"] } });
@@ -12,6 +24,13 @@ describe("the prompt", () => {
     expect(SYSTEM).toContain("- breakdown: 8 or 16 bars; kick 0, bass 0, perc 0-1, lead 1, pad 1, glitch 0-1");
     expect(SYSTEM).toContain("An empty list leaves that layer out.");
     expect(SYSTEM).toContain("The listener's wishes come first");
+    expect(SYSTEM).toContain("its length in bars (one of the lengths that section has)");
+  });
+
+  it("knows the character of every looping sound, and of nothing else", () => {
+    const loops = new Set(LAYERS.filter((l) => !l.oneShot).map((l) => l.id));
+    const ids = Object.keys(DEFAULTS).filter((id) => loops.has(id.split(".")[0]));
+    expect(Object.keys(CHARACTER).sort()).toEqual(ids.sort());
   });
 
   it("says the style, what played, what plays now, the vibe and every sound it may use", () => {
@@ -20,35 +39,57 @@ describe("the prompt", () => {
       bpm: 145.4,
       active: { kick: "kick.long", "lead.acid~1": "lead.acid~1" },
       sections: ["intro", "groove", "build", "peak", "breakdown", "build", "peak", "groove", "build", "peak"],
+      sounds: [[], [], [], [], [], [], ["kick.long", "pad.prog"], ["kick.long", "bass.rolling"], [], ["kick.long"]],
       bars: 16,
       vibe: 'oscuro "y" largo',
+      fresh: true,
       names: { "lead.acid~1": "Mi ácido" },
     });
     expect(prompt).toContain("Style: Goa, 145 BPM.");
     expect(prompt).toContain("Sections so far: build, peak, breakdown, build, peak, groove, build, peak."); // the last 8
     expect(prompt).toContain("Now playing: peak, 16 bars.");
     expect(prompt).toContain("Sounds playing now: kick.long, lead.acid~1.");
-    expect(prompt).toContain('The listener asks for: "oscuro \\"y\\" largo". That comes first');
-    expect(prompt.indexOf("The listener asks for")).toBeGreaterThan(prompt.indexOf("Sounds you can use")); // last, so it weighs
+    // the 3 before the one playing, those that opened with something
+    expect(prompt).toContain("What the sections before it opened with:\n- peak: kick.long, pad.prog\n- groove: kick.long, bass.rolling\n");
+    expect(prompt).toContain('The listener just asked for: "oscuro \\"y\\" largo". That comes first');
+    expect(prompt.indexOf("The listener just asked")).toBeGreaterThan(prompt.indexOf("Sounds you can use")); // last, so it weighs
     for (const id of poolOf(lists, "lead", "goa")) expect(prompt).toContain(`${id} (`);
-    expect(prompt).toContain('lead.acid~1 ("Mi ácido", a copy of Acid: ');
+    expect(prompt).toContain('lead.acid~1 ("Mi ácido", a copy of Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving)');
+    expect(prompt).toContain("After the peak, the usual next is breakdown or groove.");
     expect(prompt).not.toContain("kick.punchy"); // not goa's
     expect(prompt.trim().endsWith("Plan the next section.")).toBe(true);
   });
 
   it("leaves the vibe out when there is none, and asks for the queued section when there is one", () => {
     const base = { ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8 };
-    expect(planPrompt(base)).not.toContain("listener asks");
+    expect(planPrompt(base)).not.toContain("listener");
+    expect(planPrompt({ ...base, vibe: "dark" })).toContain('The listener\'s standing wish: "dark".');
+    expect(planPrompt(base)).not.toContain("What the sections before it");
+    expect(planPrompt(base)).toContain("After the intro, the usual next is groove. Plan the next section.");
+    expect(planPrompt({ ...base, sections: ["groove", "build"] })).toContain("the usual next is peak; now and then breakdown.");
     expect(planPrompt(base)).toContain("Sounds playing now: none.");
-    expect(planPrompt({ ...base, next: "breakdown" })).toContain("The listener queued breakdown next: plan that section.");
+    const queued = planPrompt({ ...base, next: "breakdown" });
+    expect(queued).toContain("The listener queued breakdown next: plan that section.");
+    expect(queued).not.toContain("usual next");
     expect(planPrompt(base)).not.toContain("theme");
-    expect(planPrompt({ ...base, theme: ["lead.acid"] })).toContain("The theme, which stays in the lead layer: lead.acid.");
+  });
+
+  it("says the theme only where the pilot holds it: the step after a breakdown or a build", () => {
+    const base = { ...goa, bpm: 145, active: {}, bars: 8, theme: ["lead.acid"] };
+    const held = "If you plan a build, its lead is the theme, lead.acid: the pilot keeps it there whatever you pick.";
+    expect(planPrompt({ ...base, sections: ["breakdown"] })).toContain(held);
+    expect(planPrompt({ ...base, sections: ["build"] })).toContain("If you plan a peak, its lead is the theme");
+    expect(planPrompt({ ...base, sections: ["breakdown"], next: "groove" })).not.toContain("theme");
+    expect(planPrompt({ ...base, sections: ["breakdown"], next: "build" })).toContain(held);
+    expect(planPrompt({ ...base, sections: ["peak"] })).not.toContain("theme");
   });
 });
 
 describe("the schema", () => {
   it("names every section a plan may pick, their lengths and each layer's pool as enums", () => {
     const schema = planSchema(goa);
+    expect(Object.keys(schema.properties)[0]).toBe("why"); // said before it picks
+    expect(schema.required).toEqual(["why", "section", "bars", "layers", "dress", "parts"]);
     expect(schema.properties.section.enum).toEqual(PLAN_SECTIONS);
     expect(PLAN_SECTIONS).not.toContain("intro");
     expect(schema.properties.bars.enum).toEqual([8, 16, 24]);
@@ -58,6 +99,20 @@ describe("the schema", () => {
     expect(layers.properties.lead.items.enum).toEqual(poolOf(lists, "lead", "goa"));
     expect(layers.properties.perc.maxItems).toBe(3); // the peak's
     expect(layers.properties.kick.maxItems).toBe(1);
+  });
+
+  it("dresses any sound it may name with whole macros, a synth of its group or none", () => {
+    const { dress, parts } = planSchema(goa).properties;
+    const item = dress.items;
+    expect(item.properties.id.enum).toEqual(expect.arrayContaining(poolOf(lists, "lead", "goa")));
+    expect(item.properties.tone.enum).toEqual([-2, -1, 0, 1, 2]);
+    expect(item.required).toEqual(["id", "tone", "length", "drive", "motion", "synth"]);
+    expect(item.properties.synth.enum).toEqual(expect.arrayContaining(["", "acid", "supersaw", "sub", "pad"]));
+    expect(dress.maxItems).toBe(1 + 1 + 3 + 1 + 1 + 1);
+    expect(parts.properties.lead).toMatchObject({ maxItems: 16 });
+    expect(parts.properties.pad).toMatchObject({ maxItems: 2 });
+    expect(parts.properties.bass).toMatchObject({ maxItems: 4 });
+    expect(parts.properties.lead.items.enum).toEqual(["-", ...Array.from({ length: 15 }, (_, i) => String(i + 1))]);
   });
 
   it("only allows the queued section when one is queued, unless a plan cannot pick it", () => {
@@ -74,6 +129,75 @@ describe("the schema", () => {
     } finally {
       delete STYLES[style];
     }
+  });
+});
+
+describe("dress and parts in a plan", () => {
+  const plan = { section: "peak", bars: 16, layers: { kick: ["kick.long"], bass: ["bass.rolling"], lead: ["lead.acid"], pad: [] } };
+
+  it("keeps the macros that move a sound the plan names, in id order", () => {
+    const out = normalizePlan(
+      {
+        ...plan,
+        dress: [
+          { id: "lead.acid", tone: -2, length: 0, drive: 1, motion: 2, synth: "supersaw" },
+          { id: "kick.long", tone: 1, length: 0, drive: 0, motion: 2, synth: "" }, // no motion on a kick
+          { id: "lead.acid", tone: 2 }, // the first one counts
+          { id: "pad.chord", tone: 1 }, // not in the plan
+          { id: "bass.rolling", tone: 3, drive: 1.5, synth: "acid" }, // out of range, not whole, not its group
+          { id: "__proto__", tone: 1 },
+          "lead.acid",
+        ],
+      },
+      goa,
+    );
+    expect(out.dress).toEqual([
+      { id: "kick.long", tone: 1 },
+      { id: "lead.acid", tone: -2, drive: 1, motion: 2, synth: "supersaw" },
+    ]);
+    expect(normalizePlan(out, goa)).toEqual(out);
+    expect(normalizePlan({ ...plan, dress: [{ id: "lead.acid", tone: 0, synth: "" }] }, goa)).not.toHaveProperty("dress");
+  });
+
+  it("keeps a part for each melodic layer the plan names a sound in, at its full length", () => {
+    const out = normalizePlan({ ...plan, parts: { lead: ["1", "-", "3", "-", "5", "-", "-", "-"], pad: ["1", "6"], bass: ["-", "1", "x", "1", "1", "1"] } }, goa);
+    expect(out.parts.lead).toEqual(Array(2).fill(["1", "-", "3", "-", "5", "-", "-", "-"]).flat());
+    expect(out.parts).not.toHaveProperty("pad"); // the plan leaves the pad out
+    expect(out.parts.bass).toEqual(["-", "1", "1", "1"]);
+    expect(normalizePlan(out, goa)).toEqual(out);
+    expect(normalizePlan({ ...plan, parts: { lead: ["-", "-"], kick: ["1"] } }, goa)).not.toHaveProperty("parts");
+    expect(normalizePlan({ ...plan, parts: "1 3 5" }, goa)).not.toHaveProperty("parts");
+  });
+
+  it("tells the model the key, the synths it may switch to and how it dressed what plays", () => {
+    const prompt = planPrompt({
+      ...goa,
+      bpm: 145,
+      active: { lead: "lead.acid" },
+      sections: ["intro"],
+      bars: 8,
+      dressed: [{ id: "lead.acid", tone: -1, synth: "acid" }, { id: "pad.chord", tone: 2 }],
+      synths: { "lead.acid": "acid" },
+    });
+    expect(prompt).toContain("Key: A harmonic minor.");
+    expect(prompt).toContain("How you dressed them: lead.acid tone -1 synth acid.");
+    expect(prompt).not.toContain("pad.chord tone");
+    expect(prompt).toContain("lead.acid (Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving; synth acid)");
+    expect(prompt).toMatch(/^lead: acid \(Acid 303: .*supersaw \(Supersaw/m);
+    expect(prompt).toMatch(/^bass: bass \(Saw pluck/m);
+    expect(SYSTEM).toContain('"-", "1", "1", "1" rolls between the kicks');
+  });
+});
+
+describe("whyOf", () => {
+  it("keeps the model's sentence on one short line, and nothing else", () => {
+    expect(whyOf({ why: "  a dark\n break " })).toBe("a dark break");
+    expect(whyOf({ why: "x".repeat(500) })).toHaveLength(200);
+    for (const raw of [null, {}, { why: 3 }, "why"]) expect(whyOf(raw)).toBe("");
+  });
+
+  it("is not part of a plan", () => {
+    expect(normalizePlan({ why: "because", section: "groove", bars: 8 }, goa)).toEqual({ section: "groove", bars: 8, layers: {} });
   });
 });
 

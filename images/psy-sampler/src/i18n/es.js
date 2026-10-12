@@ -67,7 +67,7 @@ export default {
           ["Semilla", "La misma semilla arma el mismo tema en cualquier browser. Escribí la tuya o tirá 🎲 por una nueva; con el piloto andando, cambiarla lo reinicia."],
           ["🔗 Compartir", "Copia un link con la semilla, el estilo, el BPM y tus sonidos editados: quien lo abra y toque 🤖 escucha lo mismo."],
           ["Tus ediciones mandan", "El piloto no pisa lo que editaste a mano, salvo el volumen y los filtros pasa-altos y pasa-bajos."],
-          ["✨ IA", "Un modelo de lenguaje planea la próxima fase: cuál, cuánto dura y qué sonidos entran, siguiendo tu «Onda». Usa el de Chrome (Gemini Nano: corre en tu compu y aparece si tu Chrome lo trae) o tu LM Studio (prendé su servidor con CORS). Las melodías, los FX y los cambios dentro de cada fase siguen saliendo de la semilla; si la IA tarda, el piloto decide solo. 🔗 Compartir guarda lo que eligió: el link suena igual en cualquier browser, con IA o sin."],
+          ["✨ IA", "Un modelo de lenguaje planea la próxima fase siguiendo tu «Onda»: cuál, cuánto dura, qué sonidos entran, cómo suenan (más oscuros o brillantes, cortos o largos, sucios o limpios, quietos o en movimiento, y hasta otro synth) y sus melodías: un motivo para el lead, los acordes del pad y la célula del bajo, que el piloto desarrolla en la escala del estilo. Usa el de Chrome (Gemini Nano: corre en tu compu y aparece si tu Chrome lo trae) o tu LM Studio (prendé su servidor con CORS). El tema que deja un Break se mantiene; los FX y los cambios dentro de cada fase siguen saliendo de la semilla, y si la IA tarda, el piloto decide solo. Pasá el mouse por la fase ✨ para ver por qué la eligió. 🔗 Compartir guarda lo que eligió: el link suena igual en cualquier browser, con IA o sin."],
         ],
       },
       {

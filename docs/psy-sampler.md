@@ -1189,11 +1189,11 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 ## ✨ AI: a model plans the sections
 
 **✨ AI** (next to 🤖) hands one decision of the autopilot to a language model:
-**the section after the one playing** — which one, how many bars, and which
-sounds each layer plays, following the listener's **Vibe** (free text). Nothing
-else: melodies, how each sound is dressed, the FX and the swaps inside a section
-still come from the seed, and the section forms still hold (a breakdown has no
-kick, every section plays a lead or a pad).
+**the section after the one playing** — which one, how many bars, which sounds
+each layer plays, how those sounds are dressed and what their melodic parts
+play, following the listener's **Vibe** (free text). The FX and the swaps inside
+a section still come from the seed, and the section forms still hold (a
+breakdown has no kick, every section plays a lead or a pad).
 
 | | Chrome (Gemini Nano) | LM Studio |
 |---|---|---|
@@ -1207,10 +1207,21 @@ kick, every section plays a lead or a pad).
 
 - At the start of every section (`enterSection` in `app.js`) the page asks for
   the next one (`planAhead`). The prompt (`planner.js` `planPrompt`) carries the
-  style and BPM, the last 8 sections, what plays, the vibe, and every id the
-  style allows per layer with its English name; the system prompt (`SYSTEM`)
-  teaches the section forms, read off `SECTIONS`.
-- The answer must follow `planSchema()`: the section, the bars and every
+  style and BPM, the last 8 sections and what the 3 before the current one
+  opened with (`run.sounds`), what plays, where the pilot usually goes from
+  here (read off `SECTIONS[…].next` and its `odds`), the vibe, and every id the
+  style allows per layer with its English name and a few words of character
+  (`CHARACTER`: "dark, tense, ominous"; the i18n names say how a sound is made,
+  which doesn't map a vibe like "darker" to anything). A test keeps
+  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words. The
+  system prompt (`SYSTEM`) teaches the section forms, read off `SECTIONS`.
+- The theme line appears only where the pilot holds it (`THEME_PATH`: the
+  build after a breakdown, the peak after a build), and says so plainly: the
+  pilot keeps that lead whatever the plan picks for the layer.
+- The answer must follow `planSchema()`. It opens with **`why`**, one short
+  sentence, so a small model gets a few tokens to reason before it commits to
+  a section; the ✨ chip shows it as its tooltip, and `normalizePlan()` drops
+  it (links never carry it). Then the section, the bars and every
   layer's ids are **enums**, so a model that decodes against the schema can't
   name a sound that isn't there. Engines differ in how much of a schema they
   enforce, so **`normalizePlan()` is the gate**, as `normalize()` is for
@@ -1223,7 +1234,10 @@ kick, every section plays a lead or a pad).
   pilot draws it. Outside names are looked up with `Object.hasOwn`.
 - The vibe weighs: the system prompt puts the listener's wishes before the
   usual counts and continuity (with examples of what to leave out), and the
-  prompt ends on the vibe, right before asking for the plan.
+  prompt ends on the vibe, right before asking for the plan. A vibe no plan has
+  followed yet is **just asked** ("follow boldly, so the change is heard");
+  after that it is **standing** ("keep to it while the sections rise and
+  fall"), so a kept vibe doesn't push every section into a new contrast.
 - The pilot takes a plan only **before the section's last loop**
   (`withPlan`): that loop announces what comes next and fires the riser into a
   peak, so a later answer would change a decision already made. An answer that
@@ -1250,6 +1264,44 @@ kick, every section plays a lead or a pad).
 - Requests run off the main thread's critical path: the Prompt API answers
   from Chrome's own process and LM Studio over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.
+
+### Dress and parts
+
+A plan may also say how the sounds it names sound (`dress`) and what their
+melodic parts play (`parts`). Both land on the loop the section starts
+(`app.js`, next to the seed's `dressIn` and the pilot's `rewrite`), only on
+sounds that play then, never on an owned sound, and a part never on the held
+theme.
+
+- **Dress: four macros, -2 to 2** (0 leaves the sound as the seed dressed it),
+  plus a synth. Small models are poor at Hz and ms across dozens of sliders, so
+  the model gets axes and `dress.js` `restyle()` turns them into each voice's
+  own sliders: **tone** moves the brightness ones (`tone`, a kick's `f0` and
+  `click`, a synth's `bright`) and **length** the `decay`/`sweep` ones, 15 % of
+  the slider's range per unit (in octaves where the range has no 0); **drive**
+  and **motion** set the insert's distortion and its phaser/filter LFO (motion
+  never on a kick or a bass: it muddies the low end). A melodic sound may switch
+  to a synth of its own group. Everything is computed from the **seed's dress
+  and the factory insert**, never from the live values, so a plan gives the
+  same sound whatever came before it, which is what lets a link replay it; only
+  the insert keys the AI owns change, so the autopilot's tone rides stay. The
+  run remembers each sound's last dress (`run.dress`): a sound that leaves and
+  comes back is dressed the same, and the prompt recalls it ("How you dressed
+  them").
+- **Parts: scale degrees** ("1" the root, "8" the octave, up to "15"; "-" a
+  rest), which `editing.js` `writePart()` develops with the genre's habits, as
+  `improvise()` does: a **lead** writes 16 (an 8-step motif and its answer,
+  played motif, motif with its last note a degree lower, motif, answer); a lead
+  made of chords or long notes (`lead.stabs`, `lead.melodic`) keeps the
+  factory's rhythm and shapes and walks them onto the degrees; a **pad** writes
+  one degree per bar and holds a triad on it; a **bass** writes one beat's 4
+  sixteenths, repeated under every beat. Degrees always land in the style's
+  scale, so a part can't go off key. The pilot's `rewrite` still draws from the
+  track's PRNG first, so a part changes nothing else a seed plays.
+- `normalizePlan()` keeps dress and parts only for sounds the plan names, with
+  whole units in range, a synth of the sound's group and parts repeated to
+  their full length; a plan without them normalizes exactly as before, so old
+  links replay unchanged.
 
 ### Seeds, share links and replay
 

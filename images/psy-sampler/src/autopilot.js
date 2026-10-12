@@ -503,11 +503,12 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
 }
 
 // The theme: the lead a breakdown plays, held through the build after it
-// and the peak after that.
+// and the peak after that. Each step it is held across, by where it starts.
+export const THEME_PATH = { breakdown: "build", build: "peak" };
+
 function themeOf(pilot, section, active) {
-  if (pilot.section === "breakdown" && section === "build") return playingOf(active, "lead");
-  if (pilot.section === "build" && section === "peak") return pilot.theme ?? [];
-  return [];
+  if (THEME_PATH[pilot.section] !== section) return [];
+  return pilot.section === "breakdown" ? playingOf(active, "lead") : (pilot.theme ?? []);
 }
 
 /** { variant id: volume } for every sound in `active`, as the pilot's current loop ends. */

@@ -507,7 +507,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
   can't follow: their samples must come in the same selection (the project folder).
   The ✨ AI only
-  plans the NEXT section (which, bars, per-layer ids); the pilot takes a plan
+  plans the NEXT section (which, bars, per-layer ids, plus `dress` macros and
+  melodic `parts` in scale degrees for the sounds it names — applied when that
+  section starts, from factory/seed values so a replay lands the same, never on
+  the held theme or an owned sound); the pilot takes a plan
   only before that section's last loop (`withPlan`, else the answer is dropped),
   and with no plan `advance()`/`arrange()` must draw exactly as before (old
   seeds). A model's answer is untrusted like a link: `normalizePlan()` is its

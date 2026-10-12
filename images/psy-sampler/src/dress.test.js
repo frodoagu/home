@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHS } from "./audio/params.js";
 import { DEFAULTS, defaultData, paramSpecs } from "./audio/patterns.js";
-import { FILLS, coin, dress, fillOf } from "./dress.js";
+import { FILLS, coin, dress, fillOf, moves, restyle, synthsFor } from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
 
@@ -48,5 +48,57 @@ describe("coin", () => {
     const values = ["a", "b", "c", "d"].map((seed) => coin(seed, "x"));
     for (const v of values) expect(v >= 0 && v < 1).toBe(true);
     expect(new Set(values).size).toBe(4);
+  });
+});
+
+describe("restyle: the AI's macros over the seed's dress", () => {
+  const insertOf = (id) => defaultData(id).insert;
+
+  it("is the seed's dress with no macros, and the same for the same macros", () => {
+    expect(restyle("kick.long", "s", null, insertOf("kick.long"))).toEqual(dress("kick.long", "s"));
+    const macros = { id: "lead.acid", tone: 1, drive: 2 };
+    expect(restyle("lead.acid", "s", macros, insertOf("lead.acid"))).toEqual(restyle("lead.acid", "s", macros, insertOf("lead.acid")));
+  });
+
+  it("tone moves the brightness sliders and length the decays, within range", () => {
+    const seed = dress("kick.long", "s").params;
+    const bright = restyle("kick.long", "s", { tone: 2 }, null).params;
+    const dark = restyle("kick.long", "s", { tone: -2 }, null).params;
+    expect(bright.f0).toBeGreaterThan(seed.f0);
+    expect(dark.f0).toBeLessThan(seed.f0);
+    expect(bright.decay).toBe(seed.decay); // tone leaves the length alone
+    const long = restyle("kick.long", "s", { length: 2 }, null).params;
+    expect(long.decay).toBeGreaterThan(seed.decay);
+    expect(restyle("lead.acid", "s", { tone: -2 }, null).params.bright).toBeLessThan(dress("lead.acid", "s").params.bright);
+    for (const id of Object.keys(DEFAULTS)) {
+      for (const tone of [-2, 2]) {
+        const params = restyle(id, "s", { tone, length: tone }, null).params;
+        for (const p of paramSpecs(id)) {
+          expect(params[p.key]).toBeGreaterThanOrEqual(p.min);
+          expect(params[p.key]).toBeLessThanOrEqual(p.max);
+        }
+      }
+    }
+  });
+
+  it("drive and motion set the insert from the factory's, and leave the rest of the live one", () => {
+    const live = { ...insertOf("lead.acid"), lp: 3000, drive: "fold", amount: 0.9 };
+    expect(restyle("lead.acid", "s", { drive: 2 }, live).insert).toMatchObject({ drive: "hard", amount: 0.75, lp: 3000 });
+    expect(restyle("lead.acid", "s", { drive: 1 }, live).insert).toMatchObject({ drive: "soft", amount: 0.4 });
+    expect(restyle("lead.acid", "s", { tone: 1 }, live).insert).toMatchObject({ drive: "off", lp: 3000 }); // back to the factory's
+    expect(restyle("lead.acid", "s", { motion: 2 }, live).insert.phaser).toBe(0.5);
+    const bits = restyle("lead.bits", "s", { motion: 2 }, insertOf("lead.bits")).insert;
+    expect(bits.lfo).toBe(0.6); // it has a filter to sweep
+    expect(restyle("lead.bits", "s", { motion: -2 }, insertOf("lead.bits")).insert.lfo).toBe(0);
+    expect(restyle("kick.long", "s", { motion: 2 }, insertOf("kick.long")).insert.phaser).toBe(0); // never on a kick
+    expect(moves("bass.rolling", "motion")).toBe(false);
+    expect(moves("bass.rolling", "drive")).toBe(true);
+  });
+
+  it("switches synth only within the sound's group", () => {
+    expect(restyle("lead.acid", "s", { synth: "supersaw" }, null).synth).toBe("supersaw");
+    expect(restyle("lead.acid", "s", { synth: "sub" }, null).synth).toBe(dress("lead.acid", "s").synth);
+    expect(synthsFor("kick.long")).toEqual([]);
+    expect(synthsFor("pad.chord").every((id) => groupOf(id) === "pad")).toBe(true);
   });
 });
