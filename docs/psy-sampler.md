@@ -1443,7 +1443,9 @@ hypnotic, never a jolt, and long**, ending in a drop where the bass explodes.
   atmosphere from the start; the **kick muted and lowpassed** until 40 % of
   the way, then fading in and opening; the **bass** the same from halfway,
   quiet and shut at 120 Hz, rising to 0.8 and 1.5 kHz. A spec `[from, to,
-  start]` holds `from` until `start`. The last loop is a **drop**
+  start]` holds `from` until `start`. The `changeBars` swaps never take that
+  bass (it is held like a theme, after the same draws): the one that creeps in
+  is the one the opening chose, not whatever a swap halfway drew. The last loop is a **drop**
   (`dropping`): riser (one more PRNG draw, only for openings, so a replay
   draws the same), kick roll, the sweep and the gap bar, then an impact
   (`DROP_HIT`) as the next section lands with kick and bass **snapped wide
@@ -1718,9 +1720,11 @@ picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
 Scenes: **Mandelbulb** (power drifting, orbit breathing with the kick),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
-fold, rings of light per beat), **mandala** (mirrored sectors, petal rings
-blooming in log scale, a flower of life) and **op-art tunnel** (spirals, moiré
-or dots). Each takes four numbers from the director (`uVar`) for its variant.
+fold, rings of light per beat), **mandala** (a flower: rings of lotus, daisy
+or cosmos petals opening forever out of a seed head of Fibonacci spirals) and
+**op-art tunnel** (spirals, moiré or dots in relief: ribs, ripples or domes,
+lit by a lamp circling behind the eye and grazed by each beat's ring of
+light). Each takes four numbers from the director (`uVar`) for its variant.
 
 The **lasers** are not a scene but a layer behind every scene: analytic beams
 in haze from one of three rigs (a fan from the back, two crossing banks, a cone

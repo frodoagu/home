@@ -517,7 +517,9 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     const done = pilot.length - left;
     let next = active;
     if (pilot.rearrange) next = arrange(pilot.section, active, lists, rng, style, hold);
-    else if ((done * 2) % changeBars === 0) next = vary(active, lists, rng, style, hold);
+    // An opening holds the bass it chose to fade in.
+    else if ((done * 2) % changeBars === 0)
+      next = vary(active, lists, rng, style, pilot.opening ? [...hold, ...playingOf(active, "bass")] : hold);
     const fx = [];
     let upcoming;
     if (left === 1) {
