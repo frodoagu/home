@@ -48,11 +48,16 @@ resources:
 # the page itself, so its origin must be in the CSP's connect-src. Loopback
 # covers LM Studio on the listener's own machine (Chrome asks them first:
 # Local Network Access). Another host only works over https (plain http from an
-# https page is mixed content) and with its origin listed here.
+# https page is mixed content) and with its origin listed here. A linked
+# account (the listener's own API key) is fetched the same way: its provider's
+# API origin must be listed too.
 ai:
   connectSrc:
   - "http://localhost:*"
   - "http://127.0.0.1:*"
+  - "https://api.openai.com"
+  - "https://api.anthropic.com"
+  - "https://generativelanguage.googleapis.com"
   # Origin-Trial tokens, one header each: for Chrome's Prompt API if its web
   # version still needs a trial for this host (register psy.agu.com.ar at
   # https://developer.chrome.com/origintrials). They expire: renew them. Without

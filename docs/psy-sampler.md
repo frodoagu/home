@@ -11,7 +11,8 @@ on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
 sound sounds; its sections can be forced and queued, or planned by a language
 model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
-listener's machine). A second one, the snapshot autopilot, plays the user's
+listener's machine, or the listener's own OpenAI, Anthropic or Google Gemini
+account, linked with an API key). A second one, the snapshot autopilot, plays the user's
 saved snapshots in order instead. What plays exports to WAV, as a loop or as a
 live recording.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
@@ -646,7 +647,7 @@ Everything lives in one object, the **workspace** (`workspace.js`), in
 layers and tiles, the copies, the names, the edited data, the snapshots, the
 length of the BPM change, the seed, the autopilot's style and changes, each
 sound's Improvise amount, and the language. The ✨ AI's settings live apart, in
-`psy-sampler:ai`. The only thing not saved is what's
+`psy-sampler:ai` (API keys included, so they never leave the browser). The only thing not saved is what's
 playing (a page load starts silent: no audio without a click). `normalize()` is
 the only way in, for storage and for an imported preset: it checks every field
 and whatever doesn't add up goes back to the factory value, so old, hand-edited
@@ -1195,13 +1196,13 @@ play, following the listener's **Vibe** (free text). The FX and the swaps inside
 a section still come from the seed, and the section forms still hold (a
 breakdown has no kick, every section plays a lead or a pad).
 
-| | Chrome (Gemini Nano) | LM Studio |
-|---|---|---|
-| What | Chrome's built-in model, the Prompt API (`LanguageModel`) | any OpenAI-compatible chat endpoint; LM Studio's by default (`http://localhost:1234/v1`) |
-| Offered | only where the browser exposes `LanguageModel` and `availability()` isn't `"unavailable"` | always (when the page has models: `main.js` passes `createAi()`) |
-| Runs | on the listener's machine; Chrome downloads it once for every site, and starting that download needs a click (✨) | wherever LM Studio runs; the page fetches it directly |
-| Schema | `responseConstraint` (the JSON Schema) | `response_format: {type: "json_schema", …}` |
-| Server cost | none | none: the Pi never sees the request |
+| | Chrome (Gemini Nano) | LM Studio | A linked account (OpenAI, Anthropic, Google Gemini) |
+|---|---|---|---|
+| What | Chrome's built-in model, the Prompt API (`LanguageModel`) | any OpenAI-compatible chat endpoint; LM Studio's by default (`http://localhost:1234/v1`) | the provider's API with the listener's own API key |
+| Offered | only where the browser exposes `LanguageModel` and `availability()` isn't `"unavailable"` | always (when the page has models: `main.js` passes `createAi()`) | always; it asks for a key until one is pasted |
+| Runs | on the listener's machine; Chrome downloads it once for every site, and starting that download needs a click (✨) | wherever LM Studio runs; the page fetches it directly | at the provider; the page fetches it directly (all three allow browser CORS) |
+| Schema | `responseConstraint` (the JSON Schema) | `response_format: {type: "json_schema", …}` | OpenAI `response_format` (strict); Anthropic a forced tool (`tool_choice`) whose `input_schema` is the schema; Gemini `responseJsonSchema` |
+| Server cost | none | none: the Pi never sees the request | none for the Pi; the provider bills the listener's account |
 
 ### How a plan gets in
 
@@ -1262,7 +1263,7 @@ breakdown has no kick, every section plays a lead or a pad).
   queued by hand the model is arranging, or a **✨ thinking…** chip where its
   pick will show.
 - Requests run off the main thread's critical path: the Prompt API answers
-  from Chrome's own process and LM Studio over `fetch`. Only the prompt is built
+  from Chrome's own process, LM Studio and the providers over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.
 
 ### Dress and parts
@@ -1348,6 +1349,34 @@ status line says to download it or pick another. Two gates sit in front of it:
   there.
 - **Chrome's Local Network Access** (Chrome 142+): the first request from
   psy.agu.com.ar to localhost asks the listener's permission.
+
+**A linked account** (OpenAI, Anthropic, Google Gemini): pick it under
+**Engine** and paste an API key in **API key** (a password field; *Get one*
+opens the provider's key page). "Linking" is just that: none of the three
+offers a sign-in that lets a third-party page call its models on the user's
+bill, so the key is the account. It is checked right away by listing the
+key's models (`start()`), and the status line says whether it took: a 400
+(Gemini's answer to a bad key), 401 or 403 reads as a rejected key, anything
+else as a provider that didn't answer. **Unlink** deletes it from the browser.
+
+- The key lives only in `psy-sampler:ai` (`cleanKey`: printable ASCII, no
+  spaces, 8-300 chars), one per provider, and goes only to that provider's API
+  origin, in a header (`Authorization: Bearer`, `x-api-key`,
+  `x-goog-api-key`), never in a URL. It is never in the workspace, a preset, a
+  share link or the cloud save, and psy-sync never sees it. The CSP's
+  `connect-src` is what keeps it from going anywhere else.
+- Anthropic needs `anthropic-dangerous-direct-browser-access: true` to answer
+  a browser: "dangerous" because a key in a page is the listener's to lose;
+  here it is their own key in their own browser, which is the case it exists for.
+- **Model**: the models the key lists, newest first (OpenAI: chat models only,
+  by `created`; Anthropic: as listed; Gemini: those with `generateContent`,
+  no TTS/image/embedding variants). *Automatic* (`autoModel`) takes the newest
+  fast one: `mini`, `haiku` or `flash`, a stable one before a preview. Each
+  provider remembers its own model (`models`); LM Studio keeps `model`.
+- OpenAI reasoning models (`o*`, `gpt-5*`) get `reasoning_effort: "low"` and
+  no temperature; none of the providers gets a temperature (their defaults
+  vary the answers enough).
+- The chart lists the three API origins in `ai.connectSrc`.
 
 **Chrome's model**: offered where `LanguageModel.availability()` says it can
 run (the hardware bar is Chrome's: a desktop with enough GPU memory or RAM and
@@ -1621,8 +1650,8 @@ npm run build
   sounds), `snapshots` (capture, parts, the snapshot autopilot's order and
   timing), `tempo` (BPM ramp), `share`, `wav`,
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`, `planner` (the
-  ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model and LM
-  Studio against fakes, the settings).
+  ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model, LM
+  Studio and the three linked accounts against fakes, the settings).
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
   records nodes and automation. It includes an anti-click invariant: every
@@ -1648,7 +1677,7 @@ npm run build
   section, export / import, a snapshot's link, the snapshot autopilot), bar-by-bar BPM change,
   languages, export / import, WAV, recording (through a fake worklet), Reset
   everything and shared links, and the ✨ AI with fake models (engines offered,
-  the endpoint, a plan taken, a late answer dropped, a queued section, a failing
+  the endpoint, linking and unlinking an account, a plan taken, a late answer dropped, a queued section, a failing
   model, and a shared AI track replayed note for note in a browser with none).
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
   those drag critical advisories into the test toolchain.
