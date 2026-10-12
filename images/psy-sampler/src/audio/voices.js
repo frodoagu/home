@@ -511,6 +511,22 @@ export function analog(ctx, out, t, ev, stepDur) {
   play(squares, t, end);
 }
 
+// Funkytown's lead: two pulses two octaves apart and a faint sub, the filter
+// all but open, full sustain and a 20 ms release.
+export function funky(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.95);
+  const lp = filter(ctx, "lowpass", cut(9000, ev), 0.7);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.45 * vel(ev), 0.003, dur - 0.02, 0.02);
+  lp.connect(amp).connect(out);
+  const oscs = [[1, 0.5], [4, 0.5], [0.5, 0.05]].map(([ratio, level]) => {
+    const o = osc(ctx, "square", ev.freq * ratio);
+    o.connect(constGain(ctx, level)).connect(lp);
+    return o;
+  });
+  play(oscs, t, end);
+}
+
 export function pluck(ctx, out, t, ev, stepDur) {
   const dur = noteLen(ev, stepDur, 0.9);
   const lp = filter(ctx, "lowpass", cut(6000, ev), 1);
@@ -698,6 +714,7 @@ export const INSTRUMENTS = {
   acid,
   supersaw,
   analog,
+  funky,
   pluck,
   arp,
   lead,

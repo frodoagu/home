@@ -20,6 +20,7 @@ import {
   ECHO_STEPS,
   ITERS,
   NOTE_LENGTHS,
+  PART_LOOPS,
   PLIES,
   SPEEDS,
   TRANSPOSE,
@@ -27,6 +28,7 @@ import {
   defOf,
   isCopy,
   paramSpecs,
+  partSteps,
   sampleDefaults,
 } from "../audio/patterns.js";
 import { SCALES, inScale, isRoot, noteName, scaleRows } from "../audio/music.js";
@@ -97,6 +99,8 @@ export function createEditor({
   let current = data;
   let paintGrid = () => {};
   let refreshGrid = () => {};
+  let refreshPages = () => {}; // the piano roll's page tabs, after a length change
+  let paintRoll = null; // the piano roll's playhead, which pages
   let showBrush = () => {};
   let buildUpBtn = null;
   let varyBtn = null;
@@ -678,8 +682,24 @@ export function createEditor({
       (v) => set({ len: Number(v) }),
       "len",
     );
+    // A shorter part drops what no longer fits in it.
+    const loops = select(
+      tx.partLength,
+      PART_LOOPS.map((n) => ({ value: n, label: tx.partLengths(n * 2) })),
+      current.loops ?? 1,
+      (v) => {
+        const size = Number(v) * LOOP_STEPS;
+        const notes = current.notes
+          .filter((n) => n.step < size)
+          .map((n) => (n.step + n.len > size ? { ...n, len: size - n.step } : n));
+        set({ loops: Number(v), notes });
+        refreshPages();
+        refreshGrid();
+      },
+      "loops",
+    );
     synthOnly.push(synth, synthDetail);
-    return [el("div", { class: "pickers" }, ...sourcePicker(), synth, scale, octave, len), synthDetail];
+    return [el("div", { class: "pickers" }, ...sourcePicker(), synth, scale, octave, len, loops), synthDetail];
   }
 
   /* ---- notes: piano roll ---- */
@@ -689,15 +709,40 @@ export function createEditor({
     let cellsByKey = new Map(); // "midi:step" -> cell
     let columns = [];
     let drag = null; // { midi, start, end } while painting a long note
+    // A part longer than a loop shows one loop (2 bars) at a time: `page`.
+    // Cells carry the part step, so every edit sees the whole part.
+    let page = 0;
+    const off = () => page * LOOP_STEPS;
+    const size = () => partSteps(current);
+    const pages = el("div", { class: "seg roll-pages", role: "group", "aria-label": tx.rollPages });
 
     const rows = () => scaleRows(current.scale, def.low, def.high, current.notes.map((n) => n.midi));
+    const key = () => `${rows().join()}|${current.transpose}|${page}`;
+
+    refreshPages = () => {
+      const count = current.loops ?? 1;
+      if (page >= count) page = 0;
+      pages.hidden = count === 1;
+      pages.replaceChildren(
+        ...Array.from({ length: count }, (_, i) => {
+          const b = el("button", { type: "button", class: "ghost", text: `${i * 2 + 1}-${i * 2 + 2}` });
+          b.setAttribute("aria-pressed", String(i === page));
+          b.addEventListener("click", () => {
+            page = i;
+            refreshPages();
+            refreshGrid();
+          });
+          return b;
+        }),
+      );
+    };
 
     function build() {
       const list = rows();
-      rowsKey = `${list.join()}|${current.transpose}`;
+      rowsKey = key();
       cellsByKey = new Map();
       columns = Array.from({ length: LOOP_STEPS }, () => []);
-      grid.replaceChildren(...gridHeader(tx));
+      grid.replaceChildren(...gridHeader(tx, page));
       for (const midi of list) {
         const name = noteName(midi + current.transpose, t().noteNames);
         const rowClass = ["row-label", isRoot(midi) && "root", !inScale(midi, current.scale) && "outside"].filter(Boolean);
@@ -706,11 +751,11 @@ export function createEditor({
           const cell = el("button", {
             type: "button",
             class: cellClass(s) + (isRoot(midi) ? " root" : ""),
-            "data-step": String(s),
+            "data-step": String(off() + s),
             "data-midi": String(midi),
           });
           cell.dataset.name = name;
-          cellsByKey.set(`${midi}:${s}`, cell);
+          cellsByKey.set(`${midi}:${off() + s}`, cell);
           columns[s].push(cell);
           grid.append(cell);
         }
@@ -719,7 +764,7 @@ export function createEditor({
     }
 
     refreshGrid = () => {
-      if (`${rows().join()}|${current.transpose}` !== rowsKey) build();
+      if (key() !== rowsKey) build();
       const covered = new Map();
       for (const n of current.notes) {
         for (let s = n.step; s < n.step + n.len; s++) covered.set(`${n.midi}:${s}`, n);
@@ -747,10 +792,10 @@ export function createEditor({
       const echo = { echo: echoing(e), bothBars: e.shiftKey };
       const notes =
         brush.kind !== "hit"
-          ? brushNote(current.notes, hit.step, hit.midi, current.len, brush.kind, brush[brush.kind], echo)
+          ? brushNote(current.notes, hit.step, hit.midi, current.len, brush.kind, brush[brush.kind], { ...echo, size: size() })
           : echo.echo
-            ? cycleNoteEcho(current.notes, hit.step, hit.midi, current.len, e.shiftKey)
-            : cycleNote(current.notes, hit.step, hit.midi, current.len);
+            ? cycleNoteEcho(current.notes, hit.step, hit.midi, current.len, e.shiftKey, size())
+            : cycleNote(current.notes, hit.step, hit.midi, current.len, size());
       set({ notes });
       refreshGrid();
       const now = notes.find((n) => n.midi === hit.midi && n.step <= hit.step && n.step + n.len > hit.step);
@@ -768,7 +813,7 @@ export function createEditor({
       const hit = drag && at(e.target);
       if (!hit || hit.midi !== drag.midi || hit.step < drag.start) return;
       drag.end = hit.step;
-      for (let s = 0; s < LOOP_STEPS; s++) {
+      for (let s = off(); s < off() + LOOP_STEPS; s++) {
         cellsByKey.get(`${drag.midi}:${s}`)?.classList.toggle("preview", s >= drag.start && s <= drag.end);
       }
     });
@@ -778,7 +823,7 @@ export function createEditor({
       drag = null;
       for (const cell of cellsByKey.values()) cell.classList.remove("preview");
       if (end === start) return; // the click handler adds it
-      set({ notes: placeNote(current.notes, start, midi, end - start + 1) });
+      set({ notes: placeNote(current.notes, start, midi, end - start + 1, size()) });
       refreshGrid();
       onAudition({ midi, accent: false });
     };
@@ -803,13 +848,17 @@ export function createEditor({
       set({ notes: [] });
       refreshGrid();
     });
+    refreshPages();
     refreshGrid();
+    // The playhead: `step` is the part step playing, on whichever page it is.
+    paintRoll = (step) => paintGrid(step === null || Math.floor(step / LOOP_STEPS) !== page ? null : step % LOOP_STEPS);
     return [
       ...brushControls(
         tx.rollLegend,
         (key, value) => set({ notes: brushAllNotes(current.notes, key, value) }),
         () => set({ notes: current.notes.map(({ step, midi, len, accent }) => ({ step, midi, len, accent })) }),
       ),
+      pages,
       wrap(grid),
       el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, clear),
       patternControls(),
@@ -823,10 +872,11 @@ export function createEditor({
       name.focus();
       name.select();
     },
-    paint: (step) => paintGrid(step),
+    paint: (step) => (paintRoll ? paintRoll(step) : paintGrid(step)),
     // New data from outside (a variation): redraw without reporting a change.
     show: (data) => {
       current = data;
+      refreshPages();
       refreshGrid();
       showBrush();
       paintFolds();
@@ -863,11 +913,11 @@ export function createEditor({
 const cellClass = (s) =>
   `step${s % 4 === 0 ? " beat" : ""}${Math.floor(s / 4) % 2 ? " alt" : ""}${s === 16 ? " bar" : ""}`;
 
-// Two header rows over the 32 columns: the bars, then the beats in each.
-function gridHeader(tx) {
+// Two header rows over the 32 columns: the bars (of `page`), then the beats in each.
+function gridHeader(tx, page = 0) {
   const corner = () => el("span", { class: "row-label head-label" });
   const bars = [0, 1].map((b) =>
-    el("span", { class: `bar-head${b ? " bar" : ""}`, style: "grid-column: span 16", text: tx.barN(b + 1) }),
+    el("span", { class: `bar-head${b ? " bar" : ""}`, style: "grid-column: span 16", text: tx.barN(page * 2 + b + 1) }),
   );
   const beats = Array.from({ length: 8 }, (_, i) =>
     el("span", {

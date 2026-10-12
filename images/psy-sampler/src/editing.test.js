@@ -517,3 +517,14 @@ describe("writePart: the AI's degrees as a 2-bar part", () => {
     expect(notes.every((n) => n.len === 4)).toBe(true);
   });
 });
+
+describe("parts longer than a loop", () => {
+  it("add, place and rotate notes within the whole part", () => {
+    expect(cycleNote([], 60, 57, 8, 64)).toEqual([{ step: 60, midi: 57, len: 4, accent: false }]);
+    expect(cycleNote([], 30, 57, 8)).toEqual([{ step: 30, midi: 57, len: 2, accent: false }]);
+    expect(placeNote([], 40, 57, 30, 64)).toEqual([{ step: 40, midi: 57, len: 24, accent: false }]);
+    const data = { loops: 2, notes: [{ step: 63, midi: 57, len: 1, accent: false }] };
+    expect(rotatePart(data, "notes", 1).notes[0].step).toBe(0);
+    expect(rotatePart({ ...data, notes: [{ step: 31, midi: 57, len: 1, accent: false }] }, "notes", 1).notes[0].step).toBe(32);
+  });
+});

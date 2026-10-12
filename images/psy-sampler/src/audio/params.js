@@ -156,6 +156,7 @@ export const SYNTHS = [
   { id: "acid", group: "lead" },
   { id: "supersaw", group: "lead" },
   { id: "analog", group: "lead" },
+  { id: "funky", group: "lead" },
   { id: "pluck", group: "lead" },
   { id: "arp", group: "lead" },
   { id: "lead", group: "lead" },

@@ -1,6 +1,6 @@
 // Pure edits behind the editors. Every function returns new data and never
 // mutates its input, so the UI can hand the result straight to the engine.
-import { ACCENT, HIT, MOD_DEFAULTS, OFF, cleanMod } from "./audio/patterns.js";
+import { ACCENT, HIT, MOD_DEFAULTS, OFF, cleanMod, partSteps } from "./audio/patterns.js";
 import { isRoot } from "./audio/music.js";
 import { BAR_STEPS, LOOP_STEPS } from "./audio/timing.js";
 
@@ -85,28 +85,28 @@ export const noteAt = (notes, step, midi) =>
 /**
  * Piano-roll click, same cycle as the drum grid: an empty cell gets a new
  * note of `len` 16ths (shortened so it never runs into the next note on that
- * row or past the loop end); clicking a note accents it, clicking an accented
- * note deletes it.
+ * row or past the end of the part, `size` steps); clicking a note accents
+ * it, clicking an accented note deletes it.
  */
-export function cycleNote(notes, step, midi, len) {
+export function cycleNote(notes, step, midi, len, size = LOOP_STEPS) {
   const hit = noteAt(notes, step, midi);
   if (hit) {
     return hit.accent ? notes.filter((n) => n !== hit) : notes.map((n) => (n === hit ? { ...n, accent: true } : n));
   }
-  return addNote(notes, step, midi, len, false);
+  return addNote(notes, step, midi, len, false, size);
 }
 
-function addNote(notes, step, midi, len, accent) {
+function addNote(notes, step, midi, len, accent, size = LOOP_STEPS) {
   const nextStart = Math.min(
-    LOOP_STEPS,
+    size,
     ...notes.filter((n) => n.midi === midi && n.step > step).map((n) => n.step),
   );
   return [...notes, { step, midi, len: Math.min(len, nextStart - step), accent }];
 }
 
-// The same 16th in every beat of the bar holding `step`, or of both bars.
+// The same 16th in every beat of the bar holding `step`, or of both bars of its loop.
 export function beatEchoes(step, bothBars = false) {
-  const from = bothBars ? 0 : step - (step % BAR_STEPS);
+  const from = step - (step % (bothBars ? LOOP_STEPS : BAR_STEPS));
   const beats = (bothBars ? LOOP_STEPS : BAR_STEPS) / 4;
   return Array.from({ length: beats }, (_, k) => from + (step % 4) + 4 * k);
 }
@@ -124,7 +124,7 @@ export function cycleStepEcho(steps, i, bothBars = false) {
  * gone) on every echo of its start in that row. A cell already inside a
  * longer note is left alone.
  */
-export function cycleNoteEcho(notes, step, midi, len, bothBars = false) {
+export function cycleNoteEcho(notes, step, midi, len, bothBars = false, size = LOOP_STEPS) {
   const hit = noteAt(notes, step, midi);
   const state = !hit ? HIT : hit.accent ? OFF : ACCENT;
   let out = notes;
@@ -136,15 +136,15 @@ export function cycleNoteEcho(notes, step, midi, len, bothBars = false) {
     } else if (head) {
       out = out.map((n) => (n === head ? { ...n, accent: state === ACCENT } : n));
     } else if (!noteAt(out, s, midi)) {
-      out = addNote(out, s, midi, len, state === ACCENT);
+      out = addNote(out, s, midi, len, state === ACCENT, size);
     }
   }
   return out;
 }
 
 // Drag on a row: the dragged span wins over whatever it covers on that row.
-export function placeNote(notes, step, midi, len) {
-  const end = Math.min(LOOP_STEPS, step + len);
+export function placeNote(notes, step, midi, len, size = LOOP_STEPS) {
+  const end = Math.min(size, step + len);
   const kept = notes.filter((n) => n.midi !== midi || n.step + n.len <= step || n.step >= end);
   return [...kept, { step, midi, len: end - step, accent: false }];
 }
@@ -206,7 +206,7 @@ export function brushAllSteps(data, key, value) {
  * an empty cell gets a new `len` note carrying the brush. `echo` as in
  * brushStep(), on the note's start; a cell inside a longer note is left alone.
  */
-export function brushNote(notes, step, midi, len, key, value, { echo = false, bothBars = false } = {}) {
+export function brushNote(notes, step, midi, len, key, value, { echo = false, bothBars = false, size = LOOP_STEPS } = {}) {
   const hit = noteAt(notes, step, midi);
   const mod = brushMod(hit ? cleanMod(hit) : null, key, value);
   let out = notes;
@@ -214,7 +214,7 @@ export function brushNote(notes, step, midi, len, key, value, { echo = false, bo
     const head = out.find((n) => n.midi === midi && n.step === s);
     if (head) out = out.map((n) => (n === head ? noteWith(n, mod) : n));
     else if (!noteAt(out, s, midi)) {
-      const added = addNote(out, s, midi, len, false);
+      const added = addNote(out, s, midi, len, false, size);
       out = [...out, noteWith(added.at(-1), mod)];
     }
   }
@@ -229,15 +229,15 @@ export function brushAllNotes(notes, key, value) {
 
 /* ------------------------------------------------------ pattern tools -- */
 
-const wrap = (s) => ((s % LOOP_STEPS) + LOOP_STEPS) % LOOP_STEPS;
+const wrap = (s, size = LOOP_STEPS) => ((s % size) + size) % size;
 
-// Each note kept inside the loop and clear of the next one on its row.
-function tidy(notes) {
+// Each note kept inside the part and clear of the next one on its row.
+function tidy(notes, size) {
   const sorted = [...notes].sort((a, b) => a.step - b.step || a.midi - b.midi);
   return sorted
     .filter((n, i) => !sorted.slice(0, i).some((o) => o.midi === n.midi && o.step === n.step))
     .map((n) => {
-      const next = Math.min(LOOP_STEPS, ...sorted.filter((o) => o.midi === n.midi && o.step > n.step).map((o) => o.step));
+      const next = Math.min(size, ...sorted.filter((o) => o.midi === n.midi && o.step > n.step).map((o) => o.step));
       return { ...n, len: Math.min(n.len, next - n.step) };
     });
 }
@@ -253,18 +253,19 @@ function remap(data, kind, move) {
     });
     return { steps, mods };
   }
-  return { notes: tidy(data.notes.map((n) => ({ ...n, step: move(n.step) }))) };
+  const size = partSteps(data);
+  return { notes: tidy(data.notes.map((n) => ({ ...n, step: move(n.step, size) })), size) };
 }
 
 // Strudel's early / late by one 16th: the part `by` steps later, wrapping.
-export const rotatePart = (data, kind, by) => remap(data, kind, (s) => wrap(s + by));
+export const rotatePart = (data, kind, by) => remap(data, kind, (s, size) => wrap(s + by, size));
 
 /**
  * The part backwards around its first step (a retrograde): step s goes to
  * -s, so what sat on the beat stays on a beat and an offbeat stays an
  * offbeat; notes keep their length.
  */
-export const reversePart = (data, kind) => remap(data, kind, (s) => wrap(-s));
+export const reversePart = (data, kind) => remap(data, kind, (s, size) => wrap(-s, size));
 
 /**
  * Bjorklund's `k` hits as evenly as possible over `n` steps, the same

@@ -14,6 +14,7 @@ import {
   defaultData,
   eventsAt,
   paramSpecs,
+  partSteps,
   sampleDefaults,
   sanitize,
   cleanInsert,
@@ -194,7 +195,7 @@ describe("defaults are consistent", () => {
       for (const n of data.notes) {
         expect(n.midi).toBeGreaterThanOrEqual(low);
         expect(n.midi).toBeLessThanOrEqual(high);
-        expect(n.step + n.len).toBeLessThanOrEqual(32);
+        expect(n.step + n.len).toBeLessThanOrEqual(partSteps(data));
         expect(inScale(n.midi, id === "pad.prog" ? "phrygian" : data.scale), `${id} ${n.midi}`).toBe(true);
       }
     }
@@ -475,5 +476,43 @@ describe("insert extras", () => {
     expect(ins).toMatchObject({ shape: "smooth", vowel: "u", env: -1, envDecay: 1, phaser: 0.5, phaserRate: 8, trem: 0.3, tremRate: 1 });
     const bad = cleanInsert({ shape: "noise", vowel: "y", phaserRate: 3, tremRate: 16, filter: "vowel" });
     expect(bad).toMatchObject({ shape: "sine", vowel: "a", phaserRate: 16, tremRate: 2, filter: "vowel" });
+  });
+});
+
+describe("parts longer than a loop", () => {
+  const long = { ...defaultData("lead.arp"), loops: 2, notes: [{ step: 0, midi: 57, len: 1, accent: false }, { step: 40, midi: 60, len: 20, accent: false }] };
+  const at = (loop, step, from = 0) => eventsAt("lead.arp", step, false, long, loop, from);
+
+  it("play on from where the first loop left off, then start over", () => {
+    expect(at(0, 0)).toHaveLength(1);
+    expect(at(1, 8)).toHaveLength(1);
+    expect(at(1, 0)).toHaveLength(0);
+    expect(at(2, 0)).toHaveLength(1);
+    expect(at(1, 8)[0].steps).toBe(20); // a note may run across the loop line
+  });
+
+  it("start from their beginning on the bar their lane came in on", () => {
+    expect(positionAt(0, 3, long, 3 * 32 + 16)).toBe(48);
+    expect(positionAt(16, 3, long, 3 * 32 + 16)).toBe(0);
+    expect(at(3, 16, 3 * 32 + 16)).toHaveLength(1);
+    // A 2-bar part keeps counting from ▶, whatever its lane's bar.
+    expect(positionAt(5, 3, { speed: 1, iter: 1 }, 48)).toBe(5);
+  });
+
+  it("read ×½ over twice the loops", () => {
+    const slow = { ...long, speed: 0.5 };
+    expect(positionAt(0, 2, slow)).toBe(32);
+    expect(positionAt(0, 4, slow)).toBe(0);
+  });
+
+  it("keep their length and every note inside it", () => {
+    const saved = sanitize("lead.arp", { ...long, notes: [...long.notes, { step: 70, midi: 60, len: 1 }] });
+    expect(saved.loops).toBe(2);
+    expect(saved.notes.map((n) => n.step)).toEqual([0, 40]);
+    expect(partSteps(saved)).toBe(64);
+    expect(sanitize("lead.arp", { ...long, loops: 5 }).loops).toBe(1);
+    // Saved before parts could be longer: a 2-bar part, whatever the factory's.
+    expect(sanitize("classic.popcorn", { notes: [] }).loops).toBe(1);
+    expect(sanitize("classic.popcorn", null).loops).toBe(8);
   });
 });

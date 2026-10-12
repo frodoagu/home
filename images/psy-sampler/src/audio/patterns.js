@@ -4,7 +4,11 @@
 //   drum   { steps: [32 × OFF|HIT|ACCENT], mods: [32 × mod|null],
 //            params, level }                                      one voice
 //   notes  { notes: [{step, midi, len, accent, ...mod}], synth,
-//            params, level, scale, transpose, len }               piano roll
+//            params, level, scale, transpose, len, loops }        piano roll
+//
+// A notes part is `loops` 2-bar loops long (PART_LOOPS): its steps run up to
+// loops × 32, and from the second loop on it plays on from where the first
+// left off.
 //   fx     { params, level }                                      one-shot
 //
 // All three also carry `insert` (its filter and distortion, insert.js) and
@@ -23,6 +27,9 @@ import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES, LFO_SHAPES, TREM_
 import { NOTE, SCALES, midiToFreq } from "./music.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
 import { LOOP_STEPS } from "./timing.js";
+
+// How many 2-bar loops a notes part can run.
+export const PART_LOOPS = [1, 2, 3, 4, 6, 8];
 
 export const OFF = 0;
 export const HIT = 1;
@@ -130,6 +137,7 @@ function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
       scale,
       transpose: 0,
       len,
+      loops: 1,
       ...extras(insert),
     },
   };
@@ -143,11 +151,19 @@ const BEATS = steps((s) => (s % 4 === 0 ? HIT : OFF));
 const BASS = { low: A1, high: A3 };
 const LEAD = { low: A2, high: A5 };
 const PAD = { low: A2, high: A4 };
-const CLASSIC = { low: A3, high: A5 };
-
-function classic({ synth, notes: list, scale = "minor", speed = 1 }) {
-  const def = notes(synth, list.map(([s, p, len]) => note(s, midiOf(p), len)), { ...CLASSIC, scale });
+// A classic's roll spans its melody, from the A below to the A above, and
+// its part as many loops as the melody needs.
+const A_BELOW = (midi) => midi - (((midi - 9) % 12) + 12) % 12;
+function classic({ synth, notes: list, speed = 1 }) {
+  const midis = list.map(([, p]) => midiOf(p));
+  const end = Math.max(...list.map(([s, , len]) => s + len));
+  const def = notes(synth, list.map(([s, p, len]) => note(s, midiOf(p), len)), {
+    low: A_BELOW(Math.min(...midis)),
+    high: A_BELOW(Math.max(...midis) + 11),
+    scale: "chromatic",
+  });
   def.data.speed = speed;
+  def.data.loops = PART_LOOPS.find((n) => n * LOOP_STEPS >= end);
   return def;
 }
 
@@ -382,21 +398,28 @@ export const ITERS = [1, 2, 4, 8];
 export const ECHO_STEPS = [1, 2, 3, 4, 6, 8];
 export const ECHO_SEMIS = [-12, 0, 5, 7, 12];
 
-const mod32 = (v) => ((v % LOOP_STEPS) + LOOP_STEPS) % LOOP_STEPS;
+const wrap = (v, n) => ((v % n) + n) % n;
+
+/** How many loop steps a part spans before it repeats. */
+export const partSteps = (data) => LOOP_STEPS * (data.loops ?? 1);
 
 // Where in its part a sound is on `step` of `loop`, in part steps (half
-// steps at ×½). Iter moves the start on by 1/iter of the loop each loop.
-export function positionAt(step, loop, { speed = 1, iter = 1 }) {
-  const shift = iter > 1 ? (((loop % iter) + iter) % iter) * (LOOP_STEPS / iter) : 0;
-  const pos = speed === 2 ? 2 * step : speed === 0.5 ? ((((loop % 2) + 2) % 2) * LOOP_STEPS + step) / 2 : step;
-  return mod32(pos + shift);
+// steps at ×½). Iter moves the start on by 1/iter of the part each loop. A
+// part longer than a loop counts its loops from `from`, the absolute step
+// its lane came in on, so it always starts from its beginning; a 2-bar part
+// counts from ▶.
+export function positionAt(step, loop, { speed = 1, iter = 1, loops = 1 }, from = 0) {
+  const size = LOOP_STEPS * loops;
+  const t = loop * LOOP_STEPS + step - (loops > 1 ? from : 0);
+  const shift = iter > 1 ? wrap(Math.floor(t / LOOP_STEPS), iter) * (size / iter) : 0;
+  return wrap(t * speed + shift, size);
 }
 
 // The part steps that start inside `step`: { at, offset } with `offset` the
 // fraction of the step where each one lands. ×2 reads two, ×½ one every other.
-export function readsAt(step, loop, data) {
-  const pos = positionAt(step, loop, data);
-  if (data.speed === 2) return [{ at: pos, offset: 0 }, { at: mod32(pos + 1), offset: 0.5 }];
+export function readsAt(step, loop, data, from = 0) {
+  const pos = positionAt(step, loop, data, from);
+  if (data.speed === 2) return [{ at: pos, offset: 0 }, { at: wrap(pos + 1, partSteps(data)), offset: 0.5 }];
   return Number.isInteger(pos) ? [{ at: pos, offset: 0 }] : [];
 }
 
@@ -413,7 +436,7 @@ export function readsAt(step, loop, data) {
 // With a sample, the event plays it and keeps its own voice as the fallback.
 const withSample = (ev, data) => (data.sample ? { ...ev, voice: "sample", fallback: ev.voice, sample: data.sample } : ev);
 
-export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loop = 0) {
+export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loop = 0, from = 0) {
   const def = defOf(id);
   if (!def || def.kind === "fx") return [];
   const { speed = 1, iter = 1, echo = null } = data;
@@ -422,15 +445,15 @@ export function eventsAt(id, step, entering = false, data = defOf(id)?.data, loo
   const room = moved ? LOOP_STEPS - step : Infinity; // loop steps left before the loop end
   const events = [];
   const at = (offset, list) => list.map((ev) => (offset ? { ...ev, offset: offset + (ev.offset ?? 0) } : ev));
-  for (const read of readsAt(step, loop, data)) {
+  for (const read of readsAt(step, loop, data, from)) {
     events.push(...at(read.offset, starts(id, def, data, read.at, loop, scale, room - read.offset)));
     if (echo) {
-      const copies = starts(id, def, data, mod32(read.at - echo.steps), loop, scale, room - read.offset, echo);
+      const copies = starts(id, def, data, wrap(read.at - echo.steps, partSteps(data)), loop, scale, room - read.offset, echo);
       events.push(...at(read.offset, copies));
     }
   }
   if (def.kind === "notes" && (entering || (moved && step === 0))) {
-    const pos = positionAt(step, loop, data);
+    const pos = positionAt(step, loop, data, from);
     for (const n of data.notes) {
       if (!(n.step < pos && n.step + n.len > pos) || !passes(n, id, n.step, loop)) continue;
       events.push(noteEvent(data, n, Math.min((n.step + n.len - pos) * scale, room)));
@@ -564,9 +587,13 @@ export function sanitize(id, saved) {
     out.mods = mods.map((m, s) => (out.steps[s] ? cleanMod(m) : null));
   }
   if (def.kind === "notes") {
+    // Saved before parts could be longer: a 2-bar part.
+    if (PART_LOOPS.includes(saved.loops)) out.loops = saved.loops;
+    else if (Array.isArray(saved.notes)) out.loops = 1;
+    const size = partSteps(out);
     if (Array.isArray(saved.notes)) {
       out.notes = saved.notes
-        .filter((n) => n && isInt(n.step, 0, LOOP_STEPS - 1) && isInt(n.midi, 12, 108) && isInt(n.len, 1, LOOP_STEPS - n.step))
+        .filter((n) => n && isInt(n.step, 0, size - 1) && isInt(n.midi, 12, 108) && isInt(n.len, 1, size - n.step))
         .map((n) => note(n.step, n.midi, n.len, n.accent === true, cleanMod(n)));
     }
     if (SYNTH_IDS.includes(saved.synth)) out.synth = saved.synth;

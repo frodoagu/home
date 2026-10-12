@@ -47,7 +47,7 @@ import {
   TICK_MS,
 } from "./timing.js";
 import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
-import { auditionEvent, baseOf, defOf, eventsAt, sampleDefaults } from "./patterns.js";
+import { auditionEvent, baseOf, defOf, eventsAt, partSteps, sampleDefaults } from "./patterns.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
 import TAP_URL from "./tap.worklet.js?url&no-inline";
@@ -56,7 +56,7 @@ const MASTER_GAIN = 0.7;
 const OUTPUT_TRIM = 0.8;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
-const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, glitch: 0.45, classic: 0.3, fx: 0.6 };
+const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, glitch: 0.45, classic: 0.4, fx: 0.6 };
 const BG_KICK_LEVEL = 0.6;
 // Sends per layer, after the lane gain (so they follow its fades). Kick and
 // bass stay dry: tails under them only muddy the low end.
@@ -266,7 +266,7 @@ export function createEngine({
   let stopAt = null; // a bar-line stop: the timer ends once this time passes
   let played = 0; // seconds the loop ran in earlier runs, by the audio clock
   let runFrom = 0; // audio time the current run started
-  const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered }
+  const lanes = new Map(); // lane key -> { variant, gain, input, chain, level, entered, from }
   const fxPlaying = new Map(); // fx id -> { gain, input, chain, end }
   const data = new Map(); // variant id -> edited data (factory data otherwise)
   const volumes = new Map(); // layer id -> its fader over every sound in it (1 otherwise)
@@ -309,11 +309,14 @@ export function createEngine({
 
   // A ratchet's repeats (and a swung 16th) land `offset` steps after their
   // step; a nudge moves them all, but never closer than SAFETY.
+  // A lane's `from` is the bar it came in on (absolute steps from ▶), where
+  // a part longer than a loop starts.
   function scheduleLane(lane, { step, time, loop }, stepDur) {
     const d = dataOf(lane.variant);
     const nudge = (d.nudge ?? 0) / 1000;
     const earliest = ctx.currentTime + SAFETY;
-    for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop)) {
+    lane.from ??= Math.floor((loop * LOOP_STEPS + step) / BAR_STEPS) * BAR_STEPS;
+    for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop, lane.from)) {
       const t = Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge);
       lane.chain.trigger(t);
       voice(ctx, lane.input, t, ev, stepDur);
@@ -754,14 +757,17 @@ export function createEngine({
   /**
    * Renders offline what the engine would play, with the current data, BPM,
    * effects and DJ filter: `lanes` (a lane map, as setLanes takes) or one `fx`. A loop
-   * render plays the loop twice and keeps the second pass, so the tails at
+   * render (as long as its longest part: a loop, or a whole melody several loops
+   * long) plays twice and keeps the second pass, so the tails at
    * its end are already wrapped into its start and the file loops without a
    * seam. An FX render is the one-shot and its tail, trimmed at silence.
    * Resolves to { sampleRate, channels: [Float32Array, ...] }.
    */
   async function render({ lanes: desired = {}, fx = null }) {
     const stepDur = stepDuration(bpm);
-    const loop = Math.round(LOOP_STEPS * stepDur * RENDER_RATE);
+    const long = Object.values(desired).map(dataOf).filter((d) => (d.loops ?? 1) > 1);
+    const span = Math.max(LOOP_STEPS, ...long.map((d) => partSteps(d) / (d.speed ?? 1)));
+    const loop = Math.round(span * stepDur * RENDER_RATE);
     const length = fx ? FX_RENDER_SECONDS * RENDER_RATE : 2 * loop;
     const off = createOffline(2, length, RENDER_RATE);
     const chain = buildChain(off, bpm, effects, djValue);
@@ -779,9 +785,9 @@ export function createEngine({
         const d = dataOf(variant);
         const { input, chain: insert } = into(laneLevel(key, variant), layerOf(variant), d.insert, duckOf(variant));
         const nudge = (d.nudge ?? 0) / 1000;
-        // The kept pass is loop 0, so mods sound as on the first loop after ▶.
-        for (let i = 0; i < 2 * LOOP_STEPS; i++) {
-          const loop = Math.floor(i / LOOP_STEPS) - 1;
+        // The kept pass starts on loop 0, so mods sound as on the first loop after ▶.
+        for (let i = 0; i < 2 * span; i++) {
+          const loop = Math.floor((i - span) / LOOP_STEPS);
           for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
             const t = Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge);
             insert.trigger(t);
@@ -856,6 +862,8 @@ export function createEngine({
     // Step (0..31) and loop audible now, or null.
     visibleStep: () => visible()?.step ?? null,
     visibleLoop: () => visible()?.loop ?? null,
+    /** The bar (absolute step) the lane playing `variant` came in on, or 0. */
+    fromOf: (variant) => [...lanes.values()].find((l) => l.variant === variant)?.from ?? 0,
     stop,
     render,
     tap,
