@@ -25,6 +25,11 @@
 // pad steps back under a lead. The UI draws each loop's move as a straight
 // line over the loop, so a section's volumes are one continuous curve. That
 // needs no rng, so it never shifts a seed.
+//
+// A plan (planner.js: the ✨ AI's, or a share link's) can decide the section
+// after this one: which, how long, and the variants of the layers it names.
+// The pilot takes it before the section's last loop (`withPlan`), where it
+// stands in for the pick of the next section; the queue still goes first.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { LEVEL } from "./audio/params.js";
 import { baseOf } from "./audio/patterns.js";
@@ -177,7 +182,10 @@ const playingOf = (active, layerId) =>
     .filter((id) => layerOfVariant(id) === layerId)
     .sort();
 const range = (spec) => (Array.isArray(spec) ? spec : [spec, spec]);
-const leftOut = (style, layerId) => Boolean(STYLES[style]?.pool) && !STYLES[style].pool[layerId];
+/** Whether `style` has no pool for a layer, so the pilot leaves it out. */
+export const leftOut = (style, layerId) => Boolean(STYLES[style]?.pool) && !STYLES[style].pool[layerId];
+/** [fewest, most] variants a section plays in a layer. */
+export const countRange = (section, layerId) => range(SECTIONS[section].shape[layerId]);
 
 /** A layer's variants under `style`, in id order; copies follow their base. */
 export function poolOf(lists, layerId, style = STYLE_DEFAULT) {
@@ -195,22 +203,46 @@ function shuffle(list, rng) {
   return out;
 }
 
-/** The variants a section plays, built from what plays now. */
-export function arrange(section, active, lists, rng, style = STYLE_DEFAULT) {
+// A plan's variants for a layer that are still in its pool (the style may
+// have changed since), or null when the plan leaves the layer to the rng.
+function planned(fixed, layerId, lists, style) {
+  if (!Object.hasOwn(fixed, layerId)) return null;
+  const pool = poolOf(lists, layerId, style);
+  return fixed[layerId].filter((id) => pool.includes(id));
+}
+
+/**
+ * The variants a section plays, built from what plays now. `fixed` (a plan's
+ * layers) sets a layer outright when its count fits the section; the other
+ * layers draw as usual, and with no plan every draw is the same as ever.
+ */
+export function arrange(section, active, lists, rng, style = STYLE_DEFAULT, fixed = {}) {
   const { shape } = SECTIONS[section];
   const wants = {};
+  const own = {};
   for (const layer of LOOP_LAYERS) {
     const [lo, hi] = range(shape[layer.id]);
-    wants[layer.id] = leftOut(style, layer.id) ? 0 : lo + Math.floor(rng() * (hi - lo + 1));
+    const given = leftOut(style, layer.id) ? null : planned(fixed, layer.id, lists, style);
+    if (leftOut(style, layer.id)) wants[layer.id] = 0;
+    else if (given && given.length >= lo && given.length <= hi) {
+      own[layer.id] = given;
+      wants[layer.id] = given.length;
+    } else wants[layer.id] = lo + Math.floor(rng() * (hi - lo + 1));
   }
   if (MELODIC.every((id) => !wants[id])) {
     const open = MELODIC.filter((id) => range(shape[id])[1] > 0);
     const playing = open.filter((id) => playingOf(active, id).length);
-    wants[pick(playing.length ? playing : open, rng)] = 1;
+    const layerId = pick(playing.length ? playing : open, rng);
+    wants[layerId] = 1;
+    delete own[layerId]; // a plan with no lead and no pad still gets one
   }
   const out = {};
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue; // draws nothing: older layers replay as before
+    if (own[layer.id]) {
+      for (const id of own[layer.id]) out[laneKey(layer, id)] = id;
+      continue;
+    }
     const pool = poolOf(lists, layer.id, style);
     const playing = playingOf(active, layer.id).filter((id) => pool.includes(id));
     const kept = shuffle(playing, rng).filter(() => rng() < KEEP);
@@ -279,6 +311,14 @@ export function joinPilot(active, section = null) {
 /** Jumps the pilot to `section` (a recalled snapshot's), keeping the queue. */
 export const moveTo = (pilot, section) => ({ ...fresh(section, SECTIONS[section].loops[0], pilot.queue) });
 
+/**
+ * Hands the pilot a plan (planner.js normalizePlan) for the section after
+ * this one. Only before the section's last loop: that loop announces what
+ * comes next and fires the riser into a peak, so a later plan would change a
+ * decision already made. Too late, the pilot comes back unchanged.
+ */
+export const withPlan = (pilot, plan) => (pilot && plan && pilot.left > 1 ? { ...pilot, plan } : pilot);
+
 /* ---- by hand: the queue, "next", a new style ---- */
 
 export const enqueue = (pilot, section) => ({ ...pilot, queue: [...pilot.queue, section] });
@@ -307,6 +347,7 @@ export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
  */
 export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, changeBars = CHANGE_DEFAULT } = {}) {
   const queue = pilot.queue ?? [];
+  const plan = pilot.plan ?? null;
   if (pilot.left > 1) {
     const left = pilot.left - 1;
     const done = pilot.length - left;
@@ -316,25 +357,33 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     const fx = [];
     let upcoming;
     if (left === 1) {
-      upcoming = queue[0] ?? pick(SECTIONS[pilot.section].next, rng);
+      upcoming = queue[0] ?? plan?.section ?? pick(SECTIONS[pilot.section].next, rng);
       if (upcoming === "peak") fx.push(pick(BUILD_FX, rng));
     }
     return {
-      pilot: { section: pilot.section, left, length: pilot.length, queue, ...(upcoming ? { next: upcoming } : {}) },
+      pilot: {
+        section: pilot.section,
+        left,
+        length: pilot.length,
+        queue,
+        ...(upcoming ? { next: upcoming } : {}),
+        ...(plan ? { plan } : {}),
+      },
       active: next,
       fx,
       rewrite: newLeads(active, next),
     };
   }
-  const section = queue[0] ?? pilot.next ?? pick(SECTIONS[pilot.section].next, rng);
-  const next = arrange(section, active, lists, rng, style);
+  const section = queue[0] ?? pilot.next ?? plan?.section ?? pick(SECTIONS[pilot.section].next, rng);
+  const own = plan?.section === section ? plan : null; // a queued section beats the plan's
+  const next = arrange(section, active, lists, rng, style, own?.layers);
   const entryFx = { ...ENTRY_FX, ...STYLES[style]?.entryFx }[section];
   const entry = entryFx ? pick(entryFx, rng) : null;
   const rewrite = new Set(newLeads(active, next));
   const [layerId, chance] = REWRITE[section] ?? [];
   if (layerId && rng() < chance) playingOf(next, layerId).slice(0, 1).forEach((id) => rewrite.add(id));
   return {
-    pilot: fresh(section, lengthOf(section, rng), queue[0] ? queue.slice(1) : queue),
+    pilot: fresh(section, own?.bars ? own.bars / 2 : lengthOf(section, rng), queue[0] ? queue.slice(1) : queue),
     active: next,
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),

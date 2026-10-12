@@ -7,9 +7,13 @@
 // sound it brings in from the seed (dress.js) and writes new melodies.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
+// The ✨ AI (planner.js, ai.js) asks a model for the section after each one,
+// early enough for the pilot to take it before that section's last loop; a
+// share link's plans stand in for it section by section.
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
+import { LMSTUDIO_URL, cleanEndpoint, loadPrefs, savePrefs } from "../ai.js";
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
@@ -35,6 +39,7 @@ import {
   rearrange,
   skip,
   startPilot,
+  withPlan,
 } from "../autopilot.js";
 import { dress } from "../dress.js";
 import {
@@ -52,6 +57,7 @@ import {
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
+import { PLAN_SECTIONS, normalizePlan, planPrompt, planSchema } from "../planner.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import {
   hasCustomSounds,
@@ -61,6 +67,7 @@ import {
   readSnapFragment,
   shareFragment,
   snapFragment,
+  unpackPlans,
   unpackSnap,
   unpackSounds,
 } from "../share.js";
@@ -102,7 +109,15 @@ const stamp = (d = new Date()) => {
 };
 
 // Everything tied to the old workspace, dropped when another one replaces it.
-const fresh = () => ({ tempo: null, ramp: null, drafts: new Map(), applied: null, queuedSnap: null, armed: false });
+const fresh = () => ({
+  tempo: null,
+  ramp: null,
+  drafts: new Map(),
+  applied: null,
+  queuedSnap: null,
+  armed: false,
+  replay: null,
+});
 
 export function mountApp(root, engine, opts = {}) {
   const {
@@ -114,6 +129,7 @@ export function mountApp(root, engine, opts = {}) {
     samples = null, // samples.js; same
     stats = null, // stats.js; same
     mediaKeys = null, // mediaKeys.js; same
+    ai = null, // ai.js: the ✨ AI's models; same
     recorder = createRecorder(engine),
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
@@ -132,6 +148,10 @@ export function mountApp(root, engine, opts = {}) {
     auto: resume?.auto ?? false,
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
+    run: resume?.run ?? null, // { sections, plans }: the sections the pilot walked since it started, the plans it took
+    replay: resume?.replay ?? null, // a share link's plans, one per section, taken again from silence
+    aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe (ai.js)
+    chrome: resume?.chrome ?? "unavailable", // what Chrome's built-in model said it can do here
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
     queuedSnap: resume?.queuedSnap ?? null, // a snapshot entering with `pending` on the next bar line
@@ -303,6 +323,47 @@ export function mountApp(root, engine, opts = {}) {
   diceBtn.title = tx.share.newSeed;
   const shareBtn = el("button", { type: "button", class: "ghost", "data-action": "share", text: tx.share.share });
   shareBtn.title = tx.share.shareTitle;
+
+  /* ---- ✨ AI: a model plans each next section (planner.js, ai.js) ---- */
+  const aiBtn = el("button", { type: "button", class: "ai", "data-action": "ai", text: tx.ai.button });
+  aiBtn.title = tx.ai.title;
+  aiBtn.hidden = !ai;
+  const field = (id, label, input, title) => {
+    const box = el("label", { class: "ai-field", for: id }, el("span", { text: label }), input);
+    box.title = title;
+    return box;
+  };
+  const engineInput = el("select", { id: "ai-engine", "data-control": "ai-engine" });
+  const engineBox = field("ai-engine", tx.ai.engine, engineInput, tx.ai.engineTitle);
+  const endpointInput = el("input", {
+    type: "url",
+    id: "ai-endpoint",
+    class: "ai-input",
+    spellcheck: "false",
+    autocomplete: "off",
+    placeholder: LMSTUDIO_URL,
+  });
+  const endpointBox = field("ai-endpoint", tx.ai.endpoint, endpointInput, tx.ai.endpointTitle);
+  const modelInput = el("input", {
+    type: "text",
+    id: "ai-model",
+    class: "ai-input",
+    maxlength: "120",
+    spellcheck: "false",
+    autocomplete: "off",
+    placeholder: tx.ai.modelAuto,
+  });
+  const modelBox = field("ai-model", tx.ai.model, modelInput, tx.ai.modelTitle);
+  const vibeInput = el("input", {
+    type: "text",
+    id: "ai-vibe",
+    class: "ai-input vibe",
+    maxlength: "200",
+    autocomplete: "off",
+    placeholder: tx.ai.vibePlaceholder,
+  });
+  const vibeBox = field("ai-vibe", tx.ai.vibe, vibeInput, tx.ai.vibeTitle);
+  const aiRow = el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, modelBox, vibeBox);
 
   /* ---- tools ---- */
   const wavBtn = el("button", { type: "button", class: "ghost", "data-action": "wav-mix", text: tx.tools.wav });
@@ -694,7 +755,8 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      aiRow,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
         "div",
@@ -783,12 +845,19 @@ export function mountApp(root, engine, opts = {}) {
       const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
       drop.addEventListener("click", () => {
         state.pilot = dequeue(state.pilot, i);
+        if (i === 0) replan();
         showSection();
       });
       return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), drop);
     });
-    if (p && !p.queue.length && p.left === 1 && p.next) {
-      chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
+    // What comes if nothing is queued: the pilot's pick in its last loop, a
+    // plan's (✨) as soon as there is one.
+    const upcoming = p && !p.queue.length ? (p.left === 1 ? p.next : p.plan?.section) : null;
+    if (upcoming) {
+      const text = p.plan ? `✨ ${tx.sections[upcoming]}` : tx.sections[upcoming];
+      const li = el("li", { class: `queued is-auto${p.plan ? " is-ai" : ""}`, "data-queued": upcoming }, el("span", { text }));
+      if (p.plan) li.title = tx.ai.planned;
+      chips.push(li);
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -933,6 +1002,8 @@ export function mountApp(root, engine, opts = {}) {
       for (const id of move.rewrite) rewrite(id);
       for (const id of move.fx) fire(id, time);
       state.active = move.active;
+      if (state.pilot.left === state.pilot.length) enterSection();
+      else if (state.pilot.left === 1) cancelPlanning(); // too late for a plan now
       showSection();
       changed = true;
     }
@@ -1269,6 +1340,7 @@ export function mountApp(root, engine, opts = {}) {
     state.applied = snap.id;
     if (state.auto) {
       state.pilot = moveTo(state.pilot, snap.section);
+      enterSection();
       showSection();
     }
   }
@@ -1637,6 +1709,8 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- remount: language, import, share links, reset ---- */
   function destroy() {
+    alive = false;
+    cancelPlanning();
     if (soloing) engine.setSolo(null);
     closeEditor();
     clearInterval(recTimer);
@@ -1658,14 +1732,24 @@ export function mountApp(root, engine, opts = {}) {
   function remount(changes = {}) {
     const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
     const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
+    Object.assign(carried, { run: state.run, replay: state.replay, aiPrefs: state.aiPrefs, chrome: state.chrome });
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
     return mountApp(root, engine, { ...opts, recorder, resume: next });
   }
 
-  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds }) {
+  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds, plans }) {
     history.replaceState(null, "", location.pathname + location.search);
     let next = { ...ws, seed, style: sharedStyle ?? ws.style, bpm: sharedBpm ?? ws.bpm };
+    let replay = null;
+    if (plans) {
+      try {
+        replay = await unpackPlans(plans);
+      } catch {
+        status(tx.share.badLink);
+        return;
+      }
+    }
     if (sounds) {
       try {
         const shared = await unpackSounds(sounds);
@@ -1677,7 +1761,9 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.auto = false;
     state.varying = new Map();
-    remount({ ws: normalize(next), ...fresh(), pending: null, status: tx.share.loaded(seed), open: null });
+    // With the ✨ AI on, a seed-only link plays on as the model's track.
+    const text = !replay && ai && state.aiPrefs.on ? `${tx.share.loaded(seed)} ${tx.ai.varies}` : tx.share.loaded(seed);
+    remount({ ws: normalize(next), ...fresh(), replay, pending: null, status: text, open: null });
   }
 
   // A snapshot link adds its snapshot after yours, like ⬆ Importar does,
@@ -1717,9 +1803,12 @@ export function mountApp(root, engine, opts = {}) {
     if (Object.keys(playing).length) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
+      state.replay = null; // a link's track only replays from silence
+      state.run = { sections: [], plans: [] };
       dressIn(Object.values(playing).sort());
       mixIn(playing);
       commit(playing);
+      enterSection();
       showSection();
       return;
     }
@@ -1735,10 +1824,12 @@ export function mountApp(root, engine, opts = {}) {
     state.queuedSnap = null;
     const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
+    state.run = { sections: [], plans: [] };
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
     commit(start.active);
+    enterSection();
     showSection();
   }
 
@@ -1746,9 +1837,25 @@ export function mountApp(root, engine, opts = {}) {
   function forceSection(id) {
     if (!state.auto) engageAuto(id);
     else {
+      const head = state.pilot.queue[0];
       state.pilot = enqueue(state.pilot, id);
+      if (state.pilot.queue[0] !== head) replan();
       showSection();
     }
+  }
+
+  // The queue's head changed: the ✨ AI arranges what now comes next, not the
+  // section it had picked (in the last loop that is decided already).
+  function replan() {
+    const p = state.pilot;
+    if (!p || !state.aiPrefs.on || replaying() || p.left <= 1 || (p.plan && p.plan.section === p.queue[0])) return;
+    if (p.plan) {
+      const { plan: _dropped, ...rest } = p;
+      state.pilot = rest;
+      delete state.run.plans[sectionNo()];
+    }
+    cancelPlanning();
+    planAhead();
   }
 
   // A style narrows the autopilot's sounds and takes the BPM to its own.
@@ -1765,9 +1872,187 @@ export function mountApp(root, engine, opts = {}) {
 
   function setSeed(value) {
     ws.seed = cleanSeed(value) || randomSeed();
+    state.replay = null; // another track: a link's plans were for its own seed
     seedInput.value = ws.seed;
     persist();
     if (state.auto) engageAuto();
+  }
+
+  /* ---- ✨ AI ---- */
+  let alive = true;
+  let planning = null; // { n, abort }: the model's answer for the section after section n, on its way
+  let failing = false; // the last ask failed: said once, until one works
+  const sectionNo = () => state.run.sections.length - 1;
+  // Chrome's model where it runs, unless LM Studio was picked.
+  const engineNow = () => (state.aiPrefs.engine === "lmstudio" || state.chrome === "unavailable" ? "lmstudio" : "chrome");
+  // A share link's run, from silence: while it has an entry for the section
+  // playing, that entry (or none) stands in for the model's answer.
+  const replaying = () => Boolean(state.replay) && Boolean(state.run) && sectionNo() < state.replay.length;
+
+  function showAi() {
+    const { on, endpoint, model, vibe } = state.aiPrefs;
+    const engine = engineNow();
+    aiBtn.setAttribute("aria-pressed", String(on));
+    aiBtn.classList.toggle("is-thinking", Boolean(planning));
+    aiRow.hidden = !ai || !on;
+    const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio"];
+    if (engineInput.options.length !== engines.length) {
+      engineInput.replaceChildren(...engines.map((id) => el("option", { value: id, text: tx.ai.engines[id] })));
+    }
+    engineInput.value = engine;
+    endpointBox.hidden = engine !== "lmstudio";
+    modelBox.hidden = engine !== "lmstudio";
+    if (document.activeElement !== endpointInput) endpointInput.value = endpoint;
+    if (document.activeElement !== modelInput) modelInput.value = model;
+    if (document.activeElement !== vibeInput) vibeInput.value = vibe;
+  }
+
+  function setPrefs(changes) {
+    state.aiPrefs = { ...state.aiPrefs, ...changes };
+    savePrefs(storage, state.aiPrefs);
+    showAi();
+  }
+
+  function cancelPlanning() {
+    planning?.abort.abort();
+    planning = null;
+    if (alive) showAi();
+  }
+
+  // A click on ✨ (or a new engine, endpoint or model): gets the model going,
+  // so the user hears now whether it answers: Chrome's may download first.
+  function startAi() {
+    cancelPlanning();
+    failing = false;
+    const engine = engineNow();
+    const { endpoint, model } = state.aiPrefs;
+    const name = tx.ai.engines[engine];
+    const started =
+      engine === "chrome"
+        ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))))
+        : ai.lmstudio.start({ endpoint, model });
+    started.then(
+      () => {
+        if (engine === "chrome") state.chrome = "available"; // downloaded now
+        if (!alive || !state.aiPrefs.on) return;
+        status(tx.ai.ready(name));
+        planAhead();
+      },
+      () => {
+        if (!alive || !state.aiPrefs.on) return;
+        status(engine === "chrome" ? tx.ai.chromeFailed : tx.ai.unreachable(endpoint));
+      },
+    );
+  }
+
+  // The pilot takes a plan for the section after this one (it records it, so
+  // 🔗 Compartir can carry it), unless it comes too late.
+  function attach(raw) {
+    const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
+    const next = withPlan(state.pilot, plan);
+    if (!plan || next === state.pilot) return;
+    state.pilot = next;
+    state.run.plans[sectionNo()] = plan;
+    showSection();
+  }
+
+  // Asks the model for the section after this one, while the pilot can still
+  // take the answer: before this section's last loop.
+  function planAhead() {
+    const p = state.pilot;
+    if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || p.plan || p.left <= 1) return;
+    if (replaying() || planning?.n === sectionNo()) return;
+    const next = p.queue[0] ?? null; // queued by hand: the model arranges that one
+    if (next && !PLAN_SECTIONS.includes(next)) return;
+    cancelPlanning();
+    const n = sectionNo();
+    const abort = new AbortController();
+    planning = { n, abort };
+    const ctx = { lists: ws.lists, style: ws.style, next };
+    const { endpoint, model, vibe } = state.aiPrefs;
+    const prompt = planPrompt({
+      ...ctx,
+      bpm: state.tempo,
+      active: state.active,
+      sections: state.run.sections,
+      bars: p.length * 2,
+      vibe,
+      names: ws.names,
+    });
+    ai[engineNow()]
+      .plan(prompt, planSchema(ctx), { endpoint, model, signal: abort.signal })
+      .then(
+        (raw) => {
+          if (planning?.abort !== abort) return;
+          failing = false;
+          attach(raw);
+        },
+        () => {
+          if (planning?.abort !== abort) return;
+          // Chrome's model may still need the click that downloads it.
+          if (!failing) status(engineNow() === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
+          failing = true;
+        },
+      )
+      .finally(() => {
+        if (planning?.abort !== abort) return;
+        planning = null;
+        if (alive) showAi();
+      });
+    showAi();
+  }
+
+  // A new section for the pilot: a share link's plan for the one after it,
+  // or the model's.
+  function enterSection() {
+    cancelPlanning();
+    state.run ??= { sections: [], plans: [] };
+    state.run.sections.push(state.pilot.section);
+    if (!replaying()) {
+      planAhead();
+      return;
+    }
+    const raw = state.replay[sectionNo()];
+    if (raw) attach(raw);
+  }
+
+  aiBtn.addEventListener("click", () => {
+    if (state.aiPrefs.on) {
+      setPrefs({ on: false });
+      cancelPlanning();
+      return;
+    }
+    setPrefs({ on: true });
+    startAi();
+  });
+  engineInput.addEventListener("change", () => {
+    setPrefs({ engine: engineInput.value === "lmstudio" ? "lmstudio" : "chrome" });
+    startAi();
+  });
+  endpointInput.addEventListener("change", () => {
+    const endpoint = cleanEndpoint(endpointInput.value);
+    if (!endpoint) {
+      status(tx.ai.badEndpoint);
+      endpointInput.value = state.aiPrefs.endpoint;
+      return;
+    }
+    setPrefs({ endpoint });
+    endpointInput.value = endpoint;
+    startAi();
+  });
+  modelInput.addEventListener("change", () => {
+    setPrefs({ model: modelInput.value.replace(/\s+/g, " ").trim().slice(0, 120) });
+    startAi();
+  });
+  vibeInput.addEventListener("change", () => {
+    setPrefs({ vibe: vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200) });
+  });
+  if (ai?.chrome.supported()) {
+    ai.chrome.availability(lang()).then((can) => {
+      if (!alive) return;
+      state.chrome = can;
+      showAi();
+    });
   }
 
   /* ---- controls ---- */
@@ -1863,6 +2148,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = state.armed ? playing : null;
     state.auto = false;
     state.pilot = null;
+    cancelPlanning();
     state.queuedSnap = null;
     state.ramp = null;
     state.newParts.clear();
@@ -1903,6 +2189,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     state.auto = false;
     state.pilot = null;
+    cancelPlanning();
     sync(); // the background kick may come back
     showSection();
   });
@@ -1930,7 +2217,7 @@ export function mountApp(root, engine, opts = {}) {
   }
   shareBtn.addEventListener("click", async () => {
     stats?.count("shares");
-    copyLink(await shareFragment(ws), tx.share.copied);
+    copyLink(await shareFragment(ws, state.run?.plans ?? []), tx.share.copied);
   });
   recBtn.addEventListener("click", async () => {
     if (recStopping) return;
@@ -2032,6 +2319,7 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- first paint ---- */
   showSection();
+  showAi();
   showRec();
   showRamp();
   setDj(state.dj);
@@ -2042,6 +2330,7 @@ export function mountApp(root, engine, opts = {}) {
     if (resume.open && tiles.has(resume.open)) openEditor(layerOf(resume.open), resume.open);
     else if (resume.open && snapTiles.has(resume.open)) openSnapEditor(resume.open);
     if (resume.status) status(resume.status);
+    planAhead(); // a remount drops the ask on its way
   } else {
     if (!stored.seed) persist();
     renderButtons(new Set());

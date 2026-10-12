@@ -2,15 +2,17 @@
   The page loads nothing but its own files and Google Sign-In (script, its
   stylesheet, the button's iframe). Inline styles stay allowed: the editors set
   style attributes. media-src takes blob: for the silent track that holds the
-  media session (src/mediaKeys.js). A new third-party origin must be added here or it is blocked.
+  media session (src/mediaKeys.js). connect-src adds the ✨ AI's LM Studio
+  endpoints (ai.connectSrc). A new third-party origin must be added here or it is blocked.
   No Cross-Origin-Opener-Policy: same-origin would cut the sign-in popup off.
 */}}
+{{- $connect := concat (list "'self'" "https://accounts.google.com/gsi/") (.Values.ai.connectSrc | default list) }}
 {{- $csp := list
   "default-src 'self'"
   "script-src 'self' https://accounts.google.com/gsi/client"
   "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style"
   "frame-src https://accounts.google.com/gsi/"
-  "connect-src 'self' https://accounts.google.com/gsi/"
+  (printf "connect-src %s" (join " " $connect))
   "img-src 'self' data:"
   "media-src 'self' blob:"
   "object-src 'none'"
@@ -54,6 +56,9 @@ data:
             add_header Cache-Control "no-cache, no-store, must-revalidate";
             add_header Content-Security-Policy "{{ $csp }}" always;
             add_header X-Content-Type-Options nosniff always;
+            {{- range .Values.ai.originTrials }}
+            add_header Origin-Trial "{{ . }}" always;
+            {{- end }}
         }
 
         # The build id an open page polls to notice a deploy (src/update.js):

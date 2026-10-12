@@ -17,6 +17,7 @@ import {
   rearrange,
   skip,
   startPilot,
+  withPlan,
 } from "./autopilot.js";
 import { baseOf } from "./audio/patterns.js";
 import { seeded } from "./editing.js";
@@ -286,5 +287,79 @@ describe("autopilot", () => {
         }
       }
     });
+  });
+});
+
+describe("plans (✨ AI)", () => {
+  // Plays the pilot until its first section change, with `plan` handed over at the start.
+  function toNext(plan, { seed = 7, steer = (p) => p, style } = {}) {
+    const rng = seeded(seed);
+    let { pilot, active } = startPilot(lists, rng, style);
+    pilot = steer(withPlan(pilot, plan));
+    const moves = [];
+    do {
+      const move = advance(pilot, active, lists, rng, { style });
+      ({ pilot, active } = move);
+      moves.push(move);
+    } while (pilot.left !== pilot.length);
+    return moves;
+  }
+
+  it("are taken only before a section's last loop", () => {
+    const plan = { section: "peak", bars: 16, layers: {} };
+    const { pilot } = startPilot(lists, seeded(1));
+    expect(withPlan(pilot, plan).plan).toBe(plan);
+    expect(withPlan(pilot, null)).toBe(pilot);
+    expect(withPlan({ ...pilot, left: 1 }, plan).plan).toBeUndefined();
+    expect(withPlan(null, plan)).toBeNull();
+  });
+
+  it("pick the next section, its length and the layers they name; a peak still gets its riser", () => {
+    const plan = { section: "peak", bars: 24, layers: { kick: ["kick.long"], lead: ["lead.acid"], perc: ["perc.hat", "perc.shaker", "perc.toms"] } };
+    const moves = toNext(plan, { style: "goa" });
+    const last = moves.at(-2); // the intro's last loop
+    expect(last.pilot).toMatchObject({ left: 1, next: "peak" });
+    expect(last.fx.some((id) => ["fx.riser", "fx.riserImpact", "fx.reverse"].includes(id))).toBe(true);
+    const entry = moves.at(-1);
+    expect(entry.pilot).toMatchObject({ section: "peak", length: 12, left: 12 });
+    expect(entry.pilot.plan).toBeUndefined();
+    expect(entry.active.kick).toBe("kick.long");
+    expect(Object.values(entry.active).filter((id) => layerOfVariant(id) === "lead")).toEqual(["lead.acid"]);
+    expect(Object.values(entry.active).filter((id) => layerOfVariant(id) === "perc").sort()).toEqual(["perc.hat", "perc.shaker", "perc.toms"]);
+    expect(count(entry.active, "bass")).toBe(1); // not in the plan: drawn, to the peak's shape
+    expect(count(entry.active, "pad")).toBe(1);
+  });
+
+  it("with no length (normalizePlan drops one the section cannot have), the pilot draws one", () => {
+    for (let seed = 1; seed < 10; seed++) {
+      expect([8, 12]).toContain(toNext({ section: "peak", bars: null, layers: {} }, { seed }).at(-1).pilot.length);
+    }
+  });
+
+  it("a queued section goes first; its arrangement is the plan's only if it is the same section", () => {
+    const plan = { section: "peak", bars: 16, layers: { lead: ["lead.acid"] } };
+    const other = toNext(plan, { steer: (p) => enqueue(p, "breakdown") }).at(-1);
+    expect(other.pilot).toMatchObject({ section: "breakdown", queue: [] });
+    const same = toNext(plan, { steer: (p) => enqueue(p, "peak") }).at(-1);
+    expect(same.pilot).toMatchObject({ section: "peak", length: 8, queue: [] });
+    expect(Object.values(same.active)).toContain("lead.acid");
+  });
+
+  it("a plan with no lead and no pad still plays one of them", () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const entry = toNext({ section: "groove", bars: 8, layers: { lead: [], pad: [] } }, { seed }).at(-1);
+      expect(melodic(entry.active)).toBeGreaterThan(0);
+    }
+  });
+
+  it("a layer the style no longer has the planned sounds of is drawn from the new pool", () => {
+    const plan = { section: "groove", bars: 8, layers: { kick: ["kick.long"] } }; // goa's, not techno's
+    const entry = toNext(plan, { style: "techno" }).at(-1);
+    expect(STYLES.techno.pool.kick).toContain(entry.active.kick);
+  });
+
+  it("the same seed and the same plans make the same track", () => {
+    const plan = { section: "breakdown", bars: 16, layers: { pad: ["pad.prog"], lead: ["lead.arp"] } };
+    expect(toNext(plan, { seed: 11 })).toEqual(toNext(plan, { seed: 11 }));
   });
 });

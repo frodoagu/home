@@ -9,8 +9,9 @@ signed-in user can upload samples to their profile and play any sound through
 one. A DJ filter sweeps the whole mix. An autopilot builds a track
 on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
-sound sounds; its sections can be forced and queued. What plays exports to WAV,
-as a loop or as a live recording.
+sound sounds; its sections can be forced and queued, or planned by a language
+model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
+listener's machine). What plays exports to WAV, as a loop or as a live recording.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
@@ -565,7 +566,8 @@ Everything lives in one object, the **workspace** (`workspace.js`), in
 `localStorage` (`psy-sampler:v2`, per browser): BPM, the switches, the order of
 layers and tiles, the copies, the names, the edited data, the snapshots, the
 length of the BPM change, the seed, the autopilot's style and changes, each
-sound's Improvise amount, and the language. The only thing not saved is what's
+sound's Improvise amount, and the language. The ✨ AI's settings live apart, in
+`psy-sampler:ai`. The only thing not saved is what's
 playing (a page load starts silent: no audio without a click). `normalize()` is
 the only way in, for storage and for an imported preset: it checks every field
 and whatever doesn't add up goes back to the factory value, so old, hand-edited
@@ -935,6 +937,8 @@ For the replay to hold:
 duplicated sounds, `&s=…`: those sounds as a JSON preset, `deflate-raw` and
 base64url (`share.js`), because the track is only the same with the same sounds.
 What the autopilot wrote or dressed doesn't travel: the seed regenerates it.
+A track the ✨ AI planned also carries `&ai=…`: the plans the pilot took (see
+[✨ AI](#-ai-a-model-plans-the-sections)).
 Opening the link loads seed, style and BPM (the sounds too, with a confirmation
 if you already had your own), clears the fragment and says to press the
 autopilot: audio needs that click. 🎲 draws a new seed (6 characters without
@@ -946,6 +950,109 @@ inflate to at most `SOUNDS_MAX` (1 MiB): deflate expands up to ~1000×,
 so a URL at Chrome's 2 MB limit would otherwise unpack to gigabytes and kill
 the tab. Lookups of a name from outside (style, section, scale, language) use
 `Object.hasOwn`, never `in`: `"constructor" in STYLES` is true.
+
+## ✨ AI: a model plans the sections
+
+**✨ AI** (next to 🤖) hands one decision of the autopilot to a language model:
+**the section after the one playing** — which one, how many bars, and which
+sounds each layer plays, following the listener's **Vibe** (free text). Nothing
+else: melodies, how each sound is dressed, the FX and the swaps inside a section
+still come from the seed, and the section forms still hold (a breakdown has no
+kick, every section plays a lead or a pad).
+
+| | Chrome (Gemini Nano) | LM Studio |
+|---|---|---|
+| What | Chrome's built-in model, the Prompt API (`LanguageModel`) | any OpenAI-compatible chat endpoint; LM Studio's by default (`http://localhost:1234/v1`) |
+| Offered | only where the browser exposes `LanguageModel` and `availability()` isn't `"unavailable"` | always (when the page has models: `main.js` passes `createAi()`) |
+| Runs | on the listener's machine; Chrome downloads it once for every site, and starting that download needs a click (✨) | wherever LM Studio runs; the page fetches it directly |
+| Schema | `responseConstraint` (the JSON Schema) | `response_format: {type: "json_schema", …}` |
+| Server cost | none | none: the Pi never sees the request |
+
+### How a plan gets in
+
+- At the start of every section (`enterSection` in `app.js`) the page asks for
+  the next one (`planAhead`). The prompt (`planner.js` `planPrompt`) carries the
+  style and BPM, the last 8 sections, what plays, the vibe, and every id the
+  style allows per layer with its English name; the system prompt (`SYSTEM`)
+  teaches the section forms, read off `SECTIONS`.
+- The answer must follow `planSchema()`: the section, the bars and every
+  layer's ids are **enums**, so a model that decodes against the schema can't
+  name a sound that isn't there. Engines differ in how much of a schema they
+  enforce, so **`normalizePlan()` is the gate**, as `normalize()` is for
+  presets: a section a plan may pick (never `intro`), bars the section can
+  last (else the pilot draws them), and per layer only ids in the style's pool,
+  at most as many as the section plays — a layer left with fewer than it needs
+  is dropped and the pilot draws it. Outside names are looked up with
+  `Object.hasOwn`.
+- The pilot takes a plan only **before the section's last loop**
+  (`withPlan`): that loop announces what comes next and fires the riser into a
+  peak, so a later answer would change a decision already made. An answer that
+  comes later is thrown away (the request is aborted when the last loop
+  starts) and the pilot picks as usual. A model that fails says so once in the
+  status line and the pilot carries on alone.
+- In `advance()` a plan stands in for the `pick` of the next section — the
+  queue still goes first — and for `arrange()`'s draws on the layers it names.
+  **With no plan every draw is the one it always was**: a seed shared before
+  the AI existed plays the same track.
+- A section queued by hand is the one the model is asked to arrange (the
+  schema allows only that section); queuing one when a plan for another is in
+  drops that plan and asks again.
+- Requests run off the main thread's critical path: the Prompt API answers
+  from Chrome's own process and LM Studio over `fetch`. Only the prompt is built
+  synchronously, and it is a few KB of text.
+
+### Seeds, share links and replay
+
+A model's answers can't come back from a seed, so the run records the plans it
+took, one per section (`state.run.plans`, holes where a section had none), and
+🔗 Share adds them as `&ai=…` (JSON, deflate-raw, base64url, like `&s=`, at most
+`PLAN_MAX` = 256 sections). Opening such a link keeps them as the **replay**:
+from silence, each section takes its recorded plan at its start instead of
+asking a model — in any browser, with a model or without. That is exact because
+a plan only matters at two moments (the last loop and the section change):
+when it arrived before them changes nothing. While the replay has an entry for
+the section playing, the model isn't asked; past its end the AI (if on) plans
+again. A new seed, joining a playing mix or a preset/reset ends the replay. A
+link with no `&ai=` opened with ✨ on plays on as the model's track, and the
+status line says so.
+
+Each plan read from a link is still untrusted input: `readPlans()` keeps a list
+of objects (anything else becomes a hole) and `normalizePlan()` checks each one
+when its section comes.
+
+### Settings and setup
+
+The settings (on, engine, endpoint, model, vibe) live per browser in
+`localStorage` (`psy-sampler:ai`, `ai.js` `loadPrefs` / `cleanPrefs`), not in
+the workspace: what a browser can run is that browser's, so it never travels
+with a preset or the cloud save.
+
+**LM Studio**: Developer → start the server with **CORS** on, load a chat model,
+and pick *LM Studio* under ✨. The endpoint is cleaned to an http(s) base URL
+(`/v1` added when there's no path). With **Model** empty the page asks
+`/v1/models` and takes the first id that isn't an embedding; LM Studio lists
+every downloaded model when it loads them on demand, so with several of them
+name the one to use. Two gates sit in front of it:
+
+- **CSP**: the page can only `fetch` origins in `connect-src`. The chart adds
+  `ai.connectSrc` (loopback by default: `http://localhost:*`,
+  `http://127.0.0.1:*`). Another host must be served over **https** (plain http
+  from an https page is mixed content, blocked whatever the CSP) and be listed
+  there.
+- **Chrome's Local Network Access** (Chrome 142+): the first request from
+  psy.agu.com.ar to localhost asks the listener's permission.
+
+**Chrome's model**: offered where `LanguageModel.availability()` says it can
+run (the hardware bar is Chrome's: a desktop with enough GPU memory or RAM and
+free disk; see Chrome's Prompt API docs). Whether the web version of the API
+still needs an origin trial depends on the Chrome release; if it does,
+register psy.agu.com.ar at https://developer.chrome.com/origintrials and put
+the token in the chart's `ai.originTrials` (one `Origin-Trial` header each; they
+expire). Without the API the page simply doesn't offer that engine.
+
+Tests (`ai.test.js`, `planner.test.js`, the plan cases in `autopilot.test.js`,
+the ✨ block in `app.test.js`) run against a fake `LanguageModel` and a fake
+`fetch`; nothing in CI talks to a real model.
 
 ## Languages
 
@@ -1200,7 +1307,9 @@ npm run build
   presets, snapshot files), `autopilot` (sections, forms, never without lead/pad, changes every
   N bars, section queue, styles, per-seed determinism), `dress` (per-seed
   sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
-  `take` (silence gate, cap, tail trim), `recorder`, `i18n`.
+  `take` (silence gate, cap, tail trim), `recorder`, `i18n`, `planner` (the
+  ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model and LM
+  Studio against fakes, the settings).
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
   records nodes and automation. It includes an anti-click invariant: every
@@ -1225,7 +1334,9 @@ npm run build
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
   section, export / import, a snapshot's link), bar-by-bar BPM change,
   languages, export / import, WAV, recording (through a fake worklet), Reset
-  everything and shared links.
+  everything and shared links, and the ✨ AI with fake models (engines offered,
+  the endpoint, a plan taken, a late answer dropped, a queued section, a failing
+  model, and a shared AI track replayed note for note in a browser with none).
 - The devDependencies (Vite 8, Vitest 5, jsdom 29) are newer than `home-site`'s:
   those drag critical advisories into the test toolchain.
 
