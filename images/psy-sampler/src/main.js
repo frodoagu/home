@@ -1,4 +1,5 @@
 import "./style.css";
+import { createAi } from "./ai.js";
 import { createEngine } from "./audio/engine.js";
 import { createCloud } from "./cloud.js";
 import { createMediaKeys } from "./mediaKeys.js";
@@ -20,7 +21,10 @@ const stats = createStats({ engine, storage: browserStorage() });
 stats.start();
 // The keyboard's play/pause and stop keys drive the transport.
 const mediaKeys = createMediaKeys();
-mountApp(document.getElementById("app"), engine, { cloud, samples, stats, mediaKeys });
+// The ✨ AI's models: Chrome's built-in one where it runs, or an LM Studio
+// endpoint. Created here so a remount keeps the session.
+const ai = createAi();
+mountApp(document.getElementById("app"), engine, { cloud, samples, stats, mediaKeys, ai });
 // First visit only: what this is, and the way to the how-to page.
 showIntro({
   storage: browserStorage(),
