@@ -11,9 +11,11 @@ import {
   readSnapFragment,
   shareFragment,
   snapFragment,
+  unpackPlans,
   unpackSnap,
   unpackSounds,
 } from "./share.js";
+import { PLAN_MAX } from "./planner.js";
 
 describe("seeds", () => {
   it("hash deterministically, and differ from each other", () => {
@@ -40,7 +42,39 @@ describe("share links", () => {
   it("carry only seed, style and BPM with factory sounds", async () => {
     const ws = { ...normalize({ bpm: 150, style: "goa" }), seed: "abc" };
     expect(await shareFragment(ws)).toBe("#seed=abc&style=goa&bpm=150");
-    expect(readFragment("#seed=abc&style=goa&bpm=150")).toEqual({ seed: "abc", style: "goa", bpm: 150, sounds: null });
+    expect(readFragment("#seed=abc&style=goa&bpm=150")).toEqual({
+      seed: "abc",
+      style: "goa",
+      bpm: 150,
+      sounds: null,
+      plans: null,
+    });
+  });
+
+  it("carry the plans the ✨ AI made, one per section, and only when there are some", async () => {
+    const ws = { ...normalize({ style: "goa" }), seed: "abc" };
+    expect(await shareFragment(ws, [])).toBe("#seed=abc&style=goa&bpm=145");
+    expect(await shareFragment(ws, [null, undefined])).toBe("#seed=abc&style=goa&bpm=145");
+    const plan = { section: "peak", bars: 16, layers: { kick: ["kick.long"] } };
+    const plans = [];
+    plans[2] = plan; // sections 0 and 1 had none
+    const fragment = await shareFragment(ws, plans);
+    const read = readFragment(fragment);
+    expect(read.plans).toMatch(/^[\w-]+$/);
+    expect(await unpackPlans(read.plans)).toEqual([null, null, plan]);
+  });
+
+  it("refuse plans that are not a list, and keep at most PLAN_MAX", async () => {
+    const deflate = async (value) => {
+      const out = new Response(new Blob([JSON.stringify(value)]).stream().pipeThrough(new CompressionStream("deflate-raw")));
+      const bin = String.fromCharCode(...new Uint8Array(await out.arrayBuffer()));
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    };
+    await expect(unpackPlans(await deflate({ section: "peak" }))).rejects.toThrow("not a list");
+    await expect(unpackPlans("%%%")).rejects.toThrow();
+    const many = Array.from({ length: PLAN_MAX + 10 }, () => ({ section: "groove" }));
+    expect(await unpackPlans(await deflate(many))).toHaveLength(PLAN_MAX);
+    expect(await unpackPlans(await deflate([1, "x", [], { section: "peak" }]))).toEqual([null, null, null, { section: "peak" }]);
   });
 
   it("leave out what the autopilot wrote: the seed writes it again", async () => {

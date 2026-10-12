@@ -882,6 +882,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .auto,
+.ai,
 .tour {
   padding: 7px 14px;
   font: inherit;
@@ -894,9 +895,109 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .auto[aria-pressed="true"],
+.ai[aria-pressed="true"],
 .tour[aria-pressed="true"] {
   color: var(--on-current);
   background: var(--current);
+}
+
+/* ✨ AI: the toggle pulses while the model thinks; its settings row shows
+   while it is on, the endpoint and model only for LM Studio. */
+.ai.is-thinking {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+.ai[hidden],
+.ai-panel[hidden],
+.ai-field[hidden] {
+  display: none;
+}
+
+.ai-panel summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: fit-content;
+  max-width: 100%;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.ai-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-panel summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.ai-panel[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.ai-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.ai-panel[open] .ai-summary {
+  display: none;
+}
+
+.ai-panel .ai-row {
+  margin-top: 8px;
+}
+
+.ai-field {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.ai-input,
+.ai-field select {
+  flex: 1 1 auto;
+  width: 16ch;
+  min-width: 0;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ai-field select {
+  width: auto;
+}
+
+#ai-endpoint,
+#ai-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#ai-endpoint {
+  width: 26ch;
+}
+
+#ai-model {
+  width: 20ch;
+}
+
+.ai-input.vibe {
+  width: 30ch;
 }
 
 .tour:disabled {

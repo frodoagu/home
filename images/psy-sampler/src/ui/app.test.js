@@ -2124,6 +2124,232 @@ describe("autopilot", () => {
   });
 });
 
+describe("✨ AI", () => {
+  const RealURL = globalThis.URL;
+  // The models ai.js would hand over; `answers` are what the model plans, in turn.
+  function fakeAi({ chrome = "available", answers = [], fail = false } = {}) {
+    const asks = [];
+    const engine = (name) => ({
+      supported: () => true,
+      availability: vi.fn(async () => chrome),
+      start: vi.fn(async () => name),
+      plan: vi.fn((prompt, schema, opts) => {
+        asks.push({ name, prompt, schema, opts });
+        if (fail) return Promise.reject(new Error("no"));
+        const answer = answers[Math.min(asks.length - 1, answers.length - 1)];
+        return typeof answer === "function" ? answer(opts) : Promise.resolve(answer);
+      }),
+    });
+    return { chrome: engine("chrome"), lmstudio: engine("lmstudio"), asks };
+  }
+  const aiBtn = (node = root) => node.querySelector("button.ai");
+  const engines = (node = root) => [...node.querySelectorAll("#ai-engine option")].map((o) => o.value);
+  const queue = (node = root) => [...node.querySelectorAll(".section-queue [data-queued]")].map((li) => li.dataset.queued);
+  const remountWith = async (ai) => {
+    root = document.createElement("div");
+    document.body.replaceChildren(root);
+    mount(root, engine, { ai });
+    await flushPromises();
+    return ai;
+  };
+  const BREAK = { section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
+
+  it("has no button without models", () => {
+    expect(aiBtn().hidden).toBe(true);
+  });
+
+  it("offers Chrome's model where it runs and LM Studio always; the settings show while it is on", async () => {
+    await remountWith(fakeAi());
+    expect(aiBtn().hidden).toBe(false);
+    expect($(".ai-panel").hidden).toBe(true);
+    aiBtn().click();
+    expect(aiBtn().getAttribute("aria-pressed")).toBe("true");
+    expect($(".ai-panel").hidden).toBe(false);
+    expect($(".ai-panel").open).toBe(true);
+    expect(engines()).toEqual(["chrome", "lmstudio"]);
+    expect($("#ai-engine").value).toBe("chrome");
+    expect($("#ai-endpoint").closest("label").hidden).toBe(true);
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/Chrome \(Gemini Nano\) listo/);
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai"))).toMatchObject({ on: true });
+
+    await remountWith(fakeAi({ chrome: "unavailable" }));
+    expect(aiBtn().getAttribute("aria-pressed")).toBe("true"); // remembered
+    expect(engines()).toEqual(["lmstudio"]);
+    expect($("#ai-endpoint").closest("label").hidden).toBe(false);
+    expect($("#ai-endpoint").value).toBe("http://localhost:1234/v1");
+  });
+
+  it("its settings fold away, say what they hold in the summary, and stay folded", async () => {
+    await remountWith(fakeAi({ chrome: "unavailable" }));
+    aiBtn().click();
+    const panel = $("details.ai-panel");
+    expect(panel.open).toBe(true);
+    $("#ai-model").value = "qwen";
+    $("#ai-model").dispatchEvent(new Event("change"));
+    $("#ai-vibe").value = "dark";
+    $("#ai-vibe").dispatchEvent(new Event("change"));
+    expect($(".ai-summary").textContent).toBe("LM Studio (qwen) · «dark»");
+    panel.open = false;
+    panel.dispatchEvent(new Event("toggle"));
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).open).toBe(false);
+    await remountWith(fakeAi({ chrome: "unavailable" }));
+    expect($("details.ai-panel").open).toBe(false);
+    expect($("details.ai-panel").hidden).toBe(false); // still on: folded, not gone
+    aiBtn().click(); // off: the panel goes
+    expect($("details.ai-panel").hidden).toBe(true);
+  });
+
+  it("LM Studio: a new endpoint is cleaned, remembered and tried; a bad one is refused", async () => {
+    vi.stubGlobal("URL", RealURL); // the downloads' stand-in is no constructor
+    const ai = await remountWith(fakeAi({ chrome: "unavailable" }));
+    aiBtn().click();
+    const endpoint = $("#ai-endpoint");
+    endpoint.value = "http://pc.lan:1234";
+    endpoint.dispatchEvent(new Event("change"));
+    expect(endpoint.value).toBe("http://pc.lan:1234/v1");
+    expect(ai.lmstudio.start).toHaveBeenLastCalledWith({ endpoint: "http://pc.lan:1234/v1", model: "" });
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).endpoint).toBe("http://pc.lan:1234/v1");
+    endpoint.value = "nope";
+    endpoint.dispatchEvent(new Event("change"));
+    expect($(".status").textContent).toMatch(/URL http\(s\) válida/);
+    expect(endpoint.value).toBe("http://pc.lan:1234/v1");
+    ai.lmstudio.start.mockRejectedValueOnce(new Error("refused"));
+    $("#ai-model").value = " qwen  2.5 ";
+    $("#ai-model").dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect(ai.lmstudio.start).toHaveBeenLastCalledWith({ endpoint: "http://pc.lan:1234/v1", model: "qwen 2.5" });
+    expect($(".status").textContent).toMatch(/LM Studio no responde en http:\/\/pc.lan:1234\/v1/);
+  });
+
+  it("plans the section after each one, and the pilot plays it", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK] }));
+    aiBtn().click();
+    $("#ai-vibe").value = "  oscuro  y largo ";
+    $("#ai-vibe").dispatchEvent(new Event("change"));
+    $("button.auto").click();
+    expect(aiBtn().classList.contains("is-thinking")).toBe(true);
+    await flushPromises();
+    expect(aiBtn().classList.contains("is-thinking")).toBe(false);
+    const [ask] = ai.asks;
+    expect(ask.name).toBe("chrome");
+    expect(ask.prompt).toContain("Now playing: intro, 8 bars.");
+    expect(ask.prompt).toContain('The listener asks for: "oscuro y largo".');
+    expect(ask.schema.properties.section.enum).toContain("breakdown");
+    expect(queue()).toEqual(["breakdown"]);
+    expect($(".section-queue .is-ai").textContent).toBe("✨ Break");
+    advanceSeconds(8 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    expect($(".section-left").textContent).toBe("16 compases");
+    expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
+    expect(ai.asks).toHaveLength(2); // and now the one after the breakdown
+    expect(ai.asks[1].prompt).toContain("Sections so far: intro, breakdown.");
+  });
+
+  it("an answer that comes after the section's last loop started is dropped", async () => {
+    let answer;
+    const ai = await remountWith(fakeAi({ answers: [() => new Promise((resolve) => (answer = resolve))] }));
+    aiBtn().click();
+    $("button.auto").click();
+    advanceSeconds(6 * BAR + 0.05); // into the intro's last loop
+    expect(ai.asks[0].opts.signal.aborted).toBe(true);
+    answer(BREAK);
+    await flushPromises();
+    expect(queue()).not.toContain("breakdown");
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Groove"); // the pilot's own pick
+  });
+
+  it("asks again whenever the queue's head changes: for the queued phase, or freely once it is dropped", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, { section: "peak", bars: 16, layers: {} }, BREAK] }));
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown"]);
+    $('[data-section="peak"]').click();
+    expect(ai.asks[1].schema.properties.section.enum).toEqual(["peak"]);
+    expect(ai.asks[1].prompt).toContain("The listener queued peak next");
+    await flushPromises();
+    expect(queue()).toEqual(["peak"]);
+    $('[data-section="groove"]').click(); // behind peak: the head is the same
+    expect(ai.asks).toHaveLength(2);
+    root.querySelector('.section-queue [data-queued="peak"] .unqueue').click();
+    expect(ai.asks).toHaveLength(3);
+    expect(ai.asks[2].schema.properties.section.enum).toEqual(["groove"]);
+    root.querySelector('.section-queue [data-queued="groove"] .unqueue').click();
+    expect(ai.asks).toHaveLength(4);
+    expect(ai.asks[3].schema.properties.section.enum).toContain("breakdown");
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown"]);
+  });
+
+  it("when the model fails it says so once, and the pilot carries on alone", async () => {
+    await remountWith(fakeAi({ fail: true }));
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/La IA no respondió/);
+    $(".status").textContent = "";
+    for (let i = 0; i < 12; i++) {
+      advanceSeconds(2 * BAR);
+      await flushPromises();
+    }
+    expect($(".status").textContent).toBe("");
+    expect($(".section-badge").textContent).not.toBe("Intro");
+  });
+
+  it("🔗 carries the plans it took: the link replays the same track in a browser with no AI", async () => {
+    const plans = [
+      { section: "groove", bars: 8, layers: { bass: ["bass.gallop"], lead: ["lead.arp"] } },
+      { section: "breakdown", bars: 8, layers: { pad: ["pad.supersaw"], lead: ["lead.vowel"] } },
+      { section: "build", bars: 8, layers: {} },
+      { section: "peak", bars: 16, layers: { perc: ["perc.ride", "perc.snare"] } },
+    ];
+    const record = async (node, c) => {
+      const log = [];
+      node.querySelector("button.auto").click();
+      for (let i = 0; i < 20; i++) {
+        await flushPromises();
+        for (let k = 0; k < Math.ceil((2 * BAR) / 0.025); k++) {
+          c.currentTime += 0.025;
+          vi.advanceTimersByTime(25);
+        }
+        const on = [...node.querySelectorAll('[aria-pressed="true"][data-variant]')].map((b) => b.dataset.variant);
+        log.push(`${node.querySelector(".section-badge").textContent} ${on.join()}`);
+      }
+      node.querySelector("button.stop").click();
+      return log;
+    };
+    const ai = await remountWith(fakeAi({ answers: plans }));
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    aiBtn().click();
+    const first = await record(root, ctx);
+    expect(first.some((l) => l.startsWith("Break "))).toBe(true);
+    expect(ai.asks.length).toBeGreaterThanOrEqual(4);
+
+    vi.stubGlobal("Blob", NodeBlob); // jsdom's has no stream(), and the link is deflated
+    vi.useRealTimers(); // nor do (de)compression streams settle on fake ones
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    $('[data-action="share"]').click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    const link = writeText.mock.calls[0][0];
+    const hash = link.slice(link.indexOf("#"));
+    expect(hash).toMatch(/&ai=/);
+
+    localStorage.clear();
+    history.replaceState(null, "", `/${hash}`);
+    const c2 = new FakeAudioContext();
+    const other = document.createElement("div");
+    document.body.replaceChildren(other);
+    mount(other, newEngine(c2)); // no models at all
+    await vi.waitFor(() => expect(other.querySelector(".status").textContent).toMatch(/goa/));
+    vi.useFakeTimers();
+    expect(await record(other, c2)).toEqual(first);
+  });
+});
+
 describe("language", () => {
   it("switches every text, keeps what plays and is remembered", () => {
     click("bass.rolling");
