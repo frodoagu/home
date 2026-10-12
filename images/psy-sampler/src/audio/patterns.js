@@ -18,6 +18,7 @@
 //
 // DEFAULTS holds the factory data; the UI keeps edited copies and hands them
 // to the engine, which passes them back into eventsAt() on every step.
+import { CLASSICS, midiOf } from "./classics.js";
 import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "./insert.js";
 import { NOTE, SCALES, midiToFreq } from "./music.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
@@ -142,6 +143,13 @@ const BEATS = steps((s) => (s % 4 === 0 ? HIT : OFF));
 const BASS = { low: A1, high: A3 };
 const LEAD = { low: A2, high: A5 };
 const PAD = { low: A2, high: A4 };
+const CLASSIC = { low: A3, high: A5 };
+
+function classic({ synth, notes: list, scale = "minor", speed = 1 }) {
+  const def = notes(synth, list.map(([s, p, len]) => note(s, midiOf(p), len)), { ...CLASSIC, scale });
+  def.data.speed = speed;
+  return def;
+}
 
 export const DEFAULTS = {
   "kick.punchy": drum("kick", BEATS, KICK_PUNCHY),
@@ -273,6 +281,8 @@ export const DEFAULTS = {
   "glitch.rise": drum("rise", steps((s) => (s % 8 === 7 ? HIT : OFF))),
   "glitch.tape": drum("tape", steps((s) => (s === 28 ? ACCENT : s === 12 ? HIT : OFF))),
   "glitch.lasers": drum("laser", steps((s) => (s % 4 === 2 ? (s % 16 === 14 ? ACCENT : HIT) : OFF))),
+
+  ...Object.fromEntries(Object.entries(CLASSICS).map(([id, tune]) => [`classic.${id}`, classic(tune)])),
 
   "fx.riser": fx("fx.riser"),
   "fx.riserImpact": fx("fx.riserImpact"),

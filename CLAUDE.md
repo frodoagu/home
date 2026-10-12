@@ -470,7 +470,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   exclusive lanes, perc/lead/pad/glitch stack. A style with no pool for a layer
   would leave it out WITHOUT drawing from the PRNG (`leftOut`), the way to add
   a layer without shifting old seeds (every style has a glitch pool, so that
-  layer did shift them). Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
+  layer did shift them); a `manual` layer (the classics, famous hooks in
+  src/audio/classics.js) is invisible to the pilot and the ✨ AI, and `arrange`
+  carries one played by hand through every section. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
   compressors add makeup gain, so re-measure at the destination before touching
   them. Anything that must land on the grid (queued clicks, autopilot, improvise
   variations) goes through `engine.onBar()`, never a UI timer; Tap is the one
