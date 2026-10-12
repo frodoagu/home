@@ -1694,8 +1694,24 @@ The **renderer** (`renderer.js`, shaders in `shaders.js`) draws each scene into
 a target, the previous one into another while they crossfade, and the laser
 layer into a third. POST mixes the scenes with its own last frame (trails),
 lays the lasers faintly behind them (where the scene is dark, 10 % where it
-is bright) and adds the strobe, and COPY scales it onto the
-canvas. Scenes render below the canvas resolution: one `level` sets both that
+is bright) and adds the strobe, and FINAL puts it on the canvas.
+
+What takes the synthetic edge off is all post-processing:
+
+- **Bloom**: BLOOM keeps the scene's bright parts at a quarter of its size and
+  BLUR runs a 9-tap Gaussian over them twice each way (the second time twice as
+  wide); POST adds it back, less where the frame is already bright, so a hot
+  centre glows instead of burning to white.
+- **Haze**: three octaves of slow noise drift across the screen as smoke, thin
+  at rest and thicker with the energy (`uHaze`), lit by the bloom: the light
+  catches in it the way it does in a club's smoke.
+- **Lens and grade**: a touch of barrel distortion, colour fringes growing
+  towards the edges (more on the kick), a soft S curve, blacks lifted a hair
+  and a little less saturation, then the vignette.
+- **FXAA and grain**: FINAL smooths the upscaled frame's edges (FXAA in its
+  luma-edge form, on the render's own texels) and only then adds an animated
+  grain at screen resolution, stronger in the mids, so the grain stays sharp
+  and never feeds back into the trails. Scenes render below the canvas resolution: one `level` sets both that
 share (30-100 %) and the raymarch steps, and it follows the frame time (down
 above 22 ms, up after 1.5 s below 18 ms), so a phone or a TV gets a softer
 picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.

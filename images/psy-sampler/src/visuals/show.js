@@ -18,6 +18,8 @@ const STROBE_STEPS = [1, 0.5, 0];
 // How much of the last frame stays as a trail, per scene, before the energy.
 const TRAILS = { bulb: 0.55, kifs: 0.7, mandala: 0.78, tunnel: 0.5 };
 const SWIPE_PX = 60;
+const HAZE = 0.35; // smoke in the air at rest; the energy thickens it
+const GRAIN = 0.05; // film grain, at screen resolution
 const MUSIC_MS = 800; // how fast the beat's pulse fades in and out with the music
 
 // The key that does each thing; digits pick a scene.
@@ -321,6 +323,8 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
         uStrobe: d.strobe * strobeLevel,
         uInvert: invert,
         uTrails: Math.min(0.92, TRAILS[d.scene.id] + 0.08 * s.energy),
+        uHaze: HAZE + 0.25 * s.energy,
+        uGrain: GRAIN,
       },
     });
     renderer.adapt(dt);

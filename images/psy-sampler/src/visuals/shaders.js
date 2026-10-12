@@ -13,7 +13,9 @@
 //   uPalette  0..PALETTES-1, uQuality 0..1 (raymarch steps, from the frame rate)
 //
 // POST mixes the scene with the previous one (a crossfade), its own last
-// frame (trails), the laser layer behind them and the strobe.
+// frame (trails), the laser layer behind them, the bloom (BLOOM + BLUR) and a
+// haze lit by it, through a lens and a film grade, then the strobe. FINAL
+// puts it on the canvas with FXAA and grain.
 
 export const VERTEX = `#version 300 es
 in vec2 aPos;
@@ -437,17 +439,29 @@ export const sceneSource = (id) => COMMON + SCENES[id] + SCENE_MAIN;
 export const laserSource = () => COMMON + LASERS + SCENE_MAIN;
 
 export const POST = `${COMMON}
-uniform sampler2D uScene, uPrev, uFeed, uLaser;
-uniform float uMix, uStrobe, uLaserMix, uTrails, uInvert;
+uniform sampler2D uScene, uPrev, uFeed, uLaser, uBloom;
+uniform float uMix, uStrobe, uLaserMix, uTrails, uInvert, uHaze;
 
 vec3 sceneAt(sampler2D s, vec2 uv, float split) {
   vec2 dir = (uv - 0.5) * split;
   return vec3(texture(s, uv + dir).r, texture(s, uv).g, texture(s, uv - dir).b);
 }
 
+// A lens: a touch of barrel distortion, scaled so the corners stay on screen.
+vec2 lens(vec2 uv) {
+  vec2 d = uv - 0.5;
+  return 0.5 + d * (1.0 + 0.06 * dot(d, d)) / 1.03;
+}
+
+float fbm(vec3 p) {
+  return 0.55 * noise3(p) + 0.3 * noise3(p * 2.1 + 7.3) + 0.15 * noise3(p * 4.3 + 1.7);
+}
+
 void main() {
-  vec2 uv = vUv;
-  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop;
+  vec2 uv = lens(vUv);
+  vec2 d = vUv - 0.5;
+  // Colour fringes: always a little towards the edges, more on the kick.
+  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop + 0.012 * dot(d, d);
   vec3 col = sceneAt(uScene, uv, split);
   if (uMix < 1.0) {
     // The scene going out zooms away while the new one comes in.
@@ -455,25 +469,111 @@ void main() {
     col = mix(sceneAt(uPrev, zuv, split), col, smoothstep(0.0, 1.0, uMix));
   }
   // Trails: the last frame, a little zoomed and turned, where it is brighter.
-  vec2 fuv = 0.5 + (uv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
+  vec2 fuv = 0.5 + (vUv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
   col = max(col, texture(uFeed, fuv).rgb * uTrails);
   // The lasers: a faint layer behind the scene, only where it is dark.
   float lit = smoothstep(0.03, 0.4, dot(col, vec3(0.299, 0.587, 0.114)));
   col += texture(uLaser, uv).rgb * uLaserMix * mix(1.0, 0.1, lit);
+
+  // Bloom: light bleeding past the bright parts.
+  vec3 bloom = texture(uBloom, uv).rgb;
+  col += bloom * (0.3 + 0.25 * uKick) * (1.0 - 0.6 * smoothstep(0.5, 1.0, dot(col, vec3(0.333))));
+  // Haze: slow smoke drifting across the screen, lit by the scene's own glow.
+  vec2 p = screen();
+  float smoke = fbm(vec3(p * 1.1 + vec2(uTime * 0.03, -uTime * 0.02), uTime * 0.04));
+  float density = uHaze * smoothstep(0.25, 0.85, smoke);
+  vec3 glow = bloom * 1.1 + pal(0.6 + uTime * 0.01) * 0.03;
+  col = col * (1.0 - 0.2 * density) + glow * density;
+
+  // Film grade: a soft S, blacks lifted a hair, a little less saturation.
+  col = clamp(col, 0.0, 1.0);
+  col = mix(col, col * col * (3.0 - 2.0 * col), 0.35);
+  col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.9);
+  col = col * 0.97 + vec3(0.012, 0.01, 0.02);
+
   col = mix(col, vec3(1.0) - col, uInvert);
   col = mix(col, mix(vec3(1.0), pal(uBeats * 0.25) + 0.5, 0.25), uStrobe);
-  vec2 v = uv - 0.5;
-  col *= 1.0 - 0.45 * dot(v, v);
-  col += (hash21(uv * uRes + fract(uTime)) - 0.5) / 255.0;
+  col *= 1.0 - 0.45 * dot(d, d);
   outColor = vec4(col, 1.0);
 }
 `;
 
-export const COPY = `#version 300 es
-precision mediump float;
+// The bloom's first step: the bright parts of the scene, at a quarter of its
+// size (four bilinear taps cover a 4×4 block).
+export const BLOOM = `#version 300 es
+precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uTex;
+uniform vec2 uTexel;
+
+vec3 bright(vec3 c) {
+  return c * smoothstep(0.45, 1.0, max(c.r, max(c.g, c.b)));
+}
+
 void main() {
-  outColor = texture(uTex, vUv);
+  vec3 c = bright(texture(uTex, vUv + uTexel * vec2(-1.0, -1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(1.0, -1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(-1.0, 1.0)).rgb);
+  c += bright(texture(uTex, vUv + uTexel * vec2(1.0, 1.0)).rgb);
+  outColor = vec4(c * 0.25, 1.0);
+}`;
+
+// One direction of a 9-tap Gaussian, in five bilinear fetches.
+export const BLUR = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uTex;
+uniform vec2 uDir;
+
+void main() {
+  vec3 c = texture(uTex, vUv).rgb * 0.2270270;
+  c += texture(uTex, vUv + uDir * 1.3846154).rgb * 0.3162162;
+  c += texture(uTex, vUv - uDir * 1.3846154).rgb * 0.3162162;
+  c += texture(uTex, vUv + uDir * 3.2307692).rgb * 0.0702703;
+  c += texture(uTex, vUv - uDir * 3.2307692).rgb * 0.0702703;
+  outColor = vec4(c, 1.0);
+}`;
+
+// Onto the canvas: FXAA (its luma-edge form) over the upscaled frame, then a
+// fine film grain at screen resolution, after the smoothing so it stays sharp.
+export const FINAL = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uTex;
+uniform vec2 uTexel, uRes;
+uniform float uTime, uGrain;
+
+float luma(vec3 c) {
+  return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+float hash(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+void main() {
+  vec3 m = texture(uTex, vUv).rgb;
+  float nw = luma(texture(uTex, vUv + vec2(-1.0, -1.0) * uTexel).rgb);
+  float ne = luma(texture(uTex, vUv + vec2(1.0, -1.0) * uTexel).rgb);
+  float sw = luma(texture(uTex, vUv + vec2(-1.0, 1.0) * uTexel).rgb);
+  float se = luma(texture(uTex, vUv + vec2(1.0, 1.0) * uTexel).rgb);
+  float lm = luma(m);
+  float lo = min(lm, min(min(nw, ne), min(sw, se)));
+  float hi = max(lm, max(max(nw, ne), max(sw, se)));
+  vec2 dir = vec2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+  float reduce = max((nw + ne + sw + se) * 0.03125, 1.0 / 128.0);
+  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
+  vec3 a = 0.5 * (texture(uTex, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture(uTex, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
+  vec3 b = a * 0.5 + 0.25 * (texture(uTex, vUv - dir * 0.5).rgb + texture(uTex, vUv + dir * 0.5).rgb);
+  float lb = luma(b);
+  vec3 col = lb < lo || lb > hi ? a : b;
+  // Grain, stronger in the mids the way film's is.
+  float g = hash(vUv * uRes + fract(uTime * 13.7) * 91.0) - 0.5;
+  col += g * uGrain * (0.4 + 0.6 * (1.0 - abs(luma(col) * 2.0 - 1.0)));
+  outColor = vec4(col, 1.0);
 }`;
