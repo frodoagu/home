@@ -909,7 +909,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .ai[hidden],
 .ai-panel[hidden],
-.ai-field[hidden] {
+.ai-field[hidden],
+.ai-unlink[hidden] {
   display: none;
 }
 
@@ -1006,6 +1007,21 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .ai-models {
   padding: 2px 8px;
+}
+
+#ai-key {
+  width: 22ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.ai-unlink {
+  padding: 2px 8px;
+}
+
+.ai-getkey {
+  align-self: center;
+  white-space: nowrap;
+  color: var(--accent);
 }
 
 #ai-model {

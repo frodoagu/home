@@ -3,7 +3,7 @@
   stylesheet, the button's iframe). Inline styles stay allowed: the editors set
   style attributes. media-src takes blob: for the silent track that holds the
   media session (src/mediaKeys.js). connect-src adds the ✨ AI's LM Studio
-  endpoints (ai.connectSrc). A new third-party origin must be added here or it is blocked.
+  endpoints and the linked accounts' APIs (ai.connectSrc). A new third-party origin must be added here or it is blocked.
   No Cross-Origin-Opener-Policy: same-origin would cut the sign-in popup off.
 */}}
 {{- $connect := concat (list "'self'" "https://accounts.google.com/gsi/") (.Values.ai.connectSrc | default list) }}
