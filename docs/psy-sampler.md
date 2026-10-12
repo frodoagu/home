@@ -1216,9 +1216,14 @@ kick, every section plays a lead or a pad).
   enforce, so **`normalizePlan()` is the gate**, as `normalize()` is for
   presets: a section a plan may pick (never `intro`), bars the section can
   last (else the pilot draws them), and per layer only ids in the style's pool,
-  at most as many as the section plays — a layer left with fewer than it needs
-  is dropped and the pilot draws it. Outside names are looked up with
-  `Object.hasOwn`.
+  at most as many as the section plays. Fewer than the section usually plays
+  is the plan's call, **down to none**: an empty list leaves the layer out,
+  which is how a vibe like "minimal" gets a peak with no pad (the pilot still
+  plays a lead or a pad). A layer whose ids are all foreign is dropped and the
+  pilot draws it. Outside names are looked up with `Object.hasOwn`.
+- The vibe weighs: the system prompt puts the listener's wishes before the
+  usual counts and continuity (with examples of what to leave out), and the
+  prompt ends on the vibe, right before asking for the plan.
 - The pilot takes a plan only **before the section's last loop**
   (`withPlan`): that loop announces what comes next and fires the riser into a
   peak, so a later answer would change a decision already made. An answer that

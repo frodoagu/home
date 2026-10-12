@@ -495,6 +495,18 @@ describe("plans (✨ AI)", () => {
     }
   });
 
+  it("a plan can leave out a layer the section usually plays: a minimal peak with no pad", () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const plan = { section: "peak", bars: 16, layers: { pad: [], glitch: [], perc: ["perc.hat"] } };
+      const entry = toNext(plan, { seed }).at(-1);
+      expect(entry.pilot.section).toBe("peak");
+      expect(count(entry.active, "pad")).toBe(0);
+      expect(count(entry.active, "glitch")).toBe(0);
+      expect(count(entry.active, "perc")).toBe(1);
+      expect(count(entry.active, "lead")).toBe(1); // drawn: not in the plan
+    }
+  });
+
   it("a layer the style no longer has the planned sounds of is drawn from the new pool", () => {
     const plan = { section: "groove", bars: 8, layers: { kick: ["kick.long"] } }; // goa's, not techno's
     const entry = toNext(plan, { style: "techno" }).at(-1);
