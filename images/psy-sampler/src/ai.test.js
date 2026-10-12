@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LMSTUDIO_URL, cleanEndpoint, cleanPrefs, createAi, loadPrefs, savePrefs } from "./ai.js";
+import { LMSTUDIO_URL, autoModel, cleanEndpoint, cleanKey, cleanPrefs, createAi, loadPrefs, savePrefs } from "./ai.js";
 import { SYSTEM } from "./planner.js";
 
 const PLAN = { section: "peak", bars: 16, layers: {} };
@@ -158,6 +158,129 @@ describe("an LM Studio endpoint", () => {
   });
 });
 
+describe("a linked account", () => {
+  const KEY = "sk-test-12345678";
+  const reply = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+  // Each provider's API, as far as ai.js uses it.
+  function fakeFetch({ status = 200, plan = PLAN } = {}) {
+    return vi.fn(async (url) => {
+      if (status !== 200) return reply({ error: "no" }, status);
+      if (url === "https://api.openai.com/v1/models")
+        return reply({
+          data: [
+            { id: "gpt-4o", created: 1 },
+            { id: "gpt-4o-mini", created: 2 },
+            { id: "gpt-5-mini", created: 5 },
+            { id: "gpt-5", created: 4 },
+            { id: "text-embedding-3-small", created: 9 },
+            { id: "gpt-4o-realtime-preview", created: 9 },
+            { id: "dall-e-3", created: 9 },
+          ],
+        });
+      if (url === "https://api.openai.com/v1/chat/completions") return reply({ choices: [{ message: { content: JSON.stringify(plan) } }] });
+      if (url === "https://api.anthropic.com/v1/models?limit=100")
+        return reply({ data: [{ id: "claude-opus-5-5" }, { id: "claude-haiku-5-5" }, { id: "claude-haiku-4-5" }] });
+      if (url === "https://api.anthropic.com/v1/messages")
+        return reply({ content: [{ type: "text", text: "Sure." }, { type: "tool_use", name: "section_plan", input: plan }] });
+      if (url === "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")
+        return reply({
+          models: [
+            { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+            { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent"] },
+            { name: "models/gemini-3-flash-preview", supportedGenerationMethods: ["generateContent"] },
+            { name: "models/gemini-2.5-flash-preview-tts", supportedGenerationMethods: ["generateContent"] },
+            { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+          ],
+        });
+      if (url.startsWith("https://generativelanguage.googleapis.com/v1beta/models/"))
+        return reply({ candidates: [{ content: { parts: [{ text: JSON.stringify(plan).slice(0, 5) }, { text: JSON.stringify(plan).slice(5) }] } }] });
+      throw new TypeError(`no route ${url}`);
+    });
+  }
+  const bodyOf = (fetch) => JSON.parse(fetch.mock.calls.at(-1)[1].body);
+  const headersOf = (fetch) => fetch.mock.calls.at(-1)[1].headers;
+
+  it("Automatic takes the newest fast model, a stable one first", () => {
+    expect(autoModel(["gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"], /flash/)).toBe("gemini-2.5-flash");
+    expect(autoModel(["gemini-3-flash-preview", "gemini-2.5-pro"], /flash/)).toBe("gemini-3-flash-preview");
+    expect(autoModel(["gpt-5"], /mini/)).toBe("gpt-5");
+    expect(autoModel([], /mini/)).toBeNull();
+  });
+
+  it("start() needs a key, lists the chat models newest first and answers the one it will ask", async () => {
+    const fetch = fakeFetch();
+    const ai = createAi({ fetch });
+    await expect(ai.openai.start({ key: "" })).rejects.toThrow("no key");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await ai.openai.start({ key: KEY })).toBe("gpt-5-mini");
+    expect(ai.openai.known(KEY)).toEqual(["gpt-5-mini", "gpt-5", "gpt-4o-mini", "gpt-4o"]);
+    expect(ai.openai.known("another-key-123")).toBeNull();
+    expect(await ai.anthropic.start({ key: KEY })).toBe("claude-haiku-5-5");
+    expect(await ai.gemini.start({ key: KEY, model: "gemini-2.5-pro" })).toBe("gemini-2.5-pro");
+    expect(ai.gemini.known(KEY)).toEqual(["gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash"]);
+  });
+
+  it("a rejected key fails with its status", async () => {
+    const ai = createAi({ fetch: fakeFetch({ status: 401 }) });
+    await expect(ai.anthropic.start({ key: KEY })).rejects.toMatchObject({ status: 401 });
+    expect(ai.anthropic.known(KEY)).toBeNull();
+  });
+
+  it("OpenAI: chat/completions with the key, the schema as response_format and a short think", async () => {
+    const fetch = fakeFetch();
+    const { openai } = createAi({ fetch });
+    const signal = new AbortController().signal;
+    expect(await openai.plan("next?", SCHEMA, { key: KEY, signal })).toEqual(PLAN);
+    expect(fetch.mock.calls.at(-1)[0]).toBe("https://api.openai.com/v1/chat/completions");
+    expect(fetch.mock.calls.at(-1)[1]).toMatchObject({ method: "POST", signal });
+    expect(headersOf(fetch).Authorization).toBe(`Bearer ${KEY}`);
+    const body = bodyOf(fetch);
+    expect(body).toMatchObject({ model: "gpt-5-mini", reasoning_effort: "low" });
+    expect(body.messages).toEqual([
+      { role: "system", content: SYSTEM },
+      { role: "user", content: "next?" },
+    ]);
+    expect(body.response_format).toEqual({ type: "json_schema", json_schema: { name: "section_plan", strict: true, schema: SCHEMA } });
+    expect(fetch.mock.calls.filter(([u]) => u.endsWith("/models"))).toHaveLength(1);
+    await openai.plan("next?", SCHEMA, { key: KEY, model: "gpt-4o" });
+    expect(bodyOf(fetch).model).toBe("gpt-4o");
+    expect(bodyOf(fetch)).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("Anthropic: messages from the browser, the plan as a tool the model must call", async () => {
+    const fetch = fakeFetch();
+    const { anthropic } = createAi({ fetch });
+    expect(await anthropic.plan("next?", SCHEMA, { key: KEY, model: "claude-haiku-5-5" })).toEqual(PLAN);
+    expect(fetch).toHaveBeenCalledTimes(1); // a named model needs no list
+    expect(headersOf(fetch)).toMatchObject({
+      "x-api-key": KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    });
+    const body = bodyOf(fetch);
+    expect(body).toMatchObject({ model: "claude-haiku-5-5", system: SYSTEM, messages: [{ role: "user", content: "next?" }] });
+    expect(body.tools).toEqual([{ name: "section_plan", description: expect.any(String), input_schema: SCHEMA }]);
+    expect(body.tool_choice).toEqual({ type: "tool", name: "section_plan" });
+  });
+
+  it("Gemini: generateContent with the key in a header, never in the URL", async () => {
+    const fetch = fakeFetch();
+    const { gemini } = createAi({ fetch });
+    expect(await gemini.plan("next?", SCHEMA, { key: KEY })).toEqual(PLAN);
+    const [url] = fetch.mock.calls.at(-1);
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+    expect(fetch.mock.calls.every(([u]) => !u.includes(KEY))).toBe(true);
+    expect(headersOf(fetch)["x-goog-api-key"]).toBe(KEY);
+    expect(bodyOf(fetch)).toEqual({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: "user", parts: [{ text: "next?" }] }],
+      generationConfig: { responseMimeType: "application/json", responseJsonSchema: SCHEMA },
+    });
+    await gemini.plan("x", SCHEMA, { key: KEY, model: "../../evil?x=" });
+    expect(fetch.mock.calls.at(-1)[0]).toBe("https://generativelanguage.googleapis.com/v1beta/models/..%2F..%2Fevil%3Fx%3D:generateContent");
+  });
+});
+
 describe("settings", () => {
   it("endpoints: http(s) only, no credentials, query or trailing slash; /v1 when there is no path", () => {
     expect(cleanEndpoint("http://localhost:1234")).toBe("http://localhost:1234/v1");
@@ -167,16 +290,30 @@ describe("settings", () => {
   });
 
   it("clean whatever was stored, and default to LM Studio's local server", () => {
-    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "", open: true });
+    const none = { openai: "", anthropic: "", gemini: "" };
+    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", keys: none, models: none, vibe: "", open: true });
     expect(
       cleanPrefs({ on: "yes", engine: "constructor", endpoint: "nope", model: ` ${"m".repeat(200)}`, vibe: "  dark \n\n hypnotic ", open: 0 }),
-    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), vibe: "dark hypnotic", open: true });
+    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), keys: none, models: none, vibe: "dark hypnotic", open: true });
     expect(cleanPrefs({ open: false }).open).toBe(false);
     expect(cleanPrefs({ on: true, engine: "lmstudio", endpoint: "http://pc.lan:1234/v1" })).toMatchObject({
       on: true,
       engine: "lmstudio",
       endpoint: "http://pc.lan:1234/v1",
     });
+  });
+
+  it("keep one API key and model per linked account, and nothing else", () => {
+    const prefs = cleanPrefs({
+      engine: "anthropic",
+      keys: { openai: " sk-proj-abc123 ", anthropic: "has a space in it", gemini: 42, other: "sk-xyz-12345678" },
+      models: { gemini: " gemini-2.5-flash ", __proto__: { openai: "x" } },
+    });
+    expect(prefs.engine).toBe("anthropic");
+    expect(prefs.keys).toEqual({ openai: "sk-proj-abc123", anthropic: "", gemini: "" });
+    expect(prefs.models).toEqual({ openai: "", anthropic: "", gemini: "gemini-2.5-flash" });
+    expect(cleanPrefs({ keys: "sk-proj-abc123" }).keys.openai).toBe("");
+    for (const bad of ["", "short", "sk-ünicode-123", "a b c d e f g h", null, {}]) expect(cleanKey(bad)).toBe("");
   });
 
   it("live in their own key, and survive storage that throws", () => {

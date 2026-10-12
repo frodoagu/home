@@ -75,8 +75,9 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
                      Sample import in src/import/ (own WAV/AIFF/CAF/AU decoders, zip, SoundFont,
                      Ableton/SFZ/REAPER references), fixtures from src/test/audioFiles.js.
-                     ✨ AI (src/planner.js + src/ai.js): Chrome's Prompt API or an LM Studio
-                     endpoint plans the autopilot's next section, in the listener's browser.
+                     ✨ AI (src/planner.js + src/ai.js): Chrome's Prompt API, an LM Studio
+                     endpoint or the listener's own OpenAI/Anthropic/Gemini API key plans
+                     the autopilot's next section, called from the listener's browser.
   psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
                      any Google account signs in (ID token verified server-side, own HMAC
                      cookie), one opaque JSON workspace + the user's uploaded audio samples
@@ -518,9 +519,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   and with no plan `advance()`/`arrange()` must draw exactly as before (old
   seeds). A model's answer is untrusted like a link: `normalizePlan()` is its
   gate. Plans can't come back from a seed, so 🔗 carries them (`&ai=`) and a
-  link replays them section by section from silence, model or not. LM Studio is
-  fetched by the page: its origin must be in the CSP (`ai.connectSrc`, loopback
-  by default). See docs/psy-sampler.md.
+  link replays them section by section from silence, model or not. LM Studio and
+  the linked accounts' APIs are fetched by the page: their origins must be in
+  the CSP (`ai.connectSrc`). An API key stays in `psy-sampler:ai`, never in the
+  workspace, a link or psy-sync. See docs/psy-sampler.md.
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

@@ -2198,7 +2198,7 @@ describe("✨ AI", () => {
     const asks = [];
     const engine = (name) => ({
       supported: () => true,
-      known: vi.fn(() => (name === "lmstudio" ? models : undefined)),
+      known: vi.fn(() => (name === "lmstudio" || name === "openai" ? models : undefined)),
       availability: vi.fn(async () => chrome),
       start: vi.fn(async () => name),
       plan: vi.fn((prompt, schema, opts) => {
@@ -2208,7 +2208,9 @@ describe("✨ AI", () => {
         return typeof answer === "function" ? answer(opts, schema, prompt) : Promise.resolve(answer);
       }),
     });
-    return { chrome: engine("chrome"), lmstudio: engine("lmstudio"), asks };
+    const ai = { asks };
+    for (const name of ["chrome", "lmstudio", "openai", "anthropic", "gemini"]) ai[name] = engine(name);
+    return ai;
   }
   const aiBtn = (node = root) => node.querySelector("button.ai");
   const engines = (node = root) => [...node.querySelectorAll("#ai-engine option")].map((o) => o.value);
@@ -2246,7 +2248,7 @@ describe("✨ AI", () => {
     expect(aiBtn().getAttribute("aria-pressed")).toBe("true");
     expect($(".ai-panel").hidden).toBe(false);
     expect($(".ai-panel").open).toBe(true);
-    expect(engines()).toEqual(["chrome", "lmstudio"]);
+    expect(engines()).toEqual(["chrome", "lmstudio", "openai", "anthropic", "gemini"]);
     expect($("#ai-engine").value).toBe("chrome");
     expect($("#ai-endpoint").closest("label").hidden).toBe(true);
     await flushPromises();
@@ -2255,7 +2257,7 @@ describe("✨ AI", () => {
 
     await remountWith(fakeAi({ chrome: "unavailable" }));
     expect(aiBtn().getAttribute("aria-pressed")).toBe("true"); // remembered
-    expect(engines()).toEqual(["lmstudio"]);
+    expect(engines()).toEqual(["lmstudio", "openai", "anthropic", "gemini"]);
     expect($("#ai-endpoint").closest("label").hidden).toBe(false);
     expect($("#ai-endpoint").value).toBe("http://localhost:1234/v1");
   });
@@ -2330,6 +2332,67 @@ describe("✨ AI", () => {
     ]);
     expect($("#ai-model").value).toBe("qwen");
     expect($(".status").textContent).toBe("LM Studio no tiene «qwen»: bajalo o elegí otro modelo.");
+  });
+
+  it("links an account with its API key, picks its model, and unlinks it", async () => {
+    const ai = await remountWith(fakeAi());
+    aiBtn().click();
+    await flushPromises();
+    expect($("#ai-key").closest("label").hidden).toBe(true);
+    $("#ai-engine").value = "openai";
+    $("#ai-engine").dispatchEvent(new Event("change"));
+    expect($("#ai-key").closest("label").hidden).toBe(false);
+    expect($("#ai-key").type).toBe("password");
+    expect($("#ai-endpoint").closest("label").hidden).toBe(true);
+    expect($(".ai-getkey").href).toBe("https://platform.openai.com/api-keys");
+    expect($(".ai-unlink").hidden).toBe(true);
+    expect(ai.openai.start).not.toHaveBeenCalled(); // nothing to ask without a key
+    expect($(".status").textContent).toBe("Pegá tu clave API de OpenAI para vincular tu cuenta.");
+    expect($(".ai-summary").textContent).toBe("OpenAI (sin vincular)");
+
+    $("#ai-key").value = "not a key";
+    $("#ai-key").dispatchEvent(new Event("change"));
+    expect($(".status").textContent).toBe("Eso no parece una clave API.");
+    expect($("#ai-key").value).toBe("");
+
+    $("#ai-key").value = "  sk-proj-abc12345 ";
+    $("#ai-key").dispatchEvent(new Event("change"));
+    expect(ai.openai.start).toHaveBeenLastCalledWith({ key: "sk-proj-abc12345", model: "" });
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/OpenAI listo/);
+    expect($(".ai-unlink").hidden).toBe(false);
+    expect([...root.querySelectorAll("#ai-model option")].map((o) => o.textContent)).toEqual(["Automático (uno rápido)", "gemma-3-4b", "qwen"]);
+    $("#ai-model").value = "qwen";
+    $("#ai-model").dispatchEvent(new Event("change"));
+    expect(ai.openai.start).toHaveBeenLastCalledWith({ key: "sk-proj-abc12345", model: "qwen" });
+    const stored = JSON.parse(localStorage.getItem("psy-sampler:ai"));
+    expect(stored).toMatchObject({ engine: "openai", keys: { openai: "sk-proj-abc12345" }, models: { openai: "qwen" }, model: "" });
+    expect($(".ai-summary").textContent).toBe("OpenAI (qwen)");
+
+    ai.anthropic.start.mockRejectedValueOnce(Object.assign(new Error("HTTP 401"), { status: 401 }));
+    $("#ai-engine").value = "anthropic";
+    $("#ai-engine").dispatchEvent(new Event("change"));
+    $("#ai-key").value = "sk-ant-wrong123";
+    $("#ai-key").dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect($(".status").textContent).toBe("Anthropic (Claude) rechazó la clave: revisala o creá otra.");
+
+    $("#ai-engine").value = "openai";
+    $("#ai-engine").dispatchEvent(new Event("change"));
+    $(".ai-unlink").click();
+    expect($(".status").textContent).toBe("OpenAI desvinculado: su clave se borró de este navegador.");
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).keys).toEqual({ openai: "", anthropic: "sk-ant-wrong123", gemini: "" });
+    expect($("#ai-key").value).toBe("");
+    expect($(".ai-unlink").hidden).toBe(true);
+  });
+
+  it("a linked account plans the sections with its key", async () => {
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ on: true, engine: "gemini", keys: { gemini: "AIzaTestKey123" } }));
+    const ai = await remountWith(fakeAi({ answers: [BREAK] }));
+    $("button.auto").click();
+    await flushPromises();
+    expect(ai.asks[0]).toMatchObject({ name: "gemini", opts: { key: "AIzaTestKey123", model: "" } });
+    expect(ai.asks[0].opts).not.toHaveProperty("endpoint");
   });
 
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {

@@ -18,7 +18,7 @@
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
-import { LMSTUDIO_URL, cleanEndpoint, loadPrefs, savePrefs } from "../ai.js";
+import { CLOUDS, CLOUD_IDS, LMSTUDIO_URL, cleanEndpoint, cleanKey, isCloud, loadPrefs, savePrefs } from "../ai.js";
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, sampleDefaults } from "../audio/patterns.js";
@@ -386,6 +386,7 @@ export function mountApp(root, engine, opts = {}) {
   const aiBtn = el("button", { type: "button", class: "ai", "data-action": "ai", text: tx.ai.button });
   aiBtn.title = tx.ai.title;
   aiBtn.hidden = !ai;
+  const clouds = CLOUD_IDS.filter((id) => ai?.[id]); // the accounts a listener can link
   const field = (id, label, input, title) => {
     const box = el("label", { class: "ai-field", for: id }, el("span", { text: label }), input);
     box.title = title;
@@ -402,10 +403,21 @@ export function mountApp(root, engine, opts = {}) {
     placeholder: LMSTUDIO_URL,
   });
   const endpointBox = field("ai-endpoint", tx.ai.endpoint, endpointInput, tx.ai.endpointTitle);
-  // The models LM Studio lists (ai.js known), read again on every start or ↻.
+  // A linked account: its API key, kept in this browser only (ai.js prefs).
+  const keyInput = el("input", {
+    type: "password",
+    id: "ai-key",
+    class: "ai-input",
+    spellcheck: "false",
+    autocomplete: "off",
+    placeholder: tx.ai.keyPlaceholder,
+  });
+  const unlinkBtn = el("button", { type: "button", class: "ghost ai-unlink", text: tx.ai.unlink });
+  const keyLink = el("a", { class: "ai-getkey", target: "_blank", rel: "noopener noreferrer", text: tx.ai.getKey });
+  const keyBox = field("ai-key", tx.ai.key, el("span", { class: "ai-model-pick" }, keyInput, unlinkBtn, keyLink), "");
+  // The models LM Studio or the account lists (ai.js known), read again on every start or ↻.
   const modelInput = el("select", { id: "ai-model", "data-control": "ai-model" });
-  const modelsBtn = el("button", { type: "button", class: "ghost ai-models", "aria-label": tx.ai.modelsRefresh, text: "↻" });
-  modelsBtn.title = tx.ai.modelsRefresh;
+  const modelsBtn = el("button", { type: "button", class: "ghost ai-models", text: "↻" });
   const modelBox = field("ai-model", tx.ai.model, el("span", { class: "ai-model-pick" }, modelInput, modelsBtn), tx.ai.modelTitle);
   const vibeInput = el("input", {
     type: "text",
@@ -422,7 +434,7 @@ export function mountApp(root, engine, opts = {}) {
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, modelBox, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, vibeBox),
   );
 
   /* ---- tools ---- */
@@ -2210,46 +2222,73 @@ export function mountApp(root, engine, opts = {}) {
   let alive = true;
   let failing = false; // the last ask failed: said once, until one works
   const sectionNo = () => state.run.sections.length - 1;
-  // Chrome's model where it runs, unless LM Studio was picked.
-  const engineNow = () => (state.aiPrefs.engine === "lmstudio" || state.chrome === "unavailable" ? "lmstudio" : "chrome");
+  // Chrome's model where it runs, unless another was picked.
+  const engineNow = () => {
+    const { engine } = state.aiPrefs;
+    if (engine === "lmstudio" || clouds.includes(engine)) return engine;
+    return state.chrome === "unavailable" ? "lmstudio" : "chrome";
+  };
+  const modelOf = (engine) => (isCloud(engine) ? state.aiPrefs.models[engine] : state.aiPrefs.model);
+  const keyOf = (engine) => (isCloud(engine) ? state.aiPrefs.keys[engine] : "");
+  // What the engine needs to be asked: an endpoint, or a linked account's key.
+  const reach = (engine) =>
+    isCloud(engine) ? { key: keyOf(engine), model: modelOf(engine) } : { endpoint: state.aiPrefs.endpoint, model: modelOf(engine) };
+  const knownOf = (engine) => (engine === "chrome" ? null : (ai?.[engine]?.known?.(isCloud(engine) ? keyOf(engine) : state.aiPrefs.endpoint) ?? null));
   // A share link's run, from silence: while it has an entry for the section
   // playing, that entry (or none) stands in for the model's answer.
   const replaying = () => Boolean(state.replay) && Boolean(state.run) && sectionNo() < state.replay.length;
 
   function showAi() {
-    const { on, endpoint, model, vibe } = state.aiPrefs;
+    const { on, endpoint, vibe } = state.aiPrefs;
     const engine = engineNow();
+    const name = tx.ai.engines[engine];
+    const cloud = isCloud(engine);
+    const model = modelOf(engine);
     aiBtn.setAttribute("aria-pressed", String(on));
     aiBtn.classList.toggle("is-thinking", Boolean(planning));
     aiPanel.hidden = !ai || !on;
     if (aiPanel.open !== state.aiPrefs.open) aiPanel.open = state.aiPrefs.open;
-    const what = engine === "lmstudio" && model ? `${tx.ai.engines[engine]} (${model})` : tx.ai.engines[engine];
+    const what = cloud && !keyOf(engine) ? `${name} ${tx.ai.notLinked}` : model ? `${name} (${model})` : name;
     aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
-    const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio"];
+    const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio", ...clouds];
     if (engineInput.options.length !== engines.length) {
       engineInput.replaceChildren(...engines.map((id) => el("option", { value: id, text: tx.ai.engines[id] })));
     }
     engineInput.value = engine;
     endpointBox.hidden = engine !== "lmstudio";
-    modelBox.hidden = engine !== "lmstudio";
+    keyBox.hidden = !cloud;
+    modelBox.hidden = engine === "chrome";
     if (document.activeElement !== endpointInput) endpointInput.value = endpoint;
+    if (cloud) {
+      keyBox.title = tx.ai.keyTitle(name);
+      keyLink.href = CLOUDS[engine].keys;
+      unlinkBtn.hidden = !keyOf(engine);
+      unlinkBtn.title = tx.ai.unlinkTitle(name);
+      if (document.activeElement !== keyInput) keyInput.value = keyOf(engine);
+    }
+    modelBox.title = cloud ? tx.ai.modelTitleCloud(name) : tx.ai.modelTitle;
+    modelsBtn.title = tx.ai.modelsRefresh(name);
+    modelsBtn.setAttribute("aria-label", modelsBtn.title);
     showModels();
     if (document.activeElement !== vibeInput) vibeInput.value = vibe;
     showSection();
   }
 
-  // Automatic, then what LM Studio has; a saved model it no longer lists
-  // stays, marked, until another is picked.
+  // Automatic, then what LM Studio or the account has; a saved model it no
+  // longer lists stays, marked, until another is picked.
   function showModels() {
-    const { endpoint, model } = state.aiPrefs;
-    const known = ai?.lmstudio.known?.(endpoint) ?? null;
+    const engine = engineNow();
+    if (engine === "chrome") return;
+    const model = modelOf(engine);
+    const known = knownOf(engine);
+    const missing = tx.ai.modelMissing(tx.ai.engines[engine]);
     const ids = [...(known ?? []), ...(model && !known?.includes(model) ? [model] : [])];
-    const key = JSON.stringify([known, ids]);
+    const key = JSON.stringify([engine, known, ids]);
     if (modelInput.dataset.key !== key) {
       modelInput.dataset.key = key;
       modelInput.replaceChildren(
-        el("option", { value: "", text: tx.ai.modelAuto }),
-        ...ids.map((id) => el("option", { value: id, text: known && !known.includes(id) ? `${id} ${tx.ai.modelMissing}` : id })),
+        el("option", { value: "", text: isCloud(engine) ? tx.ai.modelAutoCloud : tx.ai.modelAuto }),
+        ...ids.map((id) => el("option", { value: id, text: known && !known.includes(id) ? `${id} ${missing}` : id })),
       );
     }
     modelInput.value = model;
@@ -2267,32 +2306,50 @@ export function mountApp(root, engine, opts = {}) {
     if (alive) showAi();
   }
 
-  // A click on ✨ (or a new engine, endpoint or model): gets the model going,
-  // so the user hears now whether it answers: Chrome's may download first.
+  // A click on ✨ (or a new engine, endpoint, key or model): gets the model
+  // going, so the user hears now whether it answers: Chrome's may download
+  // first; an account must be linked.
   function startAi() {
     cancelPlanning();
     failing = false;
     const engine = engineNow();
-    const { endpoint, model } = state.aiPrefs;
+    const { endpoint } = state.aiPrefs;
+    const model = modelOf(engine);
     const name = tx.ai.engines[engine];
+    const cloud = isCloud(engine);
+    if (cloud && !keyOf(engine)) {
+      showModels();
+      status(tx.ai.needKey(name));
+      return;
+    }
     const started =
       engine === "chrome"
         ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))))
-        : ai.lmstudio.start({ endpoint, model });
+        : ai[engine].start(reach(engine));
     started.then(
       () => {
         if (engine === "chrome") state.chrome = "available"; // downloaded now
         if (!alive || !state.aiPrefs.on) return;
         showModels();
-        const known = engine === "lmstudio" ? ai.lmstudio.known?.(endpoint) : null;
-        if (model && known && !known.includes(model)) status(tx.ai.modelGone(model));
+        const known = knownOf(engine);
+        if (model && known && !known.includes(model)) status(cloud ? tx.ai.modelGoneCloud(model, name) : tx.ai.modelGone(model));
         else status(tx.ai.ready(name));
         planAhead();
       },
-      () => {
+      (err) => {
         if (!alive || !state.aiPrefs.on) return;
         showModels();
-        status(engine === "chrome" ? tx.ai.chromeFailed : tx.ai.unreachable(endpoint));
+        // A provider answers a bad key with 400 (Gemini), 401 or 403.
+        const rejected = [400, 401, 403].includes(err?.status);
+        status(
+          engine === "chrome"
+            ? tx.ai.chromeFailed
+            : cloud
+              ? rejected
+                ? tx.ai.keyRejected(name)
+                : tx.ai.cloudFailed(name)
+              : tx.ai.unreachable(endpoint),
+        );
       },
     );
   }
@@ -2315,13 +2372,15 @@ export function mountApp(root, engine, opts = {}) {
     if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
     const slot = state.run.ahead.length;
     if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
+    const engine = engineNow();
+    if (isCloud(engine) && !keyOf(engine)) return;
     const next = p.queue[slot] ?? null; // queued by hand: the model arranges that one
     if (next && !PLAN_SECTIONS.includes(next)) return;
     const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
     planning = { at, abort };
     const ctx = { lists: ws.lists, style: ws.style, next };
-    const { endpoint, model, vibe } = state.aiPrefs;
+    const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
     const prompt = planPrompt({
@@ -2345,8 +2404,8 @@ export function mountApp(root, engine, opts = {}) {
       names: ws.names,
     });
     let more = false;
-    ai[engineNow()]
-      .plan(prompt, planSchema(ctx), { endpoint, model, signal: abort.signal })
+    ai[engine]
+      .plan(prompt, planSchema(ctx), { ...reach(engine), signal: abort.signal })
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
@@ -2363,7 +2422,7 @@ export function mountApp(root, engine, opts = {}) {
         () => {
           if (planning?.abort !== abort) return;
           // Chrome's model may still need the click that downloads it.
-          if (!failing) status(engineNow() === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
+          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
           failing = true;
         },
       )
@@ -2407,8 +2466,31 @@ export function mountApp(root, engine, opts = {}) {
     startAi();
   });
   engineInput.addEventListener("change", () => {
-    setPrefs({ engine: engineInput.value === "lmstudio" ? "lmstudio" : "chrome" });
+    const engine = engineInput.value;
+    setPrefs({ engine: engine === "lmstudio" || clouds.includes(engine) ? engine : "chrome" });
     startAi();
+  });
+  keyInput.addEventListener("change", () => {
+    const engine = engineNow();
+    if (!isCloud(engine)) return;
+    const key = cleanKey(keyInput.value);
+    if (keyInput.value.trim() && !key) {
+      status(tx.ai.badKey);
+      keyInput.value = keyOf(engine);
+      return;
+    }
+    setPrefs({ keys: { ...state.aiPrefs.keys, [engine]: key } });
+    startAi();
+  });
+  unlinkBtn.addEventListener("click", (e) => {
+    e.preventDefault(); // inside the field's label
+    const engine = engineNow();
+    if (!isCloud(engine)) return;
+    cancelPlanning();
+    keyInput.value = "";
+    setPrefs({ keys: { ...state.aiPrefs.keys, [engine]: "" } });
+    showModels();
+    status(tx.ai.unlinked(tx.ai.engines[engine]));
   });
   endpointInput.addEventListener("change", () => {
     const endpoint = cleanEndpoint(endpointInput.value);
@@ -2422,7 +2504,8 @@ export function mountApp(root, engine, opts = {}) {
     startAi();
   });
   modelInput.addEventListener("change", () => {
-    setPrefs({ model: modelInput.value });
+    const engine = engineNow();
+    setPrefs(isCloud(engine) ? { models: { ...state.aiPrefs.models, [engine]: modelInput.value } } : { model: modelInput.value });
     startAi();
   });
   modelsBtn.addEventListener("click", startAi);

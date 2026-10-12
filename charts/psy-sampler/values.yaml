@@ -12,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
-  tag: "latest@sha256:2a13587c958993140b9c57f874b4a6675eecc2a045e06f2f15e6aff939ed94a4"
+  tag: "latest@sha256:62fc2cdbd96b338c53cd116b30c4eb92e32e2cdbe16e8af491b6fef06b4c2681"
 # The image is static, public content (anyone can fetch the same files from
 # psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
 # secret. GHCR creates it private on the first push: flip it once in GitHub >
@@ -48,11 +48,16 @@ resources:
 # the page itself, so its origin must be in the CSP's connect-src. Loopback
 # covers LM Studio on the listener's own machine (Chrome asks them first:
 # Local Network Access). Another host only works over https (plain http from an
-# https page is mixed content) and with its origin listed here.
+# https page is mixed content) and with its origin listed here. A linked
+# account (the listener's own API key) is fetched the same way: its provider's
+# API origin must be listed too.
 ai:
   connectSrc:
   - "http://localhost:*"
   - "http://127.0.0.1:*"
+  - "https://api.openai.com"
+  - "https://api.anthropic.com"
+  - "https://generativelanguage.googleapis.com"
   # Origin-Trial tokens, one header each: for Chrome's Prompt API if its web
   # version still needs a trial for this host (register psy.agu.com.ar at
   # https://developer.chrome.com/origintrials). They expire: renew them. Without
