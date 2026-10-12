@@ -445,6 +445,21 @@ describe("autopilot", () => {
       expect(Object.keys(toneOf({ section: "intro", length: 4, left: 1, queue: [] }, mix))).not.toContain("bass.rolling");
     });
 
+    it("keeps the bass it fades in through every swap, drawing as a plain intro does", () => {
+      for (let seed = 1; seed <= 40; seed++) {
+        const rng = seeded(seed), plainRng = seeded(seed);
+        let pilot = { ...opening(0), plan: null };
+        let active = mix;
+        for (let loop = 0; loop < 6; loop++) { // the last one adds the riser
+          const { opening: _o, ...plain } = pilot;
+          advance(plain, active, lists, plainRng);
+          ({ pilot, active } = advance(pilot, active, lists, rng));
+          expect(active.bass).toBe("bass.rolling");
+        }
+        expect(rng()).toBe(plainRng());
+      }
+    });
+
     it("its last loop is a drop with a riser, and only an opening's", () => {
       const rng = seeded(7);
       let pilot = { ...opening(6), plan: null };
