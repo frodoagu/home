@@ -38,6 +38,8 @@ describe("the prompt", () => {
     expect(planPrompt(base)).not.toContain("listener asks");
     expect(planPrompt(base)).toContain("Sounds playing now: none.");
     expect(planPrompt({ ...base, next: "breakdown" })).toContain("The listener queued breakdown next: plan that section.");
+    expect(planPrompt(base)).not.toContain("theme");
+    expect(planPrompt({ ...base, theme: ["lead.acid"] })).toContain("The theme, which stays in the lead layer: lead.acid.");
   });
 });
 

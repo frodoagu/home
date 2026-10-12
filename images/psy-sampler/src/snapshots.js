@@ -6,6 +6,13 @@
 // list (ws.snapshots) and the unsaved drafts.
 //
 //   { id: "snap-3", name, section, active: { lane key: variant }, data: { variant: data } }
+//
+// The snapshot autopilot (a "tour") plays them one after another, in the
+// panel's order and round again, with no rng: the same list plays the same
+// way every time.
+//
+//   { id: playing snapshot, at: its index then, bars: bar lines since it came in
+//     (null until the first one), phase, skip?: ⏭ asked to move on }
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { BG_KICK_VARIANT, laneKey } from "./selection.js";
 
@@ -58,3 +65,43 @@ export function partsOf(snap) {
 
 const fields = ({ name, section, active, data }) => JSON.stringify([name, section, active, data]);
 export const sameSnapshot = (a, b) => fields(a) === fields(b);
+
+/* ---- the snapshot autopilot ---- */
+
+/** A tour playing `id`: it starts counting on the bar line `step` (0 or 16), or on the next one when null. */
+export function startTour(list, id, step = null) {
+  const tour = { id, at: list.findIndex((s) => s.id === id), bars: null, phase: 0 };
+  return step === null ? tour : countBar(tour, step);
+}
+
+// `phase` makes (bars + phase) even on a loop start (step 0), wherever the
+// snapshot came in: a click enters on any bar line, the tour only moves on
+// a loop start.
+export function countBar(tour, step) {
+  const bars = tour.bars === null ? 0 : tour.bars + 1;
+  return { ...tour, bars, phase: (bars + (step ? 1 : 0)) % 2 };
+}
+
+export const skipTour = (tour) => ({ ...tour, skip: true });
+
+/** It moves on at this bar line: a loop start once it played `changeBars` bars, or after ⏭. */
+export const tourDue = (tour, step, changeBars) =>
+  step === 0 && tour.bars > 0 && (tour.skip || tour.bars >= changeBars);
+
+/** Bars from the last bar line to the one where it moves on. */
+export function tourLeft(tour, changeBars) {
+  if (tour.bars === null) return changeBars;
+  let end = Math.max(tour.skip ? 1 : changeBars, tour.bars + 1);
+  if ((end + tour.phase) % 2) end++;
+  return end - tour.bars;
+}
+
+/**
+ * The snapshot after the tour's, in panel order and round again. When that
+ * one is gone, the one that took its place; null with none left.
+ */
+export function nextSnapshot(list, { id, at }) {
+  if (!list.length) return null;
+  const i = list.findIndex((s) => s.id === id);
+  return list[i >= 0 ? (i + 1) % list.length : Math.max(0, at) % list.length];
+}

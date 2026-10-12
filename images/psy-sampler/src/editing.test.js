@@ -3,6 +3,8 @@ import { inScale, isRoot, scaleRows } from "./audio/music.js";
 import { ACCENT, HIT, OFF } from "./audio/patterns.js";
 import {
   BUILD_UP,
+  FILL_STEPS,
+  ROLL,
   beatEchoes,
   brushAllNotes,
   brushAllSteps,
@@ -25,9 +27,12 @@ import {
   reversePart,
   rotatePart,
   seeded,
+  silenced,
   varyNotes,
   varySteps,
+  withBreak,
   withBuildUp,
+  withRoll,
 } from "./editing.js";
 
 const n = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
@@ -84,6 +89,37 @@ describe("withBuildUp", () => {
     const { mods } = withBuildUp(data, 16);
     expect(mods.slice(0, 16).every((m) => m.p === 0.5)).toBe(true);
     expect(mods.slice(16).every((m) => m === null)).toBe(true);
+  });
+});
+
+describe("bar overlays", () => {
+  const drums = () => ({ steps: Array(32).fill(HIT), mods: Array(32).fill({ p: 0.5 }), speed: 2, iter: 4, echo: { steps: 3, semis: 0 } });
+
+  it("silenced plays nothing, drums and notes alike", () => {
+    const d = silenced(drums());
+    expect(d.steps.every((v) => v === OFF) && d.mods.every((m) => m === null)).toBe(true);
+    expect([d.speed, d.iter, d.echo]).toEqual([1, 1, null]);
+    const notes = { notes: [n(0, 33, 4)], echo: { steps: 3, semis: 7 }, synth: "sub" };
+    expect(silenced(notes)).toEqual({ notes: [], echo: null, synth: "sub" });
+  });
+
+  it("a break empties the last two beats of its bar, in place", () => {
+    const d = withBreak(drums(), 16);
+    expect(FILL_STEPS).toBe(8);
+    expect(d.steps.slice(0, 24).every((v) => v === HIT)).toBe(true);
+    expect(d.steps.slice(24).every((v) => v === OFF)).toBe(true);
+    expect(d.mods.slice(24).every((m) => m === null) && d.mods[23].p === 0.5).toBe(true);
+    expect([d.speed, d.iter, d.echo]).toEqual([1, 1, null]);
+    expect(withBreak(drums(), 0).steps.slice(8, 16).every((v) => v === OFF)).toBe(true);
+  });
+
+  it("a roll writes 8ths then accented 16ths over the last two beats", () => {
+    const empty = { steps: Array(32).fill(OFF), mods: Array(32).fill(null) };
+    const d = withRoll(empty, 0);
+    expect(d.steps.slice(8, 16)).toEqual(ROLL);
+    expect(ROLL).toEqual([HIT, OFF, HIT, OFF, HIT, HIT, ACCENT, ACCENT]);
+    expect(d.steps.slice(16).every((v) => v === OFF)).toBe(true);
+    expect(empty.steps.every((v) => v === OFF)).toBe(true); // never mutates
   });
 });
 

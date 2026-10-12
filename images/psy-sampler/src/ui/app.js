@@ -4,7 +4,11 @@
 // clicks, the autopilot, improvise variations) run in the engine's bar hook.
 // Snapshots recall a saved mix (and the data it played) on the next bar line;
 // a BPM change ramps there too, one slice per bar. The autopilot dresses each
-// sound it brings in from the seed (dress.js) and writes new melodies.
+// sound it brings in from the seed (dress.js) and writes new melodies; it
+// also rides each sound's volume and tone filters, decides which sounds
+// improvise, and drops into its peaks (a kick roll, a bar without kick and
+// bass under a sweep, then everything). 💥 does that drop by hand. The
+// snapshot autopilot plays the snapshots one after another instead.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 // The ✨ AI (planner.js, ai.js) asks a model for the section after each one,
@@ -23,25 +27,31 @@ import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
+  PUMP,
   SECTION_IDS,
   STYLES,
   STYLE_IDS,
   advance,
   dequeue,
+  dropNext,
+  dropping,
   enqueue,
   entering,
   fillMelodic,
   guessSection,
+  improvises,
   isBare,
   joinPilot,
   mixOf,
   moveTo,
+  phraseEnd,
   rearrange,
   skip,
   startPilot,
+  toneOf,
   withPlan,
 } from "../autopilot.js";
-import { dress } from "../dress.js";
+import { coin, dress, fillOf } from "../dress.js";
 import {
   IMPROV_DEFAULT,
   doubleSteps,
@@ -50,10 +60,13 @@ import {
   newPart,
   reversePart,
   seeded,
+  silenced,
   styleOf,
   varyNotes,
   varySteps,
+  withBreak,
   withBuildUp,
+  withRoll,
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
@@ -71,7 +84,20 @@ import {
   unpackSnap,
   unpackSounds,
 } from "../share.js";
-import { SNAP_MAX, capture, freshName, nextSnapId, partsOf, removePart } from "../snapshots.js";
+import {
+  SNAP_MAX,
+  capture,
+  countBar,
+  freshName,
+  nextSnapId,
+  nextSnapshot,
+  partsOf,
+  removePart,
+  skipTour,
+  startTour,
+  tourDue,
+  tourLeft,
+} from "../snapshots.js";
 import { browserStorage, loadState, saveState } from "../storage.js";
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
@@ -97,6 +123,11 @@ const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
 
 // Drag on a tile's 🔀 over the whole improvise range: the button is small.
 const TILE_SLIDE_PX = 120;
+// The drop by hand: the riser into it, the hit on it, and the layers its
+// second bar takes out.
+const DROP_RISER = "fx.riser";
+const DROP_HIT = "fx.impact";
+const GAP_LAYERS = ["kick", "bass"];
 
 const sameLanes = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
@@ -116,6 +147,7 @@ const fresh = () => ({
   applied: null,
   queuedSnap: null,
   armed: false,
+  tour: null,
   replay: null,
 });
 
@@ -148,12 +180,16 @@ export function mountApp(root, engine, opts = {}) {
     auto: resume?.auto ?? false,
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
+    tour: resume?.tour ?? null, // the snapshot autopilot (snapshots.js), never on with `auto`
     run: resume?.run ?? null, // { sections, plans }: the sections the pilot walked since it started, the plans it took
     replay: resume?.replay ?? null, // a share link's plans, one per section, taken again from silence
-    aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe (ai.js)
+    aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe, open (ai.js)
     chrome: resume?.chrome ?? "unavailable", // what Chrome's built-in model said it can do here
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
+    drop: resume?.drop ?? null, // { phase: "armed" | "roll" | "gap", hand }: a drop on its way (see stepDrop)
+    bar: resume?.bar ?? null, // { from, kinds: { variant: "gap" | "break" | "roll" } }: this bar's overlays
+    autoVary: resume?.autoVary ?? new Set(), // sounds whose 🔀 the autopilot switched on
     queuedSnap: resume?.queuedSnap ?? null, // a snapshot entering with `pending` on the next bar line
     applied: resume?.applied ?? null, // the snapshot last recalled: lit while its mix plays
     drafts: resume?.drafts ?? new Map(), // snapshot id -> its unsaved edits
@@ -185,13 +221,21 @@ export function mountApp(root, engine, opts = {}) {
   const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
   const owned = (id) => id in ws.variants && !ws.auto.includes(id);
 
-  // What each variant plays apart from a build-up, which feed() lays on top.
+  // What each variant plays apart from what a bar lays on top of it: a
+  // build-up, or the bar's overlay (a drop's gap, a phrase-end fill), which
+  // feed() lays on. `live` is what the engine got, for the tiles' flashes.
   const fed = new Map();
+  const live = new Map();
+  const OVERLAYS = { gap: silenced, break: withBreak, roll: withRoll };
   function feed(id, data, glide) {
     fed.set(id, data);
     const b = state.buildUp;
-    const live = b?.id === id && b.from !== null ? withBuildUp(data, b.from) : data;
-    engine.setData(id, live, glide);
+    const kind = state.bar?.kinds[id];
+    let next = data;
+    if (b?.id === id && b.from !== null) next = withBuildUp(data, b.from);
+    else if (kind) next = OVERLAYS[kind](data, state.bar.from);
+    live.set(id, next);
+    engine.setData(id, next, glide);
   }
   const dataNow = (id) => fed.get(id) ?? dataOf(id);
 
@@ -238,6 +282,8 @@ export function mountApp(root, engine, opts = {}) {
   const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
   snapBtn.title = tx.transport.snapshotTitle;
   const recBtn = el("button", { type: "button", class: "rec", "data-action": "record" });
+  const dropBtn = el("button", { type: "button", class: "drop-btn", "data-action": "drop", "aria-pressed": "false", text: tx.transport.drop });
+  dropBtn.title = tx.transport.dropTitle;
 
   /* ---- BPM change: a ramp, bar by bar ---- */
   const rampTo = el("input", {
@@ -278,6 +324,8 @@ export function mountApp(root, engine, opts = {}) {
     text: tx.transport.auto,
   });
   autoBtn.title = tx.transport.autoTitle;
+  const tourBtn = el("button", { type: "button", class: "tour", "aria-pressed": "false", text: tx.transport.tour });
+  tourBtn.title = tx.transport.tourTitle;
   const sectionBadge = el("span", { class: "section-badge", "aria-live": "polite" });
   const sectionLeft = el("span", { class: "section-left" });
   const queueList = el("ol", { class: "section-queue", "aria-label": tx.pilot.queue });
@@ -643,6 +691,7 @@ export function mountApp(root, engine, opts = {}) {
     snapTiles.clear();
     sections.get(SNAP_PANEL).group.replaceChildren(...ws.snapshots.map(makeSnapTile));
     placeEditor();
+    showSection();
   }
 
   for (const id of ws.order) {
@@ -653,6 +702,7 @@ export function mountApp(root, engine, opts = {}) {
         (ids) => {
           ws.snapshots = ids.map(snapById);
           persist();
+          showSection(); // the tour's next one follows the order
         },
         el("div", { class: "snap-files" }, snapExport, snapImport, snapFile),
       );
@@ -714,7 +764,7 @@ export function mountApp(root, engine, opts = {}) {
     "nav",
     { class: "topbar" },
     back,
-    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
+    el("div", { class: "topbar-transport" }, snapBtn, dropBtn, cueBtn, stopBtn, recBtn),
     el(
       "div",
       { class: "topbar-tempo" },
@@ -734,6 +784,7 @@ export function mountApp(root, engine, opts = {}) {
         confirm,
         status: (text) => status(text),
         onPreview: previewSample,
+        onAudition: auditionSample,
         onUse: addSampleSound,
         onRemove: forgetSample,
       })
@@ -762,7 +813,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, sectionBadge, sectionLeft, queueList, nextBtn),
       aiPanel,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
@@ -787,7 +838,7 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- rendering ---- */
   let lanes = {};
-  const laneMap = () => desiredLanes(state.active, { bgKick: ws.bgKick && !state.auto });
+  const laneMap = () => desiredLanes(state.active, { bgKick: ws.bgKick && !state.auto && !state.tour });
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
@@ -827,6 +878,7 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-dirty", state.drafts.has(id));
     }
     showCue();
+    showDrop();
   }
 
   // Running, the slot holds Parar; stopped, the cue button arms, and armed it
@@ -845,6 +897,13 @@ export function mountApp(root, engine, opts = {}) {
   function showSection() {
     const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
+    tourBtn.setAttribute("aria-pressed", String(Boolean(state.tour)));
+    tourBtn.disabled = !state.tour && ws.snapshots.length < 2;
+    if (state.tour) {
+      showTour(state.tour);
+      return;
+    }
+    for (const { node } of snapTiles.values()) node.classList.remove("is-next");
     sectionBadge.textContent = p ? tx.sections[p.section] : "";
     sectionBadge.hidden = !p;
     sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
@@ -870,6 +929,33 @@ export function mountApp(root, engine, opts = {}) {
     queueList.replaceChildren(...chips);
     queueList.hidden = !chips.length;
     nextBtn.disabled = !p || p.left === 1;
+    showDrop();
+  }
+
+  // 💥 is lit while a drop is on its way: armed, rolling, in its gap, or the
+  // pilot's next loop.
+  function showDrop() {
+    const p = state.auto ? state.pilot : null;
+    const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (p.queue[0] === "peak" && p.left <= 2)));
+    dropBtn.setAttribute("aria-pressed", String(coming));
+    dropBtn.disabled = !engine.isRunning();
+  }
+
+  // The same row under the snapshot autopilot: the snapshot playing, its bars
+  // left and the one coming next, which pulses (its tile too) in the last loop.
+  function showTour(tour) {
+    const now = snapById(tour.id);
+    const left = tourLeft(tour, ws.changeBars);
+    const next = nextSnapshot(ws.snapshots, tour);
+    sectionBadge.textContent = now?.name ?? "";
+    sectionBadge.hidden = !now;
+    sectionLeft.textContent = tx.pilot.left(left);
+    const chip = next && el("li", { class: "queued is-auto", "data-queued": next.id }, el("span", { text: next.name }));
+    chip?.classList.toggle("is-next", left <= 2);
+    queueList.replaceChildren(...(chip ? [chip] : []));
+    queueList.hidden = !chip;
+    for (const [id, { node }] of snapTiles) node.classList.toggle("is-next", left <= 2 && next?.id === id);
+    nextBtn.disabled = Boolean(tour.skip) || left <= 2;
   }
 
   let shownStep = null;
@@ -901,7 +987,7 @@ export function mountApp(root, engine, opts = {}) {
     if (step % 4 === 0) strike(bpmOut, step % BAR_STEPS === 0);
     const loop = engine.visibleLoop() ?? 0;
     for (const id of Object.values(lanes)) {
-      const events = eventsAt(id, step, false, dataNow(id), loop);
+      const events = eventsAt(id, step, false, live.get(id) ?? dataNow(id), loop);
       const t = tiles.get(id);
       if (events.length && t) strike(t.node, events.some((ev) => ev.accent));
     }
@@ -984,6 +1070,7 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- the bar hook: everything that must land on the grid ---- */
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
+    if (bar === 0 && state.drop?.phase !== "armed") state.drop = null; // a fresh run: no drop left halfway
     if (loopStart) {
       for (const id of state.newParts) writeNewPart(id);
       state.newParts.clear();
@@ -994,22 +1081,37 @@ export function mountApp(root, engine, opts = {}) {
     stepRamp();
     let changed = false;
     if (state.pending) {
-      if (state.queuedSnap) load(state.queuedSnap);
+      if (state.queuedSnap) load(state.queuedSnap, step);
+      else if (state.tour) state.tour = countBar(state.tour, step); // the hand wins this line
       state.queuedSnap = null;
       state.active = state.pending;
       state.pending = null;
       changed = true;
+    } else if (state.tour) {
+      changed = state.tour.bars === null; // its first line drops the background kick
+      state.tour = countBar(state.tour, step);
+      if (tourDue(state.tour, step, ws.changeBars)) {
+        const next = nextSnapshot(ws.snapshots, state.tour);
+        if (next) {
+          load(next, step);
+          state.active = { ...next.active };
+        } else state.tour = null;
+        changed = true;
+      }
     } else if (state.auto && loopStart) {
       const move = advance(state.pilot, state.active, ws.lists, state.rng, {
         style: ws.style,
         changeBars: ws.changeBars,
       });
+      const was = state.active;
       state.pilot = move.pilot;
       dressIn([...entering(state.active, move.active), ...move.fx]);
       for (const id of move.rewrite) rewrite(id);
       for (const id of move.fx) fire(id, time);
       state.active = move.active;
-      if (state.pilot.left === state.pilot.length) enterSection();
+      const sectionStart = move.pilot.left === move.pilot.length;
+      improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
+      if (sectionStart) enterSection();
       else if (state.pilot.left === 1) cancelPlanning(); // too late for a plan now
       showSection();
       changed = true;
@@ -1025,12 +1127,88 @@ export function mountApp(root, engine, opts = {}) {
         changed = true;
       }
     }
+    if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
+    setBar(step, stepDrop(time, step, loopStart) ?? fillKinds(step));
+    if (state.tour) showSection();
     if (!changed) return undefined;
-    if (state.auto) mixIn();
+    if (state.auto) {
+      mixIn();
+      toneIn();
+    }
     lanes = laneMap();
     renderButtons();
     return lanes;
   });
+
+  /* ---- the drop: a roll, a bar without kick and bass, then everything ---- */
+  // Two bars. The first rolls the kick (the build-up) and starts the sweep up
+  // the mix; the second takes kick and bass out (their parts, silenced for
+  // the bar); the bar line after it is the drop: they come back on the 1 and
+  // the sweep snaps open. The pilot starts one on its drop loops (it fires
+  // the riser and the peak's FX itself); 💥 by hand starts one on the next
+  // bar line, with a riser into it and an impact on it. Returns this bar's
+  // overlays while the drop owns the bar, else null.
+  function stepDrop(time, step, loopStart) {
+    const d = state.drop;
+    if (d?.phase === "gap") {
+      state.drop = null;
+      engine.sweepOff(time);
+      if (d.hand) fire(DROP_HIT, time);
+      showDrop();
+      return {};
+    }
+    if (d?.phase === "roll") {
+      state.drop = { ...d, phase: "gap" };
+      const out = {};
+      for (const id of Object.values(laneMap())) if (GAP_LAYERS.includes(layerOf(id).id)) out[id] = "gap";
+      return out;
+    }
+    const byPilot = state.auto && loopStart && dropping(state.pilot);
+    if (!byPilot && !(d?.phase === "armed" && !state.auto)) return null;
+    state.drop = { phase: "roll", hand: !byPilot };
+    const kick = Object.values(laneMap()).find((id) => layerOf(id).id === "kick");
+    if (kick) {
+      setBuildUp(kick, true);
+      state.buildUp.from = step; // this bar, not the next
+      feed(kick, dataNow(kick));
+    }
+    engine.sweep(time, time + LOOP_STEPS * stepDuration(state.tempo));
+    if (!byPilot) fire(DROP_RISER, time);
+    showDrop();
+    return null;
+  }
+
+  // The pilot's phrase-end fill, on the second bar of a loop that ends a
+  // phrase: the kick breaks, the percussion rolls, or both (dress.js fillOf).
+  function fillKinds(step) {
+    const out = {};
+    if (!state.auto || step !== BAR_STEPS || state.drop) return out;
+    const at = phraseEnd(state.pilot);
+    const fill = at ? fillOf(ws.seed, state.pilot.section, at) : null;
+    if (!fill) return out;
+    for (const id of Object.values(laneMap())) {
+      const layer = layerOf(id).id;
+      if (fill !== "roll" && layer === "kick") out[id] = "break";
+      else if (fill !== "break" && layer === "perc" && defOf(id).kind === "drum") out[id] = "roll";
+    }
+    return out;
+  }
+
+  // This bar's overlays, from its bar line to the next: the last bar's come
+  // off, the new ones go on.
+  function setBar(from, kinds) {
+    const was = state.bar?.kinds ?? {};
+    if (!Object.keys(was).length && !Object.keys(kinds).length) return;
+    state.bar = Object.keys(kinds).length ? { from, kinds } : null;
+    for (const id of new Set([...Object.keys(was), ...Object.keys(kinds)])) feed(id, dataNow(id));
+  }
+
+  // A drop armed by hand becomes the pilot's: its next loop.
+  function adoptDrop() {
+    if (state.drop?.phase !== "armed") return;
+    state.drop = null;
+    state.pilot = dropNext(state.pilot);
+  }
 
   /* ---- variant data ---- */
   function setVariant(id, data, { generated = false } = {}) {
@@ -1086,7 +1264,9 @@ export function mountApp(root, engine, opts = {}) {
     }
   }
 
-  function setVarying(id, on) {
+  function setVarying(id, on, { pilot = false } = {}) {
+    if (pilot && on) state.autoVary.add(id);
+    else state.autoVary.delete(id); // by hand it is yours
     if (on) {
       state.varying.set(id, dataOf(id));
       // The first variation waits for the next loop: nothing jumps on click.
@@ -1221,6 +1401,43 @@ export function mountApp(root, engine, opts = {}) {
     if (moved) persist();
   }
 
+  // The autopilot's tone filters on every sound it rides (autopilot.js
+  // toneOf): an exponential line over the loop, like the faders. Yours too:
+  // the rest of your edit stays.
+  function toneIn(active = state.active) {
+    let moved = false;
+    for (const [id, tone] of Object.entries(toneOf(state.pilot, active))) {
+      const ins = dataOf(id).insert;
+      if (!tiles.has(id) || (ins.hp === tone.hp && ins.lp === tone.lp)) continue;
+      setTone(id, tone, stepDuration(state.tempo) * LOOP_STEPS);
+      moved = true;
+    }
+    if (moved) persist();
+  }
+
+  function setTone(id, { hp, lp }, glide) {
+    if (!(id in ws.variants)) ws.auto.push(id);
+    const toned = (data) => ({ ...data, insert: { ...data.insert, hp, lp } });
+    ws.variants[id] = toned(dataOf(id));
+    if (state.varying.has(id)) state.varying.set(id, toned(state.varying.get(id)));
+    feed(id, toned(dataNow(id)), glide);
+    open?.id === id && open.editor.showTone(ws.variants[id].insert);
+  }
+
+  // The autopilot's 🔀: on a section's first loop it decides for everything
+  // it plays, mid-section only for what comes in, so a hand toggle holds
+  // until the section changes. From the seed, per section and sound. What
+  // it switched on stops when the sound `left`.
+  function improviseIn(ids, left = []) {
+    const section = state.pilot.section;
+    for (const id of new Set(ids)) {
+      if (!tiles.has(id) || layerOf(id).oneShot) continue;
+      const on = improvises(section, id, coin(ws.seed, `improv/${section}/${id}`));
+      if (on !== state.varying.has(id)) setVarying(id, on, { pilot: true });
+    }
+    for (const id of left) if (state.autoVary.has(id) && tiles.has(id)) setVarying(id, false, { pilot: true });
+  }
+
   function setImprov(id, amount) {
     if (amount === IMPROV_DEFAULT) delete ws.improv[id];
     else ws.improv[id] = amount;
@@ -1332,9 +1549,10 @@ export function mountApp(root, engine, opts = {}) {
     sync();
   }
 
-  // A recalled snapshot's sounds go back to the data they played then, and
-  // a running autopilot jumps to its section.
-  function load(snap) {
+  // A recalled snapshot's sounds go back to the data they played then, a
+  // running autopilot jumps to its section and the snapshot autopilot carries
+  // on from it, counting from bar line `step` (or the next one).
+  function load(snap, step = null) {
     for (const [id, data] of Object.entries(snap.data)) {
       if (!tiles.has(id) || sameData(dataOf(id), data)) continue;
       setVariant(id, structuredClone(data));
@@ -1348,8 +1566,9 @@ export function mountApp(root, engine, opts = {}) {
     if (state.auto) {
       state.pilot = moveTo(state.pilot, snap.section);
       enterSection();
-      showSection();
     }
+    if (state.tour) state.tour = startTour(ws.snapshots, snap.id, step);
+    showSection();
   }
 
   function openSnapEditor(id, { focusName = false } = {}) {
@@ -1381,6 +1600,7 @@ export function mountApp(root, engine, opts = {}) {
         tile.detailEl.textContent = snapDetail(snap);
         tile.edit.setAttribute("aria-label", tx.tile.edit(snap.name));
         renderButtons();
+        showSection(); // a new name on the pilot row
         return snap;
       },
       onTry: (draft) => recall(draft),
@@ -1402,6 +1622,7 @@ export function mountApp(root, engine, opts = {}) {
     if (!confirm(tx.snap.confirmRemove(snapById(id).name))) return;
     closeEditor();
     ws.snapshots = ws.snapshots.filter((s) => s.id !== id);
+    if (!ws.snapshots.length) state.tour = null;
     state.drafts.delete(id);
     if (state.applied === id) state.applied = null;
     if (state.queuedSnap?.id === id) {
@@ -1586,6 +1807,12 @@ export function mountApp(root, engine, opts = {}) {
     samples.load(sampleId).then((buffer) => buffer && engine.previewSample(sampleId));
   }
 
+  // The picker's ▶, before uploading: decoded here, played like a stored one.
+  function auditionSample(candidate) {
+    engine.ensureContext();
+    return samples.audition(candidate).then((id) => engine.previewSample(id));
+  }
+
   // A deleted sample: the sounds using it go back to their own voice.
   function forgetSample(sampleId) {
     for (const id of allIds()) {
@@ -1637,6 +1864,7 @@ export function mountApp(root, engine, opts = {}) {
     // Snapshots lose the sound too; one left with nothing goes.
     const strip = (snap) => (id in snap.data ? removePart(snap, id) : snap);
     ws.snapshots = ws.snapshots.map(strip).filter((snap) => partsOf(snap).length);
+    if (!ws.snapshots.length) state.tour = null;
     for (const [key, draft] of state.drafts) {
       if (snapById(key)) state.drafts.set(key, strip(draft));
       else state.drafts.delete(key);
@@ -1737,8 +1965,9 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function remount(changes = {}) {
-    const { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
-    const carried = { pending, armed, active, auto, pilot, rng, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid };
+    const { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid } = state;
+    const { drop, bar, autoVary } = state;
+    const carried = { pending, armed, active, auto, pilot, rng, tour, varying, queuedSnap, applied, drafts, tempo, ramp, dj, brush, euclid, drop, bar, autoVary };
     Object.assign(carried, { run: state.run, replay: state.replay, aiPrefs: state.aiPrefs, chrome: state.chrome });
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
@@ -1805,6 +2034,7 @@ export function mountApp(root, engine, opts = {}) {
     const playing = { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
+    state.tour = null;
     state.bare = 0;
     state.rng = seeded(hashSeed(ws.seed));
     if (Object.keys(playing).length) {
@@ -1812,8 +2042,10 @@ export function mountApp(root, engine, opts = {}) {
       state.pilot = joinPilot(playing, section);
       state.replay = null; // a link's track only replays from silence
       state.run = { sections: [], plans: [] };
+      adoptDrop();
       dressIn(Object.values(playing).sort());
       mixIn(playing);
+      toneIn(playing);
       commit(playing);
       enterSection();
       showSection();
@@ -1835,8 +2067,30 @@ export function mountApp(root, engine, opts = {}) {
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
+    toneIn(start.active);
+    improviseIn(Object.values(start.active));
     commit(start.active);
     enterSection();
+    showSection();
+  }
+
+  // The snapshot autopilot starts from the snapshot queued or playing, or
+  // from the first, and turns the other autopilot off.
+  function engageTour() {
+    stats?.count("autopilot");
+    state.auto = false;
+    state.pilot = null;
+    cancelPlanning();
+    engine.setPump({}); // the peak's pump was the other autopilot's
+    const target = state.pending ?? state.active;
+    const playing = ws.snapshots.find((s) => s.id === state.applied && sameLanes(target, s.active));
+    const start = state.queuedSnap ?? playing ?? ws.snapshots[0];
+    state.armed = false;
+    state.tour = startTour(ws.snapshots, start.id);
+    // Already queued or playing, it carries on from the next bar line (where
+    // the background kick drops); anything else enters on that line, or at
+    // once with the loop stopped.
+    if (!engine.isRunning() || (start !== state.queuedSnap && start !== playing)) recall(start);
     showSection();
   }
 
@@ -1980,8 +2234,12 @@ export function mountApp(root, engine, opts = {}) {
     planning = { n, abort };
     const ctx = { lists: ws.lists, style: ws.style, next };
     const { endpoint, model, vibe } = state.aiPrefs;
+    // The lead the pilot will hold through what comes (autopilot.js themeOf).
+    const leads = Object.values(state.active).filter((id) => id.startsWith("lead."));
+    const theme = p.section === "breakdown" ? leads : p.section === "build" ? (p.theme ?? []) : [];
     const prompt = planPrompt({
       ...ctx,
+      theme,
       bpm: state.tempo,
       active: state.active,
       sections: state.run.sections,
@@ -2161,6 +2419,7 @@ export function mountApp(root, engine, opts = {}) {
     state.pending = state.armed ? playing : null;
     state.auto = false;
     state.pilot = null;
+    state.tour = null;
     cancelPlanning();
     state.queuedSnap = null;
     state.ramp = null;
@@ -2170,6 +2429,9 @@ export function mountApp(root, engine, opts = {}) {
     state.queued.clear();
     showRamp();
     if (state.buildUp) setBuildUp(state.buildUp.id, false);
+    state.drop = null;
+    setBar(0, {});
+    engine.setPump({});
     lanes = {};
     engine.stop();
     if (frame) cancelAnimationFrame(frame);
@@ -2203,19 +2465,42 @@ export function mountApp(root, engine, opts = {}) {
     state.auto = false;
     state.pilot = null;
     cancelPlanning();
+    engine.setPump({}); // a drop on its way finishes by hand
+    sync(); // the background kick may come back
+    showSection();
+  });
+  // 💥 Drop: by hand it arms for the next bar line (a second click takes it
+  // back); under the pilot it makes the next loop its drop into a peak.
+  dropBtn.addEventListener("click", () => {
+    if (!engine.isRunning()) return;
+    if (state.auto && state.pilot) {
+      const head = state.pilot.queue[0];
+      state.pilot = dropNext(state.pilot);
+      if (state.pilot.queue[0] !== head) replan();
+    } else if (!state.drop) state.drop = { phase: "armed" };
+    else if (state.drop.phase === "armed") state.drop = null;
+    showSection();
+  });
+  tourBtn.addEventListener("click", () => {
+    if (!state.tour) {
+      engageTour();
+      return;
+    }
+    state.tour = null;
     sync(); // the background kick may come back
     showSection();
   });
   seedInput.addEventListener("change", () => setSeed(seedInput.value));
   nextBtn.addEventListener("click", () => {
-    if (!state.auto || !state.pilot) return;
-    state.pilot = skip(state.pilot);
+    if (state.tour) state.tour = skipTour(state.tour);
+    else if (state.auto && state.pilot) state.pilot = skip(state.pilot);
     showSection();
   });
   changes.addEventListener("input", () => {
     ws.changeBars = CHANGE_BARS[Number(changes.value)];
     changesOut.textContent = tx.pilot.every(ws.changeBars);
     persist();
+    if (state.tour) showSection();
   });
   diceBtn.addEventListener("click", () => setSeed(randomSeed()));
   // This page's URL with `fragment`, to the clipboard or, failing that, on screen.
@@ -2307,6 +2592,7 @@ export function mountApp(root, engine, opts = {}) {
         armed: false,
         auto: false,
         pilot: null,
+        tour: null,
         varying: new Map(),
         queuedSnap: null,
         applied: null,

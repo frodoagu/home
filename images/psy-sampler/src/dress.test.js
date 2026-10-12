@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHS } from "./audio/params.js";
 import { DEFAULTS, defaultData, paramSpecs } from "./audio/patterns.js";
-import { dress } from "./dress.js";
+import { FILLS, coin, dress, fillOf } from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
 
@@ -30,5 +30,23 @@ describe("dress", () => {
     expect(dress("fx.riser", "zz").params.bars).toBe(defaultData("fx.riser").params.bars);
     const synths = new Set(Array.from({ length: 30 }, (_, i) => dress("lead.acid", `s${i}`).synth));
     expect(synths.size).toBeGreaterThan(2);
+  });
+});
+
+describe("fillOf", () => {
+  it("is the same for the same seed, section and loop, and uses every fill across them", () => {
+    expect(fillOf("goa", "peak", 4)).toBe(fillOf("goa", "peak", 4));
+    const seen = new Set();
+    for (const seed of ["a", "b", "c", "d", "e", "f"]) for (const at of [4, 8, 12]) seen.add(fillOf(seed, "peak", at));
+    expect([...seen].sort()).toEqual([...FILLS].sort());
+  });
+});
+
+describe("coin", () => {
+  it("is a number in [0, 1), the same for the same seed and key", () => {
+    expect(coin("goa", "improv/peak/lead.acid")).toBe(coin("goa", "improv/peak/lead.acid"));
+    const values = ["a", "b", "c", "d"].map((seed) => coin(seed, "x"));
+    for (const v of values) expect(v >= 0 && v < 1).toBe(true);
+    expect(new Set(values).size).toBe(4);
   });
 });

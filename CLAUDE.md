@@ -73,6 +73,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
+                     Sample import in src/import/ (own WAV/AIFF/CAF/AU decoders, zip, SoundFont,
+                     Ableton/SFZ/REAPER references), fixtures from src/test/audioFiles.js.
                      ✨ AI (src/planner.js + src/ai.js): Chrome's Prompt API or an LM Studio
                      endpoint plans the autopilot's next section, in the listener's browser.
   psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
@@ -481,8 +483,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `a:b` condition, ratchet) follow the same rule: `passes()` draws from a hash
   of id, loop and step, never `Math.random`. A seed also dresses each sound (params,
   synth) from `seed/id` (dress.js), NOT from that PRNG, so a sound stays the
-  same while it comes and goes; every autopilot section must play a lead or a
-  pad (a bare kick/bass/perc mix lives one bar at most). All UI text lives in `src/i18n/{es,en,pt}.js`
+  same while it comes and goes; so do drops, phrase fills, tone (hp/lp) rides,
+  the peak pump and the pilot's 🔀 (rules or dress.js `coin(seed, key)`), and
+  the build's tease odds reuse pick()'s single draw; every autopilot section must play a lead or a
+  pad (a bare kick/bass/perc mix lives one bar at most). Bar overlays (the
+  build-up roll, a drop's silenced kick/bass bar, fills) live in `feed()` for
+  one bar and never reach storage. The tone hp/lp pair is always in the insert
+  chain (an identity when open) so an autopilot ride never swaps chains. All UI text lives in `src/i18n/{es,en,pt}.js`
   (same shape, enforced by a test). Cloud save is deliberately NOT behind
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through
@@ -493,7 +500,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (SQLite + samples + session key) has no backup. nginx sends a CSP (configmap.yaml):
   a new third-party origin is blocked until listed there. Share links are untrusted
   input: `#s=` and `#snap=` (one snapshot) inflate to `SOUNDS_MAX` at most, and
-  outside names are looked up with `Object.hasOwn`, never `in`. The ✨ AI only
+  outside names are looked up with `Object.hasOwn`, never `in`. Sample import:
+  Chromium and Firefox can't decode AIFF/CAF/AU, so `src/import/pcm.js` does, and
+  whatever not EVERY browser decodes is re-encoded to WAV in the page before upload
+  (a sample must play wherever its owner signs in) — don't widen psy-sync's
+  `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
+  can't follow: their samples must come in the same selection (the project folder).
+  The ✨ AI only
   plans the NEXT section (which, bars, per-layer ids); the pilot takes a plan
   only before that section's last loop (`withPlan`, else the answer is dropped),
   and with no plan `advance()`/`arrange()` must draw exactly as before (old

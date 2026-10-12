@@ -882,7 +882,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .auto,
-.ai {
+.ai,
+.tour {
   padding: 7px 14px;
   font: inherit;
   font-weight: 600;
@@ -894,7 +895,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .auto[aria-pressed="true"],
-.ai[aria-pressed="true"] {
+.ai[aria-pressed="true"],
+.tour[aria-pressed="true"] {
   color: var(--on-current);
   background: var(--current);
 }
@@ -996,6 +998,11 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .ai-input.vibe {
   width: 30ch;
+}
+
+.tour:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .section-badge {
@@ -1288,8 +1295,118 @@ html:has(dialog.help[open], dialog.intro[open]) {
   font-variant-numeric: tabular-nums;
 }
 
+.sample-formats summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.sample-formats dl {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.sample-formats dt {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.sample-formats dd {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.format-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.format-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
+.format-app {
+  font-size: 0.85rem;
+}
+
+.format-list code {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.samples.dropping {
+  outline: 2px dashed var(--current);
+  outline-offset: 4px;
+}
+
+.sample-picker {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sample-picker .hint {
+  margin: 0;
+}
+
+.pick-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.pick-head .hint {
+  margin-left: auto;
+}
+
+.pick-list {
+  display: grid;
+  gap: 4px;
+  max-height: 18rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pick-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
+.pick-label {
+  display: grid;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.pick-origin {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .topbar-transport {
   display: flex;
+  flex-wrap: wrap; /* five buttons on a phone's row */
   gap: 8px;
 }
 
@@ -1322,6 +1439,34 @@ html:has(dialog.help[open], dialog.intro[open]) {
 .snap-btn:hover {
   color: var(--on-current);
   background: var(--current);
+}
+
+/* 💥 Drop: like the snapshot button; lit and pulsing while a drop is on its
+   way (armed, rolling, in its gap, or the pilot's next loop). */
+.drop-btn {
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1.5px solid var(--current);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.drop-btn:hover:not(:disabled),
+.drop-btn[aria-pressed="true"] {
+  color: var(--on-current);
+  background: var(--current);
+}
+
+.drop-btn[aria-pressed="true"] {
+  animation: pulse 0.45s ease-in-out infinite alternate;
+}
+
+.drop-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* BPM change: target, length, go. */
@@ -1682,6 +1827,13 @@ html:has(dialog.help[open], dialog.intro[open]) {
    a fading fill going out. */
 .variant.is-queued {
   border-style: dashed;
+  border-color: var(--layer);
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* The snapshot the snapshot autopilot plays next, in its last loop. */
+.variant.is-next {
+  border-style: dotted;
   border-color: var(--layer);
   animation: pulse 0.9s ease-in-out infinite alternate;
 }
@@ -2621,10 +2773,12 @@ html:has(dialog.help[open], dialog.intro[open]) {
     transition: none;
   }
   .variant.is-queued,
+  .variant.is-next,
   .variant.is-leaving,
   .variant::after,
   .bpm-value,
   .cue.is-armed,
+  .drop-btn,
   .rec.is-waiting,
   .rec.is-recording,
   .editor-slot,

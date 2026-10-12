@@ -1137,6 +1137,160 @@ describe("drum tools", () => {
   });
 });
 
+describe("💥 drop", () => {
+  const dropBtn = () => $('[data-action="drop"]');
+  const sd = stepDuration(145);
+  const at = (step) => 0.06 + step * sd;
+  const stepsOf = (pick) =>
+    ctx
+      .sources()
+      .filter(pick)
+      .map((s) => Math.round((s.startTime - 0.06) / sd));
+  const kick = (s) => s.kind === "oscillator" && s.frequency.events[0]?.[1] === 170;
+  const saw = (s) => s.kind === "oscillator" && s.type === "sawtooth";
+  const within = (list, from, to) => list.filter((x) => x >= from && x < to);
+
+  it("needs the loop running", () => {
+    expect(dropBtn().disabled).toBe(true);
+    immediate();
+    click("kick.punchy");
+    expect(dropBtn().disabled).toBe(false);
+    dropBtn().click();
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("true");
+    dropBtn().click(); // a second click before the bar line takes it back
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("false");
+    $("button.stop").click();
+    expect(dropBtn().disabled).toBe(true);
+  });
+
+  it("by hand: a kick roll and a rising sweep, a bar without kick and bass, then everything on the 1 with an impact", () => {
+    const sweep = vi.spyOn(engine, "sweep");
+    const sweepOff = vi.spyOn(engine, "sweepOff");
+    const fx = vi.spyOn(engine, "triggerFx");
+    immediate();
+    click("kick.punchy");
+    click("bass.offbeat");
+    dropBtn().click(); // armed: the next bar line (step 16) starts it
+    advanceSeconds(4 * BAR);
+    const kicks = stepsOf(kick);
+    expect(within(kicks, 0, 16)).toEqual([0, 4, 8, 12]);
+    expect(within(kicks, 16, 32)).toEqual([16, 20, 24, 26, 28, 29, 30, 31]); // the roll
+    expect(within(kicks, 32, 48)).toEqual([]); // the gap
+    expect(within(kicks, 48, 64)).toEqual([48, 52, 56, 60]); // the drop
+    const bass = stepsOf(saw);
+    expect(within(bass, 16, 32)).toEqual([18, 22, 26, 30]);
+    expect(within(bass, 32, 48)).toEqual([]);
+    expect(within(bass, 48, 64)).toEqual([50, 54, 58, 62]);
+    expect(sweep).toHaveBeenCalledTimes(1);
+    const [from, to] = sweep.mock.calls[0];
+    expect(from).toBeCloseTo(at(16), 9);
+    expect(to).toBeCloseTo(at(48), 9);
+    expect(sweepOff.mock.calls[0][0]).toBeCloseTo(at(48), 9);
+    expect(fx.mock.calls.map(([id, t]) => [id, Math.round((t - 0.06) / sd)])).toEqual([
+      ["fx.riser", 16],
+      ["fx.impact", 48],
+    ]);
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("false");
+    expect(saved()?.variants?.["kick.punchy"]).toBeUndefined(); // the roll and the gap are never stored
+    expect(saved()?.variants?.["bass.offbeat"]).toBeUndefined();
+  });
+
+  it("Parar in the middle drops it and opens the sweep", () => {
+    const pump = vi.spyOn(engine, "setPump");
+    immediate();
+    click("kick.punchy");
+    dropBtn().click();
+    advanceSeconds(1.5 * BAR); // in the roll
+    const comp = ctx.nodes.find((n) => n.kind === "compressor");
+    const sweep = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
+    expect(sweep.frequency.events.at(-1)[0]).toBe("exp"); // on its way up
+    $("button.stop").click();
+    expect(sweep.frequency.events.at(-1)).toEqual(["set", 0, expect.closeTo(ctx.currentTime + 0.03, 9)]);
+    expect(pump).toHaveBeenLastCalledWith({});
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("false");
+    $("button.cue").click(); // ▶ again: a plain loop, no drop left halfway
+    const fx = vi.spyOn(engine, "triggerFx");
+    advanceSeconds(4 * BAR);
+    expect(fx).not.toHaveBeenCalled();
+  });
+
+  it("under the autopilot: the next loop is its drop, a Peak after it, which pumps", () => {
+    const sweep = vi.spyOn(engine, "sweep");
+    const pump = vi.spyOn(engine, "setPump");
+    $("button.auto").click();
+    expect($(".section-badge").textContent).toBe("Intro");
+    dropBtn().click();
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("true");
+    expect([...root.querySelectorAll(".section-queue [data-queued]")].map((n) => n.dataset.queued)).toEqual(["peak"]);
+    advanceSeconds(2 * BAR); // the next loop: the drop
+    expect(sweep).toHaveBeenCalledTimes(1);
+    expect($(".section-badge").textContent).toBe("Intro");
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Pico");
+    expect(pump).toHaveBeenLastCalledWith({ pad: 0.6, lead: 0.35 }, expect.any(Number));
+    expect(dropBtn().getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+describe("autopilot: fills, filters and improvise", () => {
+  const OFF = 0;
+  const run = (loops, each) => {
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    $("button.auto").click();
+    for (let i = 0; i < loops; i++) {
+      advanceSeconds(2 * BAR);
+      each?.($(".section-badge").textContent);
+    }
+  };
+
+  it("phrase ends get fills: a kick break or a percussion roll, never stored", () => {
+    const setData = vi.spyOn(engine, "setData");
+    run(48);
+    const kicks = setData.mock.calls.filter(([id]) => id.startsWith("kick."));
+    const percs = setData.mock.calls.filter(([id]) => id.startsWith("perc."));
+    const broke = kicks.some(([, d]) => d.steps.slice(24, 32).every((v) => v === OFF) && d.steps.slice(16, 24).some((v) => v !== OFF));
+    const rolled = percs.some(([, d]) => d.steps && d.steps.slice(24, 32).join() === "1,0,1,0,1,1,2,2");
+    expect(broke || rolled).toBe(true);
+    for (const data of Object.values(saved().variants)) {
+      if (data.steps) expect(data.steps.slice(24, 32).join()).not.toBe("1,0,1,0,1,1,2,2");
+    }
+  });
+
+  it("rides the leads' and pads' filters, never the kick's or the bass's", () => {
+    const lps = [];
+    run(40, (section) => {
+      const ws = saved();
+      for (const id of pressed()) {
+        const ins = ws.variants[id]?.insert;
+        if (/^(kick|bass)\./.test(id)) expect(ins ? [ins.hp, ins.lp] : [20, 20000]).toEqual([20, 20000]);
+        if (id.startsWith("lead.") && section === "Subida") lps.push(ins.lp);
+      }
+    });
+    expect(lps.length).toBeGreaterThan(0);
+    expect(Math.min(...lps)).toBeLessThan(20000); // a muffled lead opening up across the build
+  });
+
+  it("decides which sounds improvise: none in the intro, never a kick, the breakdown's leads as written", () => {
+    const varying = () => [...root.querySelectorAll('[data-vary][aria-pressed="true"]')].map((b) => b.dataset.vary);
+    let any = false;
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    $("button.auto").click();
+    expect(varying()).toEqual([]);
+    for (let i = 0; i < 60; i++) {
+      advanceSeconds(2 * BAR);
+      const section = $(".section-badge").textContent;
+      const on = varying();
+      if (on.length) any = true;
+      expect(on.filter((id) => id.startsWith("kick."))).toEqual([]);
+      if (section === "Intro") expect(on).toEqual([]);
+      if (section === "Break") expect(on.filter((id) => id.startsWith("lead."))).toEqual([]);
+    }
+    expect(any).toBe(true);
+  });
+});
+
 describe("duplicating and renaming", () => {
   it("Duplicar adds a copy right after the original, opens it and focuses its name", () => {
     openEditor("kick.punchy");
@@ -1355,6 +1509,141 @@ describe("snapshots", () => {
     snapTile().click();
     advanceSeconds(BAR);
     expect($(".section-badge").textContent).toBe("Break");
+  });
+
+  describe("snapshot autopilot", () => {
+    const tourBtn = () => $("button.tour");
+    const badge = () => ($(".section-badge").hidden ? "" : $(".section-badge").textContent);
+    // Intro (a kick), Groove (kick + bass) and Break (a pad, taken with no background kick).
+    function three() {
+      immediate();
+      click("kick.long");
+      snapBtn().click();
+      click("bass.gallop");
+      snapBtn().click();
+      click("pad.air");
+      click("kick.long");
+      click("bass.gallop");
+      $("#bgkick").click();
+      snapBtn().click();
+      $("#bgkick").click();
+      expect(saved().snapshots.map((x) => x.name)).toEqual(["Intro", "Groove", "Break"]);
+    }
+    // [audio time, badge] each time the badge changes, over `bars` bars.
+    function watch(bars) {
+      const seen = [];
+      let last = badge();
+      for (let i = 0; i < Math.ceil((bars * BAR) / 0.025); i++) {
+        advance(1);
+        if (badge() !== last) seen.push([ctx.currentTime, (last = badge())]);
+      }
+      return seen;
+    }
+
+    it("needs two snapshots", () => {
+      expect(tourBtn().disabled).toBe(true);
+      immediate();
+      click("kick.long");
+      snapBtn().click();
+      expect(tourBtn().disabled).toBe(true);
+      click("bass.gallop");
+      snapBtn().click();
+      expect(tourBtn().disabled).toBe(false);
+    });
+
+    it("plays them in the panel's order, each for the Cambios bars, and starts over", () => {
+      three();
+      const changes = $("#changes");
+      changes.value = "0"; // every 2 bars
+      changes.dispatchEvent(new Event("input"));
+      expect(button("kick.punchy").classList.contains("is-background")).toBe(true); // under the pad
+      tourBtn().click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("true");
+      expect(badge()).toBe("Break"); // it carries on from the one playing
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+      advanceSeconds(BAR);
+      expect(root.querySelectorAll(".is-background")).toHaveLength(0); // a pilot: no background kick
+
+      const seen = watch(8);
+      expect(seen.slice(0, 3).map(([, name]) => name)).toEqual(["Intro", "Groove", "Break"]);
+      for (let i = 1; i < seen.length; i++) expect(seen[i][0] - seen[i - 1][0]).toBeCloseTo(2 * BAR, 1);
+      expect(pressed()).toEqual(["pad.air"]);
+      expect(saved().snapshots).toHaveLength(3); // untouched
+    });
+
+    it("pulses the one coming next in the last loop, ⏭ moves on early and a click carries on from there", () => {
+      three();
+      tourBtn().click();
+      const tile = (id) => $(`[data-snap="${id}"]`);
+      advanceSeconds(BAR);
+      expect(tile("snap-1").classList.contains("is-next")).toBe(false); // every 8 bars: still early
+      expect($('[data-action="next-section"]').disabled).toBe(false);
+      $('[data-action="next-section"]').click();
+      expect($('[data-action="next-section"]').disabled).toBe(true);
+      expect(tile("snap-1").classList.contains("is-next")).toBe(true);
+      expect(watch(3).map(([, name]) => name)).toEqual(["Intro"]);
+      expect(pressed()).toEqual(["kick.long"]);
+
+      tile("snap-3").click(); // by hand, on the next bar line
+      advanceSeconds(BAR);
+      expect(badge()).toBe("Break");
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+    });
+
+    it("🤖, Parar and its own button turn it off", () => {
+      three();
+      tourBtn().click();
+      $("button.auto").click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect($("button.auto").getAttribute("aria-pressed")).toBe("true");
+      tourBtn().click();
+      expect($("button.auto").getAttribute("aria-pressed")).toBe("false");
+      $("button.stop").click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(badge()).toBe("");
+
+      $("button.cue").click(); // ▶ brings the mix back, without the tour
+      tourBtn().click();
+      tourBtn().click();
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(root.querySelectorAll(".is-next")).toHaveLength(0);
+    });
+
+    it("from silence it starts with the first one; armed, with what is queued", () => {
+      three();
+      click("pad.air");
+      expect(engine.isRunning()).toBe(false);
+      tourBtn().click();
+      expect(engine.isRunning()).toBe(true);
+      expect(badge()).toBe("Intro");
+      expect(pressed()).toEqual(["kick.long"]);
+
+      $("button.stop").click();
+      $('[data-snap="snap-2"]').click(); // armed: queued for ▶
+      tourBtn().click();
+      expect(engine.isRunning()).toBe(true);
+      expect(badge()).toBe("Groove");
+      expect(pressed()).toEqual(["kick.long", "bass.gallop"]);
+    });
+
+    it("keeps going after removing the one playing, and stops with none left", () => {
+      const remove = (id) => {
+        if (!snapEditor(id)) $(`[data-edit-snap="${id}"]`).click();
+        act(id, "remove").click();
+      };
+      three();
+      tourBtn().click();
+      remove("snap-3");
+      expect(badge()).toBe("");
+      expect([...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.textContent)).toEqual(["Intro"]);
+      $('[data-action="next-section"]').click();
+      advanceSeconds(3 * BAR);
+      expect(badge()).toBe("Intro");
+      remove("snap-1");
+      remove("snap-2");
+      expect(tourBtn().getAttribute("aria-pressed")).toBe("false");
+      expect(tourBtn().disabled).toBe(true);
+    });
   });
 
   it("survive a reload, travel in presets and lose a deleted copy", async () => {
@@ -2310,6 +2599,32 @@ describe("filter, distortion and the DJ filter", () => {
     input.dispatchEvent(new Event("input"));
     expect(saved().variants["lead.acid"].insert.cutoff).toBe(Math.round(40 * Math.sqrt(16000 / 40)));
     expect(input.closest(".knob").querySelector("output").textContent).toBe("800 Hz");
+  });
+
+  it("every sound has a high-pass and a low-pass of its own, open at the ends, always shown", () => {
+    openEditor("pad.chord");
+    const hp = knob("pad.chord", "hp");
+    const lp = knob("pad.chord", "lp");
+    expect([hp.closest(".knob").hidden, lp.closest(".knob").hidden]).toEqual([false, false]); // filter "off" or not
+    expect([hp.value, lp.value]).toEqual(["0", "400"]);
+    expect([hp, lp].map((n) => n.closest(".knob").querySelector("output").textContent)).toEqual(["–", "–"]);
+    lp.value = "200"; // half way on a log scale: 20 Hz · √1000 ≈ 632 Hz
+    lp.dispatchEvent(new Event("input"));
+    expect(saved().variants["pad.chord"].insert).toMatchObject({ lp: 632, hp: 20, filter: "off" });
+    expect(lp.closest(".knob").querySelector("output").textContent).toBe("632 Hz");
+  });
+
+  it("the autopilot's filter ride shows in an open editor", () => {
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    $("button.auto").click(); // an intro: its pad starts with a muffled low-pass
+    const pad = pressed().find((v) => v.startsWith("pad."));
+    openEditor(pad);
+    advanceSeconds(2 * BAR);
+    const lp = saved().variants[pad].insert.lp;
+    expect(lp).toBeLessThan(20000);
+    const shown = knob(pad, "lp").closest(".knob").querySelector("output").textContent;
+    expect(shown).toBe(lp >= 1000 ? `${(lp / 1000).toFixed(1)} kHz` : `${lp} Hz`);
   });
 
   it("the DJ knob filters the master, reads out its cutoff and recentres on a double click", () => {

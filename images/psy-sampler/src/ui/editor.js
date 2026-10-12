@@ -97,6 +97,7 @@ export function createEditor({
   let varyBtn = null;
   let paintAmount = () => {};
   let newPartBtn = null;
+  let tone = null; // { hp, lp }: the tone sliders, once the insert box is built
   const cleanups = [];
 
   function set(patch) {
@@ -430,6 +431,11 @@ export function createEditor({
     const shape = pick(tx.lfoShape, LFO_SHAPES, "shape", tx.lfoShapes, "lfo-shape");
     const vowel = pick(tx.vowel, Object.keys(VOWELS), "vowel", Object.fromEntries(Object.keys(VOWELS).map((v) => [v, v.toUpperCase()])), "vowel");
     const drive = knob("amount");
+    // The tone: the sound's own highpass and lowpass, always there (open at
+    // either end). The autopilot rides them too, like the volume.
+    const hp = knob("hp");
+    const lp = knob("lp");
+    tone = { hp, lp };
     const show = () => {
       const off = ins().filter === "off";
       for (const n of [...filterKnobs, rate, shape]) n.hidden = off;
@@ -446,7 +452,7 @@ export function createEditor({
       { class: "insert" },
       el("legend", { text: tx.insert }),
       el("div", { class: "pickers" }, filterType, vowel, rate, shape, driveType),
-      el("div", { class: "knobs" }, cutoff, ...filterKnobs, envDecay, drive),
+      el("div", { class: "knobs" }, cutoff, ...filterKnobs, envDecay, drive, hp, lp),
     );
   }
 
@@ -800,6 +806,11 @@ export function createEditor({
       current = { ...current, level: v };
       level.querySelector("input").value = String(v);
       level.querySelector("output").textContent = LEVEL.fmt(v);
+    },
+    // The tone filters, ridden by the autopilot.
+    showTone: (insert) => {
+      current = { ...current, insert: { ...current.insert, hp: insert.hp, lp: insert.lp } };
+      for (const key of ["hp", "lp"]) tone?.[key].setValue(insert[key]);
     },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),

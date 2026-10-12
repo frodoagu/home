@@ -3,13 +3,18 @@
 // as data (`data.insert`); the engine builds a chain per lane, FX shot and
 // audition, and updates it live.
 //
-//   input ─> filter ─> pre ─> shaper ─> post ─> [phaser] ─> [tremolo] ─> [panner ─> √2] ─> output
-//              ▲ detune                                                    ▲ pan
-//   lfo ─> depth  (+ a per-note envelope)                 panLfo ─> width
+//   input ─> filter ─> pre ─> shaper ─> post ─> hp ─> lp ─> [phaser] ─> [tremolo] ─> [panner ─> √2] ─> output
+//              ▲ detune                                                                  ▲ pan
+//   lfo ─> depth  (+ a per-note envelope)                               panLfo ─> width
 //
 // The filter is one biquad, or three bandpasses in parallel for a vowel.
 // The filter LFO has a shape (sine … a random sample & hold); the phaser,
 // the tremolo and the panner only exist while they are on.
+//
+// hp and lp are the sound's tone: a highpass and a lowpass that are always
+// there, an identity while open (hp at its floor runs at 0 Hz, lp at its
+// ceiling at Nyquist), so the autopilot can ride them like a fader, in
+// exponential lines (update()'s `ramp`), with no chain to swap.
 //
 // Continuous values glide. Switching a type (filter or distortion) needs
 // other nodes, so the engine builds a fresh chain and crossfades it in:
@@ -54,7 +59,16 @@ export const INSERT_DEFAULT = {
   phaserRate: 16,
   trem: 0, // depth
   tremRate: 2,
+  hp: 20, // the tone's highpass, Hz: HP_OPEN is off
+  lp: 20000, // the tone's lowpass, Hz: LP_OPEN is off
 };
+
+// The tone filters' ends, where each one is open (an identity).
+export const HP_OPEN = 20;
+export const LP_OPEN = 20000;
+// Q in dB, as Web Audio reads it for a lowpass or highpass: 0 dB is a linear
+// Q of 1, a ~1.25 dB bump at the cutoff, enough to hear a ride without a whistle.
+const TONE_Q = 0;
 
 const GLIDE = 0.02;
 const CURVE_SIZE = 4097; // odd: the middle point is exactly 0 in, 0 out
@@ -66,7 +80,19 @@ export const isPanned = (insert) => insert.pan !== 0 || insert.width > 0;
 export const kindOf = (insert) =>
   [insert.filter, insert.drive, isPanned(insert), insert.width > 0, insert.shape, insert.phaser > 0, insert.trem > 0].join("|");
 export const isBypass = (insert) =>
-  insert.filter === "off" && insert.drive === "off" && !insert.pan && !insert.width && !insert.phaser && !insert.trem;
+  insert.filter === "off" &&
+  insert.drive === "off" &&
+  !insert.pan &&
+  !insert.width &&
+  !insert.phaser &&
+  !insert.trem &&
+  insert.hp <= HP_OPEN &&
+  insert.lp >= LP_OPEN;
+
+// What a tone filter's frequency param runs at: an open one sits where the
+// spec makes it an identity.
+export const hpHz = (hz) => (hz <= HP_OPEN ? 0 : hz);
+export const lpHz = (hz, nyquist) => (hz >= LP_OPEN ? nyquist : Math.min(hz, nyquist));
 
 // Crush: 8 bits at 0 % down to 2 bits at 100 %.
 export const bitsFor = (amount) => Math.round(8 - amount * 6);
@@ -230,6 +256,22 @@ function filterStage(ctx, insert) {
   };
 }
 
+/**
+ * A tone filter's param to `hz` (0 for an open highpass): a quick glide, or
+ * an exponential line over `ramp` seconds from wherever it is. A line can't
+ * touch 0, so it runs from and to HP_OPEN there and the 0 lands at its end.
+ */
+function toneTo(param, hz, now, ramp) {
+  if (!ramp) {
+    param.setTargetAtTime(hz, now, GLIDE);
+    return;
+  }
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(Math.max(param.value, HP_OPEN), now);
+  param.exponentialRampToValueAtTime(Math.max(hz, HP_OPEN), now + ramp);
+  if (hz < HP_OPEN) param.setValueAtTime(hz, now + ramp);
+}
+
 const PHASER_STAGES = 4;
 const PHASER_HZ = 900; // where the allpasses sit; the LFO sweeps them ±2 octaves
 const PHASER_CENTS = 2400;
@@ -248,8 +290,17 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
   const pre = ctx.createGain();
   const shaper = ctx.createWaveShaper();
   const post = ctx.createGain();
+  const nyquist = ctx.sampleRate / 2;
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = hpHz(insert.hp);
+  hp.Q.value = TONE_Q;
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = lpHz(insert.lp, nyquist);
+  lp.Q.value = TONE_Q;
   input.connect(filter.input);
-  filter.output.connect(pre).connect(shaper).connect(post);
+  filter.output.connect(pre).connect(shaper).connect(post).connect(hp).connect(lp);
 
   shaper.oversample = insert.drive === "off" || insert.drive === "crush" ? "none" : "2x";
   shaper.curve = driveCurve(insert.drive, insert.amount);
@@ -272,12 +323,12 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
 
   // Phaser: allpasses in series, mixed back with the dry signal. The notches
   // cancel about half the power, so the sum is scaled by 1/√(1 + mix).
-  let tail = post;
+  let tail = lp;
   let phaser = null;
   if (insert.phaser > 0) {
     const sum = gainOf(ctx, phaserSum(insert.phaser));
     const wet = gainOf(ctx, insert.phaser);
-    let node = post;
+    let node = lp;
     const stages = Array.from({ length: PHASER_STAGES }, () => {
       const ap = ctx.createBiquadFilter();
       ap.type = "allpass";
@@ -287,7 +338,7 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
       return ap;
     });
     node.connect(wet).connect(sum);
-    post.connect(sum);
+    lp.connect(sum);
     phaser = { sum, wet, ...lfo("sine", "phaserRate", stages.map((ap) => ap.detune), PHASER_CENTS) };
     tail = sum;
   }
@@ -320,8 +371,12 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
     input,
     output,
     kind: kindOf(insert),
-    // Same kind only: values glide, a crush depth swaps its curve.
-    update(next, now) {
+    // Same kind only: values glide, a crush depth swaps its curve. A tone
+    // filter that moved goes there over `ramp` seconds when one is given
+    // (the autopilot's line over a loop), else it glides like the rest.
+    update(next, now, ramp = 0) {
+      if (next.hp !== current.hp) toneTo(hp.frequency, hpHz(next.hp), now, ramp);
+      if (next.lp !== current.lp) toneTo(lp.frequency, lpHz(next.lp, nyquist), now, ramp);
       if (next.filter !== "off") {
         filter.update(next, now);
         sweep.depth.gain.setTargetAtTime(next.lfo * LFO_CENTS, now, GLIDE);

@@ -30,7 +30,8 @@ export const SYSTEM = [
   "You arrange a live electronic dance track (psytrance, techno) made of 2-bar loops grouped in sections.",
   "Sections, their lengths in bars and how many sounds each layer plays in them:",
   ...SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} bars; ${counts(s)}`),
-  "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
+  "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
+  "The lead a breakdown plays is the track's theme: it stays through the build and the peak after it.",
   "Every section plays a lead or a pad. Keep some of the sounds playing now and change a layer or two at each section: continuity first, contrast from the section's form.",
   "You plan the section after the one playing now: which section, its length in bars and the sounds of every layer, using only the ids listed for each layer. Follow the listener's wishes when there are any.",
 ].join("\n");
@@ -45,15 +46,17 @@ function describe(id, names) {
 /**
  * What to ask for the section after the one playing. `sections` are the ones
  * walked so far (the last one plays now, `bars` long); `vibe` is the
- * listener's own words; `next`, a section queued by hand, is the one to plan.
+ * listener's own words; `next`, a section queued by hand, is the one to plan;
+ * `theme`, the lead the pilot will hold through it.
  */
-export function planPrompt({ style, bpm, lists, active, sections, bars, vibe = "", names = {}, next = null }) {
+export function planPrompt({ style, bpm, lists, active, sections, bars, vibe = "", names = {}, next = null, theme = [] }) {
   const playing = [...new Set(Object.values(active))].sort();
   const lines = [
     `Style: ${en.styles[style] ?? style}, ${Math.round(bpm)} BPM.`,
     `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}, ${bars} bars.`,
     `Sounds playing now: ${playing.length ? playing.join(", ") : "none"}.`,
   ];
+  if (theme.length) lines.push(`The theme, which stays in the lead layer: ${theme.join(", ")}.`);
   if (vibe) lines.push(`The listener asks for: ${JSON.stringify(vibe)}.`);
   lines.push("Sounds you can use, by layer:");
   for (const layer of LOOP_LAYERS) {

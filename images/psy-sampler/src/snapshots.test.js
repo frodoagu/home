@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { defaultData } from "./audio/patterns.js";
-import { addPart, capture, freshName, nextSnapId, partsOf, removePart, sameSnapshot } from "./snapshots.js";
+import {
+  addPart,
+  capture,
+  countBar,
+  freshName,
+  nextSnapId,
+  nextSnapshot,
+  partsOf,
+  removePart,
+  sameSnapshot,
+  skipTour,
+  startTour,
+  tourDue,
+  tourLeft,
+} from "./snapshots.js";
 
 const data = (id) => ({ ...defaultData(id), level: 0.5 });
 
@@ -58,5 +72,76 @@ describe("ids and names", () => {
   it("freshName numbers a repeated name", () => {
     expect(freshName("Pico", [])).toBe("Pico");
     expect(freshName("Pico", ["Pico", "Pico 2"])).toBe("Pico 3");
+  });
+});
+
+describe("the snapshot autopilot", () => {
+  const list = [{ id: "snap-1" }, { id: "snap-4" }, { id: "snap-2" }];
+
+  // Bar lines from `tour` on, alternating steps from `step`, until it moves on.
+  function barsUntilDue(tour, step, changeBars) {
+    let t = tour;
+    for (let n = 1; n < 100; n++) {
+      step = 16 - step;
+      t = countBar(t, step);
+      expect(tourLeft(t, changeBars)).toBeGreaterThanOrEqual(1);
+      if (tourDue(t, step, changeBars)) return n;
+    }
+    throw new Error("never moves on");
+  }
+
+  it("goes through the list in panel order, round again", () => {
+    expect(nextSnapshot(list, startTour(list, "snap-1")).id).toBe("snap-4");
+    expect(nextSnapshot(list, startTour(list, "snap-4")).id).toBe("snap-2");
+    expect(nextSnapshot(list, startTour(list, "snap-2")).id).toBe("snap-1");
+  });
+
+  it("with its snapshot gone, the one that took its place is next; none left, nothing", () => {
+    const tour = startTour(list, "snap-4");
+    expect(nextSnapshot([list[0], list[2]], tour).id).toBe("snap-2");
+    expect(nextSnapshot([list[0], list[1]], startTour(list, "snap-2")).id).toBe("snap-1");
+    expect(nextSnapshot([], tour)).toBeNull();
+  });
+
+  it("moves on on a loop start once it played the bars, counted from where it came in", () => {
+    for (const bars of [2, 4, 8, 16, 32]) {
+      expect(barsUntilDue(startTour(list, "snap-1", 0), 0, bars)).toBe(bars);
+      expect(barsUntilDue(startTour(list, "snap-1", 16), 16, bars)).toBe(bars + 1); // in mid-loop: one more
+    }
+  });
+
+  it("counts from the first bar line when started outside one", () => {
+    const tour = startTour(list, "snap-1");
+    expect(tour.bars).toBeNull();
+    expect(tourLeft(tour, 8)).toBe(8);
+    const first = countBar(tour, 0);
+    expect(first.bars).toBe(0);
+    expect(tourDue(first, 0, 8)).toBe(false);
+    expect(barsUntilDue(first, 0, 8)).toBe(8);
+  });
+
+  it("tells the bars left as they go", () => {
+    let tour = startTour(list, "snap-1", 0);
+    const left = [tourLeft(tour, 4)];
+    for (const step of [16, 0, 16]) {
+      tour = countBar(tour, step);
+      left.push(tourLeft(tour, 4));
+    }
+    expect(left).toEqual([4, 3, 2, 1]);
+    expect(tourLeft(startTour(list, "snap-1", 16), 4)).toBe(5);
+  });
+
+  it("⏭ moves on on the next loop start", () => {
+    const tour = skipTour(startTour(list, "snap-1", 0));
+    expect(tourLeft(tour, 16)).toBe(2);
+    expect(barsUntilDue(tour, 0, 16)).toBe(2);
+    expect(barsUntilDue(skipTour(startTour(list, "snap-1", 16)), 16, 16)).toBe(1);
+  });
+
+  it("a shorter Cambios applies to the snapshot playing", () => {
+    let tour = startTour(list, "snap-1", 0);
+    for (const step of [16, 0, 16, 0, 16]) tour = countBar(tour, step); // 5 bars in, mid-loop
+    expect(tourLeft(tour, 2)).toBe(1);
+    expect(tourDue(countBar(tour, 0), 0, 2)).toBe(true);
   });
 });

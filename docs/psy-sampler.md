@@ -11,7 +11,9 @@ on its own in the chosen style (techno, progressive psytrance, psytrance,
 psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
 sound sounds; its sections can be forced and queued, or planned by a language
 model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
-listener's machine). What plays exports to WAV, as a loop or as a live recording.
+listener's machine). A second one, the snapshot autopilot, plays the user's
+saved snapshots in order instead. What plays exports to WAV, as a loop or as a
+live recording.
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
@@ -33,7 +35,7 @@ flowchart LR
     K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n]
   end
   FX[one insert + GainNode per playing FX]
-  lanes --> M[master 0.7] --> DJ[DJ filter] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
+  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
   FX --> M
   lanes -. send .-> DL[delay 3/16] -.-> DJ
   lanes -. send .-> RV[reverb] -.-> DJ
@@ -88,6 +90,8 @@ goes through it:
   and starts. FX still fire at once. The keyboard's play/pause and stop keys
   press the same buttons (`mediaKeys.js`, see *Gotchas*).
 - **Autopilot** (see below), at every loop start.
+- **Snapshot autopilot** (see Snapshots), on the loop start where a snapshot
+  has played its bars.
 - The editors' **🔀 Improvise**, at every loop start.
 - The editors' **🎲 New part**, at the next loop start.
 - The editors' **×2 hits**, **Reset** and **Reset hits / notes**, at the next
@@ -96,6 +100,14 @@ goes through it:
   one after (see below).
 - **Snapshots** (see below): a click plays the saved moment from the next bar,
   always, even with "On the beat" off.
+- **💥 Drop** (top bar, next to Snapshot; only while the loop runs): armed, the
+  next bar line starts a drop, the same one the autopilot plays into its peaks
+  (see *Drops* below), with a riser fired on its first bar and an impact on
+  the drop. A second click before that bar line disarms it. Under the
+  autopilot it doesn't run on its own: it queues a Peak first and makes the
+  section end after the next loop (`dropNext`), so that loop is the pilot's
+  drop; ✕ on the queued Peak takes it back. Under the snapshot autopilot it
+  is the drop by hand, over whatever snapshot plays.
 - **BPM change** (in the top bar, next to the BPM slider): "BPM change [N]
   over [1-32 bars] ▶ Go" moves one linear stretch on each bar line (`rampAt`
   in `tempo.js`) and lands exactly on N on the last one. The in-between BPM goes to the engine with decimals, and rounded to the
@@ -207,6 +219,7 @@ distortion":
 | Filter | off, lowpass, highpass, bandpass, vowel | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars, LFO shape, envelope (±4 octaves) and its decay |
 | Distortion | off, saturation (tanh), hard clip, wavefold, bitcrush | drive |
 | Modulation | phaser, tremolo | mix / depth, each with its rate (phaser 1/8 … 4 bars, tremolo 1/16 … 1/2) |
+| Tone | always there | High-pass and Low-pass (log sliders, 20 Hz-20 kHz), open at either end |
 
 - **Live**: knob moves glide (20 ms) on the playing lane. Switching a *type*
   needs other nodes, so the engine builds a fresh chain and crossfades it in
@@ -242,6 +255,18 @@ distortion":
   so switching either on or off builds a fresh chain.
 - FX shots and the editor's previews get an insert too, and WAV exports render it.
 
+- **Tone**: a highpass and a lowpass of the sound's own (`insert.hp` /
+  `insert.lp`, Hz), after the distortion and before the modulation, apart from
+  the creative filter above, so the autopilot can ride them without touching
+  a filter you set. Unlike the rest of the insert they are always in the
+  chain: open (hp at 20 Hz, lp at 20 kHz) they run at 0 Hz and at Nyquist,
+  where the spec makes them identities, so a ride never swaps the chain (a
+  crossfade every loop would smear it). Q 0 dB, which Web Audio reads as a
+  linear Q of 1: a ~1.25 dB bump at the cutoff, no whistle. A knob glides
+  (20 ms); the autopilot's ride is an exponential line over the loop
+  (`update(insert, now, ramp)`), which can't touch 0 Hz, so it runs from and
+  to 20 Hz and the identity is set at its end.
+
 `lead.bits` ships with a resonant lowpass wobbling over 2 bars, to show it off;
 every other factory sound starts with the insert off.
 
@@ -251,6 +276,18 @@ compressor and after the effect returns: left closes a lowpass from Nyquist to
 the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
+
+After it sits the **drop sweep**, a highpass of its own that only a drop
+moves (`engine.sweep(at, end)` / `sweepOff(at)`), so it never fights your hand
+on the DJ knob. At 0 Hz it is an identity. A drop runs it exponentially from
+30 Hz to 900 Hz over its two bars, the low end draining out of the whole mix,
+returns included. On the drop it glides back to 30 Hz over the last 15 ms
+(a jump in a biquad's coefficients under a full mix can click) and opens to
+0 Hz on the bar line. A drop that lands early (a BPM change) cuts the rise
+where it is, as `pin()` does for a volume line. Q 0 dB: the bump passes the
+kick's fundamental early in the rise, and more would feed the limiter. Stop
+(or the loop running out) opens it as the lanes fade. Renders never have it;
+a recording does.
 
 A playing loop sound's **tile fill is its volume**: the fill covers `level /
 1.5` of the tile (a tick marks 100 %), and dragging across it (or ← → on the
@@ -526,6 +563,35 @@ Another click before the bar cancels; a double click comes in right away; with
 the loop stopped it comes in right away. With the **autopilot** running, it also
 takes it to the snapshot's section and carries on from there.
 
+**🎞️ Snapshot autopilot** (in the autopilot row, next to 🤖) plays the
+snapshots one after another, in the panel's order, and starts over after the
+last one: drag the tiles to arrange the track. Nothing in it is random, so the
+same list plays the same way every time.
+
+- **How long**: each snapshot plays the bars the **Changes** slider says (2-32)
+  and the next one comes in on a **loop start**, so a change never cuts a 2-bar
+  loop in half. A snapshot that came in mid-loop (a click lands on any bar line)
+  plays one bar more. The slider applies to the snapshot already playing.
+- **What it plays**: exactly the snapshot, through the same `load()` as a click
+  (its selection and its data). It fires no FX, writes no melodies, dresses no
+  sound and doesn't ride the faders: that is the 🤖 autopilot's job. Like it,
+  it keeps the background kick out, so a Breakdown snapshot stays kickless.
+- **Where it starts**: the queued snapshot (by hand or armed), else the one
+  playing (it carries on from it, counting from the next bar line), else the
+  first. From silence it starts at once.
+- **By hand**: clicking a snapshot plays it from the next bar and the tour carries
+  on from it. A click on a sound changes the mix until the next snapshot (on the
+  line where both fall, the hand wins and the snapshot waits a loop).
+  **⏭ Next** moves on on the next loop start. The row shows the snapshot playing,
+  its bars left and the one coming next, which pulses (and its tile, dotted) in
+  the last loop.
+- It needs two snapshots. 🤖 and the section buttons switch to the other
+  autopilot; Stop switches it off. Removing the snapshot playing goes on to the
+  one after it; removing the last one switches it off.
+
+The logic is pure (`startTour`, `countBar`, `tourDue`, `tourLeft`,
+`nextSnapshot` in `snapshots.js`); the UI drives it from the bar hook.
+
 The **editor** (▾) works on a **draft**: name (Enter saves), moment, remove a
 sound (✕), add one (takes how it sounds now; on kick or bass it replaces the one
 there was) or **📸 Capture what plays** to replace them all. Nothing changes
@@ -703,10 +769,10 @@ and uploads with the next change.
 
 ### Samples
 
-A signed-in user uploads audio files (WAV, AIFF, MP3, AAC/M4A, OGG, FLAC, WebM)
-in the **🎵 Samples** panel (under the tools, collapsed). They are kept **on the
-Pi**, in the user's profile: BLOBs in the same SQLite file, so deleting the
-account takes them along.
+A signed-in user uploads audio in the **🎵 Samples** panel (under the tools,
+collapsed): loose files, a folder (**📁**, or dropped on the panel) or archives.
+They are kept **on the Pi**, in the user's profile: BLOBs in the same SQLite
+file, so deleting the account takes them along.
 
 | Route | |
 |---|---|
@@ -715,11 +781,71 @@ account takes them along.
 | `GET /api/samples/:id` | the file, to its owner only (anyone else gets 404); `immutable`, `nosniff`, `attachment` |
 | `DELETE /api/samples/:id` | 204 |
 
-- **Checks, twice.** The page decodes a file before sending it: what the browser
-  can't play, or what runs longer than 15 s (`MAX_SECONDS` in
-  [`samples.js`](../images/psy-sampler/src/samples.js)), never leaves the page.
-  The server trusts none of it: the bytes must start like one of the formats
-  above (`sniffAudio`), and the stored `content-type` is the sniffed one.
+#### What it imports
+
+[`src/import/`](../images/psy-sampler/src/import) turns a selection into a flat
+list of candidates (`gather.js`), each read only when it is auditioned or
+uploaded. A lone audio file goes straight up; anything more (or a project file)
+opens a picker: ▶ to audition, a checkbox per sample, preselected up to the slots
+the account has left.
+
+| Source | Read by |
+|---|---|
+| MP3, FLAC, AAC/M4A, Ogg Vorbis/Opus, WebM | the browser's `decodeAudioData` (open-source Chromium has no AAC; Chrome does) |
+| WAV: 8/16/24/32-bit, 32/64-bit float, A-law/μ-law, `WAVE_FORMAT_EXTENSIBLE`, BWF, **RF64/BW64** | the browser, else `pcm.js` |
+| **AIFF/AIFC** (`NONE`, `twos`, `sowt`, `in24`, `in32`, `fl32`, `fl64`, `alaw`, `ulaw`), **CAF** (`lpcm`, `alaw`, `ulaw`), Sun **.au/.snd** | `pcm.js`: Chromium and Firefox decode none of these |
+| **SoundFont .sf2** (16/24-bit, linked L/R pairs joined) and **.sf3** (MuseScore: one Ogg Vorbis stream per sample) | `soundfont.js`: one candidate per sample, sliced out of `smpl` on demand |
+| **.zip** (ZIP64 too), and zips under other names: Bitwig `.multisample`, Renoise `.xrni`/`.xrns`, Decent Sampler `.dslibrary` | `zip.js`: reads the central directory, inflates each entry on demand (`DecompressionStream`), opens a zip inside a zip |
+| **Ableton Live** `.als` `.alc` `.adg` `.adv` | `projects.js`: gunzips the XML; marks the files the set uses, and a Simpler/Sampler zone with its own start/end becomes a **slice** |
+| **SFZ**, **Decent Sampler** `.dspreset`, **REAPER** `.rpp` | `projects.js`: the `sample=` / `path="…"` / `FILE` references |
+
+`pcm.js` was checked bit-exact against ffmpeg's float decode for every codec
+above; `soundfont.js` against a GM bank (488 samples) and MuseScore's SF3.
+
+Every extension lives in one table,
+[`formats.js`](../images/psy-sampler/src/import/formats.js) (audio, archives,
+instruments, projects, closed): `gather.js` sorts files by it, the file dialog's
+`accept` comes from it, and the panel's **ⓘ Formatos admitidos** (collapsed,
+shown signed in or out, with the per-sample limits) lists it, so what the page
+says it reads is what it reads. A new format is one line there.
+
+- **Project files only point at samples.** A page can't follow a path on disk,
+  so the samples must come in the same selection: pick or drop the **project
+  folder** (or a zip of it). A reference matches by file name, preferring the
+  file whose folders agree with it; what isn't there is listed as missing. In
+  Live, **File › Collect All and Save** copies every sample into the project
+  folder first. Sets under `Backup/` are skipped (stale references).
+- The Ableton XML is not a published format. `projects.js` reads what Live 9-12
+  write: `<SampleRef><FileRef>` with `RelativePath`/`Path` values (Live 11+) or
+  `RelativePathElement`s + `Name` (earlier), and `SampleStart`/`SampleEnd`, in
+  frames of the file, in a `<MultiSamplePart>`. Audio clips import whole: their
+  markers are in beats once warped.
+- **Not supported**, and named in the message so the user exports to WAV: REX
+  (`.rx2`), Kontakt (`.nki`, `.ncw`…), Reason ReFills, FL Studio `.flp`, Logic
+  `.logicx`/EXS, Cubase, Pro Tools, Bitwig projects, Maschine, Ableton `.alp`
+  packs. Nor ADPCM WAV, ALAC, WMA, APE/WavPack/DSD, 7z/RAR, encrypted zips.
+- Clutter in folders and archives (`.asd`, `__MACOSX/`, `._*`, artwork, docs,
+  MIDI) is skipped quietly; the list stops at 500 candidates.
+
+#### What goes up
+
+- **Checked twice.** The page decodes every candidate before sending it (the
+  browser's decoder, then `pcm.js` for what it refuses): what runs longer than
+  15 s (`MAX_SECONDS` in [`samples.js`](../images/psy-sampler/src/samples.js)),
+  or a source over 64 MiB, never leaves the page.
+- **Stored as it came** only when every browser decodes it and it fits the
+  per-file limit: plain WAV (8/16/24-bit PCM or 32-bit float, not extensible),
+  FLAC, MP3, AAC/M4A (not ALAC). **Everything else goes up as WAV**: AIFF and
+  CAF (Safari only), Ogg/WebM (not in every Safari), RF64, G.711, 64-bit float,
+  SoundFont samples, Ableton slices. At 48 kHz (the decoding context's rate),
+  24-bit when it fits the per-file limit, 16-bit otherwise: 15 s of stereo only
+  fits the 3 MiB default in 16. So a sample plays wherever its owner signs in. A
+  float file over full scale comes in scaled down to it, not clipped.
+- Samples stored before this (an AIFF uploaded from Safari) still play in
+  Chrome: `load()` falls back to `pcm.js` as well.
+- The server trusts none of it: the bytes must start like WAV, AIFF, OGG, FLAC,
+  MP4, WebM, MP3 or AAC (`sniffAudio`), and the stored `content-type` is the
+  sniffed one. Its list didn't change: the page never sends it anything else.
 - **Limits** (`sync.samples`): 3 MiB per file, 24 samples and 100 MiB per account,
   and **1 GiB for everyone together**: that shared cap, not the number of
   accounts, is what keeps uploads off the SD card's free space (local-path
@@ -821,10 +947,12 @@ the seeds of the styles that skip it. Adding the glitch layer to every style did
 shift every seed: a seed shared before it plays a different track now.
 
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
-Build-up. Each section's length is drawn from its options (always whole 8-bar
-phrases); none is longer than 24 bars. The last loop before a Peak fires a
-2-bar riser, riser + impact or reverse cymbal that lands right on it, whether it
-comes from a Build-up or from a queued section.
+Build-up. A Build-up lands on a Peak 9 times in 10; the tenth is a **tease**
+into a Breakdown (`odds`, see *Drops*). Each section's length is drawn from
+its options (always whole 8-bar phrases); none is longer than 24 bars. The
+last loop of a Build-up, and of anything else going into a Peak, fires a 2-bar
+riser, riser + impact or reverse cymbal that lands right on the next section,
+whether it comes from a Build-up or from a queued section, and is a drop.
 
 - **Never just kick, bass and percussion.** Every section plays at least one
   lead or pad (if the form draws zero of both, one is added, preferably from the
@@ -897,6 +1025,95 @@ It uses copies too. While it runs the background kick doesn't play (the
 Breakdown has no kick). Clicking during the autopilot is fine: it carries on from
 what you picked.
 
+### Drops, the theme, fills, filters, pump and improvise
+
+What makes a peak land: tension the listener can see coming, then the
+release. Everything here is arrangement, decided on the bar line; nothing in
+it is stored, and none of it draws from the track's PRNG except the tease
+(below).
+
+**Drops.** A loop is a drop (`dropping(pilot)`) when it is the last of a
+Build-up, or the last before a Peak (only `advance()` marks it, so ⏭ moves on
+without one). The UI plays it over its two bars (`stepDrop` in `app.js`):
+
+| Bar | What happens |
+|---|---|
+| 1 | the playing kick rolls (the ⏫ Build-up bar: quarters → 8ths → accented 16ths); the drop sweep starts rising |
+| 2 | kick and bass drop out (their parts silenced for the bar); the sweep keeps rising under the riser |
+| the 1 after | everything back on the downbeat, the sweep snaps open, the next section's FX |
+
+Bar 2 is silenced as data, not by muting the lane: the scheduler just finds
+nothing to play there. The tails of the roll ring out naturally, the kick
+stops feeding the sidechain (so whatever ducks opens up), and the bass's long
+notes don't get cut. One bar, not the classic one beat, because the bar hook
+only runs on bar lines; a shorter gap would need a hook on every beat in the
+scheduler.
+
+**The tease.** `SECTIONS.build.odds` is `[0.9, 0.1]` over `["peak",
+"breakdown"]`: one Build-up in ten plays every cue of a drop and lands in a
+Breakdown, with its downlifter. `nextOf` draws once, exactly as `pick()` did
+on the old one-entry list, so the odds only change seeds whose draw lands on
+the tease.
+
+**The theme.** The lead a Breakdown plays is the track's theme (`pilot.theme`):
+in the Build-up after it and in the Peak after that, `arrange()` always keeps
+it, `vary()` never swaps it out and the Build-up's 50 % rewrite skips it. It
+does all of that after the same draws, so only what gets rewritten changes
+(and with it, the draws that rewrite consumes). The drop delivers the melody
+the breakdown taught instead of a new one. The first Build-up comes from a
+Groove and has no theme.
+
+**Fills.** The last loop of every 8-bar phrase (`phraseEnd`: every 4th loop of
+a section; sections are 4, 8 or 12 loops, so phrases line up) gets a fill on
+its second bar, unless it is a drop. `fillOf(seed, section, loop)` in
+`dress.js` picks nothing, a **break** (the kick drops its last two beats), a
+**roll** (every drum percussion plays 8ths then accented 16ths over them) or
+both. Like a sound's dress it hashes the seed and not the track's PRNG, so a
+section's fills come back with it.
+
+The roll bar, the gap and the fills are **bar overlays**: `feed()` lays them on
+a sound's data for one bar (`state.bar`, `silenced` / `withBreak` / `withRoll`
+in `editing.js`, read in place like the build-up) and the next bar line takes
+them off. They never reach storage, snapshots or exports, and the tiles flash
+what the engine actually got.
+
+**Filters** (`toneOf`, `TONE` in `autopilot.js`): the pilot rides every perc,
+lead, pad and glitch sound's tone filters, like the faders and with the same
+timing: the target is where the section wants them as the loop ends, reached
+in one exponential line over the loop, so a section is a curve in octaves.
+Kick and bass are never touched: they are the groove. The Hz values in the
+middle of a section are rounded to whole Hz.
+
+| Section | Perc | Lead | Pad | Glitch |
+|---|---|---|---|---|
+| Intro | LP 3 → 9 kHz | | LP 900 Hz → 3 kHz | |
+| Groove | | LP 5 kHz | HP 180 Hz | |
+| Build-up | | LP 1.5 kHz → open | HP 180 → 600 Hz | |
+| Peak | | | HP 220 Hz | |
+| Breakdown | LP 2.5 kHz | LP 1.2 → 6 kHz | | LP 3 kHz |
+
+Blank is open. The section change is the first loop's line, so a Build-up
+first dips the lead (from the Groove's 5 kHz down toward 2.9 kHz) and then
+opens it over the other three loops, the classic filter-opening build. Like
+the volumes, it rides your sounds too and leaves the rest of your edit
+alone. A sound it touches for the first time joins `ws.auto`, and turning the
+autopilot off leaves the filters where they were.
+
+**Pump** (`PUMP`): in the Peak, pads and leads duck under the kick at 0.6 and
+0.35 at least (`engine.setPump`, the deeper of that and the sound's own
+`duck`), set on the Peak's first bar line and released on the next section's.
+Renders use it too, like any duck.
+
+**Improvise** (`IMPROVISE`): on every section's first loop the pilot decides
+which of the sounds it plays improvise (🔀), from `coin(seed,
+"improv/<section>/<id>")` against a chance per layer. None in the intro, and
+none on a kick ever. The Build-up improvises the most (perc 60 %, lead 50 %,
+glitch 70 %), the Peak a little less, and the Breakdown only its glitch, so
+the theme plays as written. Mid-section it decides only for what comes in, so
+a 🔀 you switch by hand holds until the section changes. A sound it switched
+on stops improvising when it leaves (`state.autoVary`). The amount stays
+yours (`ws.improv`).
+
 **Seed**: every decision comes from a PRNG (`seeded(hashSeed(seed))`), so **the
 same seed and the same style make the same track in any browser**. The seed also
 decides how the track sounds:
@@ -932,6 +1149,11 @@ For the replay to hold:
   not the sequence.
 - The lead or pad that the "one bare bar" guard adds comes from `Math.random`:
   it only happens if you touched the mix, and it doesn't shift the sequence.
+- Drops, fills, filters, the pump and the pilot's 🔀 draw nothing from the
+  PRNG (rules, or `coin()` from the seed). Two things did change the tracks
+  seeds make, both on purpose: the tease, and the theme from the first
+  Breakdown on. A seed shared before them plays the same track up to its
+  first tease or its first Breakdown → Build-up.
 
 **🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited or
 duplicated sounds, `&s=…`: those sounds as a JSON preset, `deflate-raw` and
@@ -1237,6 +1459,11 @@ At the real output (every node, taken from the destination):
 | one layer alone (kick / bass / acid / pad) | -3.4 / -3.6 / -3.1 / -3.7 |
 | **everything stacked**: 18 loops + riser+impact + crash + impact + siren, with delay and reverb | -1.8 (0 samples over 1.0) |
 
+The drop sweep and the tone filters were not measured this way: only their
+automation is tested (against the fake context). Each has a ~1.25 dB bump at
+its cutoff, so a sweep crossing the kick's fundamental can lift it by about
+that much for a beat, which the limiter takes.
+
 Without the limiter, everything stacked went to +1.5 dBFS. The compressor is
 gentle on purpose (-10 dB, 4:1, knee 6, 3 ms / 150 ms: Web Audio's defaults,
 -24 dB 12:1, would flatten the dynamics a single layer has to let through);
@@ -1309,7 +1536,8 @@ npm run build
   variations and new melodies with a seeded PRNG), `workspace` (normalize,
   presets, snapshot files), `autopilot` (sections, forms, never without lead/pad, changes every
   N bars, section queue, styles, per-seed determinism), `dress` (per-seed
-  sounds), `snapshots` (capture, parts), `tempo` (BPM ramp), `share`, `wav`,
+  sounds), `snapshots` (capture, parts, the snapshot autopilot's order and
+  timing), `tempo` (BPM ramp), `share`, `wav`,
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`, `planner` (the
   ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model and LM
   Studio against fakes, the settings).
@@ -1335,7 +1563,7 @@ npm run build
   reordering, autopilot (same seed = same track and same sounds, never more than
   one bar without lead/pad, styles, queued sections and Next, the changes
   slider), snapshots (capture, bar queue, draft / save / discard, try, autopilot
-  section, export / import, a snapshot's link), bar-by-bar BPM change,
+  section, export / import, a snapshot's link, the snapshot autopilot), bar-by-bar BPM change,
   languages, export / import, WAV, recording (through a fake worklet), Reset
   everything and shared links, and the ✨ AI with fake models (engines offered,
   the endpoint, a plan taken, a late answer dropped, a queued section, a failing
