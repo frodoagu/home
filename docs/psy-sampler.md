@@ -117,8 +117,9 @@ goes through it:
   comes in at most one step after the line. With the loop stopped there are no
   bars: it changes right away. Moving the slider, Stop, Tap or the same button
   cut it short.
-- **Tap** (left of the BPM): tap along to another track, or another
-  psy-sampler tab, and the loop locks onto it, tempo and phase.
+- **Tap** (left of the BPM): tap along to another track, or psy-sampler on another
+  device, and the loop locks onto it, tempo and phase (one browser runs one
+  sampler: see [One tab at a time](#one-tab-at-a-time)).
   - The **first tap** of a count is the 1: `engine.restart()` takes the loop
     back to step 0 of loop 0 right there, like a fresh ▶ (the bar hook sees
     bar 0 again). The tap is already in the past when the handler runs, so the
@@ -138,7 +139,7 @@ goes through it:
     fit lands on the exact whole BPM 46 % of the time after 8 taps, 92 % after
     16, ~100 % after 24; first-to-last (the old way, capped at 8 taps) topped
     out at 37 %. The 1 lands ~8 ms off on average after 8 taps, ~5 ms after 16. Whole
-    BPM is the point: two psy-sampler tabs, and most produced tracks, run at
+    BPM is the point: two psy-samplers, and most produced tracks, run at
     a whole BPM, so once it is right nothing drifts. A source at a fractional
     tempo (a pitched-up deck) drifts by the rounding until the next tap.
   - **Clocks**: taps are timed by the input event's `timeStamp`, not by when
@@ -673,6 +674,21 @@ parts go back to factory, copies keep their place with their base's factory data
 and every sound is deselected: the loop and the autopilot stop. Snapshots carry their own data, so they are untouched;
 so are the layout and the settings. Ticking **Factory** next to it turns it into
 **Reset everything**, which puts everything back to factory except the language.
+
+### One tab at a time
+
+Two tabs in one browser would play over each other and save over each other's
+workspace, so one browser runs one sampler (`tabs.js`). The tab in use holds a
+Web Lock (`psy-sampler:tab`). A new tab finds it held, asks the holder over a
+`BroadcastChannel` whether it is playing, and shows "Another tab is playing"
+(or "is open") instead of mounting the app: **Use this tab** steals the lock,
+and only then does the app mount, reading the workspace fresh. The tab that
+lost the lock learns it from the `AbortError` on its request: it stops, uploads
+what's pending and reloads into the same question, so either tab can take it
+back. Edits are already in `localStorage` by then (every change saves at once),
+so nothing is lost. Another browser, device or private window is another
+sampler, which is the way to Tap two together. Without Web Locks the guard is
+off and tabs behave as before.
 
 ### Export
 

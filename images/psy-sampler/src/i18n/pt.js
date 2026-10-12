@@ -73,7 +73,7 @@ export default {
         title: "Tocar ao vivo",
         items: [
           ["BPM", "De 60 a 180; o slider muda o tempo na hora."],
-          ["Tap", "À esquerda do BPM, para se sincronizar com outra faixa ou outra aba: o primeiro toque volta o loop ao 1 do compasso ali mesmo (comece no 1 do que você segue) e cada toque seguinte ajusta o BPM e a fase ao vivo. Mais toques, mais preciso: com uns 20 acerta o BPM exato. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
+          ["Tap", "À esquerda do BPM, para se sincronizar com outra faixa ou com o sampler em outro dispositivo: o primeiro toque volta o loop ao 1 do compasso ali mesmo (comece no 1 do que você segue) e cada toque seguinte ajusta o BPM e a fase ao vivo. Mais toques, mais preciso: com uns 20 acerta o BPM exato. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
           ["Mudança de BPM", "Escolha o destino e em quantos compassos: ▶ Ir move um passo por compasso. ■ Cortar para ali; mexer no slider também."],
           ["Filtro DJ", "À esquerda fecha um passa-baixas, à direita abre um passa-altas, sobre a mixagem toda."],
           ["💥 Drop", "Arma um drop no próximo compasso: virada do kick, um compasso sem kick nem baixo sob uma varredura, e tudo de volta com um impacto. Outro clique antes de começar desarma. Com o piloto, o próximo loop dele é o drop e depois vem um Pico (✕ na fila tira)."],
@@ -435,6 +435,13 @@ export default {
     text: "Uma versão nova do sampler foi publicada. Recarregue para usá-la: o que está tocando para, mas seus sons e snapshots ficam salvos.",
     reload: "Recarregar",
     later: "Mais tarde",
+  },
+  tab: {
+    playing: "Tem outra aba tocando",
+    open: "O sampler já está aberto em outra aba",
+    text: "Se você usar aqui, a outra é cortada: para de tocar e fica em espera. O que você editou lá já está salvo.",
+    close: "Para continuar na outra, feche esta aba.",
+    take: "Usar esta aba",
   },
   intro: {
     title: "Isto é o Psy Layers",

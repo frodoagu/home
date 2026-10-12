@@ -75,7 +75,7 @@ export default {
         title: "Tocar en vivo",
         items: [
           ["BPM", "Entre 60 y 180; el slider cambia el tempo al instante."],
-          ["Tap", "A la izquierda del BPM, para engancharte con otro tema o con otra pestaña: el primer toque vuelve el loop al 1 del compás ahí mismo (empezá en el 1 de lo que seguís) y cada toque que sigue ajusta el BPM y la fase en vivo. Más toques, más preciso: con unos 20 clava el BPM exacto. Medio o doble tiempo también funciona; una pausa de 2 s empieza de nuevo."],
+          ["Tap", "A la izquierda del BPM, para engancharte con otro tema o con el sampler en otro dispositivo: el primer toque vuelve el loop al 1 del compás ahí mismo (empezá en el 1 de lo que seguís) y cada toque que sigue ajusta el BPM y la fase en vivo. Más toques, más preciso: con unos 20 clava el BPM exacto. Medio o doble tiempo también funciona; una pausa de 2 s empieza de nuevo."],
           ["Cambio de BPM", "Elegí el destino y en cuántos compases: ▶ Ir lo mueve un paso por compás. ■ Cortar lo frena ahí; tocar el slider también."],
           ["Filtro DJ", "A la izquierda cierra un pasa-bajos, a la derecha abre un pasa-altos, sobre toda la mezcla."],
           ["💥 Drop", "Arma un drop en el próximo compás: redoble del kick, un compás sin kick ni bajo mientras barre el filtro, y todo de vuelta con un impacto. Otro clic antes de que empiece lo desarma. Con el piloto, su próximo loop es el drop y después viene un Pico (✕ en la cola lo saca)."],
@@ -437,6 +437,13 @@ export default {
     text: "Se publicó una versión nueva del sampler. Recargá para usarla: se corta lo que suena, pero tus sonidos y snapshots quedan guardados.",
     reload: "Recargar",
     later: "Más tarde",
+  },
+  tab: {
+    playing: "Hay otra pestaña sonando",
+    open: "El sampler ya está abierto en otra pestaña",
+    text: "Si lo usás acá, la otra se corta: deja de sonar y queda en espera. Lo que editaste allá ya está guardado.",
+    close: "Si querés seguir en la otra, cerrá esta pestaña.",
+    take: "Usar esta pestaña",
   },
   intro: {
     title: "Esto es Psy Layers",
