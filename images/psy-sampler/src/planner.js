@@ -1,13 +1,14 @@
 // The autopilot's ✨ AI option: a language model (ai.js: Chrome's built-in
-// one, or an LM Studio endpoint) plans the section after the one playing:
-// which section, how long, which sounds each layer plays, how they are
-// dressed (dress.js restyle) and the melodic parts, as degrees the pilot
-// develops (editing.js writePart). Pure: this builds the prompt and the JSON
+// one, or an LM Studio endpoint) plans the sections ahead of the one playing,
+// one ask each, AHEAD of them: which section, how long, which sounds each
+// layer plays, how they are dressed (dress.js restyle) and the melodic parts,
+// as degrees the pilot develops (editing.js writePart). Pure: this builds the
+// prompt and the JSON
 // Schema the answer must follow, and normalizePlan() is the gate every plan
 // goes through (the model's, or one from a share link) before the pilot takes
 // it (autopilot.js withPlan). FX and the swaps inside a section still come
 // from the seed.
-import { LAYERS } from "./catalog.js";
+import { LAYERS, layerOfVariant } from "./catalog.js";
 import { SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
@@ -20,6 +21,8 @@ const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
 export const PLAN_SECTIONS = SECTION_IDS.filter((id) => id !== "intro");
 // Plans a share link carries at most: one per section, about 6 h of track.
 export const PLAN_MAX = 256;
+// Sections the ✨ AI keeps planned past the one playing.
+export const AHEAD = 3;
 const HISTORY = 8; // sections the prompt recalls
 const RECALLED = 3; // of those, the ones it lists the sounds of
 const WHY_MAX = 200;
@@ -116,8 +119,8 @@ export const SYSTEM = [
   ...SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} bars; ${counts(s)}`),
   "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
   "The lead a breakdown plays is the track's theme: it stays through the build and the peak after it.",
-  "Every section plays a lead or a pad. With no wishes from the listener, keep some of the sounds playing now and change a layer or two at each section: continuity first, contrast from the section's form.",
-  "You plan the section after the one playing now: which section, its length in bars (one of the lengths that section has) and the sounds of every layer, using only the ids listed for each layer. An empty list leaves that layer out.",
+  "Every section plays a lead or a pad. With no wishes from the listener, keep some of the sounds of the section before it and change a layer or two at each section: continuity first, contrast from the section's form.",
+  "You plan one section, the one after the one playing now or, when some are already planned, after the last of them: which section, its length in bars (one of the lengths that section has) and the sounds of every layer, using only the ids listed for each layer. An empty list leaves that layer out.",
   "Each sound comes with its name, how it is made and its character in a few words: match the listener's words to those.",
   "The listener's wishes come first, before the usual counts and continuity. Leave out every layer that does not fit them (minimal: no pad, little percussion, no glitch; ambient or deep: no kick, long pads; full or euphoric: every layer at its most) and pick the sounds, the section and the length that match their words. A wish they just made, follow boldly, so the change is clearly heard; a standing one already shapes the track: keep to it while the sections still rise and fall.",
   `You may also dress the sounds you plan, in dress: four macros from -${MACRO_MAX} to ${MACRO_MAX}, 0 leaving the sound as it is: tone (dark to bright), length (short to long; drums and glitches), drive (clean to distorted), motion (still to a sweeping filter and phaser; never on kick or bass). A melodic sound may also switch synth within its group ("" keeps it). Dress only the sounds the wish or the section asks for; leave the others out of dress.`,
@@ -139,6 +142,15 @@ function describe(id, names, synths) {
 const dressLine = ({ id, synth, ...macros }) =>
   [id, ...MACROS.filter((k) => macros[k]).map((k) => `${k} ${macros[k]}`), ...(synth ? [`synth ${synth}`] : [])].join(" ");
 
+// "- groove, 16 bars: kick.long, bass.rolling; no pad", the layers it leaves
+// to the pilot unsaid.
+function plannedLine({ section, bars, layers }) {
+  const ids = Object.values(layers).flat();
+  const out = Object.keys(layers).filter((id) => !layers[id].length);
+  const what = [ids.join(", "), ...out.map((id) => `no ${id}`)].filter(Boolean).join("; ");
+  return `- ${section}${bars ? `, ${bars} bars` : ""}${what ? `: ${what}` : ""}`;
+}
+
 // The synth groups the style's melodic sounds can move within.
 function synthGroups(lists, style) {
   const groups = new Map();
@@ -154,12 +166,13 @@ function synthGroups(lists, style) {
 }
 
 /**
- * What to ask for the section after the one playing. `sections` are the ones
+ * What to ask for the section after the one playing, or after the `planned`
+ * ones (normalized plans, in order) when there are some. `sections` are the ones
  * walked so far (the last one plays now, `bars` long) and `sounds`, beside
  * them, what each one opened with; `vibe` is the listener's own words, `fresh`
  * when no plan has followed them yet; `next`, a section queued by hand, is the
  * one to plan; `theme`, the lead the pilot will hold if what comes is the
- * step after this section (autopilot.js THEME_PATH). `dressed` are the plans'
+ * step after the last section (themeAfter). `dressed` are the plans'
  * dress entries in force (the playing ones are recalled) and `synths` each
  * melodic sound's synth now.
  */
@@ -178,8 +191,10 @@ export function planPrompt({
   names = {},
   next = null,
   theme = [],
+  planned = [],
 }) {
   const now = sections.at(-1);
+  const last = planned.at(-1)?.section ?? now;
   const playing = [...new Set(Object.values(active))].sort();
   const scale = STYLES[style]?.scale;
   const lines = [
@@ -197,7 +212,8 @@ export function planPrompt({
   lines.push(`Sounds playing now: ${playing.length ? playing.join(", ") : "none"}.`);
   const worn = dressed.filter((d) => playing.includes(d.id));
   if (worn.length) lines.push(`How you dressed them: ${worn.map(dressLine).join("; ")}.`);
-  const into = THEME_PATH[now];
+  if (planned.length) lines.push("Already planned to follow it, in order:", ...planned.map(plannedLine));
+  const into = THEME_PATH[last];
   if (theme.length && into && (!next || next === into)) {
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
@@ -218,7 +234,8 @@ export function planPrompt({
   } else if (vibe) {
     lines.push(`The listener's standing wish: ${JSON.stringify(vibe)}. That comes first: keep the track true to it and leave out the layers that do not fit, while the sections still rise and fall.`);
   }
-  if (next) lines.push(`The listener queued ${next} next: plan that section.`);
+  if (next) lines.push(`The listener queued ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  else if (planned.length) lines.push(`After the planned ${last}, the usual next is ${follows(last)}. Plan the section after it.`);
   else lines.push(`After the ${now}, the usual next is ${follows(now)}. Plan the next section.`);
   return lines.join("\n");
 }
@@ -275,6 +292,33 @@ export function planSchema({ lists, style, next = null }) {
     required: ["why", "section", "bars", "layers", "dress", "parts"],
     additionalProperties: false,
   };
+}
+
+/**
+ * The lead the pilot will hold through the step after the `planned` sections
+ * (autopilot.js themeOf), as far as the plans say: `pilot` plays `active` now.
+ * A planned breakdown's theme is the lead it names, or none.
+ */
+export function themeAfter(pilot, active, planned = []) {
+  let at = pilot.section;
+  let held = at === "breakdown" ? Object.values(active).filter((id) => layerOfVariant(id) === "lead") : at === "build" ? (pilot.theme ?? []) : [];
+  for (const { section, layers } of planned) {
+    const carried = THEME_PATH[at] === section;
+    at = section;
+    held = at === "breakdown" ? (layers.lead ?? []) : at === "build" && carried ? held : [];
+  }
+  return held;
+}
+
+/**
+ * How many of the plans ahead (`{ plan, queued }`, in order) still hold after
+ * the queue changed: the queued sections must be theirs, and past the queue
+ * only plans the model picked freely stay (one asked for a section since
+ * taken off the queue goes, and everything after it).
+ */
+export function keptAhead(ahead, queue) {
+  const i = ahead.findIndex((e, i) => (i < queue.length ? e.plan.section !== queue[i] : e.queued));
+  return i < 0 ? ahead.length : i;
 }
 
 /** The model's sentence on its plan, one line and short, or "". */

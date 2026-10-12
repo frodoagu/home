@@ -11,9 +11,10 @@
 // snapshot autopilot plays the snapshots one after another instead.
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
-// The ✨ AI (planner.js, ai.js) asks a model for the section after each one,
-// early enough for the pilot to take it before that section's last loop; a
-// share link's plans stand in for it section by section.
+// The ✨ AI (planner.js, ai.js) asks a model for the sections ahead, one after
+// another until AHEAD of them are planned; the pilot takes the next one's plan
+// before the playing section's last loop. A share link's plans stand in for
+// it section by section.
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
@@ -72,7 +73,7 @@ import {
 } from "../editing.js";
 import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
-import { PLAN_SECTIONS, normalizePlan, planPrompt, planSchema, whyOf } from "../planner.js";
+import { AHEAD, PLAN_SECTIONS, keptAhead, normalizePlan, planPrompt, planSchema, themeAfter, whyOf } from "../planner.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
 import {
   hasCustomSounds,
@@ -141,6 +142,12 @@ const stamp = (d = new Date()) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 };
 
+// An autopilot run: the sections walked, what each opened with, the plan each
+// one took for the next (🔗 carries them), each sound's last dress, and the
+// ✨ AI's plans for the sections ahead ({ plan, why, queued }, in order; the
+// first is the one the pilot holds).
+const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [] });
+
 // Everything tied to the old workspace, dropped when another one replaces it.
 const fresh = () => ({
   tempo: null,
@@ -183,7 +190,7 @@ export function mountApp(root, engine, opts = {}) {
     pilot: resume?.pilot ?? null,
     rng: resume?.rng ?? null, // the autopilot's seeded PRNG
     tour: resume?.tour ?? null, // the snapshot autopilot (snapshots.js), never on with `auto`
-    run: resume?.run ?? null, // { sections, plans }: the sections the pilot walked since it started, the plans it took
+    run: resume?.run ?? null, // newRun(): the sections the pilot walked since it started, the plans it took and those ahead
     replay: resume?.replay ?? null, // a share link's plans, one per section, taken again from silence
     aiPrefs: resume?.aiPrefs ?? loadPrefs(storage), // ✨ AI: on, engine, endpoint, model, vibe, open (ai.js)
     chrome: resume?.chrome ?? "unavailable", // what Chrome's built-in model said it can do here
@@ -902,16 +909,16 @@ export function mountApp(root, engine, opts = {}) {
     cueBtn.classList.toggle("is-armed", state.armed);
   }
 
-  // The ✨ AI's answer for the section after section n, on its way
-  // ({ n, abort, vibe }: `vibe` when a new vibe asked for it). Up here because
+  // The ✨ AI's answer for section number `at` of the run, on its way
+  // ({ at, abort, vibe }: `vibe` when a new vibe asked for it). Up here because
   // showSection() shows it.
   let planning = null;
-  let planWhy = ""; // what the model said of the plan the pilot holds
   let vibeFresh = false; // the vibe changed and no plan has followed it yet
 
   // Now: the section and the bars it has left, then the queue (✕ drops one
-  // before it plays). In its last loop the section coming next pulses; while
-  // the ✨ AI thinks, so does the section it arranges, or a chip saying so.
+  // before it plays) and the sections the ✨ AI planned past it. In its last
+  // loop the section coming next pulses; while the ✨ AI thinks, so does the
+  // section it arranges, or a chip saying so.
   function showSection() {
     const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
@@ -929,24 +936,27 @@ export function mountApp(root, engine, opts = {}) {
       const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
       drop.addEventListener("click", () => {
         state.pilot = dequeue(state.pilot, i);
-        if (i === 0) replan();
+        requeue();
         showSection();
       });
       return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), drop);
     });
-    // What comes if nothing is queued: the pilot's pick in its last loop, a
-    // plan's (✨) as soon as there is one.
-    const upcoming = p && !p.queue.length ? (p.left === 1 ? p.next : p.plan?.section) : null;
-    if (upcoming) {
-      const text = p.plan ? `✨ ${tx.sections[upcoming]}` : tx.sections[upcoming];
-      const li = el("li", { class: `queued is-auto${p.plan ? " is-ai" : ""}`, "data-queued": upcoming }, el("span", { text }));
-      if (p.plan) li.title = planWhy ? `${tx.ai.planned}: ${planWhy}` : tx.ai.planned;
+    // What comes after the queue: the plans (✨) as soon as there are some,
+    // else the pilot's pick in its last loop.
+    const ahead = p ? (state.run?.ahead ?? []) : [];
+    for (const { plan, why } of ahead.slice(p?.queue.length ?? 0)) {
+      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }));
+      li.title = why ? `${tx.ai.planned}: ${why}` : tx.ai.planned;
       chips.push(li);
     }
+    if (p && !chips.length && p.left === 1 && p.next) {
+      chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
+    }
     if (p && planning) {
-      if (!chips.length) chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking })));
-      chips[0].classList.add("is-thinking");
-      chips[0].title = tx.ai.thinkingTitle;
+      const slot = planning.at - sectionNo() - 1;
+      const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
+      chip.classList.add("is-thinking");
+      chip.title = tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -1145,7 +1155,7 @@ export function mountApp(root, engine, opts = {}) {
       state.active = move.active;
       improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
       if (sectionStart) enterSection();
-      else if (state.pilot.left === 1) cancelPlanning(); // too late for a plan now
+      else if (state.pilot.left === 1 && planning?.at === sectionNo() + 1) cancelPlanning(); // too late for the next one's plan
       showSection();
       changed = true;
     }
@@ -2092,7 +2102,8 @@ export function mountApp(root, engine, opts = {}) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
       state.replay = null; // a link's track only replays from silence
-      state.run = { sections: [], sounds: [], plans: [], dress: {} };
+      cancelPlanning();
+      state.run = newRun();
       adoptDrop();
       dressIn(Object.values(playing).sort());
       mixIn(playing);
@@ -2114,7 +2125,8 @@ export function mountApp(root, engine, opts = {}) {
     state.queuedSnap = null;
     const start = startPilot(ws.lists, state.rng, ws.style, section ?? "intro");
     state.pilot = start.pilot;
-    state.run = { sections: [], sounds: [], plans: [], dress: {} };
+    cancelPlanning();
+    state.run = newRun();
     dressIn(Object.values(start.active).sort());
     for (const id of start.rewrite) rewrite(id);
     mixIn(start.active);
@@ -2149,27 +2161,41 @@ export function mountApp(root, engine, opts = {}) {
   function forceSection(id) {
     if (!state.auto) engageAuto(id);
     else {
-      const head = state.pilot.queue[0];
       state.pilot = enqueue(state.pilot, id);
-      if (state.pilot.queue[0] !== head) replan();
+      requeue();
       showSection();
     }
   }
 
-  // The queue's head or the vibe changed: the ✨ AI arranges what now comes
-  // next, not the section it had picked (in the last loop that is decided
-  // already). A new vibe drops the plan even when its section still fits.
-  function replan({ vibe = false } = {}) {
+  // The queue changed: the plans for sections that no longer come go, and
+  // the ✨ AI plans what now does.
+  function requeue() {
+    if (!state.pilot || !state.run || replaying()) return;
+    dropAhead(keptAhead(state.run.ahead, state.pilot.queue));
+    planAhead();
+  }
+
+  // A new vibe: every plan made with the old words goes, but the one the
+  // last loop already announced, and the ✨ AI plans again with the new ones.
+  function revibe() {
     const p = state.pilot;
-    if (!p || !state.aiPrefs.on || replaying() || p.left <= 1) return;
-    if (!vibe && p.plan && p.plan.section === p.queue[0]) return;
-    if (p.plan) {
+    if (!p || !state.run || !state.aiPrefs.on || replaying()) return;
+    dropAhead(p.left > 1 ? 0 : 1);
+    planAhead();
+  }
+
+  // The plans ahead from slot `from` on go, with an ask for one of them; the
+  // pilot lets go of the next section's while it still can.
+  function dropAhead(from) {
+    const p = state.pilot;
+    const ahead = state.run.ahead;
+    if (from === 0 && p.plan && p.left > 1) {
       const { plan: _dropped, ...rest } = p;
       state.pilot = rest;
       delete state.run.plans[sectionNo()];
     }
-    cancelPlanning();
-    planAhead();
+    ahead.splice(from);
+    if (planning && planning.at - sectionNo() - 1 >= from) cancelPlanning();
   }
 
   // A style narrows the autopilot's sounds and takes the BPM to its own.
@@ -2329,41 +2355,38 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // The pilot takes a plan for the section after this one (it records it, so
-  // 🔗 Compartir can carry it), unless it comes too late. Returns the plan taken.
-  function attach(raw, why = "") {
-    const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
+  // 🔗 Compartir can carry it), unless it comes too late. Whether it took it.
+  function attach(plan) {
     const next = withPlan(state.pilot, plan);
-    if (!plan || next === state.pilot) return null;
+    if (!plan || next === state.pilot) return false;
     state.pilot = next;
-    planWhy = why;
     state.run.plans[sectionNo()] = plan;
-    showSection();
-    return plan;
+    return true;
   }
 
-  // Asks the model for the section after this one, while the pilot can still
-  // take the answer: before this section's last loop.
+  // Asks the model for the first section ahead with no plan, until AHEAD of
+  // them have one: each answer asks for the next. The next section's own
+  // plan only while the pilot can still take it, before this one's last loop.
   function planAhead() {
     const p = state.pilot;
-    if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || p.plan || p.left <= 1) return;
-    if (replaying() || planning?.n === sectionNo()) return;
+    if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
+    const slot = state.run.ahead.length;
+    if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
-    const next = p.queue[0] ?? null; // queued by hand: the model arranges that one
+    const next = p.queue[slot] ?? null; // queued by hand: the model arranges that one
     if (next && !PLAN_SECTIONS.includes(next)) return;
-    cancelPlanning();
-    const n = sectionNo();
+    const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
-    planning = { n, abort };
+    planning = { at, abort };
     const ctx = { lists: ws.lists, style: ws.style, next };
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
-    // The lead the pilot will hold through what comes (autopilot.js themeOf).
-    const leads = Object.values(state.active).filter((id) => id.startsWith("lead."));
-    const theme = p.section === "breakdown" ? leads : p.section === "build" ? (p.theme ?? []) : [];
+    const planned = state.run.ahead.map((e) => e.plan);
     const prompt = planPrompt({
       ...ctx,
-      theme,
+      planned,
+      theme: themeAfter(p, state.active, planned),
       bpm: state.tempo,
       active: state.active,
       sections: state.run.sections,
@@ -2380,15 +2403,21 @@ export function mountApp(root, engine, opts = {}) {
       fresh,
       names: ws.names,
     });
+    let more = false;
     ai[engine]
       .plan(prompt, planSchema(ctx), { ...reach(engine), signal: abort.signal })
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
           failing = false;
-          const plan = attach(raw, whyOf(raw));
-          if (plan && fresh) vibeFresh = false;
-          if (plan && planning.vibe) status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
+          const plan = normalizePlan(raw, { lists: ws.lists, style: ws.style });
+          // The section it plans may be the next one by now.
+          const ahead = state.run.ahead;
+          if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
+          ahead.push({ plan, why: whyOf(raw), queued: Boolean(next) });
+          more = true;
+          if (fresh) vibeFresh = false;
+          if (planning.vibe) status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
         },
         () => {
           if (planning?.abort !== abort) return;
@@ -2400,24 +2429,31 @@ export function mountApp(root, engine, opts = {}) {
       .finally(() => {
         if (planning?.abort !== abort) return;
         planning = null;
-        if (alive) showAi();
+        if (!alive) return;
+        showAi();
+        if (more) planAhead();
       });
     showAi();
   }
 
-  // A new section for the pilot: a share link's plan for the one after it,
-  // or the model's.
+  // A new section for the pilot: the plan made for it leaves the ones ahead
+  // (all of them, if the pilot went elsewhere) and the next one's goes to the
+  // pilot; or a share link's plan for the one after it.
   function enterSection() {
-    cancelPlanning();
-    state.run ??= { sections: [], sounds: [], plans: [], dress: {} };
+    state.run ??= newRun();
     state.run.sections.push(state.pilot.section);
     state.run.sounds[sectionNo()] = [...new Set(Object.values(state.pending ?? state.active))].sort();
-    if (!replaying()) {
-      planAhead();
+    const ahead = state.run.ahead;
+    const head = ahead.shift();
+    if (head && head.plan.section !== state.pilot.section) ahead.length = 0;
+    if (planning && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
+    if (replaying()) {
+      const raw = state.replay[sectionNo()];
+      if (raw) attach(normalizePlan(raw, { lists: ws.lists, style: ws.style }));
       return;
     }
-    const raw = state.replay[sectionNo()];
-    if (raw) attach(raw);
+    if (ahead.length) attach(ahead[0].plan);
+    planAhead();
   }
 
   aiBtn.addEventListener("click", () => {
@@ -2481,7 +2517,7 @@ export function mountApp(root, engine, opts = {}) {
     if (vibe === state.aiPrefs.vibe) return;
     setPrefs({ vibe });
     vibeFresh = Boolean(vibe);
-    replan({ vibe: true });
+    revibe();
     const p = state.auto ? state.pilot : null;
     if (planning) {
       planning.vibe = true;
@@ -2646,9 +2682,8 @@ export function mountApp(root, engine, opts = {}) {
   dropBtn.addEventListener("click", () => {
     if (!engine.isRunning()) return;
     if (state.auto && state.pilot) {
-      const head = state.pilot.queue[0];
       state.pilot = dropNext(state.pilot);
-      if (state.pilot.queue[0] !== head) replan();
+      requeue();
     } else if (!state.drop) state.drop = { phase: "armed" };
     else if (state.drop.phase === "armed") state.drop = null;
     showSection();

@@ -507,12 +507,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (a sample must play wherever its owner signs in) — don't widen psy-sync's
   `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
   can't follow: their samples must come in the same selection (the project folder).
-  The ✨ AI only
-  plans the NEXT section (which, bars, per-layer ids, plus `dress` macros and
+  The ✨ AI
+  plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
+  which, bars, per-layer ids, plus `dress` macros and
   melodic `parts` in scale degrees for the sounds it names — applied when that
   section starts, from factory/seed values so a replay lands the same, never on
-  the held theme or an owned sound); the pilot takes a plan
-  only before that section's last loop (`withPlan`, else the answer is dropped),
+  the held theme or an owned sound); a queue change keeps only the plans its
+  sections still lead to (`keptAhead`), a new vibe drops them all but the one
+  the last loop announced; the pilot takes the next section's plan
+  only before the playing section's last loop (`withPlan`, else it is dropped),
   and with no plan `advance()`/`arrange()` must draw exactly as before (old
   seeds). A model's answer is untrusted like a link: `normalizePlan()` is its
   gate. Plans can't come back from a seed, so 🔗 carries them (`&ai=`) and a

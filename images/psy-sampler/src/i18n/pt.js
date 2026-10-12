@@ -246,7 +246,7 @@ export default {
     vibeTitle: "O que você procura, com suas palavras (Enter para aplicar): a IA leva isso em conta em cada fase",
     vibePlaceholder: "escuro, hipnótico, breaks longos…",
     thinking: "✨ pensando…",
-    thinkingTitle: "A IA está planejando a próxima fase",
+    thinkingTitle: "A IA está planejando as próximas fases",
     vibeAsking: (vibe) => (vibe ? `✨ Vibe «${vibe}»: a IA volta a planejar o que vem…` : "✨ Sem vibe: a IA volta a planejar o que vem…"),
     vibeApplied: (vibe, section) => (vibe ? `✨ Vibe «${vibe}» aplicada: vem ${section}.` : `✨ Sem vibe: vem ${section}.`),
     vibeLater: (vibe) => `${vibe ? `Vibe «${vibe}»` : "Sem vibe"}: a próxima fase já está decidida, entra na seguinte.`,
