@@ -15,7 +15,8 @@ model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
 listener's machine, or the listener's own OpenAI, Anthropic or Google Gemini
 account, linked with an API key). A second one, the snapshot autopilot, plays the user's
 saved snapshots in order instead. What plays exports to WAV, as a loop or as a
-live recording.
+live recording, and 🌀 turns the screen into a show of 3D fractals, lasers and
+mandalas that follows the music ([Visuals](#visuals)).
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
@@ -1637,6 +1638,82 @@ BPM flashes on every beat (harder on the bar line), and ● Record blinks while
 it records. A flash replays by alternating two identical animations (`hit-a` /
 `hit-b`), so no reflow is forced; `prefers-reduced-motion` turns them all off.
 
+## Visuals
+
+🌀 in the top bar turns the screen into a show: raymarched 3D fractals, laser
+beams through haze, mandalas and op-art tunnels that follow the music. It is
+WebGL2 only (no library: the 3D is raymarched in fragment shaders), under
+`src/visuals/`:
+
+```
+source ──events──> stage ──frame──> director ──scene, strobe──> renderer
+(engine, window,   (clock,          (VJ: which scene,          (WebGL2: scene
+ mic, idle)         envelopes)       when, palette)             -> post -> canvas)
+```
+
+- **Sources** (`sources.js`) hand over the same events wherever the music
+  comes from. In this tab they come straight off the engine: `engine.listen()`
+  reports every lane's hits per step, the bar lines, lane changes, FX, the
+  build's sweep and the drop, with their audio time, and `perfTimeOf()` turns
+  that into the `performance.now()` moment they leave the speakers. So the show
+  hits on the kick itself, not on an FFT guess, and knows a build from a drop.
+  `engine.levels()` adds an AnalyserNode off the trim for the levels.
+- **Another window** (⧉, `visuals.html`): the sampler's `createFeed()`
+  (`feed.js`, started in `main.js`) posts the engine's events over a
+  BroadcastChannel, times as wall-clock ms (each window's `performance.now()`
+  has its own zero). The window says hello every 1.5 s; the feed only posts
+  while one did lately, and answers each hello with the lanes, the bar grid
+  and a build in progress, so a window opened mid-song catches up. Drag it to
+  the TV or projector and double-click it for fullscreen. It never claims the
+  tab lock (`tabs.js`): it is not a sampler.
+- **Microphone** (🎤, `listen.js`): band levels off an AnalyserNode, kicks and
+  hats from rises well above the band's recent rises, the tempo from the gaps
+  between kicks (folded into 110-180 BPM), bar lines every four beats on that
+  grid, a breakdown after six beats without a kick and a drop when it comes
+  back. For `visuals.html` opened alone on a phone or a TV's browser.
+- **Idle**: with nothing playing (sampler stopped, no window, no mic) a
+  metronome at 140 BPM keeps the show breathing, calm and without drops.
+
+The **stage** (`stage.js`) holds early events until their time and gives each
+frame the beat and bar phase, an envelope per layer, the energy (from the
+layers playing and the levels), the build's progress and the beats since the
+last drop. The **director** (`director.js`) picks scenes by mood: calm without
+a kick, peak for 16 bars after a drop, high otherwise. It changes on a bar
+line: when the lanes changed and the scene has had 4 bars, or after 16 bars (8
+at the peak). A drop cuts, with no crossfade, to a peak scene; anything else
+crossfades over a beat. Every pick is a hash of the lanes and the bar, never
+`Math.random`, so the same seed played the same way gives the same show. It
+also drives the **strobe**: 8ths through the drop's bar, 16ths rising over the
+build's second half, the kicks through the peak. The strobe starts at full
+(`psy-sampler:visuals` in localStorage keeps the viewer's level), behind a
+one-time photosensitivity warning; the slider or S takes it down to 0.
+
+The **renderer** (`renderer.js`, shaders in `shaders.js`) draws each scene into
+a target, the previous one into another while they crossfade, then POST
+mixes them with its own last frame (trails), the drop's laser fans, slices
+shoved sideways on glitch hits and the strobe, and COPY scales it onto the
+canvas. Scenes render below the canvas resolution: one `level` sets both that
+share (30-100 %) and the raymarch steps, and it follows the frame time (down
+above 22 ms, up after 1.5 s below 18 ms), so a phone or a TV gets a softer
+picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
+
+Scenes: **Mandelbulb** (power drifting, orbit breathing with the kick),
+**fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
+fold, rings of light per beat), **lasers** (analytic beams in haze, three rigs
+moving every 4 bars, spots on the floor), **mandala** (mirrored sectors, petal
+rings blooming in log scale, a flower of life) and **op-art tunnel**
+(checkers, spirals, moiré or dots). Each takes four numbers from the director
+(`uVar`) for its variant.
+
+Keys: ← → / space change scene, 1-5 pick one, L holds it, P palette, F flash,
+S strobe (100/50/0 %), M microphone, H hides the HUD, Enter fullscreen, Esc
+closes. Touch: swipe sideways to change scene, tap to flash, double tap for
+fullscreen. A Screen Wake Lock keeps the display on while it plays.
+
+Nothing new for nginx beyond its page: `visuals.html` gets the same CSP and
+headers as `index.html` (one regex location). The microphone needs no CSP
+entry and there is no `Permissions-Policy` header to allow it in.
+
 ## Layers
 
 | Layer | Variant | What it is |
@@ -1871,7 +1948,9 @@ npm run build
   timing), `tempo` (BPM ramp), `share`, `wav`,
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`, `planner` (the
   ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model, LM
-  Studio and the three linked accounts against fakes, the settings).
+  Studio and the three linked accounts against fakes, the settings), and the
+  visuals' `stage`, `director`, `listen`, `feed` and `show` (keys, settings,
+  adaptive quality). The shaders have no unit tests: render them in a browser.
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that
   records nodes and automation. It includes an anti-click invariant: every

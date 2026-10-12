@@ -143,6 +143,17 @@ export default {
         ],
       },
       {
+        icon: "🌀",
+        title: "Visuais",
+        items: [
+          ["🌀 Visuais", "Transforma a tela num show de fractais 3D, lasers, mandalas e túneis que segue o que toca: muda de cena com as fases, corta em cada drop e pisca nos kicks."],
+          ["⧉ Outra janela", "Abre o show à parte, para arrastar até a TV ou o projetor enquanto o sampler fica na sua tela."],
+          ["🎤 Microfone", "Abra psy.agu.com.ar/visuals.html em outro dispositivo e o show segue a música que ouve."],
+          ["Teclas", "← → mudam de cena, 1-5 escolhem uma, L fixa, P muda a paleta, F flash, S estrobo, H esconde os controles."],
+          ["Estrobo", "Começa no máximo; baixe com o controle ou a tecla S se os flashes incomodarem."],
+        ],
+      },
+      {
         icon: "☁️",
         title: "Salvamento e samples",
         items: [
@@ -831,4 +842,38 @@ export default {
   },
   scales: { minor: "Lá menor", phrygian: "Lá frígio", harmonic: "Lá menor harmônica", chromatic: "Cromática" },
   noteNames: ["Dó", "Dó#", "Ré", "Mi♭", "Mi", "Fá", "Fá#", "Sol", "Sol#", "Lá", "Si♭", "Si"],
+  visuals: {
+    title: "Psy Layers · Visuais",
+    button: "🌀 Visuais",
+    buttonTitle: "Fractais, lasers e mandalas em tela cheia, no ritmo do que toca",
+    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", lasers: "Lasers", mandala: "Mandala", tunnel: "Túnel op-art" },
+    sources: {
+      sampler: "🎛 Seguindo o sampler",
+      stopped: "⏸ O sampler está parado: em repouso até você dar ▶",
+      window: "🎛 Seguindo o sampler da outra janela",
+      waiting: "Sem sampler: abra psy.agu.com.ar neste computador e dê ▶, ou toque 🎤 para seguir o microfone",
+      mic: "🎤 Seguindo o microfone",
+      idle: "Em repouso",
+    },
+    prev: "Cena anterior (←)",
+    next: "Próxima cena (→ ou espaço)",
+    lock: "Fixar a cena (L)",
+    palette: "Outra paleta (P)",
+    flash: "Flash (F)",
+    strobe: "Estrobo",
+    mic: "Seguir o microfone (M)",
+    popOut: "Abrir em outra janela, para levar à TV ou ao projetor",
+    fullscreen: "Tela cheia (Enter ou duplo clique)",
+    close: "Fechar (Esc)",
+    keys: "← → cena · 1-5 escolher · L fixar · P paleta · F flash · S estrobo · M microfone · H ocultar · Enter tela cheia",
+    micDenied: "Sem permissão para usar o microfone",
+    noWebgl: "Este navegador não tem WebGL2: os visuais não rodam aqui.",
+    warning: {
+      title: "⚠ Flashes e estrobo",
+      text:
+        "Os visuais piscam rápido, sobretudo nos drops. Se você tem fotossensibilidade ou epilepsia, " +
+        "baixe o estrobo para 0 no controle abaixo (ou a tecla S) antes de seguir.",
+      ok: "Entendi",
+    },
+  },
 };

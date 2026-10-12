@@ -30,6 +30,12 @@
 //
 // tap() hands out what the trim sends to the destination, for recording.
 //
+// listen() reports what the scheduler queues, with its audio time, for the
+// visuals: every lane's hits per step, bar lines, lane changes, FX shots, the
+// build's sweep and the drop. Hits are reported as they are queued, so they
+// arrive up to LOOKAHEAD early; perfTimeOf() turns their time into the
+// performance.now() moment they leave the speakers.
+//
 // The arrangement has two moves of its own, never stored: sweep() runs a
 // highpass up the whole mix into a drop and sweepOff() snaps it open on the
 // drop; setPump() gives every lane of a layer at least that much sidechain.
@@ -271,6 +277,12 @@ export function createEngine({
   const data = new Map(); // variant id -> edited data (factory data otherwise)
   const volumes = new Map(); // layer id -> its fader over every sound in it (1 otherwise)
   let solo = null; // the variant heard alone while its 🎧 is held
+  const listeners = new Set(); // listen()'s callbacks
+  let analyser = null; // levels for the visuals, off the trim; made on first ask
+
+  const emit = (event) => {
+    for (const fn of listeners) fn(event);
+  };
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
   const volumeOf = (layer) => volumes.get(layer) ?? 1;
@@ -316,16 +328,28 @@ export function createEngine({
     const nudge = (d.nudge ?? 0) / 1000;
     const earliest = ctx.currentTime + SAFETY;
     lane.from ??= Math.floor((loop * LOOP_STEPS + step) / BAR_STEPS) * BAR_STEPS;
+    let first = null;
+    let accent = false;
+    let count = 0;
     for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop, lane.from)) {
       const t = Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge);
       lane.chain.trigger(t);
       voice(ctx, lane.input, t, ev, stepDur);
+      first = first === null ? t : Math.min(first, t);
+      accent ||= Boolean(ev.accent);
+      count++;
     }
     lane.entered = true;
+    if (count && listeners.size) {
+      emit({ kind: "hit", layer: layerOf(lane.variant), variant: lane.variant, time: first, accent, count, level: lane.level });
+    }
   }
 
   function queueStep(s, stepDur) {
-    if (s.step % BAR_STEPS === 0) atBar(s);
+    if (s.step % BAR_STEPS === 0) {
+      atBar(s);
+      emit({ kind: "bar", time: s.time, bar: (s.loop * LOOP_STEPS + s.step) / BAR_STEPS, bpm });
+    }
     for (const lane of lanes.values()) scheduleLane(lane, s, stepDur);
     queued.push(s);
   }
@@ -523,7 +547,9 @@ export function createEngine({
     stopAt = null;
     for (const lane of lanes.values()) fadeOut(lane);
     lanes.clear();
-    if (ctx) sweepOff(ctx.currentTime + FADE); // open again as the lanes fade
+    if (!ctx) return;
+    sweepOff(ctx.currentTime + FADE); // open again as the lanes fade
+    emit({ kind: "stop", time: ctx.currentTime });
   }
 
   /**
@@ -553,6 +579,7 @@ export function createEngine({
     for (const [key, variant] of Object.entries(desired)) {
       if (!lanes.has(key)) lanes.set(key, openLane(key, variant, backfill, at));
     }
+    emit({ kind: "lanes", time: at, variants: [...lanes.values()].map((l) => l.variant) });
   }
 
   /**
@@ -646,6 +673,7 @@ export function createEngine({
     f.setValueAtTime(SWEEP_FROM, start);
     f.exponentialRampToValueAtTime(to, Math.max(end, start + SWEEP_SNAP));
     sweepLine = { start, end: Math.max(end, start + SWEEP_SNAP), to };
+    emit({ kind: "build", time: start, end: sweepLine.end });
   }
 
   /**
@@ -671,6 +699,13 @@ export function createEngine({
     if (glide > now) f.exponentialRampToValueAtTime(valueAt(glide), glide);
     f.exponentialRampToValueAtTime(SWEEP_FROM, t);
     f.setValueAtTime(0, t);
+  }
+
+  // The drop as the arrangement calls it: the visuals hear about it, a
+  // re-sweep or a stop lowering the sweep does not.
+  function drop(at) {
+    if (sweepLine && timer !== null) emit({ kind: "drop", time: Math.max(at ?? ctx.currentTime, ctx.currentTime) });
+    sweepOff(at);
   }
 
   /**
@@ -699,6 +734,7 @@ export function createEngine({
     const end = fxVoice(ctx, shot.input, t, stepDur, id);
     shot.chain.stop(end + FADE);
     fxPlaying.set(id, { ...shot, end });
+    emit({ kind: "fx", id, time: t, end });
     return { start: t, end };
   }
 
@@ -834,6 +870,29 @@ export function createEngine({
       });
   }
 
+  // performance.now() time at which audio time `t` leaves the speakers: the
+  // inverse of audioTimeAt().
+  function perfTimeOf(t) {
+    const out = ctx.getOutputTimestamp?.();
+    if (out?.performanceTime > 0) return out.performanceTime + (t - out.contextTime) * 1000;
+    return performance.now() + (t - ctx.currentTime + (ctx.outputLatency || 0)) * 1000;
+  }
+
+  /**
+   * An AnalyserNode on what the trim sends to the speakers, for the visuals'
+   * levels; null until the context exists.
+   */
+  function levels() {
+    if (!ctx) return null;
+    if (!analyser) {
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.5;
+      out.connect(analyser);
+    }
+    return analyser;
+  }
+
   function stop() {
     stopLoop();
     if (!ctx) return;
@@ -853,7 +912,7 @@ export function createEngine({
     align,
     setMasterFilter,
     sweep,
-    sweepOff,
+    sweepOff: drop,
     setPump,
     triggerFx,
     audition,
@@ -870,6 +929,14 @@ export function createEngine({
     onBar: (fn) => {
       barHook = fn;
     },
+    /** fn(event) for every hit, bar line, lane change, FX, build, drop and stop; returns the unsubscribe. */
+    listen: (fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    perfTimeOf,
+    levels,
+    bpm: () => bpm,
     isRunning: () => timer !== null,
     /** Seconds the loop has run since the engine was created (FX shots and previews aside). */
     playedSeconds: () => played + (timer !== null ? ctx.currentTime - runFrom : 0),

@@ -146,6 +146,7 @@ import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
 import { sortable } from "./sortable.js";
+import { visualsButton } from "../visuals/launch.js";
 
 const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
 
@@ -835,7 +836,7 @@ export function mountApp(root, engine, opts = {}) {
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
       rampBox,
     ),
-    el("div", { class: "topbar-end" }, help.button, ...(account ? [account.node] : []), language),
+    el("div", { class: "topbar-end" }, visualsButton(engine, tx.visuals), help.button, ...(account ? [account.node] : []), language),
   );
 
   const samplesPanel = samples

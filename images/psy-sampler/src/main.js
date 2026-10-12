@@ -13,6 +13,8 @@ import { showIntro } from "./ui/intro.js";
 import { askToTake } from "./ui/elsewhere.js";
 import { showUpdate } from "./ui/updateNotice.js";
 import { watchVersion } from "./update.js";
+import { createFeed } from "./visuals/feed.js";
+import { bandsOf } from "./visuals/listen.js";
 
 // The AudioContext is NOT created here: the engine builds it on the first
 // click (autoplay policy).
@@ -47,6 +49,8 @@ const mediaKeys = createMediaKeys();
 // The ✨ AI's models: Chrome's built-in one where it runs, or an LM Studio
 // endpoint. Created here so a remount keeps the session.
 const ai = createAi();
+// The visuals in another window (visuals.html) follow the engine from here.
+createFeed(engine, { bandsOf });
 // The app mounts once this tab holds the sampler: with another tab already on
 // it, only after you choose to cut that one off. A tab cut off that way stops,
 // saves and reloads into the same question.

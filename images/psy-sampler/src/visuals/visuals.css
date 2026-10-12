@@ -1,0 +1,116 @@
+/* The show: a full-window canvas with a HUD that hides itself. Its own
+   colours, whatever the page under it: the show is always dark. */
+.vis {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  color: #fff;
+  outline: none;
+  font: 14px/1.4 system-ui, sans-serif;
+  touch-action: none;
+  user-select: none;
+}
+.vis-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.vis.vis-idle {
+  cursor: none;
+}
+.vis-hud {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.75));
+  transition: opacity 0.4s;
+}
+.vis.vis-idle .vis-hud {
+  opacity: 0;
+  pointer-events: none;
+}
+.vis-now {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+.vis-scene {
+  font-size: 18px;
+}
+.vis-source {
+  opacity: 0.75;
+}
+.vis-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.vis-btn {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+.vis-btn:hover,
+.vis-btn:focus-visible {
+  background: rgb(255 255 255 / 0.25);
+}
+.vis-btn[aria-pressed="true"] {
+  background: rgb(255 255 255 / 0.4);
+}
+.vis-strobe {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 6px;
+}
+.vis-keys {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+@media (pointer: coarse) {
+  .vis-keys {
+    display: none;
+  }
+}
+.vis-warning {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100% - 32px));
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid #f5c542;
+  border-radius: 12px;
+  background: rgb(10 10 20 / 0.94);
+  transform: translate(-50%, -50%);
+}
+.vis-warning h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.vis-ok {
+  margin-top: 8px;
+  font-size: 16px;
+}
+.vis-fail {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+}

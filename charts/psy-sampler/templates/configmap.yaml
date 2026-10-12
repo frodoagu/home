@@ -50,10 +50,11 @@ data:
             try_files $uri $uri/ /index.html;
         }
 
-        # Every page load ends here (try_files falls back to it), so the page's
+        # Every page load ends here (try_files falls back to index.html; the
+        # visuals' window asks for its own page by name), so the pages'
         # security headers live in this block: nginx drops server-level
         # add_header in any location that sets its own.
-        location = /index.html {
+        location ~ ^/(index|visuals)\.html$ {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
             add_header Content-Security-Policy "{{ $csp }}" always;
             add_header X-Content-Type-Options nosniff always;
