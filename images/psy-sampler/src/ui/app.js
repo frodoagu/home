@@ -363,7 +363,14 @@ export function mountApp(root, engine, opts = {}) {
     placeholder: tx.ai.vibePlaceholder,
   });
   const vibeBox = field("ai-vibe", tx.ai.vibe, vibeInput, tx.ai.vibeTitle);
-  const aiRow = el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, modelBox, vibeBox);
+  // Its settings fold away (remembered), with what they say in the summary.
+  const aiSummary = el("span", { class: "ai-summary" });
+  const aiPanel = el(
+    "details",
+    { class: "ai-panel" },
+    el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
+    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, modelBox, vibeBox),
+  );
 
   /* ---- tools ---- */
   const wavBtn = el("button", { type: "button", class: "ghost", "data-action": "wav-mix", text: tx.tools.wav });
@@ -756,7 +763,7 @@ export function mountApp(root, engine, opts = {}) {
       "div",
       { class: "tools panel" },
       el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, sectionBadge, sectionLeft, queueList, nextBtn),
-      aiRow,
+      aiPanel,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
         "div",
@@ -1894,7 +1901,10 @@ export function mountApp(root, engine, opts = {}) {
     const engine = engineNow();
     aiBtn.setAttribute("aria-pressed", String(on));
     aiBtn.classList.toggle("is-thinking", Boolean(planning));
-    aiRow.hidden = !ai || !on;
+    aiPanel.hidden = !ai || !on;
+    if (aiPanel.open !== state.aiPrefs.open) aiPanel.open = state.aiPrefs.open;
+    const what = engine === "lmstudio" && model ? `${tx.ai.engines[engine]} (${model})` : tx.ai.engines[engine];
+    aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
     const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio"];
     if (engineInput.options.length !== engines.length) {
       engineInput.replaceChildren(...engines.map((id) => el("option", { value: id, text: tx.ai.engines[id] })));
@@ -2043,6 +2053,9 @@ export function mountApp(root, engine, opts = {}) {
   modelInput.addEventListener("change", () => {
     setPrefs({ model: modelInput.value.replace(/\s+/g, " ").trim().slice(0, 120) });
     startAi();
+  });
+  aiPanel.addEventListener("toggle", () => {
+    if (aiPanel.open !== state.aiPrefs.open) setPrefs({ open: aiPanel.open });
   });
   vibeInput.addEventListener("change", () => {
     setPrefs({ vibe: vibeInput.value.replace(/\s+/g, " ").trim().slice(0, 200) });

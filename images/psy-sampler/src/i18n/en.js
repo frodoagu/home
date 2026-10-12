@@ -200,6 +200,7 @@ export default {
   },
   sections: { intro: "Intro", groove: "Groove", build: "Build-up", peak: "Peak", breakdown: "Breakdown" },
   ai: {
+    settings: "AI settings",
     button: "✨ AI",
     title: "A language model picks the next section, how long it lasts and its sounds: Chrome's (Gemini Nano, on your computer) or your LM Studio",
     engine: "Engine",

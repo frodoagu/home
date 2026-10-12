@@ -1872,10 +1872,11 @@ describe("✨ AI", () => {
   it("offers Chrome's model where it runs and LM Studio always; the settings show while it is on", async () => {
     await remountWith(fakeAi());
     expect(aiBtn().hidden).toBe(false);
-    expect($(".ai-row").hidden).toBe(true);
+    expect($(".ai-panel").hidden).toBe(true);
     aiBtn().click();
     expect(aiBtn().getAttribute("aria-pressed")).toBe("true");
-    expect($(".ai-row").hidden).toBe(false);
+    expect($(".ai-panel").hidden).toBe(false);
+    expect($(".ai-panel").open).toBe(true);
     expect(engines()).toEqual(["chrome", "lmstudio"]);
     expect($("#ai-engine").value).toBe("chrome");
     expect($("#ai-endpoint").closest("label").hidden).toBe(true);
@@ -1888,6 +1889,26 @@ describe("✨ AI", () => {
     expect(engines()).toEqual(["lmstudio"]);
     expect($("#ai-endpoint").closest("label").hidden).toBe(false);
     expect($("#ai-endpoint").value).toBe("http://localhost:1234/v1");
+  });
+
+  it("its settings fold away, say what they hold in the summary, and stay folded", async () => {
+    await remountWith(fakeAi({ chrome: "unavailable" }));
+    aiBtn().click();
+    const panel = $("details.ai-panel");
+    expect(panel.open).toBe(true);
+    $("#ai-model").value = "qwen";
+    $("#ai-model").dispatchEvent(new Event("change"));
+    $("#ai-vibe").value = "dark";
+    $("#ai-vibe").dispatchEvent(new Event("change"));
+    expect($(".ai-summary").textContent).toBe("LM Studio (qwen) · «dark»");
+    panel.open = false;
+    panel.dispatchEvent(new Event("toggle"));
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).open).toBe(false);
+    await remountWith(fakeAi({ chrome: "unavailable" }));
+    expect($("details.ai-panel").open).toBe(false);
+    expect($("details.ai-panel").hidden).toBe(false); // still on: folded, not gone
+    aiBtn().click(); // off: the panel goes
+    expect($("details.ai-panel").hidden).toBe(true);
   });
 
   it("LM Studio: a new endpoint is cleaned, remembered and tried; a bad one is refused", async () => {

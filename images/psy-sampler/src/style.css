@@ -906,9 +906,52 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .ai[hidden],
-.ai-row[hidden],
+.ai-panel[hidden],
 .ai-field[hidden] {
   display: none;
+}
+
+.ai-panel summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: fit-content;
+  max-width: 100%;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.ai-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-panel summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.ai-panel[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.ai-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.ai-panel[open] .ai-summary {
+  display: none;
+}
+
+.ai-panel .ai-row {
+  margin-top: 8px;
 }
 
 .ai-field {

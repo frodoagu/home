@@ -163,10 +163,11 @@ describe("settings", () => {
   });
 
   it("clean whatever was stored, and default to LM Studio's local server", () => {
-    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "" });
+    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "", open: true });
     expect(
-      cleanPrefs({ on: "yes", engine: "constructor", endpoint: "nope", model: ` ${"m".repeat(200)}`, vibe: "  dark \n\n hypnotic " }),
-    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), vibe: "dark hypnotic" });
+      cleanPrefs({ on: "yes", engine: "constructor", endpoint: "nope", model: ` ${"m".repeat(200)}`, vibe: "  dark \n\n hypnotic ", open: 0 }),
+    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), vibe: "dark hypnotic", open: true });
+    expect(cleanPrefs({ open: false }).open).toBe(false);
     expect(cleanPrefs({ on: true, engine: "lmstudio", endpoint: "http://pc.lan:1234/v1" })).toMatchObject({
       on: true,
       engine: "lmstudio",

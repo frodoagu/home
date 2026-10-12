@@ -143,7 +143,7 @@ export function createAi({ api = globalThis.LanguageModel, fetch = globalThis.fe
   return { chrome: chromeModel(api), lmstudio: openAiModel(fetch) };
 }
 
-/* ---- per-browser settings: on, engine, endpoint, model, vibe ---- */
+/* ---- per-browser settings: on, engine, endpoint, model, vibe, open ---- */
 
 /** An http(s) base URL with no trailing slash ("/v1" when it has no path), or null. */
 export function cleanEndpoint(value) {
@@ -173,6 +173,7 @@ export function cleanPrefs(raw) {
     endpoint: cleanEndpoint(p.endpoint) ?? LMSTUDIO_URL,
     model: line(p.model, 120),
     vibe: line(p.vibe, 200),
+    open: p.open !== false, // the settings unfolded
   };
 }
 

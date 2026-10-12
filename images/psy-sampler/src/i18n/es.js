@@ -202,6 +202,7 @@ export default {
   },
   sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break" },
   ai: {
+    settings: "Ajustes de la IA",
     button: "✨ IA",
     title: "Un modelo de lenguaje elige la próxima fase, cuánto dura y sus sonidos: el de Chrome (Gemini Nano, en tu compu) o tu LM Studio",
     engine: "Motor",

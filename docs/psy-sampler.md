@@ -1022,7 +1022,10 @@ when its section comes.
 
 ### Settings and setup
 
-The settings (on, engine, endpoint, model, vibe) live per browser in
+While ✨ is on its settings show under the autopilot row as **AI settings**, a
+`<details>` that folds away; folded, its summary still says the engine (and
+model) and the vibe. The settings (on, engine, endpoint, model, vibe, and
+whether that panel is unfolded) live per browser in
 `localStorage` (`psy-sampler:ai`, `ai.js` `loadPrefs` / `cleanPrefs`), not in
 the workspace: what a browser can run is that browser's, so it never travels
 with a preset or the cloud save.
