@@ -371,11 +371,13 @@ describe("readPlans", () => {
 describe("the opening", () => {
   const psy = { lists, style: "psytrance", section: "intro" };
 
-  it("asks for the section the track starts with, with room to make it count", () => {
+  it("asks for the section the track starts with: long, spacey, building into a drop", () => {
     const prompt = openingPrompt({ ...psy, bpm: 145, active: { kick: "kick.punchy", "pad.chord": "pad.chord" }, vibe: "épico" });
     expect(prompt).toContain("Style: Psytrance, 145 BPM.");
     expect(prompt).toContain("This is the opening of the track and of the show");
-    expect(prompt).toContain("Plan the intro it opens with: 8 or 16 bars; kick 0-1, bass 0-1, perc 0-2, lead 0-1, pad 0-2, glitch 0-1.");
+    expect(prompt).toContain("Plan the intro it opens with: 16 or 24 or 32 bars; kick 0-1, bass 0-1, perc 0-2, lead 0-1, pad 0-2, glitch 0-1.");
+    expect(prompt).toContain("never a jolt");
+    expect(prompt).toContain("the groove explodes with the bass wide open");
     expect(prompt).toContain("The seed drew: kick.punchy, pad.chord.");
     for (const id of poolOf(lists, "lead", "psytrance")) expect(prompt).toContain(`${id} (`);
     for (const id of OPENING_FX) expect(prompt).toContain(`${id} (`);
@@ -385,10 +387,10 @@ describe("the opening", () => {
     expect(SYSTEM).toContain("or, when asked, the opening the track starts with");
   });
 
-  it("its schema names only that section, its lengths, a lead and the hits", () => {
+  it("its schema names only that section, its lengths, a lead and the swells", () => {
     const schema = openingSchema(psy);
     expect(schema.properties.section.enum).toEqual(["intro"]);
-    expect(schema.properties.bars.enum).toEqual([8, 16]);
+    expect(schema.properties.bars.enum).toEqual([16, 24, 32]);
     expect(schema.properties.layers.properties.lead.maxItems).toBe(1);
     expect(schema.properties.layers.properties.pad.maxItems).toBe(2);
     expect(schema.properties.fx.enum).toEqual(["", ...OPENING_FX]);
@@ -398,14 +400,14 @@ describe("the opening", () => {
     expect(openingSchema({ ...psy, section: "peak" }).properties.bars.enum).toEqual([16, 24]);
   });
 
-  it("keeps a good opening, with its hit, and is idempotent", () => {
+  it("keeps a good opening, with its swell, and is idempotent", () => {
     const raw = {
       why: "soaring",
       section: "intro",
       bars: 16,
       layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw", "pad.chord", "pad.prog"] },
       parts: { lead: ["8", "5"] },
-      fx: "fx.impact",
+      fx: "fx.reverse",
     };
     const opening = normalizeOpening(raw, psy);
     expect(opening).toEqual({
@@ -413,11 +415,11 @@ describe("the opening", () => {
       bars: 16,
       layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw", "pad.chord"] },
       parts: { lead: Array.from({ length: 16 }, (_, i) => (i % 2 ? "5" : "8")) },
-      fx: "fx.impact",
+      fx: "fx.reverse",
     });
     expect(normalizeOpening(opening, psy)).toEqual(opening);
-    expect(normalizeOpening({ ...raw, fx: "fx.tapeStop" }, psy)).not.toHaveProperty("fx");
-    expect(normalizeOpening({ ...raw, bars: 24 }, psy).bars).toBeNull();
+    expect(normalizeOpening({ ...raw, fx: "fx.impact" }, psy)).not.toHaveProperty("fx");
+    expect(normalizeOpening({ ...raw, bars: 8 }, psy).bars).toBeNull();
   });
 
   it("refuses an opening for another section, or what is not one", () => {

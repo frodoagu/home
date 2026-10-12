@@ -2662,47 +2662,64 @@ describe("✨ AI", () => {
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
   });
 
-  it("✨ in silence plans the opening first: the intro starts on its sounds, length, parts and hit", async () => {
+  it("✨ in silence plans the opening first: a long intro that fades the bass in and drops into what follows", async () => {
     const opening = {
-      why: "a soaring opener, no kick yet",
+      why: "a floating opener, the bass creeping in",
       section: "intro",
       bars: 16,
-      layers: { kick: [], lead: ["lead.soaring"], pad: ["pad.supersaw"] },
+      layers: { kick: ["kick.punchy"], bass: ["bass.rolling"], lead: ["lead.soaring"], pad: ["pad.supersaw"] },
       dress: [{ id: "pad.supersaw", tone: 2, length: 0, drive: 0, motion: 2, synth: "" }],
       parts: { lead: ["8", "-", "5", "-", "3", "-", "1", "-"] },
-      fx: "fx.impact",
+      fx: "fx.sweep",
     };
     const ai = await remountWith(fakeAi({ answers: [BUILD], opening }));
     const fx = vi.spyOn(engine, "triggerFx");
-    vibe("épico");
+    vibe("volado");
     aiBtn().click();
     await flushPromises();
     expect(ai.openings).toHaveLength(1);
     const [ask] = ai.openings;
     expect(ask.prompt).toContain("This is the opening of the track and of the show");
-    expect(ask.prompt).toContain("Plan the intro it opens with: 8 or 16 bars;");
-    expect(ask.prompt).toContain('The listener asked for: "épico".');
+    expect(ask.prompt).toContain("Plan the intro it opens with: 16 or 24 or 32 bars;");
+    expect(ask.prompt).toContain('The listener asked for: "volado".');
     expect(ask.schema.properties.section.enum).toEqual(["intro"]);
     expect(ai.asks[0].prompt).toContain("Now playing: intro, 16 bars.");
     expect(ai.asks[0].prompt).toMatch(/Sounds playing now: .*lead\.soaring/);
-    expect(ai.asks[0].prompt).toContain('standing wish: "épico"'); // the opening followed it
+    expect(ai.asks[0].prompt).toContain('standing wish: "volado"'); // the opening followed it
     expect(engine.isRunning()).toBe(false);
     expect($(".section-left").textContent).toBe("16 compases");
-    expect($(".section-badge").title).toBe("Lo eligió la IA: a soaring opener, no kick yet");
+    expect($(".section-badge").title).toBe("Lo eligió la IA: a floating opener, the bass creeping in");
     expect($(".status").textContent).toBe("✨ Las primeras 4 fases están planeadas: ▶ para arrancar.");
     const motif = saved().variants["lead.soaring"].notes.filter((n) => n.step < 8).map((n) => n.midi);
     expect(motif).toEqual([69, 64, 60]); // its part: 8, 5, 3 walking down A minor
-    expect(saved().variants["pad.supersaw"].insert.lp).toBeLessThan(3000); // dressed, and muffled by the intro's ride
+    expect(saved().variants["pad.supersaw"].insert.lp).toBeLessThan(3000); // dressed, and muffled by the opening's ride
+    const bass = () => saved().variants["bass.rolling"];
+    const kick = () => saved().variants["kick.punchy"];
+    expect([kick().level, bass().level]).toEqual([0, 0]); // not yet: atmosphere first
+    expect(bass().insert.lp).toBe(120);
     cue().click();
-    expect(pressed()).toEqual(expect.arrayContaining(["lead.soaring", "pad.supersaw"]));
-    expect(pressed().some((id) => id.startsWith("kick."))).toBe(false);
+    expect(pressed()).toEqual(expect.arrayContaining(["kick.punchy", "bass.rolling", "lead.soaring", "pad.supersaw"]));
     advanceSeconds(0.05);
-    expect(fx).toHaveBeenCalledWith("fx.impact", expect.any(Number));
+    expect(fx).toHaveBeenCalledWith("fx.sweep", expect.any(Number));
     expect(fx).toHaveBeenCalledTimes(1);
-    advanceSeconds(14 * BAR);
+    advanceSeconds(6 * BAR); // the 4th loop: the kick is in, the bass still out
+    expect(kick().level).toBeGreaterThan(0);
+    expect(bass().level).toBe(0);
+    advanceSeconds(4 * BAR); // the 6th: the bass creeps in, filtered
+    expect(bass().level).toBeGreaterThan(0);
+    expect(bass().level).toBeLessThan(0.8);
+    expect(bass().insert.lp).toBeGreaterThan(120);
+    expect(bass().insert.lp).toBeLessThan(1500);
+    expect(fx).toHaveBeenCalledTimes(1);
+    advanceSeconds(4 * BAR); // the last loop: a drop, with a riser
     expect($(".section-badge").textContent).toBe("Intro"); // 16 bars, not 8
+    expect($('[data-action="drop"]').getAttribute("aria-pressed")).toBe("true");
+    expect(fx).toHaveBeenCalledTimes(2);
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Subida");
+    expect(fx).toHaveBeenCalledWith("fx.impact", expect.any(Number)); // the explosion
+    expect(bass().insert).toMatchObject({ hp: 20, lp: 20000 }); // wide open
+    expect(kick().insert).toMatchObject({ hp: 20, lp: 20000 });
   });
 
   it("an opening that comes after ▶ is dropped, and the sections ahead are asked for", async () => {

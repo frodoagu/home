@@ -1426,21 +1426,35 @@ it isn't left to the seed: from silence, armed, the **first ask is the
 opening** (`planOpening` in `app.js`, `openingPrompt` / `openingSchema` /
 `normalizeOpening` in `planner.js`), before any section ahead. It is a plan
 for the section the track starts with (the intro, or the one a phase button
-started) and the prompt asks for it to be **powerful, beautiful or both**:
+started). It is built the way festival sets open (Universo Paralello main
+floor openers are beatless "intro edits": Astrix on Bregović's *Ederlezi*,
+Alok on *Pantheon*, Vegas's *O Universo Pulsa*) and the way a psytrance
+track's own intro is arranged (atmosphere, then percussion, then a filtered
+kick opening up, the bass held for the first big moment): **spacey and
+hypnotic, never a jolt, and long**, ending in a drop where the bass explodes.
 
-- **More room than the pilot's intro.** `OPENING` widens the intro's shape to
-  kick 0-1, bass 0-1, perc 0-2, **lead 0-1**, pad 0-2, glitch 0-1, and
-  `OPENING_BARS` lets it last **8 or 16 bars**, so it can open on a pad and a
-  lead stating the first motif with the kick held back, or on the kick, a
-  glitch and a hit. `SECTIONS.intro` itself is untouched, so seeds replay.
-- **A hit on the 1**: `fx`, one of `OPENING_FX` (impact, crash, sweep, siren,
-  reverse cymbal) or none, fired on the first bar line ▶ plays (`state.openFx`).
+- **More room and time than the pilot's intro.** `OPENING` widens the
+  intro's shape to kick 0-1, bass 0-1, perc 0-2, **lead 0-1**, pad 0-2, glitch
+  0-1, and `OPENING_BARS` lets it last **16, 24 or 32 bars**.
+  `SECTIONS.intro` itself is untouched, so seeds replay.
+- **Its own build-up** (`pilot.opening`, `autopilot.js` `OPENING_MIX` /
+  `OPENING_TONE`, read by `mixOf` / `toneOf` in place of the intro's): the
+  atmosphere from the start; the **kick muted and lowpassed** until 40 % of
+  the way, then fading in and opening; the **bass** the same from halfway,
+  quiet and shut at 120 Hz, rising to 0.8 and 1.5 kHz. A spec `[from, to,
+  start]` holds `from` until `start`. The last loop is a **drop**
+  (`dropping`): riser (one more PRNG draw, only for openings, so a replay
+  draws the same), kick roll, the sweep and the gap bar, then an impact
+  (`DROP_HIT`) as the next section lands with kick and bass **snapped wide
+  open** (`OPENING_OPEN`: `toneIn` opens the ones the opening filtered, at
+  once, when it ends) at full level. That is the explosion.
+- **Maybe a soft swell on the 1**: `fx`, one of `OPENING_FX` (sweep, siren,
+  reverse cymbal) or none, fired on the first bar line ▶ plays
+  (`state.openFx`). No impact or crash out of silence.
 - **Laid over the seed's draw** (`openWith`): each layer the opening names is
   set to its sounds, the rest stay as drawn, and it draws nothing from the PRNG,
   so a link replays it. A lead or a pad always plays. Dress and parts land as
   in any plan; a lead it brings in without a part gets the pilot's `rewrite`.
-  The intro's mix and tone rides still apply (its pads and percussion open up
-  across it).
 - **Only while armed.** An answer that lands after ▶ is dropped (▶ aborts the
   ask and moves on to the sections ahead), so the order of PRNG draws never
   depends on timing. A failed ask says so and plans nothing more: armed by 🤖,

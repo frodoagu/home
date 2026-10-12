@@ -521,9 +521,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
   can't follow: their samples must come in the same selection (the project folder).
   The ✨ AI
-  first plans the opening from silence, armed (`openingPrompt`: more room
-  than `SECTIONS.intro` via `OPENING`, a hit on the 1, laid over the seed's
-  draw by `openWith`, dropped if it lands after ▶; 🔗 carries it as `&open=`),
+  first plans the opening from silence, armed (`openingPrompt`: a long,
+  spacey intro, 16-32 bars, with more room than `SECTIONS.intro` via
+  `OPENING`, laid over the seed's draw by `openWith`, dropped if it lands
+  after ▶; 🔗 carries it as `&open=`; `pilot.opening` rides `OPENING_MIX` /
+  `OPENING_TONE`, fading a filtered kick then bass in, and drops into the next
+  section with kick and bass snapped open),
   then lays out the form of the track once per run (`planForm`: the next
   `FORM` (20) sections, walked as `pilot.form` after the hand queue, re-asked
   by Aplicar), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
