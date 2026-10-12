@@ -498,7 +498,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   build-up roll, a drop's silenced kick/bass bar, fills) live in `feed()` for
   one bar and never reach storage. The tone hp/lp pair is always in the insert
   chain (an identity when open) so an autopilot ride never swaps chains. All UI text lives in `src/i18n/{es,en,pt}.js`
-  (same shape, enforced by a test). Cloud save is deliberately NOT behind
+  (same shape, enforced by a test). One browser runs ONE sampler (`src/tabs.js`): the tab in use holds a
+  Web Lock and the app mounts only once a new tab steals it (the notice
+  asks first); the robbed tab stops, flushes and reloads. Don't mount the app
+  before `claimTab()` resolves. Cloud save is deliberately NOT behind
   google-auth: that allowlist opens the dashboards, so psy-sync verifies Google
   ID tokens itself and issues its own cookie — never route /api/ through
   oauth2-proxy. The server stores the workspace opaquely; the page's

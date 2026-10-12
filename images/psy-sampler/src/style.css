@@ -638,7 +638,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   gap: 8px;
 }
 
-.update-reload {
+.update-reload,
+.tab-take {
   padding: 6px 14px;
   font: inherit;
   font-weight: 600;
@@ -647,6 +648,39 @@ html:has(dialog.help[open], dialog.intro[open]) {
   border: 1.5px solid var(--current);
   border-radius: 8px;
   cursor: pointer;
+}
+
+/* The sampler is open in another tab: the only thing on the page until you
+   take over, so it sits in the middle with nothing behind it. */
+.tab {
+  position: fixed;
+  inset: 0;
+  width: min(420px, calc(100vw - 32px));
+  height: fit-content;
+  margin: auto;
+  padding: 20px 22px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--current);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.tab h2 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.tab p {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.tab-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .help-page {

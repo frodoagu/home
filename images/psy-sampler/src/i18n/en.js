@@ -73,7 +73,7 @@ export default {
         title: "Playing live",
         items: [
           ["BPM", "From 60 to 180; the slider changes the tempo at once."],
-          ["Tap", "Left of the BPM, to lock onto another track or another tab: the first tap takes the loop back to the 1 of the bar right there (start on the 1 of what you follow) and every tap after it adjusts the BPM and the phase live. More taps, more precise: about 20 nail the exact BPM. Half or double time works too; a 2 s pause starts over."],
+          ["Tap", "Left of the BPM, to lock onto another track or the sampler on another device: the first tap takes the loop back to the 1 of the bar right there (start on the 1 of what you follow) and every tap after it adjusts the BPM and the phase live. More taps, more precise: about 20 nail the exact BPM. Half or double time works too; a 2 s pause starts over."],
           ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
           ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],
           ["💥 Drop", "Arms a drop on the next bar: a kick roll, a bar without kick and bass under a sweep, and everything back with an impact. Another click before it starts disarms it. Under the autopilot its next loop is the drop and a Peak follows (✕ in the queue takes it out)."],
@@ -435,6 +435,13 @@ export default {
     text: "A new version of the sampler was just published. Reload to use it: what is playing stops, but your sounds and snapshots stay saved.",
     reload: "Reload",
     later: "Later",
+  },
+  tab: {
+    playing: "Another tab is playing",
+    open: "The sampler is already open in another tab",
+    text: "If you use it here, the other one is cut off: it stops playing and waits. What you edited there is already saved.",
+    close: "To stay in the other one, close this tab.",
+    take: "Use this tab",
   },
   intro: {
     title: "This is Psy Layers",
