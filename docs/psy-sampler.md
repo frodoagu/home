@@ -806,7 +806,14 @@ the token itself and issues its own session cookie.
 - The session is a stateless HMAC (`sub.expiry.signature`); the key is generated
   on first boot on the volume, next to the database: **no Secret to create**.
   Deleting the account deletes the user's row, and a cookie for a user that no
-  longer exists opens nothing.
+  longer exists opens nothing; nor does one issued before the row was created,
+  so signing up again doesn't bring a deleted account's cookies back (issued =
+  expiry − 30 days: changing `SESSION_MS` signs out anyone who signed up within
+  the difference). Signing out only clears this browser's cookie: there is no
+  server-side list to revoke it from.
+- Every API response carries `nosniff` and `Content-Security-Policy:
+  default-src 'none'; frame-ancestors 'none'; sandbox`: none is a page, so one
+  opened as a document runs nothing and can't be framed.
 - Caps: `sync.maxUsers` (5000 accounts; existing ones keep signing in) and a
   Traefik `rateLimit` per real IP (`Cf-Connecting-IP`, like Home Assistant) on
   the `/api/` route.

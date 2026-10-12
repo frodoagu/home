@@ -45,9 +45,13 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           # The stock nginx image starts as root to bind :80 and drop its
           # workers to `nginx`; that needs setuid()/chown, not exec-time
-          # escalation, so no_new_privs is safe here.
+          # escalation, so no_new_privs is safe here. Those four are all the
+          # capabilities it uses (without CHOWN it can't own its temp dirs).
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
           ports:
             - name: http
               containerPort: 80

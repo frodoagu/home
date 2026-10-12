@@ -4,7 +4,7 @@ import { openDb } from "./db.js";
 import { verifyIdToken } from "./google.js";
 import { parseQuantity, renderMetrics } from "./metrics.js";
 import { cleanName, sniffAudio } from "./samples.js";
-import { hmacKey, readSession, signSession } from "./session.js";
+import { SESSION_MS, hmacKey, readSession, signSession } from "./session.js";
 
 const CLIENT = "client-123.apps.googleusercontent.com";
 const ORIGIN = "https://psy.agu.com.ar";
@@ -101,7 +101,7 @@ describe("Google ID tokens", () => {
 describe("sessions", () => {
   it("sign and read back; tampered or expired cookies read as nobody", async () => {
     const value = await signSession(key, "1001", clock + 1000);
-    expect(await readSession(key, value, clock)).toBe("1001");
+    expect(await readSession(key, value, clock)).toEqual({ sub: "1001", issued: clock + 1000 - SESSION_MS });
     expect(await readSession(key, value.replace("1001", "1002"), clock)).toBeNull();
     expect(await readSession(key, value, clock + 1000)).toBeNull();
     expect(await readSession(await hmacKey("other"), value, clock)).toBeNull();
@@ -195,6 +195,16 @@ describe("API", () => {
     expect(db.state("1001")).toBeNull();
   });
 
+  it("a deleted account's cookie stays void after signing up again", async () => {
+    const old = await signIn();
+    await call("DELETE", "/api/account", { cookie: old });
+    clock += 1000;
+    const fresh = await signIn();
+    expect(await (await call("GET", "/api/session", { cookie: old })).json()).toEqual({ email: null });
+    expect((await call("GET", "/api/state", { cookie: old })).status).toBe(401);
+    expect(await (await call("GET", "/api/session", { cookie: fresh })).json()).toEqual({ email: "ana@example.com" });
+  });
+
   it("signing out clears the cookie", async () => {
     const res = await call("DELETE", "/api/session");
     expect(res.status).toBe(204);
@@ -207,6 +217,13 @@ describe("API", () => {
     const nope = await call("GET", "/api/nope", { cookie });
     expect(nope.status).toBe(404);
     expect(nope.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("no response can be sniffed, framed or run as a page", async () => {
+    for (const res of [await call("GET", "/api/health"), await call("GET", "/api/nope"), await call("PUT", "/api/state")]) {
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(res.headers.get("content-security-policy")).toBe("default-src 'none'; frame-ancestors 'none'; sandbox");
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 // Stateless session cookie: "<sub>.<expiry ms>.<HMAC-SHA256>", signed with a
 // key that lives next to the database. Revocation is the user row: a valid
-// cookie for a deleted account opens nothing.
+// cookie for a deleted account opens nothing, and one issued before the
+// account's row was created (a deleted account signed up again) neither.
 
 export const COOKIE = "psy_session";
 export const SESSION_MS = 30 * 24 * 3600 * 1000;
@@ -20,14 +21,14 @@ export async function signSession(key, sub, expires) {
   return `${payload}.${b64url(await crypto.subtle.sign("HMAC", key, enc.encode(payload)))}`;
 }
 
-/** The session's sub, or null when the value is forged, malformed or expired. */
+/** The session's { sub, issued } (ms), or null when the value is forged, malformed or expired. */
 export async function readSession(key, value, now) {
   const m = /^([^.]+)\.(\d+)\.([\w-]+)$/.exec(value ?? "");
   if (!m || Number(m[2]) <= now) return null;
   const expected = await signSession(key, m[1], m[2]);
   // Compare as HMACs of both, so the check takes the same time for any input.
   const [a, b] = await Promise.all([value, expected].map((v) => crypto.subtle.sign("HMAC", key, enc.encode(v))));
-  return b64url(a) === b64url(b) ? m[1] : null;
+  return b64url(a) === b64url(b) ? { sub: m[1], issued: Number(m[2]) - SESSION_MS } : null;
 }
 
 export function cookieValue(req) {

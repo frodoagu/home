@@ -67,6 +67,13 @@ const ROUTES = new Set([
 const PUBLIC = ["GET /api/health", "POST /api/session", "GET /api/session", "DELETE /api/session", "POST /api/stats"];
 const PRIVATE = new Set([...ROUTES].filter((r) => !PUBLIC.includes(r)));
 
+// No response is a page: one opened as a document (a sample, say) is never
+// sniffed into one, framed, or allowed to run anything.
+const HARDENING = {
+  "x-content-type-options": "nosniff",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'; sandbox",
+};
+
 const MiB = 2 ** 20;
 export const SAMPLE_LIMITS = { bytes: 3 * MiB, count: 24, quota: 100 * MiB, total: 1024 * MiB };
 
@@ -106,9 +113,10 @@ export function createApp({
   }
 
   async function currentUser(req) {
-    const sub = await readSession(key, cookieValue(req), now());
-    const user = sub ? db.user(sub) : null;
-    if (user) db.touchUser(user.sub, now());
+    const session = await readSession(key, cookieValue(req), now());
+    const user = session ? db.user(session.sub) : null;
+    if (!user || session.issued < user.created_at) return null;
+    db.touchUser(user.sub, now());
     return user;
   }
 
@@ -228,7 +236,6 @@ export function createApp({
         "content-type": row.type,
         // An id never changes its bytes.
         "cache-control": "private, max-age=31536000, immutable",
-        "x-content-type-options": "nosniff",
         "content-disposition": "attachment",
       },
     });
@@ -289,6 +296,7 @@ export function createApp({
         res = json({ error: "internal" }, 500);
       }
       requests.add(ROUTES.has(route) ? route : "other", res.status);
+      for (const [name, value] of Object.entries(HARDENING)) res.headers.set(name, value);
       return res;
     },
   };
