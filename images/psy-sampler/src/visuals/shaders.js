@@ -325,9 +325,10 @@ vec3 scene(vec2 uv) {
 }
 `;
 
-// A mandala: the plane folded into n mirrored sectors, rings of petals
-// blooming out from the centre in log scale, a flower of life turning under
-// them, and rays along the folds. Everything breathes with the bass.
+// A mandala that is a flower: rings of n petals (pointed, round or fanned,
+// uVar.y), each laid over and shading the one behind it, opening out from
+// under a seed head of Fibonacci spirals in log scale, so the bloom never
+// ends. Rays along the folds behind; everything breathes with the bass.
 const MANDALA = `
 float sectors() {
   return 6.0 + 2.0 * floor(uVar.x * 4.0);
@@ -340,50 +341,85 @@ vec2 fold(vec2 p, float n, float spin) {
   return length(p) * vec2(cos(a), sin(a));
 }
 
+// A petal's half width at t (0 at its base, 1 at its tip), 0..1 of its
+// sector: pointed (a lotus), round (a daisy) or a fan (a cosmos).
+float petalWidth(float t, float style) {
+  t = clamp(t, 0.0, 1.0);
+  if (style < 1.0) return pow(sin(PI * pow(t, 0.8)), 0.9);
+  if (style < 2.0) return 2.0 * sqrt(t * (1.0 - t));
+  return pow(t, 0.45) * sqrt(1.0 - pow(t, 6.0));
+}
+
 vec3 scene(vec2 uv) {
   float n = sectors();
-  float breathe = 1.0 + 0.12 * uBass + 0.06 * uKick;
-  vec2 p = uv * 0.85 / breathe;
-  float r = length(p);
-  vec3 col = vec3(0.0);
-  float seg = TAU / n;
+  float style = floor(uVar.y * 3.0);
+  float breathe = 1.0 + 0.1 * uBass + 0.05 * uKick;
+  vec2 p = uv * 0.9 / breathe * rot(uTime * 0.02);
+  float r = max(length(p), 1e-4);
+  float ang = atan(p.y, p.x) / TAU;
+  float px = fwidth(r) * 1.5;
 
-  // Petal rings, each born at the centre and growing out.
-  for (int k = 0; k < 6; k++) {
-    float fk = float(k);
-    float u = fract(fk / 6.0 + uTime * 0.035);
-    float R = 0.04 * exp(u * 3.6);
-    float fade = smoothstep(0.0, 0.25, u) * smoothstep(1.0, 0.75, u);
-    float spin = (mod(fk, 2.0) * 2.0 - 1.0) * uTime * 0.08 + fk * 0.4;
-    vec2 q = fold(p, n, spin);
-    float petal = length(q - vec2(R, 0.0)) - R * sin(seg * 0.5) * (0.9 + 0.15 * sin(uTime + fk));
-    float inner = length(q - vec2(R * 1.35, 0.0)) - R * 0.18;
-    float w = 0.004 + 0.003 * uLead;
-    vec3 c = pal(fk * 0.13 + u * 0.5 + uTime * 0.02 + uVar.z);
-    col += c * fade * 1.4 * (w / (abs(petal) + w) + 0.6 * w / (abs(inner) + w));
-    col += c * fade * (0.12 + 0.15 * uBass) * smoothstep(0.01, 0.0, petal);
-  }
-
-  // Flower of life: 19 circles on a hex lattice, slowly turning.
-  vec2 f = p * rot(-uTime * 0.03) * (1.6 + 0.3 * uVar.y);
-  float R0 = 0.33;
-  float flower = 1e9;
-  for (int i = -2; i <= 2; i++) {
-    for (int j = -2; j <= 2; j++) {
-      if (abs(i + j) > 2) continue;
-      vec2 c = R0 * (float(i) * vec2(1.0, 0.0) + float(j) * vec2(0.5, 0.8660254));
-      flower = min(flower, abs(length(f - c) - R0));
-    }
-  }
-  col += pal(0.55 + uTime * 0.015 + uVar.w) * 0.0022 / (flower + 0.0022) * (0.35 + 0.65 * uPad + 0.5 * uKick) * smoothstep(1.2, 0.3, r);
-
-  // Rays along the mirror lines, and a pulsing star at the centre.
+  vec3 col = pal(0.7 + uVar.w) * 0.05 * smoothstep(1.6, 0.0, r);
+  // Rays along the folds, behind the petals.
   vec2 q = fold(p, n, uTime * 0.05);
-  col += pal(0.1 + r) * 0.0016 / (abs(q.y) + 0.0016) * smoothstep(1.4, 0.1, r) * (0.3 + uPerc);
-  col += pal(uBeats * 0.05) * exp(-r * (9.0 - 4.0 * uKick)) * (0.4 + 1.2 * uKick);
-  // A ring per beat rolling outwards.
-  col += pal(0.8 + uBeats * 0.05) * exp(-abs(r - uBeat * 1.4) * 30.0) * 0.6 * uKick;
-  col += pal(0.7) * 0.03 * smoothstep(1.5, 0.0, r);
+  col += pal(0.1 + r) * 0.0012 / (abs(q.y) + 0.0012) * smoothstep(1.5, 0.3, r) * (0.2 + 0.8 * uPerc);
+
+  // Rings of petals in log scale, born under the seed head and opening out:
+  // drawn from the outside in, each over (and shading) the ones behind it.
+  const int K = 7;
+  float stepK = 0.42;
+  float g0 = fract(uTime * 0.05);
+  float m = style == 1.0 ? 2.0 * n : n;
+  float open = 0.86 + 0.1 * uKick + 0.04 * uPad;
+  for (int j = K - 1; j >= 0; j--) {
+    float g = float(j) + g0;
+    float id = float(j) - floor(uTime * 0.05);
+    float R = 0.13 * exp(g * stepK);
+    float base = R * 0.3;
+    float fade = smoothstep(0.0, 0.6, g) * smoothstep(float(K), float(K) - 1.8, g);
+    float spin = 0.15 * sin(id * 1.7 + uTime * 0.1);
+    float a = fract(ang * m + 0.5 * mod(id, 2.0) + spin);
+    float c = (a - 0.5) * 2.0;
+    float tipR = style == 2.0 ? R * (1.0 - 0.07 * exp(-c * c * 30.0)) * (1.0 - 0.04 * abs(sin(c * PI * 1.5))) : R;
+    float t = (r - base) / (tipR - base);
+    float half_ = petalWidth(t, style) * open;
+    float d = max((abs(c) - half_) * r * PI / m, r - tipR);
+    float cover = smoothstep(px, -px, d) * fade;
+    float shadow = smoothstep(0.06 * R, -0.01 * R, d) * fade;
+    col *= 1.0 - 0.6 * shadow;
+
+    float x = clamp(abs(c) / max(half_, 1e-3), 0.0, 1.0);
+    float h = id * 0.11 + uVar.z + uTime * 0.01;
+    vec3 tint = mix(pal(h) * 0.25, pal(h + 0.08), smoothstep(-0.1, 0.9, t));
+    tint = mix(tint, pal(h + 0.3) * 1.3, smoothstep(0.55, 1.0, t) * 0.35);
+    float cup = 0.5 + 0.5 * sqrt(1.0 - x * x);
+    float veins = 0.88 + 0.12 * cos(x * PI * 7.0);
+    float rib = mix(0.75, 1.0, smoothstep(0.0, 0.12, x));
+    vec3 petal = tint * cup * veins * rib * (0.9 + 0.4 * uPad);
+    float rim = smoothstep(4.0 * px, 0.0, -d) * cover;
+    petal += pal(h + 0.5) * rim * (0.5 + 0.9 * uLead);
+    col = mix(col, petal, cover);
+  }
+
+  // The seed head: florets on Fibonacci spirals (13 one way, 21 the
+  // other), turning slowly, swelling with the kick.
+  float Rc = 0.17 * (1.0 + 0.06 * uKick);
+  col *= 1.0 - 0.55 * smoothstep(Rc * 1.4, Rc, r);
+  float l = log(r) - uTime * 0.04;
+  vec2 cell = vec2(13.0 * ang + 21.0 * l / TAU, 21.0 * ang - 13.0 * l / TAU);
+  vec2 f = fract(cell) - 0.5;
+  // Florets per pixel, from r alone: fwidth(cell) jumps on atan's seam.
+  float dense = 3.93 * fwidth(r) / r;
+  float seed = mix(smoothstep(0.42, 0.42 - max(dense, 0.08), length(f)), 0.45, smoothstep(0.25, 0.6, dense));
+  float lit = 0.6 + 0.4 * (0.5 - f.y) + 0.7 * smoothstep(0.18, 0.0, length(f - vec2(-0.1, 0.12)));
+  vec3 head = mix(pal(0.05 + uVar.w) * 0.08, pal(0.12 + uVar.w + r * 2.0) * lit + 0.12, seed);
+  head *= 0.6 + 0.6 * smoothstep(0.0, Rc, r) + 0.8 * uKick * seed;
+  float disc = smoothstep(Rc + px, Rc - px, r);
+  col = mix(col, head, disc);
+  col += pal(0.15 + uVar.w) * smoothstep(px * 3.0, 0.0, abs(r - Rc)) * (0.4 + 0.6 * uKick);
+  col += pal(uBeats * 0.05) * exp(-r * (14.0 - 6.0 * uKick)) * (0.3 + 0.9 * uKick);
+  // A ring of pollen per beat rolling outwards.
+  col += pal(0.8 + uBeats * 0.05) * exp(-abs(r - uBeat * 1.4) * 30.0) * 0.5 * uKick;
   return col;
 }
 `;
