@@ -84,6 +84,12 @@ describe("share links", () => {
     expect(Object.keys((await unpackSounds(await packSounds(mine))).variants)).toEqual(["perc.hat"]);
   });
 
+  it("carry the sounds banned from the autopilot, since they change what a seed plays", async () => {
+    const ws = { ...normalize({ banned: ["lead.acid"] }), seed: "s" };
+    const { sounds } = readFragment(await shareFragment(ws));
+    expect((await unpackSounds(sounds)).banned).toEqual(["lead.acid"]);
+  });
+
   it("carry edited and duplicated sounds, compressed", async () => {
     const ws = {
       ...normalize({

@@ -319,6 +319,17 @@ mix; a recording (which taps the output) does capture it. It does nothing on a
 sound that is not playing, which would only leave silence, and one finger
 cannot steal another's solo. A remount drops it.
 
+**⊘ ban** is a small button in the top corner of every tile (FX too), shown on
+hover (always, faintly, on touch): it keeps that sound away from the autopilot
+when it repeats too much. The banned ids live in the workspace (`banned`) and
+`unbanned()` takes them out of the lists every pilot pick reads (`advance`,
+`startPilot`, the bare-bar guard) and that the ✨ AI is offered and checked
+against, so a layer whose whole style pool is banned sits out. The pilot
+still draws its FX and then drops a banned one, so FX bans never shift the
+seed; loop bans do (the pools are shorter), which is why they travel in
+🔗 Share's `&s=`. Banned while the pilot plays it, the sound leaves on the next
+bar line. By hand it still plays: it is the autopilot's ban, not a mute.
+
 Each **layer volume** (the slider under a layer's name, 0-150 %) is a fader over
 every sound in that layer, on top of each sound's own volume. It is not a node:
 `engine.setLayerVolume` multiplies it into the level of the lanes and FX shots
@@ -646,7 +657,7 @@ Everything lives in one object, the **workspace** (`workspace.js`), in
 `localStorage` (`psy-sampler:v2`, per browser): BPM, the switches, the order of
 layers and tiles, the copies, the names, the edited data, the snapshots, the
 length of the BPM change, the seed, the autopilot's style and changes, each
-sound's Improvise amount, and the language. The ✨ AI's settings live apart, in
+sound's Improvise amount, the sounds banned from the autopilot, and the language. The ✨ AI's settings live apart, in
 `psy-sampler:ai` (API keys included, so they never leave the browser). The only thing not saved is what's
 playing (a page load starts silent: no audio without a click). `normalize()` is
 the only way in, for storage and for an imported preset: it checks every field
@@ -1169,8 +1180,8 @@ For the replay to hold:
   Breakdown on. A seed shared before them plays the same track up to its
   first tease or its first Breakdown → Build-up.
 
-**🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited or
-duplicated sounds, `&s=…`: those sounds as a JSON preset, `deflate-raw` and
+**🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited,
+duplicated or banned sounds, `&s=…`: those sounds (and the bans) as a JSON preset, `deflate-raw` and
 base64url (`share.js`), because the track is only the same with the same sounds.
 What the autopilot wrote or dressed doesn't travel: the seed regenerates it.
 A track the ✨ AI planned also carries `&ai=…`: the plans the pilot took (see

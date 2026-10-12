@@ -27,6 +27,7 @@ import {
   skip,
   startPilot,
   toneOf,
+  unbanned,
   withPlan,
 } from "./autopilot.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
@@ -345,6 +346,27 @@ describe("autopilot", () => {
       const added = Object.values(full).filter((id) => !Object.values(bare).includes(id));
       expect(added).toHaveLength(1);
       expect(STYLES.darkpsy.pool[layerOfVariant(added[0])]).toContain(added[0]);
+    }
+  });
+
+  it("never plays a banned sound; a layer with its whole pool banned sits out", () => {
+    const banned = ["lead.acid", "perc.hat", "bass.rolling", "bass.rollingOct", "bass.gallop"];
+    const free = unbanned(lists, banned);
+    expect(unbanned(lists, [])).toBe(lists);
+    expect(free.lead).not.toContain("lead.acid");
+    const rng = seeded(3);
+    let { pilot, active } = startPilot(free, rng, "psytrance");
+    for (let i = 0; i < 200; i++) {
+      ({ pilot, active } = advance(pilot, active, free, rng, { style: "psytrance" }));
+      for (const id of Object.values(active)) expect(banned).not.toContain(id);
+      expect(count(active, "bass")).toBe(0);
+    }
+    const bare = { kick: "kick.punchy" };
+    const noMelody = unbanned(lists, [...lists.lead, ...lists.pad]);
+    expect(fillMelodic(bare, noMelody, seeded(1), "psytrance")).toEqual(bare);
+    const leadsOnly = unbanned(lists, lists.pad);
+    for (let seed = 1; seed < 10; seed++) {
+      expect(count(fillMelodic(bare, leadsOnly, seeded(seed), "psytrance"), "lead")).toBe(1);
     }
   });
 

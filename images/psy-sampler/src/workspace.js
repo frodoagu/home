@@ -36,6 +36,7 @@ export { layerOfVariant };
  *   variants: { variant: edited data } (copies always have an entry)
  *   auto:     variants the autopilot wrote or dressed (it may rewrite them)
  *   improv:   { variant: how much improvise varies it, 0-1 } (0.5 is left out)
+ *   banned:   variants the autopilot never plays or fires (by hand they still do)
  *   snapshots: [{ id, name, section, active, data }] in tile order (snapshots.js)
  *   active:   { lane key: variant } (presets only: a page load starts silent)
  * }
@@ -72,6 +73,8 @@ export function normalize(raw) {
   for (const [id, v] of Object.entries(src.improv ?? {})) {
     if (known.has(id) && Number.isFinite(v)) improv[id] = Math.min(1, Math.max(0, v));
   }
+
+  const banned = unique((Array.isArray(src.banned) ? src.banned : []).filter((id) => known.has(id))).sort();
 
   const active = cleanActive(src.active, known);
   const snapshots = [];
@@ -110,6 +113,7 @@ export function normalize(raw) {
     variants,
     auto,
     improv,
+    banned,
     snapshots,
     active,
   };

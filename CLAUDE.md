@@ -477,6 +477,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   thing that moves the grid itself (`engine.restart()` on the first tap of a count,
   `engine.align()` after), timed by the event's `timeStamp` and mapped through
   `getOutputTimestamp()` — `Date.now()` in the handler jitters by main-thread load.
+  Sounds banned with ⊘ (`ws.banned`) leave the pilot's and the ✨ AI's lists
+  via `unbanned()`, so they shorten pools and travel in 🔗's `&s=`; banned FX
+  are drawn and then dropped, so they don't shift seeds.
   Duplicated sounds are ids `<base>~n` resolved through the base
   (`defOf`/`baseOf`), not new DEFAULTS entries. A seed must replay the same track anywhere: the autopilot
   reads pools sorted by id and consumes its PRNG even when it skips a user-owned

@@ -2,7 +2,8 @@
 // the 32-bit state of the PRNG (editing.js seeded) behind the autopilot, so
 // the same seed plays the same track anywhere. A share link carries the seed,
 // the style and the BPM in the URL fragment, plus the user's own sounds (a
-// deflated preset), since the track is only the same with the same sounds.
+// deflated preset), since the track is only the same with the same sounds
+// (and the same banned ones: they leave the pilot's pools).
 // What the autopilot wrote is left out: the seed writes it again. A track the
 // ✨ AI planned also carries the plans the pilot took (planner.js), since no
 // seed can bring a model's answers back: any browser replays them, with a
@@ -76,18 +77,18 @@ const pack = async (value) =>
 const unpack = async (text, max) => new TextDecoder().decode(await inflate(fromBase64Url(text), max));
 
 export async function packSounds(ws) {
-  const { lists, names } = ws;
-  return pack(toPreset({ lists, names, variants: ownVariants(ws), auto: [] }));
+  const { lists, names, banned } = ws;
+  return pack(toPreset({ lists, names, variants: ownVariants(ws), auto: [], banned }));
 }
 
 export async function unpackSounds(text, max = SOUNDS_MAX) {
-  const { lists, names, variants, auto } = parsePreset(await unpack(text, max));
-  return { lists, names, variants, auto };
+  const { lists, names, variants, auto, banned } = parsePreset(await unpack(text, max));
+  return { lists, names, variants, auto, banned };
 }
 
 // The sounds are worth sending only when they are not the factory ones.
 export const hasCustomSounds = (ws) =>
-  Object.keys(ownVariants(ws)).length > 0 || Object.keys(ws.names).length > 0;
+  Object.keys(ownVariants(ws)).length > 0 || Object.keys(ws.names).length > 0 || ws.banned.length > 0;
 
 /**
  * "#seed=…&style=…&bpm=…[&s=…][&ai=…]" for `ws` (async: compressing). `plans`
