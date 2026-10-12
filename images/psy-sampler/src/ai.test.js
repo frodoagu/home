@@ -117,10 +117,14 @@ describe("an LM Studio endpoint", () => {
     expect(await lmstudio.start({ endpoint: LMSTUDIO_URL })).toBe("qwen2.5-7b-instruct");
     expect(await lmstudio.start({ endpoint: LMSTUDIO_URL, model: "mine" })).toBe("mine");
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([`${LMSTUDIO_URL}/models`, `${LMSTUDIO_URL}/models`]);
+    expect(lmstudio.known(LMSTUDIO_URL)).toEqual(["qwen2.5-7b-instruct"]); // what to pick from: no embeddings
+    expect(lmstudio.known("http://other:1234/v1")).toBeNull();
     await expect(createAi({ fetch: fakeFetch({ models: ["text-embedding-x"] }) }).lmstudio.start({ endpoint: LMSTUDIO_URL })).rejects.toThrow(
       "no model",
     );
-    await expect(createAi({ fetch: fakeFetch({ status: 500 }) }).lmstudio.start({ endpoint: LMSTUDIO_URL })).rejects.toThrow("HTTP 500");
+    const down = createAi({ fetch: fakeFetch({ status: 500 }) }).lmstudio;
+    await expect(down.start({ endpoint: LMSTUDIO_URL })).rejects.toThrow("HTTP 500");
+    expect(down.known(LMSTUDIO_URL)).toBeNull();
   });
 
   it("plans through chat/completions, with the instructions and the schema as response_format", async () => {

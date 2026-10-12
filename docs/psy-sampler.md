@@ -1282,10 +1282,12 @@ with a preset or the cloud save.
 
 **LM Studio**: Developer → start the server with **CORS** on, load a chat model,
 and pick *LM Studio* under ✨. The endpoint is cleaned to an http(s) base URL
-(`/v1` added when there's no path). With **Model** empty the page asks
-`/v1/models` and takes the first id that isn't an embedding; LM Studio lists
-every downloaded model when it loads them on demand, so with several of them
-name the one to use. Two gates sit in front of it:
+(`/v1` added when there's no path). **Model** is a dropdown of what the
+server lists at `/v1/models` (embeddings left out; LM Studio lists every
+downloaded model when it loads them on demand), read again whenever the AI
+starts, the endpoint or model changes, or on ↻. *Automatic* takes the first
+one. A saved model the server no longer lists stays selected, marked, and the
+status line says to download it or pick another. Two gates sit in front of it:
 
 - **CSP**: the page can only `fetch` origins in `connect-src`. The chart adds
   `ai.connectSrc` (loopback by default: `http://localhost:*`,

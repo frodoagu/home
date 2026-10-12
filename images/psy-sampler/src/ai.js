@@ -85,6 +85,7 @@ function chromeModel(api) {
 
 function openAiModel(fetchFn) {
   const models = new Map(); // endpoint -> the model it serves first
+  const lists = new Map(); // endpoint -> every chat model it listed last
 
   async function call(url, init) {
     const res = await fetchFn(url, init);
@@ -97,7 +98,9 @@ function openAiModel(fetchFn) {
   async function listed(endpoint, signal) {
     const list = await call(`${endpoint}/models`, { signal });
     const ids = (Array.isArray(list?.data) ? list.data : []).map((m) => m?.id);
-    const id = ids.find((m) => typeof m === "string" && !/embed/i.test(m)) ?? null;
+    const chat = [...new Set(ids.filter((m) => typeof m === "string" && m && !/embed/i.test(m)))];
+    lists.set(endpoint, chat);
+    const id = chat[0] ?? null;
     if (id) models.set(endpoint, id);
     return id;
   }
@@ -111,13 +114,17 @@ function openAiModel(fetchFn) {
 
   return {
     supported: () => typeof fetchFn === "function",
-    // Checks that the endpoint answers; resolves to the model it will ask.
+    // Checks that the endpoint answers (and reads its models again);
+    // resolves to the model it will ask.
     async start({ endpoint, model, signal } = {}) {
       models.delete(endpoint);
+      lists.delete(endpoint);
       const first = await listed(endpoint, signal);
       if (!model && !first) throw new Error(`${endpoint}: no model`);
       return model || first;
     },
+    // The chat models the endpoint listed when it last started, or null.
+    known: (endpoint) => lists.get(endpoint) ?? null,
     async plan(prompt, schema, { endpoint, model, signal } = {}) {
       const body = await call(`${endpoint}/chat/completions`, {
         method: "POST",
