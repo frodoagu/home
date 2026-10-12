@@ -231,7 +231,11 @@ export const PUMP = { peak: { pad: 0.6, lead: 0.35 } };
 // line up with them.
 export const PHRASE_LOOPS = 4;
 
-const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot);
+// A manual layer (the classics) is the listener's: the pilot never draws for
+// it and keeps whatever of it plays.
+const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
+const byHand = (active) =>
+  Object.fromEntries(Object.entries(active).filter(([, id]) => layerById(layerOfVariant(id))?.manual));
 const pick = (list, rng) => list[Math.floor(rng() * list.length)];
 // The section after `section`: one draw, like pick(), whatever its odds, so
 // odds only change the seeds that land on them.
@@ -319,7 +323,7 @@ export function arrange(section, active, lists, rng, style = STYLE_DEFAULT, hold
     wants[layerId] = 1;
     delete own[layerId]; // a plan with no lead and no pad still gets one
   }
-  const out = {};
+  const out = byHand(active);
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue; // draws nothing: older layers replay as before
     if (own[layer.id]) {

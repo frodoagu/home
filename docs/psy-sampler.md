@@ -1,8 +1,9 @@
 # psy-sampler
 
 A live electronic music machine at `https://psy.agu.com.ar`. Each button loops a
-layer (kick, bass, percussion, lead, pad, glitch; 9-11 sounds per layer) over a
-grid of 32 sixteenths (2 bars); FX are one-shots outside the loop. **Everything
+layer (kick, bass, percussion, lead, pad, glitch; 9-15 sounds per layer) over a
+grid of 32 sixteenths (2 bars), plus a layer of classics (hooks from famous
+tracks) played by hand; FX are one-shots outside the loop. **Everything
 is editable**: every button has a ▾ that opens its editor (steps, notes, synth,
 knobs, filter and distortion), any sound can be duplicated and renamed, and a
 signed-in user can upload samples to their profile and play any sound through
@@ -33,7 +34,7 @@ users' own samples, which psy-sync keeps.
 ```mermaid
 flowchart LR
   subgraph lanes["one lane per playing variant: input → insert → GainNode"]
-    K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n]
+    K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n] & CL[classic ×n]
   end
   FX[one insert + GainNode per playing FX]
   lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
@@ -200,6 +201,7 @@ global switch in the transport (the return glides over 30 ms):
 | lead | 0.3 | 0.25 |
 | pad | — | 0.4 |
 | glitch | 0.25 | 0.15 |
+| classic | 0.3 | 0.25 |
 | FX | 0.2 | 0.35 |
 
 Kick and bass stay dry: a tail under them only muddies the low end. The delay is
@@ -319,7 +321,7 @@ mix; a recording (which taps the output) does capture it. It does nothing on a
 sound that is not playing, which would only leave silence, and one finger
 cannot steal another's solo. A remount drops it.
 
-**⊘ ban** is a small button in the top corner of every tile (FX too), shown on
+**⊘ ban** is a small button in the top corner of every tile the pilot can play (FX too, not the classics), shown on
 hover (always, faintly, on touch): it keeps that sound away from the autopilot
 when it repeats too much. The banned ids live in the workspace (`banned`) and
 `unbanned()` takes them out of the lists every pilot pick reads (`advance`,
@@ -971,6 +973,12 @@ for it (`leftOut`), which is how a future layer can be added without shifting
 the seeds of the styles that skip it. Adding the glitch layer to every style did
 shift every seed: a seed shared before it plays a different track now.
 
+The classics layer is `manual` in the catalog: the autopilot and the ✨ AI
+never see it (not even "anything goes"), so it draws nothing and shifted no
+seed. A classic you start by hand rides through every section change and swap
+untouched (`arrange` carries it over) until you stop it; only the pilot's mix
+moves its volume.
+
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
 Build-up. A Build-up lands on a Peak 9 times in 10; the tenth is a **tease**
 into a Breakdown (`odds`, see *Drops*). Each section's length is drawn from
@@ -1532,6 +1540,15 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 | | Bwip | a square rising 3 octaves in 80 ms, before each offbeat |
 | | Tape stop | a saw slowing to 4 % of its pitch, the filter closing with it, at the end of the loop |
 | | Lasers | a saw diving from 4 kHz to 60 Hz in 150 ms on every off-beat 8th, the last of the bar accented |
+| Classics (stack, by hand) | Sandstorm | supersaw, Darude's runs (5, 7, 7, 7 sixteenths, each ending long) on A-D-C-G |
+| | Axel F | saw lead, Harold Faltermeyer's hook (and Crazy Frog's) |
+| | Popcorn | pluck, Gershon Kingsley's staccato bar, twice |
+| | Tetris | bit lead, Korobeiniki at speed ×½ (4 bars) |
+| | Mountain King | pluck, Grieg's theme in sixteenths, the top note sliding down E → D♯ → D |
+| | Für Elise | FM bell, Beethoven's theme at speed ×½ |
+| | Toccata | analog, Bach's mordent, held E and the run down to G♯ → A |
+| | Funkytown | rubber, Lipps Inc.'s riff, twice |
+| | Misirlou | acid, up and down A Phrygian dominant (Pump It) |
 | FX | Riser | BP noise 300 Hz → "To" (9 kHz) over "Length" (2 bars) |
 | | Riser + impact | the impact lands right at the end of the riser |
 | | Downlifter | BP noise "From" (8 kHz) → 150 Hz + sine 400→40 Hz |
@@ -1542,6 +1559,11 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 | | Reverse cymbal | HP noise ("HP cutoff", 5 kHz) swelling over "Length" (2 bars) and cutting on the bar line |
 | | Stutter roll | noise bursts accelerating from eighths to 64ths over "Length", the band rising to "To" |
 | | Tape stop | saw + sub falling from "From" (600 Hz) to 3 % over "Decay" (0.8 s), LP closing |
+
+The classics ([`classics.js`](../images/psy-sampler/src/audio/classics.js)) are
+moved to A like every other sound, so they sit on top of any mix; one that needs
+4 bars ships at speed ×½. Their scale is the piano roll's: the ones with notes
+outside A minor (D♯, B♭, C♯) open on the chromatic rows.
 
 FX length follows the BPM at the moment they fire. While the loop runs they come
 in on the next beat; with the loop stopped, right away.

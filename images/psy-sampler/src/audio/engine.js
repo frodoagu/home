@@ -56,7 +56,7 @@ const MASTER_GAIN = 0.7;
 const OUTPUT_TRIM = 0.8;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
-const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, glitch: 0.45, fx: 0.6 };
+const LAYER_LEVEL = { kick: 0.9, bass: 0.6, perc: 0.6, lead: 0.3, pad: 0.35, glitch: 0.45, classic: 0.3, fx: 0.6 };
 const BG_KICK_LEVEL = 0.6;
 // Sends per layer, after the lane gain (so they follow its fades). Kick and
 // bass stay dry: tails under them only muddy the low end.
@@ -65,6 +65,7 @@ const SENDS = {
   lead: { delay: 0.3, reverb: 0.25 },
   pad: { delay: 0, reverb: 0.4 },
   glitch: { delay: 0.25, reverb: 0.15 },
+  classic: { delay: 0.3, reverb: 0.25 },
   fx: { delay: 0.2, reverb: 0.35 },
 };
 const DELAY_STEPS = 3; // dotted 8th: the classic psy lead echo

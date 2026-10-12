@@ -531,7 +531,7 @@ export function mountApp(root, engine, opts = {}) {
     const solo = layer.oneShot ? null : soloButton(id);
     const levelBar = layer.oneShot ? null : levelSlider(id, node, detailEl);
     const side = vary ? el("div", { class: "tile-side" }, vary, solo, edit) : edit;
-    const ban = el("button", {
+    const ban = layer.manual ? null : el("button", {
       type: "button",
       class: "ban-tile",
       "data-ban": id,
@@ -540,9 +540,9 @@ export function mountApp(root, engine, opts = {}) {
       title: tx.tile.banTitle,
       text: "⊘",
     });
-    ban.addEventListener("pointerdown", (e) => e.stopPropagation()); // a click, not a reorder
-    ban.addEventListener("click", () => setBanned(layer, id, !ws.banned.includes(id)));
-    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side, ban);
+    ban?.addEventListener("pointerdown", (e) => e.stopPropagation()); // a click, not a reorder
+    ban?.addEventListener("click", () => setBanned(layer, id, !ws.banned.includes(id)));
+    const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side, ...(ban ? [ban] : []));
     tiles.set(id, { layer, node, tile, edit, vary, solo, ban, levelBar, labelEl, detailEl });
     return tile;
   }
@@ -894,7 +894,7 @@ export function mountApp(root, engine, opts = {}) {
       tile.classList.toggle("is-auto", ws.auto.includes(id));
       tile.classList.toggle("is-varying", state.varying.has(id));
       tile.classList.toggle("is-banned", ws.banned.includes(id));
-      ban.setAttribute("aria-pressed", String(ws.banned.includes(id)));
+      ban?.setAttribute("aria-pressed", String(ws.banned.includes(id)));
       solo?.classList.toggle("is-idle", !on && lanes.bgKick !== id);
       if (vary) {
         vary.setAttribute("aria-pressed", String(state.varying.has(id)));

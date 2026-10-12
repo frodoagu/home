@@ -179,7 +179,7 @@ describe("layout", () => {
   });
 
   it("has one row per layer plus the snapshots, and a 16-cell bar with the 4 beats marked", () => {
-    expect(root.querySelectorAll("section.layer")).toHaveLength(8);
+    expect(root.querySelectorAll("section.layer")).toHaveLength(9);
     expect(root.querySelector("section.layer:last-of-type").dataset.layer).toBe("snap");
     expect(root.querySelectorAll(".cell")).toHaveLength(16);
     expect([...root.querySelectorAll(".cell.beat")].map((c) => c.textContent)).toEqual(["1", "2", "3", "4"]);
@@ -2082,6 +2082,7 @@ describe("autopilot", () => {
   it("⊘ bans a sound: a playing one leaves on the next bar and the pilot never plays it again", () => {
     const ban = (id) => $(`[data-ban="${id}"]`);
     expect(ban("fx.impact")).not.toBeNull(); // one-shots too: the pilot fires them
+    expect(ban("classic.popcorn")).toBeNull(); // the pilot never plays a manual layer
     autoBtn().click();
     const id = pressed().find((v) => v.startsWith("kick."));
     ban(id).click();
