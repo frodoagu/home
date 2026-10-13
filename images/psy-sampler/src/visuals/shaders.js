@@ -576,20 +576,39 @@ vec3 scene(vec2 uv) {
 
 // A reef: Knighty's pseudo-Kleinian fractal (box folds and sphere
 // inversions, near the limit set of a Kleinian group), repeated along the
-// flight and bored through. Its finest tips glow like polyps with the hats
-// and the lead; the box (uVar.x, uVar.z) sets the species.
+// flight and bored through along its path (flight.js): the corners so far,
+// uPath, oldest first, then on from the last one, swinging from uFrom to uTo
+// as uBend goes 0 to 1. Its finest tips glow like polyps with the hats and
+// the lead; the box (uVar.x, uVar.z) sets the species.
 const CORAL = `
+uniform vec4 uPath[6];
+uniform vec3 uEye, uAhead, uFrom, uTo;
+uniform float uBend;
+
 vec3 box() {
   return vec3(0.92436 + 0.06 * (uVar.x - 0.5), 0.90756, 0.92436 + 0.05 * (uVar.z - 0.5));
 }
 
-vec2 path(float z) {
-  return vec2(0.25 * sin(z * 0.4), 0.2 * cos(z * 0.3));
+float segment(vec3 p, vec3 a, vec3 b) {
+  vec3 pa = p - a, ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0));
+}
+
+float ray(vec3 p, vec3 a, vec3 d) {
+  vec3 pa = p - a;
+  return length(pa - d * max(dot(pa, d), 0.0));
+}
+
+float flight(vec3 p) {
+  float d = 1e9;
+  for (int i = 0; i < 5; i++) d = min(d, segment(p, uPath[i].xyz, uPath[i + 1].xyz));
+  vec3 tip = uPath[5].xyz;
+  return min(d, mix(ray(p, tip, uFrom), ray(p, tip, uTo), uBend));
 }
 
 float reef(vec3 p, out vec4 orb) {
   vec3 C = box();
-  float bore = 0.12 - length(p.xy - path(p.z));
+  float bore = 0.12 - flight(p);
   p = mod(p + 2.0 * C, 4.0 * C) - 2.0 * C;
   float k = 1.0;
   orb = vec4(1e3);
@@ -612,10 +631,9 @@ float reefD(vec3 p) {
 }
 
 vec3 scene(vec2 uv) {
-  float z = uTime * (0.12 + 0.1 * uEnergy) + 0.12 * uPush;
-  vec3 ro = vec3(path(z), z);
-  mat3 cam = camera(ro, vec3(path(z + 0.5), z + 0.5), uTime * 0.05);
-  vec3 rd = cam * normalize(vec3(uv, 1.1 - 0.06 * uSurge));
+  vec3 ro = uEye;
+  mat3 cam = camera(ro, ro + uAhead, 0.0);
+  vec3 rd = cam * normalize(vec3(uv * rot(uTime * 0.05), 1.1 - 0.06 * uSurge));
   float x = 0.0, d = 0.0;
   vec4 orb;
   int n = steps(50.0, 120.0), i;

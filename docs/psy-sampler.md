@@ -1836,6 +1836,15 @@ spirals). The organic and 2D-fractal ones:
   flies through it, veins of light with the lead.
 - **Fractal reef** (`coral`): Knighty's pseudo-Kleinian fractal (box folds and
   sphere inversions) repeated along the flight; polyps glow with the hats.
+  The flight (`flight.js`) turns on the beat: each kick (each bar in a
+  breakdown) puts a corner just ahead of the camera and the path leaves it
+  10-30° off the heading, the way hashed from the turn's count (never steeper
+  than 40°). The tunnel is bored along that path, the stretch past the corner
+  swings to the new heading over 0.4 beats and is done before the camera gets
+  there, and the camera rounds each corner within 0.05 of it, so the walls
+  (0.12 away) never come closer than 0.07: `flight.test.js` checks it on every
+  frame. A kick that comes before the last leg is long enough flies on.
+  `prefers-reduced-motion` flies straight.
 - **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
   their borders, nuclei, grains and an out-of-focus layer behind; a ripple per
   kick swells them. Dark field or stained.
