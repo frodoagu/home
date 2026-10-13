@@ -2,12 +2,12 @@ export default {
   langName: "Português",
   synthNote: "∿ Zero samples: cada som de fábrica é uma fórmula matemática calculada ao vivo. Nada gravado, nada comprimido: lossless.",
   lede:
-    "Uma máquina de música eletrônica ao vivo: kick, baixo, percussão, glitches, leads, pads e FX que você monta, " +
+    "Um DAW de música eletrônica ao vivo, no navegador: kick, baixo, percussão, glitches, leads, pads e FX que você monta, " +
     "edita, filtra, distorce e mixa enquanto tocam, ou seus próprios samples. Escolha um estilo e deixe o 🤖 Piloto automático montar a faixa " +
     "a partir de uma semente, ou assuma o controle: enfileire fases, improvise partes e salve momentos com 📸.",
   help: {
     open: "📖 Ajuda",
-    title: "Como usar o Psy Layers",
+    title: "Como usar o Psy Layers DAW",
     close: "Fechar",
     intro: "Primeiro os truques que não se veem de cara; depois, tudo o que cada parte faz.",
     search: "Buscar na ajuda…",
@@ -54,6 +54,7 @@ export default {
           ["🤖 Piloto automático", "Monta a faixa sozinho: liga e desliga camadas a cada frase, dispara FX, escreve melodias e vai passando pelas fases."],
           ["Fases", "Intro, Groove, Subida, Pico e Break. Um clique enfileira uma: entra quando acaba a que está tocando. ✕ tira da fila."],
           ["⏭ Próxima", "Termina a fase que está tocando no próximo loop."],
+          ["🌅 Encerrar", "Termina o set em 5 minutos no máximo: o piloto põe na fila as últimas fases (um pico de despedida) e um Outro que baixa a energia (primeiro sai o baixo, depois o kick) e nos seus últimos 4 compassos enlouquece: tudo volta no máximo com viradas, glitches e FX, e as visuais piscam feito loucas. Aí tudo corta. Com ✨ IA, a IA planeja essas fases. Outro clique cancela enquanto o Outro não começou."],
           ["Estilo", "Quais sons o piloto usa. Mudar leva o BPM ao do estilo, aos poucos."],
           ["Mudanças", "A cada quantos compassos o piloto troca um som dentro de uma fase; o de snapshots, a cada quantos passa ao seguinte."],
           ["Volumes", "O piloto mixa: cada fase tem seu equilíbrio, a subida cresce até o pico, os sons empilhados dividem o espaço e o pad recua sob o lead. Mexe no preenchimento de tudo o que toca aos poucos, em curvas suaves, o seu também."],
@@ -223,7 +224,7 @@ export default {
     empty: "Nada tocou: não há gravação.",
     unsupported: "Este navegador não consegue gravar.",
   },
-  sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break" },
+  sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break", outro: "Outro" },
   ai: {
     settings: "Ajustes da IA",
     button: "✨ IA",
@@ -280,6 +281,9 @@ export default {
     formingTitle: "A IA está montando a sequência de fases da faixa",
     formed: "Sequência da IA",
     formReady: (n) => `✨ A IA montou a sequência: ${n} fases na fila. ✕ tira uma.`,
+    closed: "Encerramento da IA",
+    closingTitle: "A IA está planejando o encerramento do set",
+    closingReady: (route) => `🌅 A IA planejou o encerramento: ${route}.`,
     thinking: "✨ pensando…",
     thinkingTitle: "A IA está planejando as próximas fases",
     vibeAsking: (vibe, kept) => `✨ ${vibe ? `Vibe «${vibe}»` : "Sem vibe"}: ${kept ? `${kept} fica como estava e a IA volta a planejar o que segue…` : "a IA volta a planejar o que vem…"}`,
@@ -313,6 +317,13 @@ export default {
     queue: "Fases na fila",
     then: "depois",
     unqueue: (name) => `Tirar ${name} da fila`,
+    close: "🌅 Encerrar",
+    closeTitle: "Encerra o set em 5 minutos no máximo: as últimas fases, um pico de despedida e um Outro que baixa e termina enlouquecido, com as visuais piscando (com ✨ IA, a IA as planeja). Outro clique cancela enquanto o Outro não começou",
+    closing: (route, time) => `🌅 Encerrando o set: ${route}. Termina antes de ${time}; 🌅 de novo cancela.`,
+    closingLeft: (bars, time) => `${bars} ${bars === 1 ? "compasso" : "compassos"} · 🌅 ${time}`,
+    closingChip: "Encerramento do set",
+    closeOff: "🌅 Encerramento cancelado: o set continua.",
+    closed: "🌅 Fim do set.",
   },
   styles: {
     house: "House",
@@ -489,9 +500,9 @@ export default {
     },
   },
   intro: {
-    title: "Isto é o Psy Layers",
+    title: "Isto é o Psy Layers DAW",
     what:
-      "Uma máquina de música eletrônica psicodélica que roda inteira no seu navegador. Sem samples: cada kick, " +
+      "Um DAW de música eletrônica psicodélica que roda inteiro no seu navegador. Sem samples: cada kick, " +
       "baixo, lead e pad é uma fórmula calculada ao vivo, e você escolhe o que toca e quando.",
     points: [
       ["🎛️", "Cada linha é uma camada: Kick, Baixo, Percussão, Lead, Pad, Glitch e FX. Um clique liga um som, outro desliga, e ele entra bem no próximo compasso."],
@@ -877,7 +888,7 @@ export default {
   scales: { minor: "Lá menor", phrygian: "Lá frígio", harmonic: "Lá menor harmônica", chromatic: "Cromática" },
   noteNames: ["Dó", "Dó#", "Ré", "Mi♭", "Mi", "Fá", "Fá#", "Sol", "Sol#", "Lá", "Si♭", "Si"],
   visuals: {
-    title: "Psy Layers · Visuais",
+    title: "Psy Layers DAW · Visuais",
     button: "🌀 Visuais",
     buttonTitle: "Fractais, mandalas e texturas orgânicas em tela cheia, no ritmo do que toca",
     scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", flow: "Fluido", julia: "Julia", gyroid: "Carne de giroide", coral: "Recife fractal", cells: "Células", phyllo: "Romanesco", hyper: "Mosaico hiperbólico", turing: "Padrões de Turing", physarum: "Physarum" },

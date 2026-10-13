@@ -321,7 +321,9 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     }
     if (!renderer) return;
     const strobeLevel = settings.strobe;
-    const invert = strobeLevel >= 0.75 && s.sinceDrop >= 0 && s.sinceDrop < 2 && Math.floor(s.sinceDrop * 2) % 2 === 1 ? 1 : 0;
+    // The colours flip on the drop's off-8ths, and on every other 16th of a set's frenzy.
+    const flips = (s.sinceDrop >= 0 && s.sinceDrop < 2 && Math.floor(s.sinceDrop * 2) % 2 === 1) || (s.frenzy > 0 && Math.floor(s.beats * 4) % 2 === 1);
+    const invert = strobeLevel >= 0.75 && flips ? 1 : 0;
     renderer.render({
       uniforms: {
         uTime: time,

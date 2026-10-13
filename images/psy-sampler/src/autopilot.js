@@ -49,6 +49,13 @@
 // stands in for the pick of the next section; the queue still goes first.
 // The ✨ AI may also lay out the form of the whole track (`withForm`): the
 // sections to walk, in order, after whatever is queued by hand.
+//
+// 🌅 closes the set (`closeSet`): the sections up to a last peak are queued,
+// then the outro, which winds the track down and, in its last FRENZY_LOOPS,
+// goes wild (`frenzy`): everything back at full, wide open, more glitch and
+// percussion, rolls and FX; the set ends with it, cold (`advance` says `end`). It all fits in CLOSE_SECONDS: the pilot counts
+// the loops left (`closing.left`), shortens a section that would not leave
+// the outro its room and goes straight to it when not a phrase is left.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { LEVEL } from "./audio/params.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
@@ -78,8 +85,18 @@ export const SECTIONS = {
     next: ["build"],
     shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1, glitch: [0, 1] },
   },
+  // The end of a set, only ever queued by 🌅 (closeSet): what plays winds
+  // down, then goes wild (FRENZY_MIX), and the set ends with it. No pick
+  // leads here, so seeds replay as before.
+  outro: {
+    loops: [8, 12, 16],
+    next: ["breakdown"],
+    shape: { kick: [0, 1], bass: [0, 1], perc: [0, 2], lead: [0, 1], pad: [1, 2], glitch: [0, 1] },
+  },
 };
-export const SECTION_IDS = Object.keys(SECTIONS);
+export const OUTRO = "outro";
+// The sections a listener or a plan may pick: the outro only closes a set.
+export const SECTION_IDS = Object.keys(SECTIONS).filter((id) => id !== OUTRO);
 
 export const STYLES = {
   house: {
@@ -211,7 +228,12 @@ export function bpmFor(style, bpm) {
 export const CHANGE_BARS = [2, 4, 8, 16, 32];
 export const CHANGE_DEFAULT = 8;
 
-const ENTRY_FX = { peak: ["fx.crash", "fx.impact"], breakdown: ["fx.down"], groove: [null, null, "fx.siren"] };
+const ENTRY_FX = {
+  peak: ["fx.crash", "fx.impact"],
+  breakdown: ["fx.down"],
+  groove: [null, null, "fx.siren"],
+  outro: ["fx.down", "fx.reverse"],
+};
 const BUILD_FX = ["fx.riser", "fx.riserImpact", "fx.reverse"];
 const REWRITE = { build: ["lead", 0.5], breakdown: ["lead", 0.6], groove: ["bass", 0.25] };
 const KEEP = 0.75; // a playing variant survives a section change
@@ -226,7 +248,26 @@ export const MIX = {
   build: { perc: [0.9, 1.15], lead: [0.8, 1.15], pad: [1, 0.8], glitch: [0.8, 1.1] },
   peak: { lead: 1.1, pad: 0.95 },
   breakdown: { perc: 0.75, lead: [0.9, 1.1], pad: 1.3, glitch: 0.8 },
+  // The opening backwards, up to the frenzy (outro's `at` stops short of
+  // it): the bass leaves first, then the kick, and the rest winds down low.
+  // [from, to, start, end]: `from` holds until `start`, `to` from `end`.
+  outro: {
+    kick: [0.9, 0, 0.35, 0.75],
+    bass: [1, 0, 0.15, 0.5],
+    perc: [0.8, 0.3, 0.2, 0.8],
+    lead: [1, 0.5, 0.4],
+    pad: [1.2, 0.6, 0.5],
+    glitch: [0.8, 0.3, 0, 0.6],
+  },
 };
+// The outro's last loops: the frenzy, everything back up and over the top.
+// The first loop's line climbs to it from the wind-down: a 2-bar swell.
+export const FRENZY_LOOPS = 2;
+export const FRENZY_MIX = { kick: 1, bass: 0.9, perc: 1.15, lead: 1.1, pad: 0.85, glitch: 1.35 };
+// What the frenzy stacks in, at least: a kick, and percussion and glitch to these many.
+const FRENZY_STACK = { kick: 1, perc: 2, glitch: 2 };
+// Its FX: a riser or a siren as it starts, a stutter or a tape stop to end on.
+const FRENZY_FX = [["fx.riser", "fx.siren"], ["fx.stutter", "fx.tapeStop"]];
 // The tone each layer gets per section, in Hz (insert.js hp / lp): [as the
 // section starts, as it ends] or one value; absent is open. It moves in
 // exponential lines, so a lowpass opens evenly in octaves. Kick and bass
@@ -237,6 +278,15 @@ export const TONE = {
   build: { lead: { lp: [1500, LP_OPEN] }, pad: { hp: [180, 600] } },
   peak: { pad: { hp: 220 } },
   breakdown: { lead: { lp: [1200, 6000] }, perc: { lp: 2500 }, glitch: { lp: 3000 } },
+  // The outro closes the lowpass on everything, kick and bass too, as each fades.
+  outro: {
+    kick: { lp: [LP_OPEN, 150, 0.35, 0.75] },
+    bass: { lp: [LP_OPEN, 120, 0.15, 0.5] },
+    perc: { lp: [9000, 1500] },
+    lead: { lp: [5000, 700] },
+    pad: { lp: [3000, 500] },
+    glitch: { lp: [6000, 1200] },
+  },
 };
 export const TONE_LAYERS = ["perc", "lead", "pad", "glitch"];
 
@@ -271,6 +321,7 @@ export const OPENING_OPEN = ["kick", "bass"];
 // intro, the most in the build; the breakdown lays its theme out as written.
 export const IMPROVISE = {
   intro: {},
+  outro: {},
   groove: { perc: 0.3, lead: 0.3, glitch: 0.5 },
   build: { perc: 0.6, lead: 0.5, glitch: 0.7 },
   peak: { bass: 0.25, perc: 0.5, lead: 0.4, glitch: 0.7 },
@@ -465,11 +516,15 @@ export function joinPilot(active, section = null) {
   return { ...fresh(at, SECTIONS[at].loops[0]), ...(section ? { rearrange: true } : {}) };
 }
 
-/** Jumps the pilot to `section` (a recalled snapshot's), keeping the queue. */
-export const moveTo = (pilot, section) => ({
-  ...fresh(section, SECTIONS[section].loops[0], pilot.queue, pilot.form),
-  ...handedOn(pilot.handoff, section),
-});
+/** Jumps the pilot to `section` (a recalled snapshot's), keeping the queue and a closing. */
+export const moveTo = (pilot, section) => {
+  const length = SECTIONS[section].loops[0];
+  return {
+    ...fresh(section, pilot.closing ? fitLength(section, length, pilot.closing.left) : length, pilot.queue, pilot.form),
+    ...handedOn(pilot.handoff, section),
+    ...(pilot.closing ? { closing: pilot.closing } : {}),
+  };
+};
 
 /**
  * Hands the pilot a plan (planner.js normalizePlan) for the section after
@@ -559,6 +614,106 @@ export function styleAt(pilot, slot, playing) {
   return playing;
 }
 
+/* ---- 🌅 the closing: the set ends within CLOSE_SECONDS ---- */
+
+export const CLOSE_SECONDS = 300;
+// Loops the outro is sure to get (16 bars): a section that would leave it
+// less is cut short, to whole phrases, or skipped.
+export const OUTRO_MIN = 8;
+// The sections a closing walks from each one before the outro, when no plan
+// lays them out: up to a last peak, the one the night says goodbye with.
+export const CLOSE_ROUTE = {
+  intro: ["build", "peak"],
+  groove: ["build", "peak"],
+  build: ["peak"],
+  peak: ["breakdown", "build", "peak"],
+  breakdown: ["build", "peak"],
+};
+// Sections a closing lays out at most before the outro.
+export const CLOSE_MAX = 4;
+
+/** The loops `section` lasts with `left` loops of the set to go as it starts: the outro takes what is left. */
+function fitLength(section, length, left) {
+  if (section === OUTRO) return Math.max(1, Math.min(length, left));
+  const room = Math.floor((left - OUTRO_MIN) / PHRASE_LOOPS) * PHRASE_LOOPS;
+  return Math.max(1, Math.min(length, room));
+}
+
+// Under a closing, what comes in with `left` loops of the set to go: `section`,
+// or the outro when not a phrase of it fits before the outro's room.
+const closingPick = (section, left) => (section === OUTRO || left - OUTRO_MIN < PHRASE_LOOPS ? OUTRO : section);
+
+/**
+ * 🌅 Closes the set in at most `loops` more loops (the one playing counts
+ * whole): this section plays out (cut short if it would not leave the outro
+ * its room), the one its last loop announced stays, then `route` (CLOSE_ROUTE
+ * when none) and the outro. The form and a new style on its way go.
+ */
+export function closeSet(pilot, loops, route = null) {
+  const { handoff: _handoff, form: _form, ...rest } = pilot;
+  const settledNow = settled(pilot);
+  const left = settledNow.length ? pilot.left : Math.min(pilot.left, Math.max(1, loops - OUTRO_MIN));
+  const closing = { ...rest, left, queue: settledNow, closing: { left: loops } };
+  return closeWith(closing, route ?? CLOSE_ROUTE[settledNow.at(-1) ?? pilot.section] ?? []);
+}
+
+/**
+ * A closing's sections before the outro (the ✨ AI's, or CLOSE_ROUTE): as
+ * many of `route` as fit in what the set has left at their shortest, after
+ * the section playing and the one announced. The outro goes last.
+ */
+export function closeWith(pilot, route) {
+  const ahead = announced(pilot).filter((id) => id !== OUTRO);
+  let room = routeRoom(pilot);
+  const fits = [];
+  for (const id of route.slice(0, CLOSE_MAX)) {
+    if (!SECTION_IDS.includes(id) || id === "intro" || (room -= SECTIONS[id].loops[0]) < 0) break;
+    fits.push(id);
+  }
+  return { ...pilot, queue: [...ahead, ...fits, OUTRO] };
+}
+
+/** The section this one's last loop announced, if it did: [id] or []. */
+export const announced = (pilot) => settled(pilot);
+
+/**
+ * The loops a closing has for its sections before the outro, at their
+ * shortest: what the set has left after the section playing, the one
+ * announced and the outro's room.
+ */
+export function routeRoom(pilot) {
+  let room = pilot.closing.left - pilot.left - OUTRO_MIN;
+  for (const id of announced(pilot)) if (id !== OUTRO) room -= SECTIONS[id].loops[0];
+  return room;
+}
+
+/** Whether the pilot's loop is one of a closing outro's last FRENZY_LOOPS: the set going wild. */
+export const frenzy = (pilot) => Boolean(pilot?.closing) && pilot.section === OUTRO && pilot.left <= FRENZY_LOOPS;
+
+// The frenzy's mix: what plays, plus a kick if there was none and fresh
+// percussion and glitches up to FRENZY_STACK.
+function unleash(active, lists, rng, style) {
+  const out = { ...active };
+  for (const [layerId, most] of Object.entries(FRENZY_STACK)) {
+    if (leftOut(style, layerId)) continue;
+    const layer = layerById(layerId);
+    const playing = playingOf(out, layerId);
+    const fresh = shuffle(poolOf(lists, layerId, style).filter((id) => !playing.includes(id)), rng);
+    for (const id of fresh.slice(0, Math.max(0, most - playing.length))) out[laneKey(layer, id)] = id;
+  }
+  return out;
+}
+
+/** Whether a closing can still be called off: the outro is not playing nor announced. */
+export const closingOpen = (pilot) =>
+  Boolean(pilot?.closing) && pilot.section !== OUTRO && settled(pilot)[0] !== OUTRO;
+
+/** 🌅 again: the closing is called off, its sections leave the queue (the one announced stays). */
+export function uncloseSet(pilot) {
+  const { closing: _closing, ...rest } = pilot;
+  return { ...rest, queue: settled(pilot) };
+}
+
 /** By hand: a drop on the next loop. The section ends there and a peak comes in after it. */
 export function dropNext(pilot) {
   if (dropping(pilot)) return pilot;
@@ -575,6 +730,7 @@ export const dropping = (pilot) =>
   Boolean(pilot) &&
   pilot.left === 1 &&
   pilot.next !== undefined &&
+  pilot.next !== OUTRO &&
   (pilot.next === "peak" || pilot.section === "build" || Boolean(pilot.opening));
 
 /** This loop's number in its section (from 1) when it ends a phrase and is not a drop; else 0. */
@@ -602,26 +758,33 @@ export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
 /**
  * The next loop: { pilot, active, fx: [fx ids], rewrite: [variant ids] }.
  * `fx` fire on the boundary; `rewrite` are parts to write anew; `style`, a
- * new style that came in with this section (the pilot played it).
+ * new style that came in with this section (the pilot played it). Past a
+ * closing's outro there is none: `end` says the set is over.
  */
 export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, changeBars = CHANGE_DEFAULT } = {}) {
+  if (pilot.closing && pilot.section === OUTRO && pilot.left <= 1) return { pilot, active, fx: [], rewrite: [], end: true };
   const queue = pilot.queue ?? [];
   const form = pilot.form ?? [];
   const hold = pilot.theme ?? [];
   const plan = pilot.plan ?? null;
+  const closing = pilot.closing ? { left: pilot.closing.left - 1 } : null; // the loops left, this new one included
   if (pilot.left > 1) {
     const left = pilot.left - 1;
     const done = pilot.length - left;
     let next = active;
+    const wild = closing && pilot.section === OUTRO && left <= FRENZY_LOOPS;
+    // The frenzy stacks sounds in; an opening holds the bass it chose to fade
+    // in; an outro otherwise only lets go.
     if (pilot.rearrange) next = arrange(pilot.section, active, lists, rng, style, hold);
-    // An opening holds the bass it chose to fade in.
-    else if ((done * 2) % changeBars === 0)
+    else if (wild && left === FRENZY_LOOPS) next = unleash(active, lists, rng, style);
+    else if ((done * 2) % changeBars === 0 && pilot.section !== OUTRO)
       next = vary(active, lists, rng, style, pilot.opening ? [...hold, ...playingOf(active, "bass")] : hold);
-    const fx = [];
+    const fx = wild ? [pick(FRENZY_FX[left === 1 ? 1 : 0], rng)] : [];
     let upcoming;
-    if (left === 1) {
+    if (left === 1 && !(closing && pilot.section === OUTRO)) {
       upcoming = queue[0] ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
-      if (upcoming === "peak" || pilot.section === "build" || pilot.opening) fx.push(pick(BUILD_FX, rng));
+      if (closing) upcoming = closingPick(upcoming, closing.left - 1);
+      if (upcoming !== OUTRO && (upcoming === "peak" || pilot.section === "build" || pilot.opening)) fx.push(pick(BUILD_FX, rng));
     }
     return {
       pilot: {
@@ -635,13 +798,15 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         ...(plan ? { plan } : {}),
         ...(pilot.opening ? { opening: true } : {}),
         ...(pilot.handoff ? { handoff: pilot.handoff } : {}),
+        ...(closing ? { closing } : {}),
       },
       active: next,
       fx,
       rewrite: newLeads(active, next),
     };
   }
-  const section = queue[0] ?? pilot.next ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
+  const picked = queue[0] ?? pilot.next ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
+  const section = closing ? closingPick(picked, closing.left) : picked;
   const own = plan?.section === section ? plan : null; // a queued section beats the plan's
   // A new style lands with its own lead: the theme was the old style's.
   const landed = lands(pilot.handoff, section) ? pilot.handoff.style : null;
@@ -658,18 +823,23 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       .filter((id) => !theme.includes(id))
       .forEach((id) => rewrite.add(id));
   }
+  const length = own?.bars ? own.bars / 2 : lengthOf(section, rng);
+  // The outro is the last: what was queued after it, or skipped for it, goes.
+  const ends = closing && section === OUTRO;
+  const fitted = closing ? fitLength(section, length, closing.left) : length;
   return {
     pilot: {
       ...fresh(
         section,
-        own?.bars ? own.bars / 2 : lengthOf(section, rng),
-        queue[0] ? queue.slice(1) : queue,
-        !queue[0] && form[0] === section ? form.slice(1) : form,
+        fitted,
+        ends ? [] : queue[0] ? queue.slice(1) : queue,
+        ends ? [] : !queue[0] && form[0] === section ? form.slice(1) : form,
       ),
       ...(theme.length ? { theme } : {}),
       ...(landed ? {} : handedOn(pilot.handoff, section)),
+      ...(closing ? { closing } : {}),
     },
-    active: next,
+    active: ends && fitted <= FRENZY_LOOPS ? unleash(next, lists, rng, now) : next, // an outro with no time to wind down
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),
     ...(landed ? { style: landed } : {}),
@@ -685,16 +855,26 @@ function themeOf(pilot, section, active) {
   return pilot.section === "breakdown" ? playingOf(active, "lead") : (pilot.theme ?? []);
 }
 
+// How far into its section the pilot's current loop ends, 0..1. A closing
+// outro's wind-down is done as its frenzy starts.
+function wayOf(pilot) {
+  const done = pilot.length - pilot.left + 1;
+  const wound = pilot.closing && pilot.section === OUTRO && pilot.length > FRENZY_LOOPS ? pilot.length - FRENZY_LOOPS : pilot.length;
+  return Math.min(1, done / wound);
+}
+
 /** { variant id: volume } for every sound in `active`, as the pilot's current loop ends. */
 export function mixOf(pilot, active) {
-  const at = (pilot.length - pilot.left + 1) / pilot.length;
+  const at = wayOf(pilot);
+  const wild = frenzy(pilot);
   const ids = [...new Set(Object.values(active))];
   const count = {};
   for (const id of ids) count[layerOfVariant(id)] = (count[layerOfVariant(id)] ?? 0) + 1;
   const out = {};
   for (const id of ids) {
     const layer = layerOfVariant(id);
-    const [from, to, t] = span((pilot.opening ? OPENING_MIX : MIX[pilot.section])[layer] ?? 1, at);
+    const spec = wild ? FRENZY_MIX[layer] : (pilot.opening ? OPENING_MIX : MIX[pilot.section])[layer];
+    const [from, to, t] = span(spec ?? 1, at);
     let level = (from + (to - from) * t) * count[layer] ** -STACK;
     if (layer === "pad" && count.lead) level *= DUCK;
     out[id] = Number(Math.min(LEVEL.max, Math.round(level / LEVEL.step) * LEVEL.step).toFixed(2));
@@ -703,10 +883,10 @@ export function mixOf(pilot, active) {
 }
 
 // [from, to, how far between them] at `at` of the way: a spec's `start`
-// holds `from` until then.
+// holds `from` until then, and its `end` reaches `to` there.
 function span(spec, at) {
-  const [from, to, start = 0] = range(spec);
-  return [from, to, Math.max(0, (at - start) / (1 - start))];
+  const [from, to, start = 0, end = 1] = range(spec);
+  return [from, to, Math.min(1, Math.max(0, (at - start) / (end - start)))];
 }
 
 // [from, to] at `at` of the way, in ratios (octaves).
@@ -717,13 +897,16 @@ const along = (spec, open, at) => {
 
 /** { variant id: { hp, lp } } for the sounds whose tone the pilot rides, as its current loop ends. */
 export function toneOf(pilot, active) {
-  const at = (pilot.length - pilot.left + 1) / pilot.length;
+  const at = wayOf(pilot);
+  const wild = frenzy(pilot); // wide open
   const out = {};
   for (const id of new Set(Object.values(active))) {
     const layer = layerOfVariant(id);
     const tones = pilot.opening ? OPENING_TONE : TONE[pilot.section];
-    if (!(pilot.opening ? Object.hasOwn(OPENING_TONE, layer) : TONE_LAYERS.includes(layer))) continue;
-    const spec = tones[layer] ?? {};
+    // An opening and an outro ride kick and bass too; no other section touches them.
+    const own = pilot.opening || pilot.section === OUTRO;
+    if (!(own ? Object.hasOwn(tones, layer) : TONE_LAYERS.includes(layer))) continue;
+    const spec = (!wild && tones[layer]) || {};
     out[id] = { hp: along(spec.hp, HP_OPEN, at), lp: along(spec.lp, LP_OPEN, at) };
   }
   return out;

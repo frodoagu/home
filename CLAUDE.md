@@ -69,7 +69,7 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.
-  psy-sampler/       The psy.agu.com.ar live music machine (Vite + vanilla JS, Web Audio, no runtime
+  psy-sampler/       Psy Layers DAW at psy.agu.com.ar, a live music DAW (Vite + vanilla JS, Web Audio, no runtime
                      deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
@@ -474,7 +474,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   but keeps it as the `fallback` whenever the sample isn't decoded) that the UI
   edits and hands to `engine.setData()`; edits persist per browser in
   localStorage and are run through `sanitize()` on load. Kick and bass are
-  exclusive lanes, perc/lead/pad/glitch stack. A style with no pool for a layer
+  exclusive lanes, perc/lead/pad/glitch stack. The 🌅 outro is in `SECTIONS`
+  but NOT in `SECTION_IDS`: only a closing queues it (no pick, plan, phase
+  button or snapshot leads there), so seeds replay; don't list it with the rest. A style with no pool for a layer
   would leave it out WITHOUT drawing from the PRNG (`leftOut`), the way to add
   a layer without shifting old seeds (every style has a glitch pool, so that
   layer did shift them); a `manual` layer (the classics, famous melodies in

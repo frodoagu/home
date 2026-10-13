@@ -26,6 +26,29 @@ function play(director, bars, frameAt = (b) => at(b)) {
   return out;
 }
 
+describe("a set's frenzy", () => {
+  it("strobes at full, in 16ths and then 32nds, whatever else plays", () => {
+    const on16 = strobeOf(frame({ frenzy: 0.2, beats: 10 }));
+    const off16 = strobeOf(frame({ frenzy: 0.2, beats: 10.125 })); // half a 16th later
+    expect(on16).toBe(1);
+    expect(off16).toBeLessThan(0.2);
+    expect(strobeOf(frame({ frenzy: 0.7, beats: 10.125 }))).toBe(1); // a 32nd
+    expect(strobeOf(frame({ frenzy: 0, beats: 10, layers: new Set() }))).toBe(0);
+  });
+
+  it("cuts to a new scene on every beat, unless the scene is locked", () => {
+    const d = createDirector();
+    const beatAt = (b, over = {}) => frame({ time: b * BEAT_MS, beats: b, bar: Math.floor(b / 4), frenzy: 0.5, ...over });
+    const shown = [0, 1, 2, 3, 4].map((b) => d.frame(beatAt(b)));
+    for (let i = 1; i < shown.length; i++) {
+      expect(shown[i].scene.vars).not.toEqual(shown[i - 1].scene.vars);
+      expect(shown[i].previous).toBeNull(); // a cut, not a crossfade
+    }
+    d.lock();
+    expect(d.frame(beatAt(5)).scene).toBe(d.frame(beatAt(6)).scene);
+  });
+});
+
 describe("director", () => {
   it("holds a scene while nothing changes, and moves on after 16 bars", () => {
     const shown = play(createDirector(), 40);

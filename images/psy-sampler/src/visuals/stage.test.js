@@ -52,6 +52,19 @@ describe("stage", () => {
     expect(s.drops).toBe(1);
   });
 
+  it("goes wild through a set's frenzy, until it ends or the loop stops", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "frenzy", time: 1000, end: 3000 });
+    expect(stage.frame(500).frenzy).toBe(0);
+    expect(stage.frame(1000).frenzy).toBeGreaterThan(0);
+    expect(stage.frame(2000).frenzy).toBeCloseTo(0.5, 5);
+    expect(stage.frame(3000).frenzy).toBe(0);
+    stage.push({ kind: "frenzy", time: 4000, end: 9000 });
+    stage.push({ kind: "stop", time: 5000 });
+    expect(stage.frame(4500).frenzy).toBeGreaterThan(0);
+    expect(stage.frame(5000).frenzy).toBe(0);
+  });
+
   it("stops playing on a stop, and its energy falls back", () => {
     const stage = createStage({ now: 0 });
     stage.push({ kind: "lanes", time: 0, variants: ["kick.a", "bass.b", "perc.c", "lead.d"] });

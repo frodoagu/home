@@ -10,6 +10,9 @@
 // from the seed. Before those, a run asks once for the form of the whole
 // track (formPrompt): the order of its next FORM sections, which the pilot
 // walks (autopilot.js withForm) and each section's plan then fills in.
+// 🌅 asks for the closing in its place (closingPrompt): the last sections
+// before the outro, in the time the set has left, and then each plan,
+// the outro's last (outroSchema, normalizeOutro).
 //
 // Every ask's instructions open on a brief of the track (briefOf): the
 // style's genre, tempo and key, the BPM and the listener's wish, read off the
@@ -22,7 +25,7 @@
 // the model build each sound's filter, sweep, distortion, tremolo, autopan
 // and echo (dress.js TWEAKS). `describe` off lists the sounds by id alone.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
-import { SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
+import { CLOSE_MAX, OUTRO, SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
 import { CHOICES, MACROS, MACRO_MAX, TWEAKS, UNIT_TWEAKS, fits, moves, synthsFor } from "./dress.js";
@@ -345,7 +348,9 @@ function soundLines(lists, style, names, synths, { level, describe: told = true 
  * one to plan; `theme`, the lead the pilot will hold if what comes is the
  * step after the last section (themeAfter). `dressed` are the plans'
  * dress entries in force (the playing ones are recalled) and `synths` each
- * melodic sound's synth now.
+ * melodic sound's synth now. `closing` ({ seconds, route }, closingLine)
+ * says 🌅 is closing the set, in place of the set's arc; a `next` outro
+ * gets what the pilot does with it.
  */
 export function planPrompt({
   style,
@@ -367,6 +372,7 @@ export function planPrompt({
   level = LEVEL_DEFAULT,
   describe: told = true,
   set = {},
+  closing = null,
 }) {
   const low = !dresses(level);
   const now = sections.at(-1);
@@ -390,15 +396,17 @@ export function planPrompt({
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
   lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
-  const arc = setLine(set);
+  const arc = closing ? closingLine(closing) : setLine(set);
   if (arc) lines.push(arc);
+  if (next === OUTRO) lines.push(OUTRO_LINE);
   if (vibe && fresh) {
     lines.push(`The listener just asked for: ${JSON.stringify(vibe)}. That comes first: shape this section to it boldly, so the change is clearly heard, and leave out the layers that do not fit.`);
   } else if (vibe) {
     lines.push("The listener's wish comes first: keep the track true to it and leave out the layers that do not fit, while the sections still rise and fall.");
   }
   if (form.length) lines.push(`After it, the track goes on with: ${form.join(", ")}.`);
-  if (next && formed) lines.push(`Your form of the track has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  if (next && closing) lines.push(`The closing has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  else if (next && formed) lines.push(`Your form of the track has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
   else if (next) lines.push(`The listener queued ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
   else if (planned.length) lines.push(`After the planned ${last}, the usual next is ${follows(last)}. Plan the section after it.`);
   else lines.push(`After the ${now}, the usual next is ${follows(now)}. Plan the next section.`);
@@ -490,6 +498,56 @@ export function normalizeForm(raw) {
   return given.filter((id) => PLAN_SECTIONS.includes(id)).slice(0, FORM);
 }
 
+// The outro (autopilot.js OUTRO): what the pilot does with it, for the
+// plan of it and the closing's.
+const OUTRO_BARS = barsOf(OUTRO);
+const OUTRO_WHAT = `the outro (${OUTRO_BARS.join(", ")} bars; ${counts(OUTRO)}), where the pilot takes the bass out first, filtered down and faded by halfway, then the kick, and winds the lead and the pads down; its last 4 bars go wild, everything back at full and wide open with more percussion and glitch, rolls and FX, and then the set cuts`;
+const OUTRO_LINE = `The outro is the last thing the audience hears: ${OUTRO_WHAT}. Pick what says goodbye: deep or airy pads, maybe the theme's lead or a last melody that resolves to the root (long notes, rests, slow); the pilot brings the madness at the end itself. Take the longest lengths unless the set has little time left.`;
+
+/** The line saying the set is closing: `seconds` left at most, the `route` coming (the outro last). */
+export function closingLine({ seconds = 0, route = [] } = {}) {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `The listener is closing the set: it ends in ${minutes} minute${minutes > 1 ? "s" : ""} at most, after ${route.join(", ")}. Every section left is part of the goodbye: a last peak to remember, then the energy winds down to the end.`;
+}
+
+/**
+ * What to ask when 🌅 closes the set: the sections before the outro, in
+ * order, after the one playing (`sections` so far, `left` bars of it to go)
+ * and the one its last loop announced (`coming`), in `room` bars at most
+ * (at the shortest lengths) and CLOSE_MAX sections. With a `vibe` (the brief
+ * holds it), the closing follows it.
+ */
+export function closingPrompt({ sections, left, coming = [], room, seconds, vibe = "" }) {
+  const now = sections.at(-1);
+  const lines = [
+    `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${now}, ${left} bars left.`,
+    `The listener is closing the set: it must end in ${Math.max(1, Math.ceil(seconds / 60))} minutes at most, and it ends with ${OUTRO_WHAT}.`,
+  ];
+  if (coming.length) lines.push(`Already coming after it: ${coming.join(", ")}.`);
+  lines.push(
+    "Close it the way a DJ ends a night: a last peak the crowd remembers, then let it wind down, with a long breakdown or straight into the outro; never a cold stop. No intro.",
+    `Lay out the sections between ${coming.length ? `the ${coming.at(-1)} already coming` : `the ${now}`} and the outro, in order: ${CLOSE_MAX} at most, ${room} bars at most in all at their shortest (${PLAN_SECTIONS.map((id) => `${id} ${barsOf(id)[0]}`).join(", ")}). None is fine: the outro comes next.`,
+  );
+  if (vibe) lines.push("Shape the closing to the listener's wish.");
+  return lines.join("\n");
+}
+
+/** The JSON Schema of a closing: why, then the sections before the outro. */
+export const closingSchema = () => ({
+  type: "object",
+  properties: {
+    why: { type: "string", maxLength: WHY_MAX },
+    sections: { type: "array", items: { type: "string", enum: PLAN_SECTIONS }, maxItems: CLOSE_MAX },
+  },
+  required: ["why", "sections"],
+  additionalProperties: false,
+});
+
+/** Anyone's closing -> the section ids before the outro that a plan may pick, at most CLOSE_MAX. */
+export function normalizeClosing(raw) {
+  return normalizeForm(raw).slice(0, CLOSE_MAX);
+}
+
 /**
  * The JSON Schema of an answer: a sentence on why, then the section, its
  * bars, each layer's ids, how to dress them and the melodic parts, all as
@@ -499,6 +557,7 @@ export function normalizeForm(raw) {
  * asks for no dress or parts; high, for the tweaks in every dress entry.
  */
 export function planSchema({ lists, style, next = null, level = LEVEL_DEFAULT }) {
+  if (next === OUTRO) return schemaOf({ lists, style, sections: [OUTRO], bars: OUTRO_BARS, range: countRange, most: [OUTRO], level });
   const sections = PLAN_SECTIONS.includes(next) ? [next] : PLAN_SECTIONS;
   const bars = [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
   return schemaOf({ lists, style, sections, bars, range: countRange, most: PLAN_SECTIONS, level });
@@ -655,6 +714,15 @@ export function normalizePlan(raw, { lists, style }) {
   const section = PLAN_SECTIONS.find((id) => id === raw.section);
   if (!section) return null;
   return cleanPlan(raw, { lists, style }, section, barsOf(section), countRange);
+}
+
+/**
+ * Anyone's outro -> { section, bars, layers, dress?, parts? } or null:
+ * normalizePlan() for the outro, which no other plan may pick. Idempotent too.
+ */
+export function normalizeOutro(raw, { lists, style }) {
+  if (!isObject(raw) || raw.section !== OUTRO) return null;
+  return cleanPlan(raw, { lists, style }, OUTRO, OUTRO_BARS, countRange);
 }
 
 /**

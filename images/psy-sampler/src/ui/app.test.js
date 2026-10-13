@@ -2303,6 +2303,102 @@ describe("autopilot", () => {
   });
 });
 
+describe("🌅 closing", () => {
+  const closeBtn = () => $('[data-action="close-set"]');
+  const queue = () => [...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.dataset.queued);
+  const levels = () => Object.values(saved().variants).map((v) => v.level).filter((l) => l !== undefined);
+  const playingLevels = () => pressed().map((id) => saved().variants[id]?.level ?? 1);
+  // The outro's last loop before the frenzy: its levels are the wind-down's end.
+  const wound = () => /^6 compases/.test($(".section-left").textContent) && $(".section-badge").textContent === "Outro";
+  const seed = (value) => {
+    $("#seed").value = value;
+    $("#seed").dispatchEvent(new Event("change"));
+  };
+
+  it("closes what plays within 5 minutes: a last peak, an outro that winds down and goes wild, and a cold stop", () => {
+    const wild = [];
+    engine.listen((e) => e.kind === "frenzy" && wild.push(e));
+    const sweep = vi.spyOn(engine, "sweep");
+    expect(closeBtn().disabled).toBe(true); // nothing plays
+    seed("goa");
+    $("button.auto").click();
+    advanceSeconds(4 * BAR);
+    expect(closeBtn().disabled).toBe(false);
+    closeBtn().click();
+    expect(closeBtn().getAttribute("aria-pressed")).toBe("true");
+    expect(queue().at(-1)).toBe("outro");
+    expect(queue()).toContain("peak");
+    expect($(".status").textContent).toMatch(/^🌅 Cerrando el set: .*Outro\. Termina antes de [45]:\d\d; 🌅 otra vez lo cancela\.$/);
+    expect($(".section-left").textContent).toMatch(/compases · 🌅 [45]:\d\d$/);
+    expect([...root.querySelectorAll("button.phase")].every((b) => b.disabled)).toBe(true);
+    const seen = [];
+    let low = false; // the outro wound down
+    let loud = null; // the levels of the last loop played
+    for (let t = 0; t < 300 && engine.isRunning(); t += 2 * BAR) {
+      if (wound()) low = Math.max(...playingLevels()) <= 0.6;
+      loud = playingLevels();
+      advanceSeconds(2 * BAR);
+      seen.push($(".section-badge").textContent);
+    }
+    expect(engine.isRunning()).toBe(false);
+    expect(seen.filter((s) => s === "Outro").length).toBeGreaterThanOrEqual(8); // 16 bars at least
+    expect(seen.at(-1)).toBe(""); // the badge goes with the pilot
+    expect($(".status").textContent).toBe("🌅 Fin del set.");
+    expect($("button.auto").getAttribute("aria-pressed")).toBe("false");
+    expect($('[data-action="cue"]').textContent).not.toBe("▶ Arrancar"); // nothing left queued for ▶
+    expect(pressed()).toEqual([]);
+    expect(low).toBe(true);
+    expect(Math.min(...loud)).toBeGreaterThan(0.5); // its last loop was the frenzy, all up
+    expect(wild).toHaveLength(1);
+    expect(wild[0].end - wild[0].time).toBeCloseTo(4 * BAR, 3); // its last 4 bars
+    expect(sweep).toHaveBeenCalledWith(wild[0].time, wild[0].end);
+    expect(levels().every((l) => l > 0)).toBe(true); // and every level is back
+  });
+
+  it("over a mix with the autopilot off, the autopilot takes it and closes it", () => {
+    click("bass.rolling");
+    advanceSeconds(BAR);
+    closeBtn().click();
+    expect($("button.auto").getAttribute("aria-pressed")).toBe("true");
+    expect(queue().at(-1)).toBe("outro");
+  });
+
+  it("🌅 again calls it off until the outro is announced; ⏹ in the outro brings the levels back", () => {
+    seed("goa");
+    $("button.auto").click();
+    closeBtn().click();
+    closeBtn().click();
+    expect(queue()).not.toContain("outro");
+    expect(closeBtn().getAttribute("aria-pressed")).toBe("false");
+    expect($(".status").textContent).toBe("🌅 Cierre cancelado: el set sigue.");
+    expect([...root.querySelectorAll("button.phase")].some((b) => b.disabled)).toBe(false);
+    closeBtn().click();
+    for (let i = 0; i < 200 && $(".section-badge").textContent !== "Outro"; i++) advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Outro");
+    expect(closeBtn().disabled).toBe(true); // too late to call it off
+    expect($('[data-action="drop"]').disabled).toBe(true);
+    for (let i = 0; i < 20 && !wound(); i++) advanceSeconds(2 * BAR);
+    expect(levels()).toContain(0);
+    $("button.stop").click();
+    expect(levels().every((l) => l > 0.35)).toBe(true);
+  });
+
+  it("🤖 off in the frenzy lets go of its sweep and brings the levels back", () => {
+    seed("goa");
+    $("button.auto").click();
+    closeBtn().click();
+    const wild = [];
+    engine.listen((e) => e.kind === "frenzy" && wild.push(e));
+    for (let i = 0; i < 200 && !wild.length; i++) advanceSeconds(2 * BAR);
+    const off = vi.spyOn(engine, "sweepOff");
+    $("button.auto").click();
+    expect(off).toHaveBeenCalled();
+    expect(engine.isRunning()).toBe(true); // the mix plays on, by hand
+    advanceSeconds(2 * BAR);
+    expect(levels().every((l) => l > 0)).toBe(true);
+  });
+});
+
 describe("✨ AI", () => {
   const RealURL = globalThis.URL;
   // The models ai.js would hand over; `answers` are what the model plans, in
@@ -2618,6 +2714,32 @@ describe("✨ AI", () => {
     expect(ai.asks.at(-1).prompt).toMatch(/The set lasts about 2 hours; [3-6] minutes have played/);
     await remountWith(fakeAi());
     expect($("#ai-set").value).toBe("120");
+  });
+
+  it("🌅 asks the model for the sections that close the set, then plans each one, the outro last", async () => {
+    const closing = { why: "a last peak", sections: ["breakdown", "build", "peak"] };
+    const ai = await remountWith(fakeAi({ forms: [{ why: "", sections: [] }, closing], answers: queuedOr(GROOVE) }));
+    $("button.auto").click();
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.formAsks).toHaveLength(1);
+    $('[data-action="close-set"]').click();
+    await flushPromises();
+    expect(ai.formAsks).toHaveLength(2);
+    const ask = ai.formAsks[1];
+    expect(ask.prompt).toContain("The listener is closing the set: it must end in 5 minutes at most");
+    expect(ask.schema.properties.sections.maxItems).toBe(4);
+    expect(queue()).toEqual(["breakdown", "build", "peak", "outro"]);
+    expect($('.section-queue [data-queued="build"]').title).toBe("Cierre de la IA: a last peak");
+    expect($(".status").textContent).toMatch(/^🌅 La IA planeó el cierre: Break → Subida → Pico → Outro\.$|^✨/);
+    const outro = () => ai.asks.find((a) => a.schema.properties.section.enum.join() === "outro");
+    for (let i = 0; i < 200 && !outro(); i++) {
+      advanceSeconds(2 * BAR);
+      await flushPromises();
+    }
+    expect(outro().prompt).toContain("The outro is the last thing the audience hears");
+    expect(outro().prompt).toContain("The listener is closing the set: it ends in");
+    expect(outro().schema.properties.bars.enum).toEqual([16, 24, 32]);
   });
 
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {

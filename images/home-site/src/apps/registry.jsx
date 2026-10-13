@@ -67,11 +67,11 @@ export const apps = [
   },
   {
     slug: "psy-sampler",
-    title: { es: "Psy Layers", en: "Psy Layers", pt: "Psy Layers" },
+    title: { es: "Psy Layers DAW", en: "Psy Layers DAW", pt: "Psy Layers DAW" },
     description: {
-      es: "Maquina de musica electronica en vivo: arma, edita y mezcla un tema de psytrance o techno mientras suena.",
-      en: "A live electronic music machine: build, edit and mix a psytrance or techno track while it plays.",
-      pt: "Máquina de música eletrônica ao vivo: monte, edite e mixe uma faixa de psytrance ou techno enquanto ela toca.",
+      es: "Un DAW de musica electronica en vivo, en el navegador: arma, edita y mezcla un tema de psytrance o techno mientras suena.",
+      en: "A live electronic music DAW, in your browser: build, edit and mix a psytrance or techno track while it plays.",
+      pt: "Um DAW de música eletrônica ao vivo, no navegador: monte, edite e mixe uma faixa de psytrance ou techno enquanto ela toca.",
     },
     href: "https://psy.agu.com.ar",
     categories: ["music"],

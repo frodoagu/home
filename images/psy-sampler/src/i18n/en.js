@@ -2,12 +2,12 @@ export default {
   langName: "English",
   synthNote: "∿ Zero samples: every factory sound is a mathematical formula computed live. Nothing recorded, nothing compressed: lossless.",
   lede:
-    "A live electronic music machine: kick, bass, percussion, glitches, leads, pads and FX you build, " +
+    "A live electronic music DAW, in your browser: kick, bass, percussion, glitches, leads, pads and FX you build, " +
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
   help: {
     open: "📖 Help",
-    title: "How to use Psy Layers",
+    title: "How to use Psy Layers DAW",
     close: "Close",
     intro: "First the tricks you won't spot at a glance; then everything each part does.",
     search: "Search the help…",
@@ -54,6 +54,7 @@ export default {
           ["🤖 Autopilot", "Builds the track by itself: switches layers on and off each phrase, fires FX, writes melodies and moves through the sections."],
           ["Sections", "Intro, Groove, Build-up, Peak and Breakdown. A click queues one: it comes in when the current one ends. ✕ takes it off the queue."],
           ["⏭ Next", "Ends the current section on the next loop."],
+          ["🌅 Close", "Ends the set within 5 minutes: the autopilot queues the last sections (a farewell peak) and an Outro that winds the energy down (the bass leaves first, then the kick) and goes wild in its last 4 bars: everything back at full with rolls, glitches and FX, and the visuals flash like crazy. Then everything cuts. With ✨ AI, the AI plans those sections. Another click calls it off until the Outro starts."],
           ["Style", "Which sounds the autopilot uses. Changing it takes the BPM to the style's, gradually."],
           ["Changes", "How many bars between the autopilot's sound changes within a section; for the snapshot autopilot, between one snapshot and the next."],
           ["Volumes", "The autopilot mixes: each section has its own balance, the build-up swells into the peak, stacked sounds share their room and the pad steps back under the lead. It moves the fill of everything playing gradually, in smooth curves, yours too."],
@@ -223,7 +224,7 @@ export default {
     empty: "Nothing played: no recording.",
     unsupported: "This browser cannot record.",
   },
-  sections: { intro: "Intro", groove: "Groove", build: "Build-up", peak: "Peak", breakdown: "Breakdown" },
+  sections: { intro: "Intro", groove: "Groove", build: "Build-up", peak: "Peak", breakdown: "Breakdown", outro: "Outro" },
   ai: {
     settings: "AI settings",
     button: "✨ AI",
@@ -280,6 +281,9 @@ export default {
     formingTitle: "The AI is laying out the track's sections",
     formed: "The AI's sequence",
     formReady: (n) => `✨ The AI laid out the track: ${n} sections queued. ✕ drops one.`,
+    closed: "The AI's closing",
+    closingTitle: "The AI is planning the set's closing",
+    closingReady: (route) => `🌅 The AI planned the closing: ${route}.`,
     thinking: "✨ thinking…",
     thinkingTitle: "The AI is planning the sections ahead",
     vibeAsking: (vibe, kept) => `✨ ${vibe ? `Vibe «${vibe}»` : "No vibe"}: ${kept ? `the ${kept} stays as it was and the AI is planning what follows again…` : "the AI is planning what comes next again…"}`,
@@ -313,6 +317,13 @@ export default {
     queue: "Queued sections",
     then: "then",
     unqueue: (name) => `Remove ${name} from the queue`,
+    close: "🌅 Close",
+    closeTitle: "Closes the set within 5 minutes: the last sections, a farewell peak and an Outro that winds down and ends wild, with the visuals flashing (with ✨ AI, the AI plans them). Another click calls it off until the Outro starts",
+    closing: (route, time) => `🌅 Closing the set: ${route}. It ends within ${time}; 🌅 again calls it off.`,
+    closingLeft: (bars, time) => `${bars} ${bars === 1 ? "bar" : "bars"} · 🌅 ${time}`,
+    closingChip: "The set's closing",
+    closeOff: "🌅 Closing called off: the set goes on.",
+    closed: "🌅 End of the set.",
   },
   styles: {
     house: "House",
@@ -489,9 +500,9 @@ export default {
     },
   },
   intro: {
-    title: "This is Psy Layers",
+    title: "This is Psy Layers DAW",
     what:
-      "A psychedelic electronic music machine that runs entirely in your browser. No samples: every kick, " +
+      "A psychedelic electronic music DAW that runs entirely in your browser. No samples: every kick, " +
       "bass, lead and pad is a formula computed live, and you choose what plays and when.",
     points: [
       ["🎛️", "Each row is a layer: Kick, Bass, Percussion, Lead, Pad, Glitch and FX. One click turns a sound on, another turns it off, and it comes in right on the next bar."],
@@ -877,7 +888,7 @@ export default {
   scales: { minor: "A minor", phrygian: "A Phrygian", harmonic: "A harmonic minor", chromatic: "Chromatic" },
   noteNames: ["C", "C#", "D", "E♭", "E", "F", "F#", "G", "G#", "A", "B♭", "B"],
   visuals: {
-    title: "Psy Layers · Visuals",
+    title: "Psy Layers DAW · Visuals",
     button: "🌀 Visuals",
     buttonTitle: "Full-screen fractals, mandalas and organic textures, in time with what plays",
     scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", flow: "Liquid", julia: "Julia", gyroid: "Gyroid flesh", coral: "Fractal reef", cells: "Cells", phyllo: "Romanesco", hyper: "Hyperbolic tiling", turing: "Turing patterns", physarum: "Physarum" },
