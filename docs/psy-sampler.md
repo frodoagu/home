@@ -1090,8 +1090,9 @@ whether it comes from a Build-up or from a queued section, and is a drop.
   playing one ends, in order, instead of the one that was due. The autopilot row
   shows the current section, the bars it has left and the queue
   (`→ Peak ✕ → Breakdown ✕`); ✕ removes a section that isn't playing yet, and on
-  the last loop the incoming one pulses (with no queue, the autopilot's own pick
-  shows in grey). **⏭ Next** ends the section on the next loop. With the
+  the last loop the incoming one pulses, with no ✕: that loop already announced
+  it and fired its riser (with no queue, the autopilot's own pick shows in
+  grey). **⏭ Next** ends the section on the next loop. With the
   autopilot off, a section button switches it on starting in that section (from
   silence it builds it from scratch; over a mix, it reshapes it to that form on
   the next loop).
@@ -1373,6 +1374,9 @@ breakdown has no kick, every section plays a lead or a pad).
   (its tooltip lists the rest); each chip's tooltip is the plan's `why` once it
   has one, else the form's. ✕ drops a section of the form (`unform`), and the
   plans ahead re-plan from there (`keptAhead` against the whole `sequence()`).
+  A section the model planned past the queue and the form has a ✕ too: it goes
+  with the plans after it (they followed from it) and the model plans that slot
+  again (`dropAhead`).
 - **Aplicar** lays out the form again with the new vibe: what stays planned (the
   next section, playing) stays, the rest of the form goes and the model is
   asked for a new one after it, then plans its sections.
@@ -1437,8 +1441,12 @@ breakdown has no kick, every section plays a lead or a pad).
   comes later is thrown away (the request for it is aborted when the last
   loop starts) and the pilot picks as usual; the plans further ahead don't
   care, and an ask still on its way when its section becomes the next one goes
-  to the pilot when it lands. A model that fails says so once in the status
-  line and the pilot carries on alone until the next section asks again.
+  to the pilot when it lands. Every ask goes through `ask()` in `app.js`: one
+  at a time (`planning`), **cut off after 2 minutes** (`ASK_TIMEOUT_MS`) by
+  racing the model against its abort signal, so a model that never answers
+  (or ignores the abort) cannot hold the asks up until a reload. A model that
+  fails or is cut off says so once in the status line, the pilot carries on
+  alone, and the ✨ AI asks again 15 s later (`RETRY_MS`).
 - In `advance()` a plan stands in for the `pick` of the next section — the
   queue still goes first — and for `arrange()`'s draws on the layers it names.
   **With no plan every draw is the one it always was**: a seed shared before
@@ -1449,16 +1457,18 @@ breakdown has no kick, every section plays a lead or a pad).
   (`keptAhead`); from the first that isn't, they go and the model plans again.
   A plan asked for a queued section goes once that section is taken off the
   queue.
-- **From silence the ✨ AI plans before ▶.** Turning ✨ on with nothing playing
-  or queued arms the autopilot (🤖 lit, ▶ Arrancar, ■ to let go of it): the
+- **From silence the ✨ AI plans before ▶.** Turning ✨ on with the loop
+  stopped and no autopilot on arms the autopilot (🤖 lit, ▶ Arrancar, ■ to let go of it): the
   intro is drawn but not played, the model plans the **opening** over it, then
   the first `AHEAD` sections from what the intro will play (`state.pending`). The status line
   counts the asks and says when they are in; ▶ plays. 🤖 from silence with ✨
   on does the same and then plays by itself once the asks stop
   (`cueWhenPlanned`: all planned, a failure, or nothing it can ask); ▶ or 🤖
   again plays sooner with the plans it has. 🤖 resumes the AudioContext inside
-  its click, so the later start needs no gesture. A share link's replay and a
-  mix already playing or queued never wait.
+  its click, so the later start needs no gesture. A mix ⏹ left armed for ▶
+  waits the same way (`armForAi`), with the pilot joining it instead of
+  drawing an intro, so ✨ or 🤖 after a stop plans as on a fresh page. A share
+  link's replay and a mix already playing never wait.
 - **Aplicar** (or Enter in the field) applies the **Vibe** (`revibe`): the
   plans made with the old words go, with any ask on its way for them, and the
   model plans again with the new ones, even when the words are the same.

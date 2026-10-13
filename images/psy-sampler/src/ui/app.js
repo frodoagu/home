@@ -187,6 +187,10 @@ const stamp = (d = new Date()) => {
 const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "" });
 // Form chips the queue shows before folding the rest into "+n".
 const FORM_SHOWN = 8;
+// An ask the model has not answered by then is cut off, and a failed one is
+// tried again after RETRY_MS: neither may hold the ✨ AI up until a reload.
+const ASK_TIMEOUT_MS = 120_000;
+const RETRY_MS = 15_000;
 
 // Everything tied to the old workspace, dropped when another one replaces it.
 const fresh = () => ({
@@ -1030,14 +1034,24 @@ export function mountApp(root, engine, opts = {}) {
     const opened = Boolean(p && state.run?.opening) && sectionNo() === 0; // the ✨ AI's opening plays
     sectionBadge.title = !opened ? "" : state.run.why ? `${tx.ai.planned}: ${state.run.why}` : tx.ai.planned;
     sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
-    const chips = (p?.queue ?? []).map((id, i) => {
-      const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
-      drop.addEventListener("click", () => {
-        state.pilot = dequeue(state.pilot, i);
-        requeue();
+    // ✕ on a section coming: none on the one the last loop already announced
+    // (its riser is on its way), so every ✕ shown does what it says.
+    const settled = (slot) => slot === 0 && p.left === 1 && p.next !== undefined;
+    const unqueue = (id, slot, drop) => {
+      if (settled(slot)) return [];
+      const btn = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
+      btn.addEventListener("click", () => {
+        drop();
         showSection();
       });
-      return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), drop);
+      return [btn];
+    };
+    const chips = (p?.queue ?? []).map((id, i) => {
+      const drop = unqueue(id, i, () => {
+        state.pilot = dequeue(state.pilot, i);
+        requeue();
+      });
+      return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), ...drop);
     });
     // What comes after the queue: the ✨ AI's form of the track (✕ drops a
     // section of it too), then the plans past it as soon as there are some,
@@ -1051,14 +1065,12 @@ export function mountApp(root, engine, opts = {}) {
       return said ? `${tx.ai.planned}: ${said}` : fallback;
     };
     form.slice(0, FORM_SHOWN).forEach((id, i) => {
-      const drop = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
-      drop.addEventListener("click", () => {
+      const drop = unqueue(id, p.queue.length + i, () => {
         state.pilot = unform(state.pilot, i);
         requeue();
-        showSection();
       });
       const formWhy = state.run?.formWhy;
-      const li = el("li", { class: "queued is-ai", "data-queued": id }, el("span", { text: `✨ ${tx.sections[id]}` }), drop);
+      const li = el("li", { class: "queued is-ai", "data-queued": id }, el("span", { text: `✨ ${tx.sections[id]}` }), ...drop);
       li.title = why(p.queue.length + i, formWhy ? `${tx.ai.formed}: ${formWhy}` : tx.ai.formed);
       chips.push(li);
     });
@@ -1069,8 +1081,14 @@ export function mountApp(root, engine, opts = {}) {
       chips.push(li);
     }
     const shown = (p?.queue.length ?? 0) + form.length;
+    // A plan past them goes with the ones after it (they followed from it),
+    // and the ✨ AI plans that section again.
     ahead.slice(shown).forEach(({ plan }, i) => {
-      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }));
+      const drop = unqueue(plan.section, shown + i, () => {
+        dropAhead(shown + i);
+        planAhead();
+      });
+      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }), ...drop);
       li.title = why(shown + i, tx.ai.planned);
       chips.push(li);
     });
@@ -2341,9 +2359,11 @@ export function mountApp(root, engine, opts = {}) {
       dressIn(Object.values(playing).sort());
       mixIn(playing);
       toneIn(playing);
+      armForAi(arm);
       commit(playing);
       enterSection();
       showSection();
+      if (cueWhenPlanned && !planning) cue();
       return;
     }
     // Parts the autopilot wrote go back to factory, so a seed always replays
@@ -2365,10 +2385,7 @@ export function mountApp(root, engine, opts = {}) {
     mixIn(start.active);
     toneIn(start.active);
     improviseIn(Object.values(start.active));
-    const wait = !engine.isRunning() && Boolean(ai) && state.aiPrefs.on && !state.replay;
-    cueWhenPlanned = wait && (rearm ? cueWhenPlanned : !arm);
-    if (cueWhenPlanned) engine.ensureContext(); // inside the click: the mix starts once planned
-    state.armed = wait;
+    armForAi(arm, rearm);
     commit(start.active);
     if (state.replayOpening) {
       const opening = normalizeOpening(state.replayOpening, { lists: pilotLists(), style: ws.style, section: start.pilot.section });
@@ -2377,6 +2394,16 @@ export function mountApp(root, engine, opts = {}) {
     enterSection();
     showSection();
     if (cueWhenPlanned && !planning) cue();
+  }
+
+  // Stopped with ✨ on, the autopilot waits armed while the model plans the
+  // first sections, from silence or from a mix ⏹ left. It then plays by
+  // itself (`cueWhenPlanned`), or waits for ▶ when ✨ armed it (`arm`).
+  function armForAi(arm, rearm = false) {
+    const wait = !engine.isRunning() && Boolean(ai) && state.aiPrefs.on && !state.replay;
+    cueWhenPlanned = wait && (rearm ? cueWhenPlanned : !arm);
+    if (cueWhenPlanned) engine.ensureContext(); // inside the click: the mix starts once planned
+    state.armed = wait;
   }
 
   // The snapshot autopilot starts from the snapshot queued or playing, or
@@ -2628,11 +2655,58 @@ export function mountApp(root, engine, opts = {}) {
   function cancelPlanning() {
     planning?.abort.abort();
     planning = null;
+    clearTimeout(retry);
+    retry = 0;
     if (alive) showAi();
   }
 
-  // Stopped with nothing queued: the ✨ AI may arm the autopilot.
-  const silent = () => !state.auto && !state.tour && !state.armed && !engine.isRunning();
+  // One ask to the model at a time: `planning` holds what it is for. It is
+  // cut off after ASK_TIMEOUT_MS whether or not the model honours the abort,
+  // and a failed one asks again RETRY_MS later. `take` gets the answer;
+  // `then(ok)` runs once it is over, unless something else took its place.
+  let retry = 0;
+  function ask(engine, what, send, take, then) {
+    const abort = new AbortController();
+    const cut = new Promise((_, reject) => abort.signal.addEventListener("abort", () => reject(new Error("cut")), { once: true }));
+    const timer = setTimeout(() => abort.abort(), ASK_TIMEOUT_MS);
+    const mine = () => planning?.abort === abort;
+    let ok = false;
+    planning = { ...what, abort };
+    Promise.race([send(abort.signal), cut])
+      .then(
+        (raw) => {
+          if (!mine()) return;
+          failing = false;
+          ok = true;
+          take(raw);
+        },
+        () => {
+          if (!mine()) return;
+          // Chrome's model may still need the click that downloads it.
+          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
+          failing = true;
+        },
+      )
+      .finally(() => {
+        clearTimeout(timer);
+        if (!mine()) return;
+        planning = null;
+        if (!alive) return;
+        showAi();
+        if (!ok) retry = setTimeout(retryAsk, RETRY_MS);
+        then(ok);
+      });
+    showAi();
+  }
+
+  function retryAsk() {
+    retry = 0;
+    if (alive && state.aiPrefs.on) planAhead();
+  }
+
+  // Stopped, with no autopilot on: the ✨ AI may arm one. A mix ⏹ left
+  // armed for ▶ does not count: the pilot carries on from it.
+  const silent = () => !state.auto && !state.tour && !engine.isRunning();
 
   // A click on ✨ (or a new engine, endpoint, key or model): gets the model
   // going, so the user hears now whether it answers: Chrome's may download
@@ -2736,8 +2810,6 @@ export function mountApp(root, engine, opts = {}) {
     const p = state.pilot;
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
-    const abort = new AbortController();
-    planning = { at: sectionNo(), abort, opening: true };
     const ctx = { lists: pilotLists(), style: ws.style, section: p.section, ...asked() };
     const { vibe } = state.aiPrefs;
     const prompt = openingPrompt({
@@ -2747,35 +2819,25 @@ export function mountApp(root, engine, opts = {}) {
       names: ws.names,
       synths: synthsNow(),
     });
-    ai[engine]
-      .plan(prompt, openingSchema(ctx), asking(engine, abort.signal))
-      .then(
-        (raw) => {
-          if (planning?.abort !== abort) return;
-          failing = false;
-          const opening = normalizeOpening(raw, ctx);
-          if (!opening || !state.armed || state.pilot.left !== state.pilot.length) return;
-          openOn(opening);
-          state.run.why = whyOf(raw);
-          vibeFresh = false;
-        },
-        () => {
-          if (planning?.abort !== abort) return;
-          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
-          failing = true;
-        },
-      )
-      .finally(() => {
-        if (planning?.abort !== abort) return;
-        planning = null;
+    ask(
+      engine,
+      { at: sectionNo(), opening: true },
+      (signal) => ai[engine].plan(prompt, openingSchema(ctx), asking(engine, signal)),
+      (raw) => {
+        const opening = normalizeOpening(raw, ctx);
+        if (!opening || !state.armed || state.pilot.left !== state.pilot.length) return;
+        openOn(opening);
+        state.run.why = whyOf(raw);
+        vibeFresh = false;
+      },
+      (ok) => {
+        if (!state.run) return;
         state.run.opening ??= null;
-        if (!alive) return;
-        showAi();
-        if (!failing) planAhead();
-        else if (state.auto && state.armed && cueWhenPlanned) cue(); // the model is down: the pilot plays alone
-      });
+        if (ok) planAhead();
+        else settle(); // the model is down: the pilot plays alone, or waits for ▶
+      },
+    );
     status(tx.ai.arming(1, AHEAD + 1));
-    showAi();
   }
 
   // Asks the model for the first section ahead with no plan, until AHEAD of
@@ -2802,8 +2864,6 @@ export function mountApp(root, engine, opts = {}) {
     const next = coming[slot] ?? null; // queued by hand or by the form: the model arranges that one
     if (next && !PLAN_SECTIONS.includes(next)) return;
     const at = sectionNo() + 1 + slot;
-    const abort = new AbortController();
-    planning = { at, abort };
     const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, ...asked() };
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
@@ -2827,41 +2887,29 @@ export function mountApp(root, engine, opts = {}) {
       names: ws.names,
     });
     let more = false;
-    ai[engine]
-      .plan(prompt, planSchema(ctx), asking(engine, abort.signal, { style: ctx.style, bpm }))
-      .then(
-        (raw) => {
-          if (planning?.abort !== abort) return;
-          failing = false;
-          const plan = normalizePlan(raw, { lists: pilotLists(), style: ctx.style });
-          // The section it plans may be the next one by now.
-          const ahead = state.run.ahead;
-          if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
-          ahead.push({ plan, why: whyOf(raw), queued: Boolean(next), style: ctx.style });
-          more = true;
-          if (fresh) {
-            vibeFresh = false;
-            status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
-          }
-        },
-        () => {
-          if (planning?.abort !== abort) return;
-          // Chrome's model may still need the click that downloads it.
-          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
-          failing = true;
-        },
-      )
-      .finally(() => {
-        if (planning?.abort !== abort) return;
-        planning = null;
-        if (!alive) return;
-        showAi();
+    ask(
+      engine,
+      { at },
+      (signal) => ai[engine].plan(prompt, planSchema(ctx), asking(engine, signal, { style: ctx.style, bpm })),
+      (raw) => {
+        const plan = normalizePlan(raw, { lists: pilotLists(), style: ctx.style });
+        // The section it plans may be the next one by now.
+        const ahead = state.run.ahead;
+        if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
+        ahead.push({ plan, why: whyOf(raw), queued: Boolean(next), style: ctx.style });
+        more = true;
+        if (fresh) {
+          vibeFresh = false;
+          status(tx.ai.vibeApplied(vibe, tx.sections[plan.section]));
+        }
+      },
+      () => {
         if (more) planAhead();
         settle();
-      });
+      },
+    );
     const opened = state.run.opening !== undefined ? 1 : 0;
     if (state.armed && !failing) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
-    showAi();
   }
 
   // An armed autopilot plays once the ✨ AI stops asking, or says it is ready.
@@ -2876,8 +2924,6 @@ export function mountApp(root, engine, opts = {}) {
   // sections after the queue (and the form kept, after a vibe), which the
   // pilot walks and each plan then fills in. Answered or not, the plans follow.
   function planForm(engine) {
-    const abort = new AbortController();
-    planning = { form: true, abort };
     // The sections coming already: the queue, the form kept, the plans past them.
     const comingNow = () => {
       const coming = sequence(state.pilot);
@@ -2889,35 +2935,25 @@ export function mountApp(root, engine, opts = {}) {
       coming: comingNow(),
       vibe: state.aiPrefs.vibe,
     });
-    ai[engine]
-      .plan(prompt, formSchema(), asking(engine, abort.signal))
-      .then(
-        (raw) => {
-          if (planning?.abort !== abort) return;
-          failing = false;
-          const form = normalizeForm(raw);
-          if (!form.length) return;
-          state.pilot = withForm(state.pilot, [...comingNow().slice(state.pilot.queue.length), ...form]);
-          state.run.formWhy = whyOf(raw);
-          if (!state.armed) status(tx.ai.formReady(form.length));
-        },
-        () => {
-          if (planning?.abort !== abort) return;
-          if (!failing) status(engine === "chrome" && state.chrome !== "available" ? tx.ai.chromeFailed : tx.ai.failed);
-          failing = true;
-        },
-      )
-      .finally(() => {
-        if (planning?.abort !== abort) return;
-        planning = null;
-        if (!alive || !state.run) return;
+    ask(
+      engine,
+      { form: true },
+      (signal) => ai[engine].plan(prompt, formSchema(), asking(engine, signal)),
+      (raw) => {
+        const form = normalizeForm(raw);
+        if (!form.length) return;
+        state.pilot = withForm(state.pilot, [...comingNow().slice(state.pilot.queue.length), ...form]);
+        state.run.formWhy = whyOf(raw);
+        if (!state.armed) status(tx.ai.formReady(form.length));
+      },
+      (ok) => {
+        if (!state.run) return;
         state.run.formed = true;
-        showAi();
-        planAhead();
+        if (ok) planAhead(); // failed, the retry asks for the sections
         settle();
-      });
+      },
+    );
     if (state.armed) status(tx.ai.forming);
-    showAi();
   }
 
   // A new section for the pilot: the plan made for it leaves the ones ahead
