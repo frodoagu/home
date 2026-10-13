@@ -1067,6 +1067,10 @@ html:has(dialog.help[open], dialog.intro[open]) {
   width: 30ch;
 }
 
+.ai-vibe-note {
+  margin-top: 6px;
+}
+
 .tour:disabled {
   opacity: 0.45;
   cursor: default;

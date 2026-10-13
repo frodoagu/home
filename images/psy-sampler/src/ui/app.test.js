@@ -2889,18 +2889,21 @@ describe("✨ AI", () => {
     expect(high.asks.at(-1).schema.properties.dress.items.required).toContain("filter");
   });
 
-  it("describing the sounds is a tick away: off, the AI sees their ids alone", async () => {
-    localStorage.setItem("psy-sampler:ai", JSON.stringify({ describe: false }));
+  it("an empty vibe is no message: the AI sees the sounds by id, and the note under it says so", async () => {
     const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
     aiBtn().click();
     await flushPromises();
-    expect($("#ai-describe").checked).toBe(false);
-    expect($("#ai-describe").closest("label").title).toMatch(/Sin tilde solo ve los ids/);
+    expect($(".ai-vibe-note").textContent).toMatch(/no hay mensaje para la IA/);
     expect(ai.asks.length).toBeGreaterThan(0);
     for (const ask of ai.asks) expect(ask.prompt).not.toMatch(/squelchy|hypnotic, driving/);
-    $("#ai-describe").checked = true;
-    $("#ai-describe").dispatchEvent(new Event("change"));
-    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).describe).toBe(true);
+    const vibe = $("#ai-vibe");
+    vibe.value = "oscuro";
+    vibe.dispatchEvent(new Event("input"));
+    expect($(".ai-vibe-note").textContent).toMatch(/cómo suena cada sonido/);
+    vibe.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flushPromises();
+    expect(ai.asks.at(-1).prompt).toMatch(/oscuro/);
+    expect(ai.asks.at(-1).prompt).toMatch(/squelchy|hypnotic, driving/);
   });
 
   it("■ lets go of the armed autopilot", async () => {

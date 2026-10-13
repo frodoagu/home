@@ -451,8 +451,6 @@ export function mountApp(root, engine, opts = {}) {
     }),
   );
   const levelBox = field("ai-level", tx.ai.level, levelInput, tx.ai.levelTitle);
-  const describeCheck = checkbox("ai-describe", tx.ai.describe, true);
-  describeCheck.node.title = tx.ai.describeTitle;
   const endpointInput = el("input", {
     type: "url",
     id: "ai-endpoint",
@@ -489,13 +487,17 @@ export function mountApp(root, engine, opts = {}) {
   const vibeBtn = el("button", { type: "button", class: "ghost ai-apply", text: tx.ai.apply });
   vibeBtn.title = tx.ai.applyTitle;
   const vibeBox = field("ai-vibe", tx.ai.vibe, el("span", { class: "ai-model-pick" }, vibeInput, vibeBtn), tx.ai.vibeTitle);
+  // What an empty vibe means, said under it as it's typed.
+  const vibeNote = el("p", { class: "hint ai-vibe-note" });
+  const noteVibe = () => (vibeNote.textContent = vibeInput.value.trim() ? tx.ai.vibeSaid : tx.ai.vibeEmpty);
   // Its settings fold away (remembered), with what they say in the summary.
   const aiSummary = el("span", { class: "ai-summary" });
   const aiPanel = el(
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, describeCheck.node, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, vibeBox),
+    vibeNote,
   );
 
   /* ---- tools ---- */
@@ -2535,14 +2537,15 @@ export function mountApp(root, engine, opts = {}) {
   // An ask goes with the instructions of its level.
   const asking = (engine, signal) => ({ ...reach(engine), system: systemOf(state.aiPrefs.level), signal });
   // What a prompt and its schema take from the settings.
-  const asked = () => ({ level: state.aiPrefs.level, describe: state.aiPrefs.describe });
+  // An empty vibe is no message: the sounds go by id, with no words to match.
+  const asked = () => ({ level: state.aiPrefs.level, describe: Boolean(state.aiPrefs.vibe) });
   const knownOf = (engine) => (engine === "chrome" ? null : (ai?.[engine]?.known?.(isCloud(engine) ? keyOf(engine) : state.aiPrefs.endpoint) ?? null));
   // A share link's run, from silence: while it has an entry for the section
   // playing, that entry (or none) stands in for the model's answer.
   const replaying = () => Boolean(state.replay) && Boolean(state.run) && sectionNo() < state.replay.length;
 
   function showAi() {
-    const { on, endpoint, vibe, level, describe } = state.aiPrefs;
+    const { on, endpoint, vibe, level } = state.aiPrefs;
     const engine = engineNow();
     const name = tx.ai.engines[engine];
     const cloud = isCloud(engine);
@@ -2557,7 +2560,6 @@ export function mountApp(root, engine, opts = {}) {
     aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
     levelInput.value = level;
     levelBox.title = `${tx.ai.levelTitle}. ${levelName}: ${levelWhat}`;
-    describeCheck.input.checked = describe;
     const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio", ...clouds];
     if (engineInput.options.length !== engines.length) {
       engineInput.replaceChildren(...engines.map((id) => el("option", { value: id, text: tx.ai.engines[id] })));
@@ -2579,6 +2581,7 @@ export function mountApp(root, engine, opts = {}) {
     modelsBtn.setAttribute("aria-label", modelsBtn.title);
     showModels();
     if (document.activeElement !== vibeInput) vibeInput.value = vibe;
+    noteVibe();
     showSection();
   }
 
@@ -2946,7 +2949,7 @@ export function mountApp(root, engine, opts = {}) {
     setPrefs({ level: LEVELS.includes(levelInput.value) ? levelInput.value : state.aiPrefs.level });
     startAi();
   });
-  describeCheck.input.addEventListener("change", () => setPrefs({ describe: describeCheck.input.checked }));
+  vibeInput.addEventListener("input", noteVibe);
   keyInput.addEventListener("change", () => {
     const engine = engineNow();
     if (!isCloud(engine)) return;
