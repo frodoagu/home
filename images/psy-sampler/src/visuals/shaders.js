@@ -576,20 +576,35 @@ vec3 scene(vec2 uv) {
 
 // A reef: Knighty's pseudo-Kleinian fractal (box folds and sphere
 // inversions, near the limit set of a Kleinian group), repeated along the
-// flight and bored through. Its finest tips glow like polyps with the hats
-// and the lead; the box (uVar.x, uVar.z) sets the species.
+// flight. The flight (flight.js) steers through its gaps; what still comes
+// within reach is bored away by a cone from the eye (uEye, 0.1 wide) to a
+// point on the path ahead (uReach), so nothing is opened in the distance.
+// Its finest tips glow like polyps with the hats and the lead; the box
+// (uVar.x, uVar.z) sets the species.
 const CORAL = `
+uniform vec3 uEye, uAhead, uReach;
+
 vec3 box() {
   return vec3(0.92436 + 0.06 * (uVar.x - 0.5), 0.90756, 0.92436 + 0.05 * (uVar.z - 0.5));
 }
 
-vec2 path(float z) {
-  return vec2(0.25 * sin(z * 0.4), 0.2 * cos(z * 0.3));
+// A cone with round ends, r1 wide at a and r2 at b (iq).
+float roundCone(vec3 p, vec3 a, vec3 b, float r1, float r2) {
+  vec3 ba = b - a;
+  float l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1.0 / l2;
+  vec3 pa = p - a;
+  float y = dot(pa, ba), z = y - l2;
+  vec3 xv = pa * l2 - ba * y;
+  float x2 = dot(xv, xv), y2 = y * y * l2, z2 = z * z * l2;
+  float k = sign(rr) * rr * rr * x2;
+  if (sign(z) * a2 * z2 > k) return sqrt(x2 + z2) * il2 - r2;
+  if (sign(y) * a2 * y2 < k) return sqrt(x2 + y2) * il2 - r1;
+  return (sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
 }
 
 float reef(vec3 p, out vec4 orb) {
   vec3 C = box();
-  float bore = 0.12 - length(p.xy - path(p.z));
+  float bore = -roundCone(p, uEye, uReach, 0.1, 0.0);
   p = mod(p + 2.0 * C, 4.0 * C) - 2.0 * C;
   float k = 1.0;
   orb = vec4(1e3);
@@ -612,10 +627,9 @@ float reefD(vec3 p) {
 }
 
 vec3 scene(vec2 uv) {
-  float z = uTime * (0.12 + 0.1 * uEnergy) + 0.12 * uPush;
-  vec3 ro = vec3(path(z), z);
-  mat3 cam = camera(ro, vec3(path(z + 0.5), z + 0.5), uTime * 0.05);
-  vec3 rd = cam * normalize(vec3(uv, 1.1 - 0.06 * uSurge));
+  vec3 ro = uEye;
+  mat3 cam = camera(ro, ro + uAhead, 0.0);
+  vec3 rd = cam * normalize(vec3(uv * rot(uTime * 0.05), 1.1 - 0.06 * uSurge));
   float x = 0.0, d = 0.0;
   vec4 orb;
   int n = steps(50.0, 120.0), i;

@@ -1837,6 +1837,18 @@ spirals). The organic and 2D-fractal ones:
   flies through it, veins of light with the lead.
 - **Fractal reef** (`coral`): Knighty's pseudo-Kleinian fractal (box folds and
   sphere inversions) repeated along the flight; polyps glow with the hats.
+  The flight (`flight.js`) turns on the beat and steers through the reef's
+  gaps: each kick (each bar in a breakdown) puts a corner just ahead of the
+  camera and tries up to 12 hashed ways out of it, 10-30° off the heading
+  first and 30-70° after, taking the first with a unit of open water ahead
+  (else the freest). It measures the reef with `reefAt()`, a JS copy of the
+  shader's distance estimate (keep the two in step), and turns off the beat
+  only to dodge, when the way ahead closes within 0.3. Nothing is bored in
+  the distance: the shader cuts away only what still comes within a cone
+  from the camera (0.1 wide) to a point 0.3 ahead, a last resort that
+  `flight.test.js` checks never fires over 30 s of kicks. Picks are hashed
+  from the turn's count, so the same song flies the same way.
+  `prefers-reduced-motion` flies straight.
 - **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
   their borders, nuclei, grains and an out-of-focus layer behind; a ripple per
   kick swells them. Dark field or stained.
