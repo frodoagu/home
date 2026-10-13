@@ -1328,6 +1328,60 @@ so a URL at Chrome's 2 MB limit would otherwise unpack to gigabytes and kill
 the tab. Lookups of a name from outside (style, section, scale, language) use
 `Object.hasOwn`, never `in`: `"constructor" in STYLES` is true.
 
+### 🌅 Closing the set
+
+**🌅 Cierre** (in the pilot row) ends the set within **5 minutes**
+(`CLOSE_SECONDS`), the way a DJ ends a night: a last peak, then an **Outro**
+that winds down, goes wild in its last 4 bars and cuts. With the autopilot off
+it takes the mix that plays first (as 🤖 over a mix).
+
+- **The route** (`closeSet` in `autopilot.js`): the section playing plays out,
+  the one its last loop announced stays, then `CLOSE_ROUTE` up to a last peak
+  (from a peak: breakdown → build → peak; from a groove or an intro: build →
+  peak; from a build: peak), then the outro. The form of the track and a new
+  style on its way go; a style picked while closing comes in on the next loop.
+  The queue shows the route and a 🌅 Outro chip; the section's bars left read
+  `· 🌅 m:ss`, the time the set has left. The phase buttons are off: nothing
+  plays after the outro.
+- **The budget**: `CLOSE_SECONDS` in loops at the slowest tempo the set is
+  heading to (`pilot.closing.left`, one less per loop). The outro is sure to
+  get `OUTRO_MIN` loops (16 bars): a route section that would not leave it
+  that room is cut to whole phrases or skipped, the section playing too, and
+  the outro takes what is left (`fitLength`, `closingPick`). Nothing drops
+  into it (no riser, 💥 off). Clicks on the tiles hold the pilot's step for
+  their bar line, as ever, so each stretches the set by a loop; a slower BPM
+  picked by hand mid-closing stretches it too.
+- **The outro** (`SECTIONS.outro`, out of `SECTION_IDS`: no pick, plan, phase
+  button or snapshot leads there, so seeds replay as before) swaps nothing and
+  improvises nothing. Over all but its last 2 loops it **winds down**
+  (`MIX.outro` / `TONE.outro`, whose specs take an `end` too): the bass fades
+  and closes to 120 Hz by halfway, the kick by three quarters, the rest sinks
+  low. A spec is `[from, to, start, end]`.
+- **The frenzy** (`frenzy()`, the last `FRENZY_LOOPS` = 2 loops, 4 bars):
+  everything comes back at `FRENZY_MIX` (glitch at 135 %), every filter wide
+  open, a kick if there was none and fresh percussion and glitches up to two
+  each (`unleash`); every drum rolls the build-up pattern bar after bar
+  (`frenzyKinds`, the `build` overlay); a riser or siren starts it and a
+  stutter or tape stop ends it; the DJ sweep climbs the mix across it, and the
+  engine tells the visuals (`engine.frenzy` → a `frenzy` event).
+- **The end**: past the outro's last loop `advance` says `end` and the page
+  stops (`endSet`, off the engine's tick): nothing stays queued for ▶, the
+  status line says *Fin del set*. The levels and filters the outro rode go back
+  to where they were as it took them (`outroFrom` / `restoreOutro`), there or
+  on ⏹, 🤖 off or a new seed mid-outro, so nothing is left muted or muffled.
+- **🌅 again** calls it off (`uncloseSet`) while the outro isn't announced: its
+  sections leave the queue and, with ✨, the form is laid out again.
+- **With ✨ AI** the model lays the closing out in place of the form
+  (`planClosing`: `closingPrompt` / `closingSchema` / `normalizeClosing` in
+  `planner.js`): up to `CLOSE_MAX` (4) sections before the outro, told how many
+  bars fit at their shortest (`routeRoom`) and how many minutes are left; what
+  fits replaces the pilot's route (`closeWith`), and its `why` is the chips'
+  tooltip. An answer for a section gone by is too late. Then each section is
+  planned as a queued one, with a line saying the set is closing in place of
+  the set's arc (`closingLine`), and the outro last (`planSchema` with
+  `next: "outro"`, `normalizeOutro`), told what the pilot does with it. The low
+  level skips the closing ask, like the form, and plans the pilot's route.
+
 ## ✨ AI: a model plans the sections
 
 **✨ AI** (next to 🤖) hands one decision of the autopilot to a language model:
@@ -1809,7 +1863,10 @@ at the peak). A drop cuts, with no crossfade, to a peak scene; anything else
 crossfades over a beat. Every pick is a hash of the lanes and the bar, never
 `Math.random`, so the same seed played the same way gives the same show. It
 also drives the **strobe**: 8ths through the drop's bar, 16ths rising over the
-build's second half, the kicks through the peak. The strobe starts at full
+build's second half, the kicks through the peak, and a set's frenzy (🌅) at
+full: 16ths, then 32nds over its second half, with the colours flipping on
+every other 16th (at a strobe of 75 % or more) and a cut to a new scene and
+palette on every beat (unless 🔒). The strobe starts at full
 (`psy-sampler:visuals` in localStorage keeps the viewer's level), behind a
 one-time photosensitivity warning; the slider or S takes it down to 0.
 

@@ -34,20 +34,27 @@ import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
+  CLOSE_SECONDS,
   OPENING_OPEN,
+  OUTRO,
   PUMP,
   SECTIONS,
   SECTION_IDS,
   STYLES,
   STYLE_IDS,
   advance,
+  announced,
   bpmFor,
+  closeSet,
+  closeWith,
+  closingOpen,
   dequeue,
   dropNext,
   dropping,
   enqueue,
   entering,
   fillMelodic,
+  frenzy,
   guessSection,
   improvises,
   isBare,
@@ -56,6 +63,7 @@ import {
   moveTo,
   phraseEnd,
   rearrange,
+  routeRoom,
   skip,
   startPilot,
   styleAt,
@@ -63,6 +71,7 @@ import {
   toneOf,
   sequence,
   unbanned,
+  uncloseSet,
   unform,
   withForm,
   withPlan,
@@ -95,11 +104,15 @@ import {
   PLAN_SECTIONS,
   SET_LENGTHS,
   asksForm,
+  closingPrompt,
+  closingSchema,
   formPrompt,
   formSchema,
   keptAhead,
+  normalizeClosing,
   normalizeForm,
   normalizeOpening,
+  normalizeOutro,
   normalizePlan,
   openWith,
   openingPrompt,
@@ -185,7 +198,7 @@ const stamp = (d = new Date()) => {
 // ✨ AI's plans for the sections ahead ({ plan, why, queued }, in order; the
 // first is the one the pilot holds). From silence it also gets `opening`
 // (planner.js normalizeOpening; null once asked for in vain) and its `why`.
-const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "" });
+const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "", closeWhy: "" });
 // Form chips the queue shows before folding the rest into "+n".
 const FORM_SHOWN = 8;
 // An ask the model has not answered by then is cut off, and a failed one is
@@ -282,13 +295,14 @@ export function mountApp(root, engine, opts = {}) {
   const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
   const owned = (id) => id in ws.variants && !ws.auto.includes(id);
   const pilotLists = () => unbanned(ws.lists, ws.banned); // what the autopilot and the ✨ AI pick from
+  const loopSeconds = (bpm = state.tempo) => stepDuration(bpm) * LOOP_STEPS;
 
   // What each variant plays apart from what a bar lays on top of it: a
   // build-up, or the bar's overlay (a drop's gap, a phrase-end fill), which
   // feed() lays on. `live` is what the engine got, for the tiles' flashes.
   const fed = new Map();
   const live = new Map();
-  const OVERLAYS = { gap: silenced, break: withBreak, roll: withRoll };
+  const OVERLAYS = { gap: silenced, break: withBreak, roll: withRoll, build: withBuildUp };
   function feed(id, data, glide) {
     fed.set(id, data);
     const b = state.buildUp;
@@ -393,6 +407,8 @@ export function mountApp(root, engine, opts = {}) {
   const queueList = el("ol", { class: "section-queue", "aria-label": tx.pilot.queue });
   const nextBtn = el("button", { type: "button", class: "ghost", "data-action": "next-section", text: tx.pilot.next });
   nextBtn.title = tx.pilot.nextTitle;
+  const closeBtn = el("button", { type: "button", class: "ghost close-set", "data-action": "close-set", "aria-pressed": "false", text: tx.pilot.close });
+  closeBtn.title = tx.pilot.closeTitle;
   const phaseBtns = SECTION_IDS.map((id) => {
     const b = el("button", { type: "button", class: "ghost phase", "data-section": id, text: tx.sections[id] });
     b.title = tx.pilot.phasesTitle;
@@ -927,7 +943,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, sectionBadge, sectionLeft, queueList, nextBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, sectionBadge, sectionLeft, queueList, nextBtn, closeBtn),
       aiPanel,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
@@ -1042,12 +1058,13 @@ export function mountApp(root, engine, opts = {}) {
     sectionBadge.hidden = !p;
     const opened = Boolean(p && state.run?.opening) && sectionNo() === 0; // the ✨ AI's opening plays
     sectionBadge.title = !opened ? "" : state.run.why ? `${tx.ai.planned}: ${state.run.why}` : tx.ai.planned;
-    sectionLeft.textContent = p ? tx.pilot.left(p.left * 2) : "";
+    sectionLeft.textContent = !p ? "" : p.closing ? tx.pilot.closingLeft(p.left * 2, clock(p.closing.left * loopSeconds())) : tx.pilot.left(p.left * 2);
     // ✕ on a section coming: none on the one the last loop already announced
     // (its riser is on its way), so every ✕ shown does what it says.
+    // Nor on the outro: a closing is called off with 🌅.
     const settled = (slot) => slot === 0 && p.left === 1 && p.next !== undefined;
     const unqueue = (id, slot, drop) => {
-      if (settled(slot)) return [];
+      if (settled(slot) || id === OUTRO) return [];
       const btn = el("button", { type: "button", class: "unqueue", "aria-label": tx.pilot.unqueue(tx.sections[id]), text: "✕" });
       btn.addEventListener("click", () => {
         drop();
@@ -1055,16 +1072,6 @@ export function mountApp(root, engine, opts = {}) {
       });
       return [btn];
     };
-    const chips = (p?.queue ?? []).map((id, i) => {
-      const drop = unqueue(id, i, () => {
-        state.pilot = dequeue(state.pilot, i);
-        requeue();
-      });
-      return el("li", { class: "queued", "data-queued": id }, el("span", { text: tx.sections[id] }), ...drop);
-    });
-    // What comes after the queue: the ✨ AI's form of the track (✕ drops a
-    // section of it too), then the plans past it as soon as there are some,
-    // else the pilot's pick in its last loop.
     const ahead = p ? (state.run?.ahead ?? []) : [];
     const form = p?.form ?? [];
     const coming = p ? sequence(p) : [];
@@ -1073,6 +1080,18 @@ export function mountApp(root, engine, opts = {}) {
       const said = e && (i >= coming.length || e.plan.section === coming[i]) ? e.why : "";
       return said ? `${tx.ai.planned}: ${said}` : fallback;
     };
+    const chips = (p?.queue ?? []).map((id, i) => {
+      const drop = unqueue(id, i, () => {
+        state.pilot = dequeue(state.pilot, i);
+        requeue();
+      });
+      const li = el("li", { class: "queued", "data-queued": id }, el("span", { text: id === OUTRO ? `🌅 ${tx.sections[id]}` : tx.sections[id] }), ...drop);
+      if (p.closing) li.title = why(i, state.run?.closeWhy ? `${tx.ai.closed}: ${state.run.closeWhy}` : tx.pilot.closingChip);
+      return li;
+    });
+    // What comes after the queue: the ✨ AI's form of the track (✕ drops a
+    // section of it too), then the plans past it as soon as there are some,
+    // else the pilot's pick in its last loop.
     form.slice(0, FORM_SHOWN).forEach((id, i) => {
       const drop = unqueue(id, p.queue.length + i, () => {
         state.pilot = unform(state.pilot, i);
@@ -1115,7 +1134,7 @@ export function mountApp(root, engine, opts = {}) {
       const slot = planning.form ? chips.length : planning.at - sectionNo() - 1;
       const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
       chip.classList.add("is-thinking");
-      chip.title = planning.form ? tx.ai.formingTitle : tx.ai.thinkingTitle;
+      chip.title = planning.closing ? tx.ai.closingTitle : planning.form ? tx.ai.formingTitle : tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -1125,12 +1144,16 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // 💥 is lit while a drop is on its way: armed, rolling, in its gap, or the
-  // pilot's next loop.
+  // pilot's next loop. 🌅 closes what plays; again, it calls the closing off
+  // until the outro is announced.
   function showDrop() {
     const p = state.auto ? state.pilot : null;
+    closeBtn.setAttribute("aria-pressed", String(Boolean(p?.closing)));
+    closeBtn.disabled = !engine.isRunning() || state.armed || Boolean(p?.closing && !closingOpen(p));
+    for (const b of phaseBtns) b.disabled = Boolean(p?.closing); // nothing plays after the outro
     const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
-    dropBtn.disabled = !engine.isRunning();
+    dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // nothing drops into an outro
   }
 
   // The same row under the snapshot autopilot: the snapshot playing, its bars
@@ -1313,9 +1336,20 @@ export function mountApp(root, engine, opts = {}) {
         style: ws.style,
         changeBars: ws.changeBars,
       });
+      if (move.end) {
+        setTimeout(endSet); // the outro is over, and so is the set: off the engine's tick
+        return undefined;
+      }
       const was = state.active;
       const plan = state.pilot.plan;
+      const tame = !frenzy(state.pilot);
       state.pilot = move.pilot;
+      if (tame && frenzy(state.pilot)) {
+        // The set goes wild: the sweep climbs the mix to the end, the visuals flash.
+        const end = time + state.pilot.left * loopSeconds();
+        engine.sweep(time, end);
+        engine.frenzy(time, end);
+      }
       const sectionStart = move.pilot.left === move.pilot.length;
       if (move.style) {
         styleNow(move.style); // before any part is written: it takes the new scale
@@ -1361,7 +1395,7 @@ export function mountApp(root, engine, opts = {}) {
       }
     }
     if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
-    setBar(step, stepDrop(time, step, loopStart) ?? fillKinds(step));
+    setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? fillKinds(step));
     if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) {
@@ -1424,6 +1458,14 @@ export function mountApp(root, engine, opts = {}) {
       if (fill !== "roll" && layer === "kick") out[id] = "break";
       else if (fill !== "break" && layer === "perc" && defOf(id).kind === "drum") out[id] = "roll";
     }
+    return out;
+  }
+
+  // The frenzy rolls every drum it plays, bar after bar; null out of it.
+  function frenzyKinds() {
+    if (!state.auto || !frenzy(state.pilot)) return null;
+    const out = {};
+    for (const id of Object.values(laneMap())) if (defOf(id).kind === "drum") out[id] = "build";
     return out;
   }
 
@@ -1644,6 +1686,7 @@ export function mountApp(root, engine, opts = {}) {
     let moved = false;
     for (const [id, level] of Object.entries(mixOf(state.pilot, active))) {
       if (!tiles.has(id) || dataOf(id).level === level) continue;
+      keepForEnd(id);
       setLevel(id, level, { pilot: true, glide: stepDuration(state.tempo) * LOOP_STEPS });
       moved = true;
     }
@@ -1661,6 +1704,7 @@ export function mountApp(root, engine, opts = {}) {
       if (opening && OPENING_OPEN.includes(layerOf(id).id)) openRidden.add(id);
       const ins = dataOf(id).insert;
       if (!tiles.has(id) || (ins.hp === tone.hp && ins.lp === tone.lp)) continue;
+      keepForEnd(id);
       setTone(id, tone, stepDuration(state.tempo) * LOOP_STEPS);
       moved = true;
     }
@@ -1672,6 +1716,28 @@ export function mountApp(root, engine, opts = {}) {
     if (moved) persist();
   }
   const openRidden = new Set();
+
+  // A closing's outro rides every sound's level and lowpass, kick and bass
+  // too: each goes back to where it was as the outro took it once the set
+  // ends, or once anything else ends the outro (⏹, 🤖, a new seed), so
+  // nothing is left muted or muffled, nor the frenzy's sweep up. `glide`:
+  // over that long.
+  const outroFrom = new Map(); // variant -> { level, hp, lp } before the outro rode it
+  function keepForEnd(id) {
+    if (!state.pilot?.closing || state.pilot.section !== OUTRO || outroFrom.has(id)) return;
+    const { level, insert } = dataOf(id);
+    outroFrom.set(id, { level, hp: insert.hp, lp: insert.lp });
+  }
+  function restoreOutro(glide = 0) {
+    if (frenzy(state.pilot)) engine.sweepOff();
+    for (const [id, { level, hp, lp }] of outroFrom) {
+      if (!tiles.has(id)) continue;
+      setLevel(id, level, { pilot: true, glide });
+      setTone(id, { hp, lp }, glide);
+    }
+    if (outroFrom.size) persist();
+    outroFrom.clear();
+  }
 
   function setTone(id, { hp, lp }, glide) {
     if (!(id in ws.variants)) ws.auto.push(id);
@@ -1822,7 +1888,7 @@ export function mountApp(root, engine, opts = {}) {
       return;
     }
     const parts = capture(lanes, dataNow);
-    const section = state.auto && state.pilot ? state.pilot.section : guessSection(parts.active);
+    const section = state.auto && state.pilot && state.pilot.section !== OUTRO ? state.pilot.section : guessSection(parts.active);
     const name = freshName(tx.sections[section], ws.snapshots.map((s) => s.name));
     const snap = { id: nextSnapId(ws.snapshots), name, section, ...parts };
     ws.snapshots = [...ws.snapshots, snap];
@@ -2350,6 +2416,7 @@ export function mountApp(root, engine, opts = {}) {
   function engageAuto(section = null, { arm = false } = {}) {
     if (!state.auto) stats?.count("autopilot"); // a new seed re-engages: not a start
     landStyle();
+    restoreOutro(loopSeconds()); // a new seed over an outro: the pilot rides the levels from where they were
     const rearm = state.auto && state.armed; // still from silence
     const playing = rearm ? {} : { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
@@ -2501,7 +2568,8 @@ export function mountApp(root, engine, opts = {}) {
   // styleOnDrop): the sections up to it are queued, the BPM rides the break,
   // and the plans from the drop on are asked again in the new style.
   function setStyle(value) {
-    if (!state.auto || !state.pilot || state.armed || !engine.isRunning()) {
+    // Closing, there is no drop out of a break to wait for: it comes in on the next loop.
+    if (!state.auto || !state.pilot || state.armed || !engine.isRunning() || state.pilot.closing) {
       styleNow(value);
       if (state.auto && state.pilot) state.pilot = rearrange(state.pilot);
       return;
@@ -2868,15 +2936,19 @@ export function mountApp(root, engine, opts = {}) {
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
     // The low level skips the form: one ask less before the section comes.
+    // Closing, the model lays out the closing in its place, while it may.
+    if (p.closing && !closingOpen(p)) state.run.formed = true;
     if (!state.run.formed && asksForm(state.aiPrefs.level)) {
-      planForm(engine);
+      if (p.closing) planClosing(engine);
+      else planForm(engine);
       return;
     }
     const slot = state.run.ahead.length;
     if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
     const coming = sequence(p);
     const next = coming[slot] ?? null; // queued by hand or by the form: the model arranges that one
-    if (next && !PLAN_SECTIONS.includes(next)) return;
+    if (p.closing && !next) return; // nothing plays after the outro
+    if (next && !PLAN_SECTIONS.includes(next) && next !== OUTRO) return;
     const at = sectionNo() + 1 + slot;
     const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, ...asked() };
     const { vibe } = state.aiPrefs;
@@ -2899,6 +2971,7 @@ export function mountApp(root, engine, opts = {}) {
       vibe,
       fresh,
       names: ws.names,
+      closing: p.closing ? { seconds: p.closing.left * loopSeconds(), route: coming } : null,
     });
     let more = false;
     ask(
@@ -2906,7 +2979,7 @@ export function mountApp(root, engine, opts = {}) {
       { at },
       (signal) => ai[engine].plan(prompt, planSchema(ctx), asking(engine, signal, { style: ctx.style, bpm })),
       (raw) => {
-        const plan = normalizePlan(raw, { lists: pilotLists(), style: ctx.style });
+        const plan = (next === OUTRO ? normalizeOutro : normalizePlan)(raw, { lists: pilotLists(), style: ctx.style });
         // The section it plans may be the next one by now.
         const ahead = state.run.ahead;
         if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
@@ -2969,6 +3042,40 @@ export function mountApp(root, engine, opts = {}) {
       },
     );
     if (state.armed) status(tx.ai.forming);
+  }
+
+  // 🌅 Asks the model for the sections that close the set, before the
+  // outro, in what it has left (autopilot.js routeRoom); the pilot walks them
+  // in place of its own route. An answer for a section gone by is too late:
+  // the pilot's route stays. Answered or not, the plans follow.
+  function planClosing(engine) {
+    const p = state.pilot;
+    const at = sectionNo();
+    const prompt = closingPrompt({
+      sections: state.run.sections,
+      left: p.left * 2,
+      coming: announced(p),
+      room: Math.max(0, routeRoom(p)) * 2,
+      seconds: p.closing.left * loopSeconds(),
+      vibe: state.aiPrefs.vibe,
+    });
+    ask(
+      engine,
+      { form: true, closing: true },
+      (signal) => ai[engine].plan(prompt, closingSchema(), asking(engine, signal)),
+      (raw) => {
+        if (at !== sectionNo() || !closingOpen(state.pilot)) return;
+        state.pilot = closeWith(state.pilot, normalizeClosing(raw));
+        state.run.closeWhy = whyOf(raw);
+        requeue();
+        status(tx.ai.closingReady(sequence(state.pilot).map((id) => tx.sections[id]).join(" → ")));
+      },
+      (ok) => {
+        if (!state.run) return;
+        state.run.formed = true;
+        if (ok) planAhead(); // failed, the retry plans the pilot's route
+      },
+    );
   }
 
   // A new section for the pilot: the plan made for it leaves the ones ahead
@@ -3186,11 +3293,12 @@ export function mountApp(root, engine, opts = {}) {
       persist();
     });
   }
-  // What played stays queued for ▶, so it comes back together on the first step.
-  stopBtn.addEventListener("click", () => {
+  // What played stays queued for ▶ (`keep`), so it comes back together on
+  // the first step.
+  function stopSet({ keep = true } = {}) {
     const playing = state.active;
     state.active = {};
-    state.armed = Object.keys(playing).length > 0;
+    state.armed = keep && Object.keys(playing).length > 0;
     state.pending = state.armed ? playing : null;
     landStyle();
     state.auto = false;
@@ -3215,9 +3323,55 @@ export function mountApp(root, engine, opts = {}) {
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     fxShown = new Set();
+    restoreOutro(); // once the lanes are gone: no level jumps before the fade
     renderButtons(new Set());
     paintStep(null);
     showSection();
+  }
+  stopBtn.addEventListener("click", () => stopSet());
+
+  // 🌅 The closing: the pilot (over what plays, if it was off) queues the
+  // sections up to a last peak and the outro, all within CLOSE_SECONDS at
+  // the slowest tempo it is heading to; with ✨ on the model lays them out
+  // instead (planClosing) and plans each one. 🌅 again calls it off while
+  // the outro is not announced. A new style on its way goes with its ramp.
+  function closeNow() {
+    if (!engine.isRunning() || state.armed) return;
+    if (!state.auto) engageAuto();
+    if (state.pilot.handoff) {
+      state.ramp = null;
+      showRamp();
+    }
+    const slowest = Math.min(state.tempo, state.ramp?.to ?? state.tempo);
+    state.pilot = closeSet(state.pilot, Math.floor(CLOSE_SECONDS / loopSeconds(slowest)));
+    if (planning?.form) cancelPlanning(); // a form: the closing is laid out in its place
+    state.run.formed = false;
+    requeue();
+    const route = sequence(state.pilot).map((id) => tx.sections[id]).join(" → ");
+    status(tx.pilot.closing(route, clock(state.pilot.closing.left * loopSeconds())));
+    showSection();
+  }
+
+  function uncloseNow() {
+    state.pilot = uncloseSet(state.pilot);
+    if (planning?.form) cancelPlanning();
+    state.run.formed = false; // the form of the track is laid out again
+    state.run.closeWhy = "";
+    requeue();
+    status(tx.pilot.closeOff);
+    showSection();
+  }
+
+  // Past the outro's last loop: everything stops, nothing stays queued for ▶.
+  function endSet() {
+    if (!alive || !state.pilot?.closing) return;
+    stopSet({ keep: false });
+    status(tx.pilot.closed);
+  }
+
+  closeBtn.addEventListener("click", () => {
+    if (closingOpen(state.auto ? state.pilot : null)) uncloseNow();
+    else if (!state.pilot?.closing) closeNow();
   });
   // The keyboard's play/pause and stop keys press the same buttons.
   mediaKeys?.bind({ playing: engine.isRunning, play: () => cueBtn.click(), stop: () => stopBtn.click() });
@@ -3257,6 +3411,7 @@ export function mountApp(root, engine, opts = {}) {
       return;
     }
     landStyle();
+    restoreOutro(loopSeconds()); // an outro let go of comes back over a loop
     state.auto = false;
     state.pilot = null;
     cancelPlanning();

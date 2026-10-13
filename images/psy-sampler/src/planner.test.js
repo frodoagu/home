@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LAYERS } from "./catalog.js";
 import { DEFAULTS } from "./audio/patterns.js";
-import { SECTIONS, STYLES, STYLE_IDS, countRange, poolOf } from "./autopilot.js";
+import { CLOSE_MAX, OUTRO, SECTIONS, STYLES, STYLE_IDS, countRange, poolOf } from "./autopilot.js";
 import {
   CHARACTER,
   FORM,
@@ -15,11 +15,16 @@ import {
   setLine,
   asksForm,
   briefOf,
+  closingLine,
+  closingPrompt,
+  closingSchema,
   formPrompt,
   formSchema,
   keptAhead,
+  normalizeClosing,
   normalizeForm,
   normalizeOpening,
+  normalizeOutro,
   normalizePlan,
   openWith,
   openingPrompt,
@@ -370,6 +375,54 @@ describe("the length of the set", () => {
     const base = { ...goa, active: {}, sections: ["intro"], bars: 8 };
     expect(planPrompt({ ...base, set })).toContain(line);
     expect(planPrompt(base)).not.toContain("The set lasts");
+  });
+});
+
+describe("🌅 the closing", () => {
+  it("asks for the sections before the outro, in the time the set has left", () => {
+    const prompt = closingPrompt({ sections: ["intro", "groove", "peak"], left: 12, coming: [], room: 40, seconds: 270, vibe: "dark" });
+    expect(prompt).toContain("Now playing: peak, 12 bars left.");
+    expect(prompt).toContain("it must end in 5 minutes at most, and it ends with the outro (16, 24, 32 bars;");
+    expect(prompt).toContain(`between the peak and the outro, in order: ${CLOSE_MAX} at most, 40 bars at most in all at their shortest (groove 8, build 8, peak 24, breakdown 8)`);
+    expect(prompt).toContain("No intro.");
+    expect(prompt).toContain("Shape the closing to the listener's wish.");
+    const announced = closingPrompt({ sections: ["build"], left: 2, coming: ["peak"], room: 8, seconds: 100 });
+    expect(announced).toContain("Already coming after it: peak.");
+    expect(announced).toContain("between the peak already coming and the outro");
+    expect(announced).toContain("in 2 minutes at most");
+    expect(announced).not.toContain("wish");
+    expect(closingSchema().properties.sections).toEqual({ type: "array", items: { type: "string", enum: PLAN_SECTIONS }, maxItems: CLOSE_MAX });
+    expect(closingSchema().required).toEqual(["why", "sections"]);
+  });
+
+  it("keeps only sections a plan may pick, at most CLOSE_MAX; never the outro or an intro", () => {
+    expect(normalizeClosing({ sections: ["peak", "outro", "intro", "breakdown"] })).toEqual(["peak", "breakdown"]);
+    expect(normalizeClosing({ sections: Array(9).fill("groove") })).toHaveLength(CLOSE_MAX);
+    expect(normalizeClosing(null)).toEqual([]);
+    expect(normalizePlan({ section: OUTRO, bars: 16, layers: {} }, goa)).toBeNull(); // no plan picks it by itself
+  });
+
+  it("plans the outro like a queued section: its own lengths and counts, and what the pilot does with it", () => {
+    const schema = planSchema({ ...goa, next: OUTRO });
+    expect(schema.properties.section.enum).toEqual([OUTRO]);
+    expect(schema.properties.bars.enum).toEqual([16, 24, 32]);
+    expect(schema.properties.layers.properties.pad.maxItems).toBe(countRange(OUTRO, "pad")[1]);
+    const raw = { section: OUTRO, bars: 32, layers: { kick: [], pad: ["pad.prog", "pad.chord", "pad.fifths"], lead: ["lead.acid"] } };
+    const outro = normalizeOutro(raw, goa);
+    expect(outro).toEqual({ section: OUTRO, bars: 32, layers: { kick: [], pad: ["pad.prog", "pad.chord"], lead: ["lead.acid"] } });
+    expect(normalizeOutro(outro, goa)).toEqual(outro);
+    expect(normalizeOutro({ ...raw, section: "peak" }, goa)).toBeNull();
+    expect(normalizeOutro({ ...raw, bars: 8 }, goa).bars).toBeNull();
+    const closing = { seconds: 200, route: ["peak", OUTRO] };
+    const base = { ...goa, active: {}, sections: ["intro", "build"], bars: 8, set: { minutes: 60, elapsed: 600 } };
+    const prompt = planPrompt({ ...base, next: OUTRO, closing });
+    expect(prompt).toContain(closingLine(closing));
+    expect(prompt).toContain("The listener is closing the set: it ends in 4 minutes at most, after peak, outro.");
+    expect(prompt).not.toContain("The set lasts"); // the closing stands in for the arc
+    expect(prompt).toContain("The outro is the last thing the audience hears");
+    expect(prompt).toContain("The closing has outro next: plan that section.");
+    expect(planPrompt({ ...base, next: "peak", closing })).toContain("The closing has peak next: plan that section.");
+    expect(planPrompt({ ...base, next: "peak", closing })).not.toContain("The outro is the last thing");
   });
 });
 

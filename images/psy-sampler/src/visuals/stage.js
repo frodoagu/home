@@ -13,6 +13,7 @@
 //   { kind: "lanes", time, variants }         what plays from `time` on
 //   { kind: "build", time, end }              the sweep up into a drop
 //   { kind: "drop", time }                    the drop
+//   { kind: "frenzy", time, end }             the end of a set going wild (🌅)
 //   { kind: "fx", id, time, end }             a one-shot FX
 //   { kind: "stop", time }                    the loop stops
 //   { kind: "levels", low, mid, high }        what the speakers get now, 0..1
@@ -49,6 +50,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
   let variants = [];
   let build = null; // { time, end } while a sweep is up
   let drop = { time: -Infinity, count: 0 };
+  let frenzy = null; // { time, end } while a set goes wild
   let playing = false;
   let levels = { low: 0, mid: 0, high: 0 };
   let heard = { low: 0, mid: 0, high: 0 }; // smoothed
@@ -76,12 +78,16 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
         build = null;
         drop = { time: e.time, count: drop.count + 1 };
         break;
+      case "frenzy":
+        frenzy = { time: e.time, end: e.end };
+        break;
       case "fx":
         last.fx = { time: e.time, accent: false };
         break;
       case "stop":
         playing = false;
         build = null;
+        frenzy = null;
         layers = new Set();
         variants = [];
         break;
@@ -127,6 +133,8 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
     }
     const sinceDrop = (t - drop.time) / beatMs; // beats
     const building = build && t >= build.time ? clamp01((t - build.time) / Math.max(1, build.end - build.time)) : 0;
+    // How far into the frenzy, 0..1 while it lasts (just past 0 as it starts), else 0.
+    const wild = frenzy && t >= frenzy.time && t < frenzy.end ? Math.max(1e-3, (t - frenzy.time) / Math.max(1, frenzy.end - frenzy.time)) : 0;
 
     return {
       time: t,
@@ -145,6 +153,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
       variants,
       playing,
       build: building,
+      frenzy: wild,
       sinceDrop,
       drops: drop.count,
     };

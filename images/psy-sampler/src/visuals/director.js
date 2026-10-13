@@ -51,10 +51,12 @@ export function moodOf(s) {
 /**
  * The strobe the music asks for at a frame, 0..1, before the viewer's level:
  * 8ths through the drop's first bar, 16ths rising over the second half of the
- * build, the kicks through the peak, and a flash by hand.
+ * build, the kicks through the peak, a set's frenzy at full (16ths, then 32nds
+ * over its second half) and a flash by hand.
  */
 export function strobeOf(s, flashAt = -Infinity) {
   let f = 0;
+  if (s.frenzy > 0) f = pulse((s.beats * (s.frenzy < 0.5 ? 4 : 8)) % 1, 5);
   if (s.sinceDrop >= 0 && s.sinceDrop < 4) f = Math.max(f, pulse((s.sinceDrop * 2) % 1, 7));
   if (s.build > 0.5) f = Math.max(f, pulse((s.beats * 4) % 1, 9) * ((s.build - 0.5) * 2) ** 2);
   if (moodOf(s) === "peak") f = Math.max(f, s.env.kick ** 3 * 0.5);
@@ -72,7 +74,7 @@ export function createDirector({ scenes = SCENES } = {}) {
   let fade = { start: -Infinity, ms: 1 };
   let locked = false;
   let since = 0; // bar the current scene came in on
-  let seen = { bar: null, sig: null, drops: 0 };
+  let seen = { bar: null, sig: null, drops: 0, beat: null };
   let changedSig = false; // the lanes changed since the scene came in
   let flashAt = -Infinity;
   let manual = 0; // presses, so a manual pick hashes differently each time
@@ -99,7 +101,11 @@ export function createDirector({ scenes = SCENES } = {}) {
     const sig = [...s.variants].sort().join(",");
     if (seen.sig !== null && sig !== seen.sig) changedSig = true;
     const mood = moodOf(s);
-    if (s.drops > seen.drops) {
+    const beat = Math.floor(s.beats);
+    if (s.frenzy > 0 && beat !== seen.beat && !locked) {
+      // A set going wild cuts to a new scene and palette on every beat.
+      show(choose("peak", `frenzy:${sig}:${beat}`), s, 0);
+    } else if (s.drops > seen.drops) {
       // The drop cuts: no crossfade, a new scene on the 1.
       if (!locked) show(choose("peak", `drop:${sig}:${s.bar}`), s, 0);
     } else if (seen.bar !== null && s.bar !== seen.bar && !locked) {
@@ -108,7 +114,7 @@ export function createDirector({ scenes = SCENES } = {}) {
         show(choose(mood, `${sig}:${s.bar}`), s, FADE_BEATS);
       }
     }
-    seen = { bar: s.bar, sig, drops: s.drops };
+    seen = { bar: s.bar, sig, drops: s.drops, beat };
 
     const mix = clamp01((s.time - fade.start) / fade.ms);
     const strobe = strobeOf(s, flashAt);

@@ -728,6 +728,11 @@ export function createEngine({
     sweepOff(at);
   }
 
+  /** The end of a set going wild from `at` to `end`: only the visuals hear it. */
+  function frenzy(at, end) {
+    if (ctx && timer !== null) emit({ kind: "frenzy", time: Math.max(at, ctx.currentTime), end });
+  }
+
   /**
    * The arrangement's pump: per layer, the least duck every lane of it gets
    * from `at` on (its own duck when that is deeper). Kicks never duck. Renders
@@ -933,6 +938,7 @@ export function createEngine({
     setMasterFilter,
     sweep,
     sweepOff: drop,
+    frenzy,
     setPump,
     triggerFx,
     audition,
@@ -949,7 +955,7 @@ export function createEngine({
     onBar: (fn) => {
       barHook = fn;
     },
-    /** fn(event) for every hit, bar line, lane change, FX, build, drop and stop; returns the unsubscribe. */
+    /** fn(event) for every hit, bar line, lane change, FX, build, drop, frenzy and stop; returns the unsubscribe. */
     listen: (fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);

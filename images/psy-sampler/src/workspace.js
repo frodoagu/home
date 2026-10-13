@@ -6,7 +6,7 @@ import { LAYERS, LAYER_IDS, layerById, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
 import { LEVEL } from "./audio/params.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
-import { CHANGE_BARS, CHANGE_DEFAULT, SECTIONS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
+import { CHANGE_BARS, CHANGE_DEFAULT, SECTION_IDS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
 import { laneKey } from "./selection.js";
 import { SNAP_MAX, freshName, nextSnapId } from "./snapshots.js";
 import { RAMP_BARS, RAMP_DEFAULT } from "./tempo.js";
@@ -85,7 +85,7 @@ export function normalize(raw) {
     const name = typeof snap.name === "string" ? snap.name.trim().slice(0, NAME_MAX) : "";
     const data = {};
     for (const v of Object.values(parts)) data[v] = sanitize(v, snap.data?.[v]);
-    const section = Object.hasOwn(SECTIONS, snap.section) ? snap.section : "groove";
+    const section = SECTION_IDS.includes(snap.section) ? snap.section : "groove"; // never the outro: it only closes a set
     snapshots.push({ id, name: name || id, section, active: parts, data });
     if (snapshots.length === SNAP_MAX) break;
   }

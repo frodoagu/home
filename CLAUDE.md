@@ -474,7 +474,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   but keeps it as the `fallback` whenever the sample isn't decoded) that the UI
   edits and hands to `engine.setData()`; edits persist per browser in
   localStorage and are run through `sanitize()` on load. Kick and bass are
-  exclusive lanes, perc/lead/pad/glitch stack. A style with no pool for a layer
+  exclusive lanes, perc/lead/pad/glitch stack. The 🌅 outro is in `SECTIONS`
+  but NOT in `SECTION_IDS`: only a closing queues it (no pick, plan, phase
+  button or snapshot leads there), so seeds replay; don't list it with the rest. A style with no pool for a layer
   would leave it out WITHOUT drawing from the PRNG (`leftOut`), the way to add
   a layer without shifting old seeds (every style has a glitch pool, so that
   layer did shift them); a `manual` layer (the classics, famous melodies in

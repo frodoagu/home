@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_BARS,
+  CLOSE_MAX,
+  CLOSE_ROUTE,
+  FRENZY_LOOPS,
+  FRENZY_MIX,
   IMPROVISE,
+  MIX,
+  OUTRO,
+  OUTRO_MIN,
   OPENING_MIX,
   OPENING_TONE,
   PHRASE_LOOPS,
   PUMP,
   SECTIONS,
+  SECTION_IDS,
   STYLES,
   STYLE_IDS,
   TONE,
@@ -14,11 +22,15 @@ import {
   advance,
   arrange,
   bpmFor,
+  closeSet,
+  closeWith,
+  closingOpen,
   dequeue,
   dropNext,
   dropping,
   enqueue,
   fillMelodic,
+  frenzy,
   guessSection,
   improvises,
   isBare,
@@ -35,6 +47,7 @@ import {
   styleOnDrop,
   toneOf,
   unbanned,
+  uncloseSet,
   unform,
   withForm,
   withPlan,
@@ -120,7 +133,7 @@ describe("autopilot", () => {
           expect(cur.left).toBe(cur.length);
         }
       }
-      expect(new Set(log.map((m) => m.pilot.section))).toEqual(new Set(Object.keys(SECTIONS)));
+      expect(new Set(log.map((m) => m.pilot.section))).toEqual(new Set(SECTION_IDS)); // the outro only closes a set
     }
   });
 
@@ -419,12 +432,12 @@ describe("autopilot", () => {
       expect(toneOf(pilot("build", 1), mix)["pad.chord"]).toEqual({ hp: 600, lp: LP_OPEN });
     });
 
-    it("never rides kick or bass, and an absent entry is open", () => {
+    it("never rides kick or bass but in the outro, and an absent entry is open", () => {
       const peak = toneOf(pilot("peak", 8, 8), mix);
       expect(Object.keys(peak).sort()).toEqual(["lead.acid", "pad.chord"]);
       expect(peak["lead.acid"]).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
       expect(peak["pad.chord"].hp).toBe(220);
-      for (const section of Object.keys(TONE)) {
+      for (const section of SECTION_IDS) {
         for (const layer of Object.keys(TONE[section])) expect(TONE_LAYERS).toContain(layer);
       }
     });
@@ -754,5 +767,146 @@ describe("a new style while it plays", () => {
       const [lo, hi] = STYLES[id].bpm;
       expect(lo, id).toBeLessThan(hi);
     }
+  });
+});
+
+describe("🌅 the closing", () => {
+  // Plays `pilot` until the set ends (or `most` loops): the loops it took and every move.
+  function close(pilot, active, most = 400) {
+    const rng = seeded(7);
+    const moves = [];
+    for (let i = 0; i < most; i++) {
+      const move = advance(pilot, active, lists, rng);
+      if (move.end) return { loops: i, moves };
+      ({ pilot, active } = move);
+      moves.push(move);
+    }
+    return { loops: Infinity, moves };
+  }
+
+  it("the outro is no section to pick: no phase button, no plan, no way there but a closing", () => {
+    expect(SECTION_IDS).not.toContain(OUTRO);
+    for (const id of SECTION_IDS) expect(SECTIONS[id].next).not.toContain(OUTRO);
+  });
+
+  it("queues the sections up to a last peak, then the outro; the form and a new style go", () => {
+    const { pilot } = startPilot(lists, seeded(1));
+    const peak = { ...pilot, section: "peak", left: 10, length: 12, form: ["groove", "build"], handoff: { style: "goa", broke: false } };
+    const closed = closeSet(peak, 90);
+    expect(closed.queue).toEqual([...CLOSE_ROUTE.peak, OUTRO]);
+    expect(closed.closing).toEqual({ left: 90 });
+    expect(closed.form).toBeUndefined();
+    expect(closed.handoff).toBeUndefined();
+    expect(closingOpen(closed)).toBe(true);
+    // The section its last loop announced stays, and the route follows from it.
+    const announced = { ...pilot, section: "build", left: 1, length: 4, queue: [], next: "peak" };
+    expect(closeSet(announced, 90).queue).toEqual(["peak", ...CLOSE_ROUTE.peak, OUTRO]);
+    expect(closeSet(pilot, 90, ["breakdown", "peak", "intro", "groove"]).queue).toEqual(["breakdown", "peak", OUTRO]); // never an intro
+  });
+
+  it("keeps only the sections that fit at their shortest, at most CLOSE_MAX", () => {
+    const { pilot } = startPilot(lists, seeded(1));
+    const now = { ...pilot, section: "groove", left: 4, length: 8 };
+    // 4 playing + 8 for the outro: 6 loops left, a build (4) fits and a peak (12) does not.
+    expect(closeSet(now, 18).queue).toEqual(["build", OUTRO]);
+    expect(closeSet(now, 12).queue).toEqual([OUTRO]);
+    expect(closeWith(closeSet(now, 400), Array(8).fill("groove")).queue).toEqual([...Array(CLOSE_MAX).fill("groove"), OUTRO]);
+    // A section that would not leave the outro its room is cut short.
+    expect(closeSet({ ...now, left: 8 }, 12).left).toBe(4);
+  });
+
+  it("ends the set within its loops, with the outro last, whatever the queue and the plans say", () => {
+    const { pilot, active } = startPilot(lists, seeded(3));
+    for (const loops of [12, 20, 37, 60, 90, 150]) {
+      for (const section of SECTION_IDS) {
+        const now = { ...pilot, section, left: SECTIONS[section].loops.at(-1), length: SECTIONS[section].loops.at(-1) };
+        const long = { section: "peak", bars: 32, layers: {} };
+        const closed = { ...closeWith(closeSet(now, loops), ["peak", "breakdown", "peak", "groove"]), plan: long };
+        const { loops: took, moves } = close(closed, active);
+        expect(took, `${section} in ${loops}`).toBeLessThanOrEqual(loops);
+        const outro = moves.filter((m) => m.pilot.section === OUTRO);
+        expect(outro.length).toBeGreaterThanOrEqual(Math.min(OUTRO_MIN, loops - now.left));
+        expect(moves.at(-1).pilot.section).toBe(OUTRO);
+        expect(moves.some((m) => m.pilot.closing === undefined)).toBe(false);
+      }
+    }
+  });
+
+  it("goes straight to the outro when not a phrase is left before it, with no drop into it", () => {
+    const { pilot, active } = startPilot(lists, seeded(5));
+    const build = { ...pilot, section: "build", left: 2, length: 4, queue: ["peak", OUTRO], closing: { left: OUTRO_MIN + 4 } };
+    const last = advance(build, active, lists, seeded(1));
+    expect(last.pilot.next).toBe(OUTRO);
+    expect(last.fx).toEqual([]); // no riser
+    expect(dropping(last.pilot)).toBe(false);
+    const outro = advance(last.pilot, last.active, lists, seeded(1));
+    expect(outro.pilot).toMatchObject({ section: OUTRO, queue: [], closing: { left: OUTRO_MIN + 2 } });
+    expect(outro.pilot.length).toBeLessThanOrEqual(OUTRO_MIN + 2); // what the set has left, at most
+  });
+
+  it("the outro winds down without a swap, the bass and the kick out, the lowpass closing on them", () => {
+    const { active } = startPilot(lists, seeded(2));
+    const mix = { ...active, kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid", "pad.chord": "pad.chord" };
+    const outro = (left) => ({ section: OUTRO, left, length: 10, queue: [], closing: { left: left + 1 } });
+    for (let left = 10; left > FRENZY_LOOPS + 1; left--) {
+      expect(advance(outro(left), mix, lists, seeded(left), { changeBars: 2 }).active).toEqual(mix);
+    }
+    const first = mixOf(outro(10), mix);
+    expect(first["pad.chord"]).toBeGreaterThan(0.8);
+    expect(first["kick.punchy"]).toBe(0.9); // whole until a third of the way
+    expect(mixOf(outro(6), mix)["bass.rolling"]).toBe(0); // the bass is gone by halfway
+    const wound = mixOf(outro(FRENZY_LOOPS + 1), mix); // the wind-down is done as the frenzy starts
+    expect(wound["kick.punchy"]).toBe(0);
+    expect(wound["pad.chord"]).toBeGreaterThan(0);
+    expect(wound["pad.chord"]).toBeLessThan(first["pad.chord"]);
+    const tone = toneOf(outro(FRENZY_LOOPS + 1), mix);
+    expect(tone["kick.punchy"].lp).toBe(150);
+    expect(tone["bass.rolling"].lp).toBe(120);
+    expect(toneOf(outro(10), mix)["kick.punchy"].lp).toBe(LP_OPEN);
+    expect(IMPROVISE.outro).toEqual({});
+  });
+
+  it("its last loops go wild: everything back at full and wide open, more percussion and glitch, FX on every loop", () => {
+    const quiet = { "pad.chord": "pad.chord", "lead.acid": "lead.acid" }; // a beatless outro
+    const outro = (left) => ({ section: OUTRO, left, length: 10, queue: [], closing: { left: left + 1 } });
+    expect(frenzy(outro(FRENZY_LOOPS + 1))).toBe(false);
+    const wild = advance(outro(FRENZY_LOOPS + 1), quiet, lists, seeded(4));
+    expect(frenzy(wild.pilot)).toBe(true);
+    expect(count(wild.active, "kick")).toBe(1);
+    expect(count(wild.active, "perc")).toBe(2);
+    expect(count(wild.active, "glitch")).toBe(2);
+    expect(Object.values(quiet).every((id) => Object.values(wild.active).includes(id))).toBe(true);
+    expect(["fx.riser", "fx.siren"]).toContain(wild.fx[0]);
+    const last = advance(wild.pilot, wild.active, lists, seeded(4));
+    expect(last.active).toEqual(wild.active);
+    expect(["fx.stutter", "fx.tapeStop"]).toContain(last.fx[0]);
+    const levels = mixOf(last.pilot, last.active);
+    expect(levels[Object.values(last.active).find((id) => layerOfVariant(id) === "kick")]).toBe(FRENZY_MIX.kick);
+    expect(Math.min(...Object.values(levels))).toBeGreaterThan(0.5);
+    for (const tone of Object.values(toneOf(last.pilot, last.active))) expect(tone).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
+    expect(advance(last.pilot, last.active, lists, seeded(4)).end).toBe(true); // and cold
+    expect(frenzy({ ...outro(1), closing: undefined })).toBe(false);
+  });
+
+  it("past the outro's last loop the set is over", () => {
+    const { active } = startPilot(lists, seeded(2));
+    const last = { section: OUTRO, left: 1, length: 8, queue: [], closing: { left: 1 } };
+    expect(advance(last, active, lists, seeded(1))).toMatchObject({ end: true, active, fx: [] });
+    // An outro with no closing (none gets there) is just a section.
+    expect(advance({ ...last, closing: undefined }, active, lists, seeded(1)).end).toBeUndefined();
+  });
+
+  it("🌅 again calls it off until the outro is announced; a snapshot's jump keeps it", () => {
+    const { pilot } = startPilot(lists, seeded(1));
+    const closed = closeSet({ ...pilot, section: "groove", left: 6, length: 8 }, 90);
+    expect(uncloseSet(closed)).toMatchObject({ queue: [] });
+    expect(uncloseSet(closed).closing).toBeUndefined();
+    const announced = { ...closed, left: 1, next: "build" };
+    expect(uncloseSet(announced).queue).toEqual(["build"]);
+    expect(closingOpen({ ...closed, queue: [OUTRO], left: 1, next: OUTRO })).toBe(false);
+    expect(closingOpen({ ...closed, section: OUTRO })).toBe(false);
+    expect(closingOpen(pilot)).toBe(false);
+    const jumped = moveTo({ ...closed, closing: { left: 14 } }, "peak");
+    expect(jumped).toMatchObject({ section: "peak", left: 4, closing: { left: 14 } }); // cut to leave the outro its room
   });
 });
