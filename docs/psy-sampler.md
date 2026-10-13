@@ -1208,6 +1208,14 @@ in one exponential line over the loop, so a section is a curve in octaves.
 Kick and bass are never touched: they are the groove. The Hz values in the
 middle of a section are rounded to whole Hz.
 
+A ride shows while it is heard. Every loop sound's tile has a thin **band**
+along its bottom edge: the stretch between the hp and the lp on a log scale
+from 20 Hz to 20 kHz, hidden while both are open (`.tone-band`, `paintTone` in
+`app.js`). `setTone` records each ride in flight (`rides`: from, to, start,
+length), and on every frame the draw loop (`paintRides`) moves the band, and
+the hp/lp knobs of an open editor (`showToneAt`), along the same exponential
+line the audio takes.
+
 | Section | Perc | Lead | Pad | Glitch |
 |---|---|---|---|---|
 | Intro | LP 3 → 9 kHz | | LP 900 Hz → 3 kHz | |
@@ -1518,10 +1526,53 @@ theme.
   sixteenths, repeated under every beat. Degrees always land in the style's
   scale, so a part can't go off key. The pilot's `rewrite` still draws from the
   track's PRNG first, so a part changes nothing else a seed plays.
+- **At Alta, the whole sound** (`dress.js` `TWEAKS`): each dress entry also
+  names `filter` (off, lowpass, highpass, bandpass, or a vowel `vowel a`…`u`),
+  `cutoff` and `res` (-2 to 2), `sweep` (the filter LFO's cycle: beat, half
+  bar, bar, 2 or 4 bars; or off) and its `shape`, `env` (a per-note filter
+  envelope, -2 closes to 2 opens), `distortion` (soft, hard, fold, crush; the
+  `drive` macro sets how much), `trem` and `autopan`, and `echo` (each note
+  answered a 1/8, a dotted 1/8 or a 1/4 later; melodic sounds only). `""` or 0
+  leaves the factory's. They are named choices for the same reason the macros
+  are, and `restyle()` maps them onto values (`RES_AT`, `SWEEP_DEPTH`,
+  `ENV_PER`, …). The low end takes few: the kick only `distortion`, the bass a
+  lowpass with `cutoff`, `res`, `env` and `distortion` (no sweep, swing or
+  echo: they muddy it), checked by `fits()`. A dress with any tweak rebuilds
+  every key the tweaks reach from the factory insert (and the factory echo), so
+  a new dress replaces the last one whole; a dress with none (Media) touches
+  only the macros' keys, exactly as before.
 - `normalizePlan()` keeps dress and parts only for sounds the plan names, with
-  whole units in range, a synth of the sound's group and parts repeated to
-  their full length; a plan without them normalizes exactly as before, so old
-  links replay unchanged.
+  whole units in range, a synth of the sound's group, the tweaks `fits()`
+  allows and parts repeated to their full length; a plan without them
+  normalizes exactly as before, so old links replay unchanged. It keeps the
+  tweaks whatever level is set, so a link made at Alta replays at Alta.
+
+### Complexity
+
+**Complexity** (`planner.js` `LEVELS`) sets how much each ask carries, so a
+small model can keep ahead of the music:
+
+| | Baja (`low`) | Media (`mid`, default) | Alta (`high`) |
+| --- | --- | --- | --- |
+| Instructions | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) |
+| Asks | the opening and the sections | + the form of the track | same as Media |
+| Answer | `why` (80 chars), section, bars, layers | + `dress` (macros, synth) and `parts` | + the tweaks in every dress entry |
+| Prompt | the sounds by character only; no recall, no dress, no synths | as it was | as Media, plus how it dressed them with tweaks |
+| Size (psytrance, a section) | ~820 tokens | ~2400 | ~2900 |
+
+Baja is for Chrome's Gemini Nano on a laptop: with Media the asks were taking
+longer than the sections, so some came in unplanned. It skips the form
+(`asksForm`), which is one ask less before the first section. Each set of
+instructions gets its own Chrome base session (`ai.js` keeps one per system
+text), and the engines take it as `system` in `plan()`'s options. A new level
+asks again right away (`startAi`). LM Studio and Anthropic get more output room
+than before (2000 / 2048 tokens), since an Alta plan dresses every sound in full.
+
+**Contarle a la IA cómo suena cada sonido** (`describe`, on by default) is a
+separate tick: on, the prompt gives each sound its name, how it is made and
+its character (Baja: the character only); off, the ids alone, and the synths and
+swells by id. It saves about 2,600 characters a section at Media and Alta,
+at the cost of the model matching the vibe by id names only.
 
 ### Seeds, share links and replay
 
@@ -1547,8 +1598,9 @@ when its section comes.
 
 While ✨ is on its settings show under the autopilot row as **AI settings**, a
 `<details>` that folds away; folded, its summary still says the engine (and
-model) and the vibe. The settings (on, engine, endpoint, model, vibe, and
-whether that panel is unfolded) live per browser in
+model), the complexity when it isn't Media, and the vibe. The settings (on,
+engine, endpoint, model, vibe, complexity, describe, and whether that panel is
+unfolded) live per browser in
 `localStorage` (`psy-sampler:ai`, `ai.js` `loadPrefs` / `cleanPrefs`), not in
 the workspace: what a browser can run is that browser's, so it never travels
 with a preset or the cloud save.

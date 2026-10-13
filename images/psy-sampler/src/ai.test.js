@@ -81,6 +81,16 @@ describe("Chrome's built-in model", () => {
     expect(clones.every((s) => s.destroyed)).toBe(true);
   });
 
+  it("keeps one base session per set of instructions: a level's", async () => {
+    const api = fakeLanguageModel();
+    const { chrome } = createAi({ api });
+    await chrome.plan("a", SCHEMA);
+    await chrome.plan("b", SCHEMA, { system: "short" });
+    await chrome.plan("c", SCHEMA, { system: "short" });
+    const bases = api.create.mock.calls.map(([o]) => o.initialPrompts[0].content);
+    expect(bases).toEqual([SYSTEM, "short"]);
+  });
+
   it("without clone(), opens and closes a fresh session per plan", async () => {
     const api = fakeLanguageModel({ clone: false });
     const { chrome } = createAi({ api });
@@ -146,6 +156,8 @@ describe("an LM Studio endpoint", () => {
     expect(fetch.mock.calls.filter(([u]) => u.endsWith("/models"))).toHaveLength(1); // the model is remembered
     await lmstudio.plan("named", SCHEMA, { endpoint: LMSTUDIO_URL, model: "mine" });
     expect(JSON.parse(fetch.mock.calls.at(-1)[1].body).model).toBe("mine");
+    await lmstudio.plan("low", SCHEMA, { endpoint: LMSTUDIO_URL, system: "short" });
+    expect(JSON.parse(fetch.mock.calls.at(-1)[1].body).messages[0]).toEqual({ role: "system", content: "short" });
   });
 
   it("rejects an error status or an answer that is not JSON", async () => {
@@ -261,6 +273,8 @@ describe("a linked account", () => {
     expect(body).toMatchObject({ model: "claude-haiku-5-5", system: SYSTEM, messages: [{ role: "user", content: "next?" }] });
     expect(body.tools).toEqual([{ name: "section_plan", description: expect.any(String), input_schema: SCHEMA }]);
     expect(body.tool_choice).toEqual({ type: "tool", name: "section_plan" });
+    await anthropic.plan("high", SCHEMA, { key: KEY, model: "claude-haiku-5-5", system: "long" });
+    expect(bodyOf(fetch).system).toBe("long");
   });
 
   it("Gemini: generateContent with the key in a header, never in the URL", async () => {
@@ -291,11 +305,23 @@ describe("settings", () => {
 
   it("clean whatever was stored, and default to LM Studio's local server", () => {
     const none = { openai: "", anthropic: "", gemini: "" };
-    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", keys: none, models: none, vibe: "", open: true });
+    const rest = { keys: none, models: none, level: "mid", describe: true };
+    expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "", open: true, ...rest });
     expect(
-      cleanPrefs({ on: "yes", engine: "constructor", endpoint: "nope", model: ` ${"m".repeat(200)}`, vibe: "  dark \n\n hypnotic ", open: 0 }),
-    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), keys: none, models: none, vibe: "dark hypnotic", open: true });
+      cleanPrefs({
+        on: "yes",
+        engine: "constructor",
+        endpoint: "nope",
+        model: ` ${"m".repeat(200)}`,
+        vibe: "  dark \n\n hypnotic ",
+        open: 0,
+        level: "ultra",
+        describe: "no",
+      }),
+    ).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "m".repeat(120), vibe: "dark hypnotic", open: true, ...rest });
     expect(cleanPrefs({ open: false }).open).toBe(false);
+    expect(cleanPrefs({ level: "low", describe: false })).toMatchObject({ level: "low", describe: false });
+    expect(cleanPrefs({ level: "high" }).level).toBe("high");
     expect(cleanPrefs({ on: true, engine: "lmstudio", endpoint: "http://pc.lan:1234/v1" })).toMatchObject({
       on: true,
       engine: "lmstudio",

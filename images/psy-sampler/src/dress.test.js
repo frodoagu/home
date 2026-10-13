@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHS } from "./audio/params.js";
 import { DEFAULTS, defaultData, paramSpecs } from "./audio/patterns.js";
-import { FILLS, coin, dress, fillOf, moves, restyle, synthsFor } from "./dress.js";
+import { FILLS, coin, dress, fillOf, fits, moves, restyle, synthsFor } from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
 
@@ -93,6 +93,38 @@ describe("restyle: the AI's macros over the seed's dress", () => {
     expect(restyle("kick.long", "s", { motion: 2 }, insertOf("kick.long")).insert.phaser).toBe(0); // never on a kick
     expect(moves("bass.rolling", "motion")).toBe(false);
     expect(moves("bass.rolling", "drive")).toBe(true);
+  });
+
+  it("high's tweaks build the insert and the echo from the factory's, and a new dress replaces them whole", () => {
+    const live = { ...insertOf("lead.acid"), lp: 3000 };
+    const t = restyle("lead.acid", "s", { filter: "vowel o", res: 2, sweep: "2 bars", shape: "triangle", env: -2, trem: "1/8", autopan: "slow", echo: "dotted 1/8" }, live);
+    expect(t.insert).toMatchObject({ filter: "vowel", vowel: "o", res: 12, lfo: 0.4, rate: 32, shape: "triangle", env: -0.5, trem: 0.5, tremRate: 2, width: 0.6, panRate: 64, lp: 3000 });
+    expect(t.echo).toEqual({ steps: 3, semis: 0 });
+    const bright = restyle("lead.acid", "s", { filter: "lowpass", cutoff: 2 }, live).insert;
+    expect(bright.cutoff).toBeGreaterThan(insertOf("lead.acid").cutoff * 5);
+    expect(bright.cutoff).toBeLessThanOrEqual(16000);
+    const next = restyle("lead.acid", "s", { distortion: "crush", drive: 2 }, { ...live, ...t.insert });
+    expect(next.insert).toMatchObject({ filter: "off", lfo: 0, trem: 0, width: 0, drive: "crush", amount: 0.75, lp: 3000 });
+    expect(next.echo).toBeNull(); // the factory's
+    expect(restyle("lead.grid", "s", { trem: "off" }, insertOf("lead.grid")).echo).toEqual(defaultData("lead.grid").echo ?? null);
+    expect(restyle("lead.acid", "s", { tone: 1 }, live)).not.toHaveProperty("echo"); // no tweaks, no echo: mid as it was
+    expect(restyle("lead.acid", "s", { sweep: "off" }, { ...live, lfo: 0.8 }).insert.lfo).toBe(0);
+    expect(restyle("perc.hat", "s", { filter: "highpass" }, insertOf("perc.hat"))).not.toHaveProperty("echo");
+  });
+
+  it("the low end takes few tweaks: the kick grit, the bass a lowpass with an envelope", () => {
+    expect(fits("kick.long", "distortion", "fold")).toBe(true);
+    for (const [k, v] of [["filter", "lowpass"], ["sweep", "bar"], ["trem", "1/8"], ["echo", "1/8"]]) expect(fits("kick.long", k, v)).toBe(false);
+    expect(fits("bass.rolling", "filter", "lowpass")).toBe(true);
+    expect(fits("bass.rolling", "filter", "vowel a")).toBe(false);
+    expect(fits("bass.rolling", "env", 2)).toBe(true);
+    expect(fits("bass.rolling", "sweep", "bar")).toBe(false);
+    expect(fits("lead.acid", "echo", "1/4")).toBe(true);
+    expect(fits("perc.hat", "echo", "1/4")).toBe(false);
+    expect(fits("lead.acid", "cutoff", 0)).toBe(false); // 0 leaves it
+    expect(fits("lead.acid", "cutoff", 3)).toBe(false);
+    expect(fits("lead.acid", "filter", "__proto__")).toBe(false);
+    expect(fits("lead.acid", "toString", "x")).toBe(false);
   });
 
   it("switches synth only within the sound's group", () => {

@@ -90,7 +90,10 @@ import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import {
   AHEAD,
+  LEVELS,
+  LEVEL_DEFAULT,
   PLAN_SECTIONS,
+  asksForm,
   formPrompt,
   formSchema,
   keptAhead,
@@ -102,6 +105,7 @@ import {
   openingSchema,
   planPrompt,
   planSchema,
+  systemOf,
   themeAfter,
   whyOf,
 } from "../planner.js";
@@ -435,6 +439,20 @@ export function mountApp(root, engine, opts = {}) {
   };
   const engineInput = el("select", { id: "ai-engine", "data-control": "ai-engine" });
   const engineBox = field("ai-engine", tx.ai.engine, engineInput, tx.ai.engineTitle);
+  // How much it asks (planner.js LEVELS), each option saying what it decides.
+  const levelInput = el(
+    "select",
+    { id: "ai-level", "data-control": "ai-level" },
+    ...LEVELS.map((id) => {
+      const [name, what] = tx.ai.levels[id];
+      const option = el("option", { value: id, text: name });
+      option.title = what;
+      return option;
+    }),
+  );
+  const levelBox = field("ai-level", tx.ai.level, levelInput, tx.ai.levelTitle);
+  const describeCheck = checkbox("ai-describe", tx.ai.describe, true);
+  describeCheck.node.title = tx.ai.describeTitle;
   const endpointInput = el("input", {
     type: "url",
     id: "ai-endpoint",
@@ -477,7 +495,7 @@ export function mountApp(root, engine, opts = {}) {
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, describeCheck.node, vibeBox),
   );
 
   /* ---- tools ---- */
@@ -502,13 +520,22 @@ export function mountApp(root, engine, opts = {}) {
 
   /* ---- layer rows, in the user's order ---- */
   const tiles = new Map(); // variant -> { layer, node, tile, edit, labelEl }
+  const rides = new Map(); // variant -> its tone ride in flight, { from, to, t0, ms } (setTone)
   const sections = new Map(); // layer id -> { node, group, slot }
   const sorters = [];
 
   function makeTile(layer, id) {
     const labelEl = el("span", { class: "variant-label", text: labelOf(id) });
     const detailEl = el("span", { class: "variant-detail", text: detailOf(id) });
-    const node = el("button", { type: "button", class: layer.oneShot ? "variant" : "variant has-level", "data-variant": id }, labelEl, detailEl);
+    // A loop sound's tone filters, as the band they let through (paintTone).
+    const toneEl = layer.oneShot ? null : el("span", { class: "tone-band", "aria-hidden": "true" });
+    const node = el(
+      "button",
+      { type: "button", class: layer.oneShot ? "variant" : "variant has-level", "data-variant": id },
+      labelEl,
+      detailEl,
+      ...(toneEl ? [toneEl] : []),
+    );
     if (!layer.oneShot) node.setAttribute("aria-pressed", "false");
     // Playing, its fill is the sound's volume: a drag across it (or ← →)
     // sets it, 0-150 % over the tile's width. Ctrl (⌘) on a click stacks
@@ -583,7 +610,7 @@ export function mountApp(root, engine, opts = {}) {
     ban?.addEventListener("pointerdown", (e) => e.stopPropagation()); // a click, not a reorder
     ban?.addEventListener("click", () => setBanned(layer, id, !ws.banned.includes(id)));
     const tile = el("div", { class: isCopy(id) ? "tile is-copy" : "tile", "data-key": id }, node, ...(levelBar ? [levelBar] : []), side, ...(ban ? [ban] : []));
-    tiles.set(id, { layer, node, tile, edit, vary, solo, ban, levelBar, labelEl, detailEl });
+    tiles.set(id, { layer, node, tile, edit, vary, solo, ban, levelBar, labelEl, detailEl, toneEl });
     return tile;
   }
 
@@ -924,6 +951,7 @@ export function mountApp(root, engine, opts = {}) {
         levelBar.setAttribute("aria-valuenow", String(Math.round(dataOf(id).level * 100)));
         levelBar.setAttribute("aria-valuetext", LEVEL.fmt(dataOf(id).level));
       }
+      if (!rides.has(id)) paintTone(id, dataOf(id)?.insert);
       node.title =
         on && !layer.oneShot
           ? tx.tile.levelTitle
@@ -1144,6 +1172,7 @@ export function mountApp(root, engine, opts = {}) {
     const step = engine.visibleStep();
     paintStep(step);
     strikeStep(step);
+    paintRides(performance.now());
     const fx = engine.activeFx();
     if ([...fx].sort().join() !== [...fxShown].sort().join()) {
       renderButtons(fx);
@@ -1153,7 +1182,7 @@ export function mountApp(root, engine, opts = {}) {
       }
       fxShown = fx;
     }
-    if (engine.isRunning() || fx.size > 0) frame = requestAnimationFrame(draw);
+    if (engine.isRunning() || fx.size > 0 || rides.size > 0) frame = requestAnimationFrame(draw);
   }
   const animate = () => {
     if (!frame) frame = requestAnimationFrame(draw);
@@ -1611,11 +1640,51 @@ export function mountApp(root, engine, opts = {}) {
 
   function setTone(id, { hp, lp }, glide) {
     if (!(id in ws.variants)) ws.auto.push(id);
+    const from = toneNow(id);
     const toned = (data) => ({ ...data, insert: { ...data.insert, hp, lp } });
     ws.variants[id] = toned(dataOf(id));
     if (state.varying.has(id)) state.varying.set(id, toned(state.varying.get(id)));
     feed(id, toned(dataNow(id)), glide);
     open?.id === id && open.editor.showTone(ws.variants[id].insert);
+    if (glide > 0) {
+      rides.set(id, { from, to: { hp, lp }, t0: performance.now(), ms: glide * 1000 });
+      paintTone(id, from);
+      animate();
+    } else {
+      rides.delete(id);
+      paintTone(id, { hp, lp });
+    }
+  }
+
+  // The tone rides in flight (`rides`): the audio glides the filters in an
+  // exponential line, and each frame (draw) the tile's band and an open
+  // editor's knobs follow it, so a ride is seen while it is heard.
+  function toneAt(ride, now) {
+    const t = Math.min(1, Math.max(0, (now - ride.t0) / ride.ms));
+    const line = (a, b) => a * (b / a) ** t;
+    return { hp: line(ride.from.hp, ride.to.hp), lp: line(ride.from.lp, ride.to.lp) };
+  }
+  const toneNow = (id) => (rides.has(id) ? toneAt(rides.get(id), performance.now()) : dataOf(id).insert);
+
+  // The band a sound's tone lets through, on a log scale from 20 Hz to 20 kHz.
+  function tonePos(hz) {
+    const at = Math.log(Math.min(LP_OPEN, Math.max(HP_OPEN, hz)) / HP_OPEN) / Math.log(LP_OPEN / HP_OPEN);
+    return `${Math.round(at * 1000) / 10}%`;
+  }
+  function paintTone(id, tone) {
+    const t = tiles.get(id);
+    if (!t?.toneEl || !tone) return;
+    t.toneEl.style.setProperty("--hp", tonePos(tone.hp));
+    t.toneEl.style.setProperty("--lp", tonePos(tone.lp));
+    t.node.classList.toggle("is-toned", tone.hp > HP_OPEN || tone.lp < LP_OPEN);
+  }
+  function paintRides(now) {
+    for (const [id, ride] of rides) {
+      const tone = toneAt(ride, now);
+      paintTone(id, tone);
+      if (open?.id === id) open.editor.showToneAt(tone);
+      if (now >= ride.t0 + ride.ms) rides.delete(id);
+    }
   }
 
   // The autopilot's 🔀: on a section's first loop it decides for everything
@@ -1907,6 +1976,9 @@ export function mountApp(root, engine, opts = {}) {
       newPart: state.newParts.has(id),
       onNewPart: () => askNewPart(layer, id),
       onChange: (next) => {
+        // A hand on the tone takes it from a ride in flight.
+        const ride = rides.get(id);
+        if (ride && (next.insert.hp !== ride.to.hp || next.insert.lp !== ride.to.lp)) rides.delete(id);
         setVariant(id, next);
         // Editing something silent switches it on: what you edit is what you hear.
         const target = state.pending ?? state.active;
@@ -2460,13 +2532,17 @@ export function mountApp(root, engine, opts = {}) {
   // What the engine needs to be asked: an endpoint, or a linked account's key.
   const reach = (engine) =>
     isCloud(engine) ? { key: keyOf(engine), model: modelOf(engine) } : { endpoint: state.aiPrefs.endpoint, model: modelOf(engine) };
+  // An ask goes with the instructions of its level.
+  const asking = (engine, signal) => ({ ...reach(engine), system: systemOf(state.aiPrefs.level), signal });
+  // What a prompt and its schema take from the settings.
+  const asked = () => ({ level: state.aiPrefs.level, describe: state.aiPrefs.describe });
   const knownOf = (engine) => (engine === "chrome" ? null : (ai?.[engine]?.known?.(isCloud(engine) ? keyOf(engine) : state.aiPrefs.endpoint) ?? null));
   // A share link's run, from silence: while it has an entry for the section
   // playing, that entry (or none) stands in for the model's answer.
   const replaying = () => Boolean(state.replay) && Boolean(state.run) && sectionNo() < state.replay.length;
 
   function showAi() {
-    const { on, endpoint, vibe } = state.aiPrefs;
+    const { on, endpoint, vibe, level, describe } = state.aiPrefs;
     const engine = engineNow();
     const name = tx.ai.engines[engine];
     const cloud = isCloud(engine);
@@ -2475,8 +2551,13 @@ export function mountApp(root, engine, opts = {}) {
     aiBtn.classList.toggle("is-thinking", Boolean(planning));
     aiPanel.hidden = !ai || !on;
     if (aiPanel.open !== state.aiPrefs.open) aiPanel.open = state.aiPrefs.open;
-    const what = cloud && !keyOf(engine) ? `${name} ${tx.ai.notLinked}` : model ? `${name} (${model})` : name;
+    const linked = cloud && !keyOf(engine) ? `${name} ${tx.ai.notLinked}` : model ? `${name} (${model})` : name;
+    const [levelName, levelWhat] = tx.ai.levels[level];
+    const what = level === LEVEL_DEFAULT ? linked : `${linked} · ${tx.ai.level} ${levelName.toLowerCase()}`;
     aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
+    levelInput.value = level;
+    levelBox.title = `${tx.ai.levelTitle}. ${levelName}: ${levelWhat}`;
+    describeCheck.input.checked = describe;
     const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio", ...clouds];
     if (engineInput.options.length !== engines.length) {
       engineInput.replaceChildren(...engines.map((id) => el("option", { value: id, text: tx.ai.engines[id] })));
@@ -2555,7 +2636,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     const started =
       engine === "chrome"
-        ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))))
+        ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))), systemOf(state.aiPrefs.level))
         : ai[engine].start(reach(engine));
     started.then(
       () => {
@@ -2640,7 +2721,7 @@ export function mountApp(root, engine, opts = {}) {
     if (isCloud(engine) && !keyOf(engine)) return;
     const abort = new AbortController();
     planning = { at: sectionNo(), abort, opening: true };
-    const ctx = { lists: pilotLists(), style: ws.style, section: p.section };
+    const ctx = { lists: pilotLists(), style: ws.style, section: p.section, ...asked() };
     const { vibe } = state.aiPrefs;
     const prompt = openingPrompt({
       ...ctx,
@@ -2651,7 +2732,7 @@ export function mountApp(root, engine, opts = {}) {
       synths: synthsNow(),
     });
     ai[engine]
-      .plan(prompt, openingSchema(ctx), { ...reach(engine), signal: abort.signal })
+      .plan(prompt, openingSchema(ctx), asking(engine, abort.signal))
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
@@ -2694,7 +2775,8 @@ export function mountApp(root, engine, opts = {}) {
     }
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
-    if (!state.run.formed) {
+    // The low level skips the form: one ask less before the section comes.
+    if (!state.run.formed && asksForm(state.aiPrefs.level)) {
       planForm(engine);
       return;
     }
@@ -2706,7 +2788,7 @@ export function mountApp(root, engine, opts = {}) {
     const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
     planning = { at, abort };
-    const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next };
+    const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, ...asked() };
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
@@ -2730,7 +2812,7 @@ export function mountApp(root, engine, opts = {}) {
     });
     let more = false;
     ai[engine]
-      .plan(prompt, planSchema(ctx), { ...reach(engine), signal: abort.signal })
+      .plan(prompt, planSchema(ctx), asking(engine, abort.signal))
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
@@ -2794,7 +2876,7 @@ export function mountApp(root, engine, opts = {}) {
       vibe: state.aiPrefs.vibe,
     });
     ai[engine]
-      .plan(prompt, formSchema(), { ...reach(engine), signal: abort.signal })
+      .plan(prompt, formSchema(), asking(engine, abort.signal))
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
@@ -2859,6 +2941,12 @@ export function mountApp(root, engine, opts = {}) {
     setPrefs({ engine: engine === "lmstudio" || clouds.includes(engine) ? engine : "chrome" });
     startAi();
   });
+  // A new level asks again at once, with its own instructions.
+  levelInput.addEventListener("change", () => {
+    setPrefs({ level: LEVELS.includes(levelInput.value) ? levelInput.value : state.aiPrefs.level });
+    startAi();
+  });
+  describeCheck.input.addEventListener("change", () => setPrefs({ describe: describeCheck.input.checked }));
   keyInput.addEventListener("change", () => {
     const engine = engineNow();
     if (!isCloud(engine)) return;

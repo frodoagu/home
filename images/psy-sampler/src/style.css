@@ -1932,6 +1932,27 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 /* A hit: a flash over the tile (brighter on an accent) that fades in a
    moment. hit-a and hit-b are the same flash, alternated so it replays. */
+/* The tone filters (hp, lp) as the band they let through, 20 Hz to 20 kHz on
+   a log scale: hidden while both are open, it follows an autopilot ride. */
+.tone-band {
+  position: absolute;
+  left: 26px;
+  right: 12px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background:
+    linear-gradient(to right, transparent var(--hp, 0%), currentColor var(--hp, 0%) var(--lp, 100%), transparent var(--lp, 100%)),
+    color-mix(in srgb, currentColor 22%, transparent);
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+.variant.is-toned .tone-band {
+  opacity: 0.85;
+}
+
 .variant::after {
   content: "";
   position: absolute;

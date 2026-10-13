@@ -893,6 +893,10 @@ export function createEditor({
       for (const key of ["hp", "lp"]) tone?.[key].setValue(insert[key]);
       paintFolds();
     },
+    // Where a ride is now, on its way to the tone showTone() set: the knobs only.
+    showToneAt: (at) => {
+      for (const key of ["hp", "lp"]) tone?.[key].setValue(Math.round(at[key]));
+    },
     showBuildUp: (on) => buildUpBtn?.setAttribute("aria-pressed", String(on)),
     showNewPart: (on) => newPartBtn?.setAttribute("aria-pressed", String(on)),
     showQueued: (action, on) => node.querySelector(`[data-action="${action}"]`)?.setAttribute("aria-pressed", String(on)),

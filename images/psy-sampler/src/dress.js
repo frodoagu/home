@@ -3,7 +3,8 @@
 // another synth of its group. Each draw comes from the seed AND the sound's
 // id, so a seed always gives the same kick and the same bass synth, whatever
 // order the sounds come in. FX lengths stay: they time the transitions.
-import { SYNTHS } from "./audio/params.js";
+import { INSERT_PARAMS, SYNTHS } from "./audio/params.js";
+import { DRIVE_TYPES, LFO_SHAPES } from "./audio/insert.js";
 import { defOf, defaultData, paramSpecs } from "./audio/patterns.js";
 import { seeded } from "./editing.js";
 import { hashSeed } from "./share.js";
@@ -63,10 +64,90 @@ export function synthsFor(id) {
 /** May `macro` move `id`? */
 export const moves = (id, macro) => macro !== "motion" || !STILL.includes(layerOf(id));
 
-// The insert keys the AI sets, from the factory's: drive and motion.
-function insertOf(id, { drive = 0, motion = 0 }) {
-  const base = defOf(id).data.insert;
-  const out = { drive: base.drive, amount: base.amount, phaser: base.phaser, lfo: base.lfo };
+// The ✨ AI's level high (planner.js LEVELS) also builds each sound's insert
+// and echo, from named choices mapped onto values here: "" (or 0) leaves the
+// factory's. Every one is a whole choice, so a plan stays small and replays.
+export const FILTERS = ["off", "lowpass", "highpass", "bandpass", "vowel a", "vowel e", "vowel i", "vowel o", "vowel u"];
+export const SWEEPS = { off: 0, beat: 4, "half bar": 8, bar: 16, "2 bars": 32, "4 bars": 64 }; // steps per LFO cycle
+export const TREMOLOS = { off: 0, "1/16": 1, "1/8": 2, "1/4": 4, "1/2": 8 }; // steps per cycle
+export const AUTOPANS = { off: 0, slow: 64, fast: 16 }; // steps per swing
+export const ECHOES = { off: 0, "1/8": 2, "dotted 1/8": 3, "1/4": 4 }; // steps late
+// Each tweak's choices; the unit ones run -MACRO_MAX..MACRO_MAX like the macros.
+export const CHOICES = {
+  filter: FILTERS,
+  sweep: Object.keys(SWEEPS),
+  shape: LFO_SHAPES,
+  distortion: DRIVE_TYPES,
+  trem: Object.keys(TREMOLOS),
+  autopan: Object.keys(AUTOPANS),
+  echo: Object.keys(ECHOES),
+};
+export const UNIT_TWEAKS = ["cutoff", "res", "env"];
+export const TWEAKS = ["filter", "cutoff", "res", "sweep", "shape", "env", "distortion", "trem", "autopan", "echo"];
+// What the low end takes: the kick only grit; the bass a lowpass that may
+// open and close per note, but no sweep or swing (they muddy it) and no echo.
+const ALLOWED = {
+  kick: ["distortion"],
+  bass: ["filter", "cutoff", "res", "env", "distortion"],
+};
+const BASS_FILTERS = ["off", "lowpass"];
+const RES_AT = { "-2": 0.5, "-1": 0.8, 1: 5, 2: 12 };
+const SWEEP_DEPTH = 0.4;
+const ENV_PER = 0.25; // of ENV_CENTS per unit: ±2 octaves at most
+const TREM_DEPTH = 0.5;
+const AUTOPAN_WIDTH = 0.6;
+const CUTOFF = INSERT_PARAMS.find((p) => p.key === "cutoff");
+
+/** May the AI set the tweak `key` of `id` to `value`? */
+export function fits(id, key, value) {
+  const allowed = ALLOWED[layerOf(id)];
+  if (allowed && !allowed.includes(key)) return false;
+  if (key === "filter" && layerOf(id) === "bass" && !BASS_FILTERS.includes(value)) return false;
+  if (key === "echo" && defOf(id).kind !== "notes") return false;
+  if (UNIT_TWEAKS.includes(key)) return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MACRO_MAX;
+  return Object.hasOwn(CHOICES, key) && CHOICES[key].includes(value);
+}
+
+export const isTweaked = (macros) => TWEAKS.some((k) => Object.hasOwn(macros, k));
+
+// The factory's insert with the AI's tweaks on it.
+function tweaked(id, t) {
+  const out = { ...defOf(id).data.insert };
+  if (t.filter) {
+    const [filter, vowel] = t.filter.split(" ");
+    out.filter = filter;
+    if (vowel) out.vowel = vowel;
+  }
+  if (t.cutoff) out.cutoff = nudge(out.cutoff, CUTOFF, t.cutoff);
+  if (t.res) out.res = RES_AT[t.res];
+  if (t.sweep) {
+    out.lfo = SWEEPS[t.sweep] ? Math.max(out.lfo, SWEEP_DEPTH) : 0;
+    if (SWEEPS[t.sweep]) out.rate = SWEEPS[t.sweep];
+  }
+  if (t.shape) out.shape = t.shape;
+  if (t.env) out.env = t.env * ENV_PER;
+  if (t.distortion) out.drive = t.distortion;
+  if (t.trem) {
+    out.trem = TREMOLOS[t.trem] ? TREM_DEPTH : 0;
+    if (TREMOLOS[t.trem]) out.tremRate = TREMOLOS[t.trem];
+  }
+  if (t.autopan) {
+    out.width = AUTOPANS[t.autopan] ? AUTOPAN_WIDTH : 0;
+    if (AUTOPANS[t.autopan]) out.panRate = AUTOPANS[t.autopan];
+  }
+  return out;
+}
+
+// The insert keys the AI sets: drive and motion over the factory's, and with
+// tweaks every key they reach, so a dress replaces the one before it whole.
+const MACRO_KEYS = ["drive", "amount", "phaser", "lfo"];
+const TWEAK_KEYS = ["filter", "vowel", "cutoff", "res", "rate", "shape", "env", "trem", "tremRate", "width", "panRate"];
+
+function insertOf(id, macros) {
+  const { drive = 0, motion = 0 } = macros;
+  const base = isTweaked(macros) ? tweaked(id, macros) : defOf(id).data.insert;
+  const keys = isTweaked(macros) ? [...MACRO_KEYS, ...TWEAK_KEYS] : MACRO_KEYS;
+  const out = Object.fromEntries(keys.map((k) => [k, base[k]]));
   if (drive < 0) {
     if (drive <= -MACRO_MAX || base.drive === "off") out.drive = "off";
     else out.amount = twentieth(base.amount / 2);
@@ -86,9 +167,10 @@ function insertOf(id, { drive = 0, motion = 0 }) {
 }
 
 /**
- * { params, synth?, insert? }: `id` dressed by the seed and then by the AI's
- * `macros` (a plan's dress entry, or null). `insert` is the live one: only
- * the drive and motion keys change, so the autopilot's tone rides stay.
+ * { params, synth?, insert?, echo? }: `id` dressed by the seed and then by
+ * the AI's `macros` (a plan's dress entry, or null). `insert` is the live
+ * one: only the keys the AI sets change, so the autopilot's tone rides stay.
+ * A melodic sound's dress with tweaks sets its echo too (or the factory's).
  */
 export function restyle(id, seed, macros, insert) {
   const out = dress(id, seed);
@@ -99,6 +181,10 @@ export function restyle(id, seed, macros, insert) {
   }
   if (macros.synth && synthsFor(id).includes(macros.synth)) out.synth = macros.synth;
   if (insert) out.insert = { ...insert, ...insertOf(id, macros) };
+  if (isTweaked(macros) && defOf(id).kind === "notes") {
+    const steps = ECHOES[macros.echo];
+    out.echo = macros.echo ? (steps ? { steps, semis: 0 } : null) : (defaultData(id).echo ?? null);
+  }
   return out;
 }
 
