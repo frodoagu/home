@@ -60,7 +60,8 @@ describe("motion", () => {
     expect(deep).toBeGreaterThan(soft * 1.5);
     expect(accent).toBeGreaterThan(deep);
     const s = createStage({ now: 0 }).frame(0);
-    expect(throwOf("bass", s)).toBeLessThan(throwOf("kick", s));
+    expect(throwOf({ layer: "bass" }, s)).toBeLessThan(throwOf({ layer: "kick" }, s));
+    expect(throwOf({ layer: "perc" }, s)).toBe(0);
   });
 
   it("adds up kick after kick: a steady beat keeps it moving", () => {
@@ -83,6 +84,21 @@ describe("motion", () => {
     for (let i = 1; i < drop.length; i++) {
       expect(Math.abs(drop[i].shake[0] - drop[i - 1].shake[0])).toBeLessThan(SHAKE_MAX * 0.6);
     }
+  });
+
+  it("counts every hit a slow frame reaches, each with its own accent", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "bar", time: 0, bar: 0, bpm: 150 });
+    stage.push({ kind: "hit", layer: "kick", time: 10, accent: true });
+    stage.push({ kind: "hit", layer: "kick", time: 60 });
+    const motion = createMotion();
+    motion(stage.frame(0));
+    const both = motion(stage.frame(100));
+    const one = createMotion();
+    const single = createStage({ now: 0 });
+    single.push({ kind: "hit", layer: "kick", time: 60 });
+    one(single.frame(0));
+    expect(both.surge).toBeGreaterThan(one(single.frame(100)).surge * 2);
   });
 
   it("does not shake when told not to (reduced motion)", () => {

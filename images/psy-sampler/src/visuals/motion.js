@@ -19,10 +19,10 @@ const ACCENT = 1.3;
 const DROP_BEATS = 8;
 const FAR_SHAKE = 0.12; // a kick far from any drop shakes this much of a drop's
 
-/** How far a hit of `layer` throws the picture: further the deeper it is (an accent, a loud low end). */
-export function throwOf(layer, s) {
+/** How far `hit` throws the picture at frame `s`: further the deeper it is (an accent, a loud low end). */
+export function throwOf(hit, s) {
   const deep = 0.55 + 0.9 * Math.min(1, s.levels.low);
-  return THROW[layer] * (layer === "kick" && s.accent ? ACCENT : 1) * deep;
+  return (THROW[hit.layer] ?? 0) * (hit.layer === "kick" && hit.accent ? ACCENT : 1) * deep;
 }
 
 // Two sines a little out of step: a wobble that never quite repeats.
@@ -30,7 +30,6 @@ const wobble = (t, hz, phase) => 0.6 * Math.sin(t * hz * 2 * Math.PI + phase) + 
 
 /** step(frame) once per stage frame: { push, surge, shake: [x, y, turn] }. */
 export function createMotion({ shake: shakes = true } = {}) {
-  const seen = { kick: -Infinity, bass: -Infinity };
   let at = null;
   let drive = 0; // the velocity a hit asks for, braked by friction
   let surge = 0; // the velocity, easing towards drive
@@ -41,13 +40,11 @@ export function createMotion({ shake: shakes = true } = {}) {
   return function step(s) {
     const dt = at === null ? 0 : Math.min(100, Math.max(0, s.time - at));
     at = s.time;
-    for (const layer of ["kick", "bass"]) {
-      const t = s.hitAt[layer];
-      if (t <= seen[layer]) continue;
-      seen[layer] = t;
-      const k = throwOf(layer, s);
+    for (const hit of s.hits) {
+      const k = throwOf(hit, s);
+      if (!k) continue;
       drive += k;
-      if (layer === "kick" && shakes) {
+      if (hit.layer === "kick" && shakes) {
         const near = s.sinceDrop >= 0 ? Math.exp(-s.sinceDrop / DROP_BEATS) : 0;
         quake = Math.max(quake, Math.min(1, k) * (FAR_SHAKE + (1 - FAR_SHAKE) * near));
       }
