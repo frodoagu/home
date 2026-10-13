@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SHAKE_MAX, createMotion, throwOf } from "./motion.js";
+import { SHAKE_MAX, createMotion, pulse, throwOf } from "./motion.js";
 import { createStage } from "./stage.js";
 
 const BEAT = 60000 / 150;
@@ -26,7 +26,7 @@ describe("motion", () => {
     const stage = createStage({ now: 0 });
     stage.push({ kind: "bar", time: 0, bar: 0, bpm: 150, rest: true });
     const frames = run(stage, createMotion(), 0, 3000);
-    expect(frames.every((f) => f.push === 0 && f.surge === 0)).toBe(true);
+    expect(frames.every((f) => f.push === 0 && f.surge === 0 && f.heart === 0)).toBe(true);
   });
 
   it("throws the picture forward on a kick, never back", () => {
@@ -71,6 +71,45 @@ describe("motion", () => {
     const frames = run(stage, createMotion(), 0, 16 * BEAT);
     const late = frames.filter((f) => f.t > 8 * BEAT);
     expect(Math.min(...late.map((f) => f.surge))).toBeGreaterThan(0.1);
+  });
+
+  it("beats like a heart on a kick: lub, a softer dub, then rest", () => {
+    const frames = run(kicked({ low: 1 }), createMotion(), 0, 1000);
+    const at = (t) => frames.find((f) => f.t >= t).heart;
+    const peaks = frames.filter((f, i) => i > 0 && i < frames.length - 1 && f.heart > frames[i - 1].heart && f.heart >= frames[i + 1].heart);
+    expect(peaks).toHaveLength(2);
+    expect(peaks[0].t).toBeLessThan(100 + BEAT * 0.2);
+    expect(peaks[1].heart).toBeLessThan(peaks[0].heart);
+    expect(peaks[1].heart).toBeGreaterThan(peaks[0].heart * 0.4);
+    expect(at(100 + BEAT)).toBeLessThan(0.1);
+  });
+
+  it("leaves and returns to rest with no jump", () => {
+    expect(pulse(0)).toBe(0);
+    expect(pulse(1)).toBeLessThan(0.002);
+    expect(Math.max(...Array.from({ length: 300 }, (_, ms) => pulse(ms)))).toBeCloseTo(1, 3);
+    const frames = run(kicked({ accent: true, low: 1 }), createMotion(), 0, 1000);
+    for (let i = 1; i < frames.length; i++) expect(Math.abs(frames[i].heart - frames[i - 1].heart)).toBeLessThan(0.45);
+  });
+
+  it("beats the same at any frame rate", () => {
+    const at = (fps) => {
+      const stage = createStage({ now: 0 });
+      stage.push({ kind: "bar", time: 0, bar: 0, bpm: 150 });
+      stage.push({ kind: "hit", layer: "kick", time: 100 });
+      const motion = createMotion();
+      for (let t = 0; t < 230; t += 1000 / fps) motion(stage.frame(t));
+      return motion(stage.frame(230)).heart;
+    };
+    expect(at(24)).toBeCloseTo(at(144), 6);
+  });
+
+  it("beats on kicks only", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "bar", time: 0, bar: 0, bpm: 150 });
+    stage.push({ kind: "hit", layer: "bass", time: 100 });
+    stage.push({ kind: "hit", layer: "perc", time: 200 });
+    expect(run(stage, createMotion(), 0, 1000).every((f) => f.heart === 0)).toBe(true);
   });
 
   it("shakes on a drop's kick, barely on any other, and settles", () => {
