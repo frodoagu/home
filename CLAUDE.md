@@ -30,6 +30,10 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      digest pinned by Image Updater). Public, no google-auth, no pull secret (the GHCR
                      package must be public). Also deploys its cloud-save API (images/psy-sync) as a
                      separate Deployment + PVC behind /api/. See docs/psy-sampler.md + gotchas.
+  psy-sampler-previews/  PR previews: an ApplicationSet (pull-request generator, label `psy-preview`)
+                     rendering charts/psy-sampler from each PR's branch at pr-<n>-psy.agu.com.ar
+                     (google-auth, no cloud save), plus its locked-down AppProject + shared
+                     namespace. See docs/psy-sampler.md#pr-previews + gotchas.
   argocd-image-updater/  Argo CD Image Updater (wrapper chart) + one ImageUpdater CR per CI-built image
                      (agu-spa, psy-sampler + psy-sync, origin-firewall).
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
@@ -98,6 +102,7 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      psy-sampler-test.yml (lint+Vitest+build) and psy-sampler-image.yml (arm64 → GHCR)
                      for images/psy-sampler/;
                      psy-sync-test.yml (bun test) and psy-sync-image.yml (arm64 → GHCR) for images/psy-sync/;
+                     psy-sampler-preview.yml builds a same-repo PR's image (pr-<n>-<sha8>) and labels it;
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
@@ -559,6 +564,20 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   the linked accounts' APIs are fetched by the page: their origins must be in
   the CSP (`ai.connectSrc`). An API key stays in `psy-sampler:ai`, never in the
   workspace, a link or psy-sync. See docs/psy-sampler.md.
+- **psy-sampler-previews — forks must never deploy, and the generator can't
+  tell.** The GitHub PR generator filters on labels/branch/title only, with no
+  fork flag. So the gate is the `psy-preview` label, added only by
+  `psy-sampler-preview.yml` for a branch of this repo, after its image is
+  pushed. The Application tracks `{{ .branch }}`, NOT `{{ .head_sha }}`: Argo CD
+  resolves a branch name in this repo, while a sha would also reach fork
+  commits through GitHub's `refs/pull/*`. Don't "fix" it to the sha. The
+  AppProject (no cluster-scoped kinds, a kind whitelist, one namespace) and the
+  namespace's Pod Security `baseline` are the backstop. A new kind in
+  charts/psy-sampler breaks previews until it's whitelisted there. Previews
+  share one namespace, so anything the chart names must derive from the
+  fullname (the google-auth Middlewares do). Cloud save stays off there: Google
+  OAuth JS origins take no wildcard. DNS is the `*.agu.com.ar` DDNS record; TLS
+  is one shared `*.agu.com.ar` origin cert (`ingress.tlsDomains`).
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

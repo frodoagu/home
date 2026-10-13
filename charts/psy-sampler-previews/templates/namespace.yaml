@@ -1,0 +1,9 @@
+# Shared by every preview. Pod Security "baseline" refuses privileged,
+# hostNetwork and hostPath pods even if a branch's chart asked for them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "psy-sampler-previews.labels" . | nindent 4 }}
+    pod-security.kubernetes.io/enforce: baseline

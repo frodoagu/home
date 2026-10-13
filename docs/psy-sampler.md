@@ -2243,6 +2243,70 @@ To keep it private: seal a `ghcr-creds` docker-registry Secret into the
 - A card in the public grid of `agu.com.ar` (an entry with `href` in `apps` of
   [`registry.jsx`](../images/home-site/src/apps/registry.jsx)).
 
+### PR previews
+
+Every PR that touches `images/psy-sampler/` or `charts/psy-sampler/` gets its
+own copy at `https://pr-<n>-psy.agu.com.ar`, behind the same Google sign-in as
+the other private apps, and loses it when it is closed or merged.
+
+1. [`psy-sampler-preview.yml`](../.github/workflows/psy-sampler-preview.yml)
+   builds the PR's head commit into `ghcr.io/frodoagu/psy-sampler:pr-<n>-<sha8>`
+   (never `latest`), then labels the PR `psy-preview` and comments the URL.
+   Once labelled, every push rebuilds, whatever it touches. Adding the label
+   by hand asks for a preview of any other PR.
+2. The `psy-sampler-previews` ApplicationSet
+   ([`charts/psy-sampler-previews`](../charts/psy-sampler-previews)) polls
+   GitHub every 3 min with the pull-request generator, filtered on that label,
+   and renders one Application `psy-sampler-pr-<n>`: `charts/psy-sampler` from
+   the PR's branch, its `values.yaml` plus `previewValues` (google-auth on,
+   cloud save off) and the image tag above. Closing the PR deletes the app and,
+   through its finalizer, everything it deployed.
+
+**Forks never get one.** Anyone outside the repo has to fork to open a PR, and
+that is the line: the workflow skips any PR whose head repo isn't
+`frodoagu/home` (a fork's token couldn't push to GHCR anyway). The generator
+can't tell forks apart (it filters on labels, branch and title only), so the
+label is the gate, and the Application tracks the PR's **branch name**, not its
+head sha. Argo CD resolves that name in this repo, so a fork's code is never
+rendered even if its PR got labelled. A sha would let it through, since GitHub
+serves fork commits through `refs/pull/*`.
+
+What a preview can do is boxed in on the cluster side too:
+
+- The `psy-sampler-previews` AppProject allows this repo only, the
+  `psy-sampler-previews` namespace only, no cluster-scoped resources, and only
+  the kinds the chart renders with cloud save off (Deployment, Service,
+  ConfigMap, IngressRoute, Middleware). A branch that adds another kind gets
+  its preview's sync refused until the kind is listed there.
+- The namespace enforces Pod Security `baseline` (no privileged, hostNetwork
+  or hostPath pods). It belongs to the previews app, so all previews share it
+  and the last PR closing leaves it empty, not orphaned.
+
+Hosts, DNS and TLS. `pr-<n>-psy` is a single label under `agu.com.ar`, so one
+proxied `*.agu.com.ar` record in `cloudflare-ddns` and Cloudflare's Universal
+SSL cover every preview. At the origin, all previews share one Let's Encrypt
+`*.agu.com.ar` certificate (`ingress.tlsDomains`), so a new preview doesn't
+wait for a DNS-01 issuance. The Middlewares are named after the release
+(`psy-sampler-pr-<n>-google-auth`), so previews don't clash in their shared
+namespace. Pi-hole has no local record for them, so from the LAN they go
+through Cloudflare.
+
+Cloud save is off in previews: Google's Authorized JavaScript origins take no
+wildcard, so its sign-in can't load on a preview host. With no `/api/` route,
+`/api/health` falls through to `index.html`, the reply isn't JSON, and the page
+hides the cloud UI as when psy-sync is down.
+
+Timing: the label only goes on after the first image is pushed, so a new
+preview never waits on a missing image. On later pushes the ApplicationSet may
+see the new sha before CI has pushed it. The new pod then sits in
+`ImagePullBackOff` for a few minutes while the old one keeps serving.
+
+Optional: GitHub allows the generator 60 anonymous API calls/h per IP, and it
+makes one per poll. For more headroom, put a token in a Secret in `argocd`
+labelled `argocd.argoproj.io/secret-type: scm-creds` and name it in
+`github.tokenSecret`. Old `pr-*` tags pile up in the GHCR package; delete them
+by hand when they bother you.
+
 ## Development and tests
 
 ```bash

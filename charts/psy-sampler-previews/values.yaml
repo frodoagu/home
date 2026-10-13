@@ -1,0 +1,45 @@
+# Default values for psy-sampler-previews.
+#
+# One Application per open PR of frodoagu/home that carries `github.label`,
+# rendering charts/psy-sampler from the PR's branch with the PR's image. The
+# label is added by .github/workflows/psy-sampler-preview.yml once the image
+# is pushed, and only for PRs whose branch lives in this repo: a fork PR never
+# gets one (see templates/applicationset.yaml for why it couldn't deploy anyway).
+
+repoURL: git@github.com:frodoagu/home.git
+chartPath: charts/psy-sampler
+
+github:
+  owner: frodoagu
+  repo: home
+  label: psy-preview
+  # Optional Secret (in argocd) with a GitHub token, for 5000 API calls/h
+  # instead of the anonymous 60/h per IP. It must carry the label
+  # argocd.argoproj.io/secret-type: scm-creds. Empty: anonymous, which the
+  # poll interval below stays well inside (one call per poll).
+  tokenSecret:
+    name: ""
+    key: token
+
+# How often the ApplicationSet asks GitHub for open PRs. A new label or commit
+# shows up at most this late (the image build takes longer anyway).
+requeueAfterSeconds: 180
+
+# Every preview lives here; the namespace is this chart's, so closing the last
+# PR leaves it empty rather than orphaned.
+namespace: psy-sampler-previews
+
+# pr-<n>-psy.agu.com.ar: one label under agu.com.ar, so the `*.agu.com.ar`
+# DNS record (charts/cloudflare-ddns), Cloudflare's Universal SSL and the
+# wildcard origin certificate below all cover it.
+domain: agu.com.ar
+hostSuffix: psy
+
+# Overrides applied on top of the PR branch's charts/psy-sampler/values.yaml.
+# Cloud save is off: Google's Authorized JavaScript origins take no wildcard,
+# so its sign-in can't load on a preview host (the page hides the cloud UI).
+previewValues:
+  googleAuth:
+    enabled: true
+  sync:
+    enabled: false

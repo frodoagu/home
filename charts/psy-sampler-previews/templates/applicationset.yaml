@@ -1,0 +1,75 @@
+{{- /*
+  The {{ .number }}-style placeholders are the ApplicationSet's own Go
+  template (filled per PR by the controller), kept out of Helm's way as raw
+  strings.
+*/}}
+{{- $number := `{{ .number }}` }}
+{{- $host := printf "pr-%s-%s.%s" $number .Values.hostSuffix .Values.domain }}
+{{- $tag := printf "pr-%s-%s" $number `{{ .head_short_sha }}` }}
+{{- $values := mustMergeOverwrite (deepCopy .Values.previewValues) (dict
+  "image" (dict "tag" $tag)
+  "ingress" (dict "host" $host "tlsDomains" (list (dict "main" (printf "*.%s" .Values.domain))))) }}
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ include "psy-sampler-previews.name" . }}
+  labels:
+    {{- include "psy-sampler-previews.labels" . | nindent 4 }}
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - pullRequest:
+        github:
+          owner: {{ .Values.github.owner }}
+          repo: {{ .Values.github.repo }}
+          # Only .github/workflows/psy-sampler-preview.yml adds it, after the
+          # PR's image is in GHCR and only for a branch of this repo.
+          labels:
+            - {{ .Values.github.label }}
+          {{- with .Values.github.tokenSecret.name }}
+          tokenRef:
+            secretName: {{ . }}
+            key: {{ $.Values.github.tokenSecret.key }}
+          {{- end }}
+        requeueAfterSeconds: {{ .Values.requeueAfterSeconds }}
+  template:
+    metadata:
+      name: psy-sampler-pr-{{ $number }}
+      labels:
+        agu.com.ar/category: web
+        agu.com.ar/exposure: google-auth
+        agu.com.ar/blast-radius: app
+      annotations:
+        link.argocd.argoproj.io/external-link: "https://{{ $host }}"
+        link.argocd.argoproj.io/pull-request: "https://github.com/{{ .Values.github.owner }}/{{ .Values.github.repo }}/pull/{{ $number }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: {{ include "psy-sampler-previews.name" . }}
+      info:
+        - name: Description
+          value: "Preview of PR #{{ $number }} ({{`{{ .branch }}`}}): psy-sampler behind Google sign-in, no cloud save."
+        - name: Docs
+          value: "https://github.com/frodoagu/home/blob/main/docs/psy-sampler.md#pr-previews"
+        - name: Image
+          value: "ghcr.io/frodoagu/psy-sampler:{{ $tag }} (built by psy-sampler-preview.yml)"
+      source:
+        repoURL: {{ .Values.repoURL }}
+        # The branch, not head_sha: Argo CD then resolves it in THIS repo, so a
+        # fork's code can't be rendered even if its PR were labelled (GitHub
+        # serves fork commits by sha through refs/pull/*).
+        targetRevision: {{`"{{ .branch }}"`}}
+        path: {{ .Values.chartPath }}
+        helm:
+          valueFiles:
+            - values.yaml
+          valuesObject:
+            {{- toYaml $values | nindent 12 }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ .Values.namespace }}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

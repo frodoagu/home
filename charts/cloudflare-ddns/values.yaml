@@ -43,6 +43,10 @@ domains:
   - shelly.agu.com.ar
   - alertmanager.agu.com.ar
   - psy.agu.com.ar
+  # PR previews (pr-<n>-psy.agu.com.ar, charts/psy-sampler-previews) come and
+  # go with the PRs. Cloudflare answers the explicit records above first; any
+  # other name lands on Traefik, which 404s what no route claims.
+  - "*.agu.com.ar"
   - www.yaskia.com
   - yaskia.com
 

@@ -1,0 +1,132 @@
+name: 🎛️ Psy-sampler · PR preview
+
+# Builds a PR's sampler into ghcr.io/frodoagu/psy-sampler:pr-<n>-<sha8>, then
+# labels the PR `psy-preview`: that label is what the psy-sampler-previews
+# ApplicationSet (charts/psy-sampler-previews) watches, so the preview at
+# https://pr-<n>-psy.agu.com.ar only appears once its image exists, and goes
+# away when the PR is closed or merged. Never `latest`: that one is main's,
+# pinned by Image Updater. PRs from forks never build and never get the label.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+env:
+  IMAGE: ghcr.io/frodoagu/psy-sampler
+  LABEL: psy-preview
+
+jobs:
+  build:
+    name: Build & push the preview image
+    # A branch of this repo only, and of the label events only ours (adding
+    # it by hand asks for a preview of a PR that doesn't touch the sampler).
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'labeled' || github.event.label.name == 'psy-preview')
+    # Job-level, so a skipped run (another label) doesn't cancel a build.
+    concurrency:
+      group: psy-sampler-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to checkout the repo
+      packages: write # to push to GHCR
+      pull-requests: write # to label and comment on the PR
+      issues: write # to create the label the first time
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HOST: pr-${{ github.event.pull_request.number }}-psy.agu.com.ar
+    steps:
+      - name: 🔎 Does this PR need a preview?
+        id: check
+        # Once labelled it keeps one (every push rebuilds, or the preview would
+        # wait for an image that never comes); otherwise only when it touches
+        # the sampler or its chart.
+        env:
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'psy-preview') }}
+        run: |
+          if [ "$LABELLED" = true ] || gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' \
+              | grep -qE '^(images|charts)/psy-sampler/|^\.github/workflows/psy-sampler-preview\.yml$'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Argo CD's head_short_sha is the first 8 characters.
+          echo "tag=pr-$PR-${HEAD_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "labelled=$LABELLED" >> "$GITHUB_OUTPUT"
+
+      - name: ⬇️ Checkout
+        if: steps.check.outputs.build == 'true'
+        uses: actions/checkout@v4
+        with:
+          # The PR's own commit, not GitHub's merge with main: the preview
+          # renders the chart from the PR branch, so the image matches it.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: 🧰 Set up QEMU
+        if: steps.check.outputs.build == 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: mirror.gcr.io/tonistiigi/binfmt:latest
+
+      - name: 🐳 Set up Docker Buildx
+        if: steps.check.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+          # Docker Hub through Google's mirror, as in psy-sampler-image.yml.
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+
+      - name: 🔑 Log in to GHCR
+        if: steps.check.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build & push image
+        if: steps.check.outputs.build == 'true'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./images/psy-sampler
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.check.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🏷️ Label the PR
+        if: steps.check.outputs.build == 'true' && steps.check.outputs.labelled != 'true'
+        run: |
+          gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color 7057ff \
+            --description "psy-sampler preview at pr-<n>-psy.agu.com.ar (added by CI)" 2>/dev/null || true
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" -f "labels[]=$LABEL" > /dev/null
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
+            "🎛️ Preview: https://$HOST (Google sign-in, no cloud save). It follows every push and goes away when this PR closes."
+
+      - name: 📦 Preview summary
+        if: always() && steps.check.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "## 🎛️ PR preview"
+            echo ""
+            if [ -n "$DIGEST" ]; then
+              echo "| Field | Value |"
+              echo "| --- | --- |"
+              echo "| Image | \`${IMAGE}:${TAG}\` |"
+              echo "| Digest | \`${DIGEST}\` |"
+              echo "| Preview | https://${HOST} |"
+              echo ""
+              echo "Argo CD picks the new tag up within the ApplicationSet's poll (3 min)."
+            else
+              echo "⚠️ The build did not complete."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

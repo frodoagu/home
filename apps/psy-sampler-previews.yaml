@@ -1,0 +1,37 @@
+---
+# ArgoCD Application – the ApplicationSet that turns every psy-sampler PR into
+# a preview at pr-<n>-psy.agu.com.ar. See charts/psy-sampler-previews.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: psy-sampler-previews
+  namespace: argocd
+  labels:
+    agu.com.ar/category: gitops
+    agu.com.ar/exposure: google-auth
+    agu.com.ar/blast-radius: app
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  info:
+    - name: Description
+      value: "PR previews of psy-sampler: ApplicationSet (pull-request generator), its AppProject and namespace. One psy-sampler-pr-<n> app per labelled PR."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/psy-sampler.md#pr-previews"
+    - name: Image
+      value: "ghcr.io/frodoagu/psy-sampler:pr-<n>-<sha> (built by psy-sampler-preview.yml, not Image Updater)"
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/psy-sampler-previews
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
