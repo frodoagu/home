@@ -308,7 +308,7 @@ describe("settings", () => {
 
   it("clean whatever was stored, and default to LM Studio's local server", () => {
     const none = { openai: "", anthropic: "", gemini: "" };
-    const rest = { keys: none, models: none, level: "mid" };
+    const rest = { keys: none, models: none, level: "mid", set: 0 };
     expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "", open: true, ...rest });
     expect(
       cleanPrefs({
@@ -324,6 +324,9 @@ describe("settings", () => {
     expect(cleanPrefs({ open: false }).open).toBe(false);
     expect(cleanPrefs({ level: "low", describe: false })).toEqual({ ...cleanPrefs(null), level: "low" });
     expect(cleanPrefs({ level: "high" }).level).toBe("high");
+    expect(cleanPrefs({ set: 120 }).set).toBe(120);
+    expect(cleanPrefs({ set: 90 }).set).toBe(0); // only the lengths offered
+    expect(cleanPrefs({ set: "60" }).set).toBe(0);
     expect(cleanPrefs({ on: true, engine: "lmstudio", endpoint: "http://pc.lan:1234/v1" })).toMatchObject({
       on: true,
       engine: "lmstudio",

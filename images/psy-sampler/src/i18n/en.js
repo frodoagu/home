@@ -259,6 +259,12 @@ export default {
     vibePlaceholder: "dark, hypnotic, long breaks…",
     apply: "Apply",
     applyTitle: "Plans again with this vibe now; the next section, if already planned, stays as it was",
+    set: "Length",
+    setTitle: "About how long the set lasts: the AI shapes the arc of the night (warm-up, rise, peak time and closing) to where it is",
+    sets: { 0: "Open", 60: "~1 h", 120: "~2 h", 180: "~3 h" },
+    setShort: (len) => `set ${len}`,
+    setSaved: (len) => `A ${len} set: the AI plans each section for where the night is.`,
+    setOpen: "Open-ended set: the AI plans with no length in mind.",
     level: "Complexity",
     levelTitle: "How much the AI decides each section: more complexity, longer prompts and slower answers",
     levels: {

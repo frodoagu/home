@@ -48,6 +48,25 @@ export const AHEAD = 3;
 // Sections the form of a track lays out: some 7 minutes at 145 BPM, a whole
 // track. Past it the ✨ AI picks each section as it plans it.
 export const FORM = 20;
+
+// How long the listener means the set to last, in minutes (0: open-ended).
+// Where the track is in it shapes each plan, the way a DJ paces a night.
+export const SET_LENGTHS = [0, 60, 120, 180];
+const SET_STAGES = [
+  [0.25, "the warm-up: patient energy, long grooves and breakdowns, few and gentle peaks"],
+  [0.6, "the rise of the night: the energy climbs, peaks come more often and hit harder"],
+  [0.9, "the heart of the set: the strongest peaks, the energy at its highest, short breaks"],
+  [Infinity, "the closing: wind the energy down, longer breakdowns, and a last peak to say goodbye"],
+];
+
+/** The line placing a plan in the set (`minutes` long, `elapsed` seconds played), or null. */
+export function setLine({ minutes = 0, elapsed = 0 } = {}) {
+  if (!SET_LENGTHS.includes(minutes) || !minutes) return null;
+  const played = Math.min(minutes, Math.floor(Math.max(0, elapsed) / 60));
+  const share = played / minutes;
+  const [, stage] = SET_STAGES.find(([upTo]) => share < upTo);
+  return `The set lasts about ${minutes / 60} hour${minutes > 60 ? "s" : ""}; ${played} minutes have played (${Math.round(share * 100)} %), so this is ${stage}.`;
+}
 const HISTORY = 8; // sections the prompt recalls
 const RECALLED = 3; // of those, the ones it lists the sounds of
 const WHY_MAX = 200;
@@ -347,6 +366,7 @@ export function planPrompt({
   planned = [],
   level = LEVEL_DEFAULT,
   describe: told = true,
+  set = {},
 }) {
   const low = !dresses(level);
   const now = sections.at(-1);
@@ -370,6 +390,8 @@ export function planPrompt({
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
   lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
+  const arc = setLine(set);
+  if (arc) lines.push(arc);
   if (vibe && fresh) {
     lines.push(`The listener just asked for: ${JSON.stringify(vibe)}. That comes first: shape this section to it boldly, so the change is clearly heard, and leave out the layers that do not fit.`);
   } else if (vibe) {
@@ -402,6 +424,7 @@ export function openingPrompt({
   synths = {},
   level = LEVEL_DEFAULT,
   describe: told = true,
+  set = {},
 }) {
   const low = !dresses(level);
   const drawn = [...new Set(Object.values(active))].sort();
@@ -425,6 +448,8 @@ export function openingPrompt({
       "Write the parts of the melodic sounds you pick: sparse and slow, long notes and rests, a lead motif that hangs in the air; dress the sounds to the mood (long, with motion, never driven).",
     );
   }
+  const arc = setLine(set);
+  if (arc) lines.push(arc);
   if (vibe) lines.push(`The listener asked for: ${JSON.stringify(vibe)}. That comes first: open the track on it boldly, and leave out the layers that do not fit.`);
   lines.push(`Plan the opening ${section}.`);
   return lines.join("\n");
@@ -436,9 +461,11 @@ export function openingPrompt({
  * the ones `coming` already (queued by hand, or a form kept). With a `vibe`
  * (the brief holds it), the form follows it.
  */
-export function formPrompt({ sections, coming = [], vibe = "" }) {
+export function formPrompt({ sections, coming = [], vibe = "", set = {} }) {
   const lines = [`Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}.`];
   if (coming.length) lines.push(`Already coming after it, in order: ${coming.join(", ")}.`);
+  const arc = setLine(set);
+  if (arc) lines.push(`${arc} Shape the form to that point of the set.`);
   if (vibe) lines.push("Shape the form to the listener's wish: which sections, how often.");
   lines.push(
     `Lay out the form of the track: the next ${FORM} sections, in order, after ${coming.length ? `the ${coming.at(-1)} already coming` : `the ${sections.at(-1)}`}. Each one may be any of ${PLAN_SECTIONS.join(", ")}.`,
