@@ -1332,8 +1332,8 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 
 **🌅 Cierre** (in the pilot row) ends the set within **5 minutes**
 (`CLOSE_SECONDS`), the way a DJ ends a night: a last peak, then an **Outro**
-that drops into 16 bars of frenzy or more, fades out bit by bit over 16 bars and
-stops like a vinyl on its last one. With the autopilot off
+that drops into 16 bars of frenzy or more, fades out bit by bit over 8 to 16
+bars and slowly comes to a stop like a vinyl over its last 4 or 8. With the autopilot off
 it takes the mix that plays first (as 🤖 over a mix).
 
 - **The route** (`closeSet` in `autopilot.js`): the section playing plays out,
@@ -1346,34 +1346,41 @@ it takes the mix that plays first (as 🤖 over a mix).
   plays after the outro.
 - **The budget**: `CLOSE_SECONDS` in loops at the slowest tempo the set is
   heading to (`pilot.closing.left`, one less per loop). The outro is sure to
-  get `OUTRO_MIN` loops (32 bars: 16 of frenzy, 16 of fade): a route section
+  get `OUTRO_MIN` loops (40 bars: 16 of frenzy, 16 of fade and 8 of brake at
+  their longest): a route section
   that would not leave it that room is cut to whole phrases or skipped, the
   section playing too, and the outro takes what is left (`fitLength`,
   `closingPick`). Clicks on the tiles hold the pilot's step for
   their bar line, as ever, so each stretches the set by a loop; a slower BPM
   picked by hand mid-closing stretches it too.
-- **The outro** (`SECTIONS.outro`: 32, 40 or 48 bars, the one section past
+- **The outro** (`SECTIONS.outro`: 40, 48 or 56 bars, the one section past
   the pilot's 32; out of `SECTION_IDS`: no pick, plan, phase button or
   snapshot leads there, so seeds replay as before) swaps nothing. The section
   before it **drops into it** like into a peak (riser, kick roll, the gap bar,
   then a crash or an impact on its 1); 💥 is off from the moment it is
   announced.
-- **The frenzy** (`frenzy()`: every loop but the last `FADE_LOOPS` = 8, so 16,
-  24 or 32 bars): everything at `FRENZY_MIX` (glitch at 135 %), every filter
+- **Its parts** (`OUTRO_PARTS`, drawn as it starts into `pilot.ending`): the
+  frenzy, 16 bars at least; a fade of 8, 12 or 16 bars; a brake of 4 or 8. A
+  squeezed outro shortens the fade first, then the brake (`endingOf`).
+- **The frenzy** (`frenzy()`: every loop before the fade): everything at `FRENZY_MIX` (glitch at 135 %), every filter
   wide open, a kick if there was none and fresh percussion and glitches up to
   two each (`unleash`), the peak's pump, improvising like a build
   (`IMPROVISE.outro`), an FX on every phrase (stutter, siren, riser or
   impact) and the usual phrase-end fills; its last 4 bars roll every drum
   bar after bar (`frenzyKinds`, the `build` overlay). The engine tells the
   visuals (`engine.frenzy` → a `frenzy` event).
-- **The fade** (the last 16 bars, `MIX.outro` / `TONE.outro` over them alone,
-  `wayOf`; a spec is `[from, to, start, end]`): a downlifter starts it, the
-  glitch and the bass leave first, the rest sinks slowly as every lowpass
-  closes, kick and bass too, but still sounds on the last bar. There the
-  **vinyl brake** (`engine.brake`) takes the whole mix: a delay line between
-  the limiter and the trim stretches as t²/2T, so its slope (one minus the
-  speed) climbs from 0 to 1 and pitch and tempo fall to nothing over the bar,
-  with the level following over its last 40 %. `unbrake()` (🤖 off, a new
+- **The fade** (`MIX.outro` / `TONE.outro` over its loops alone, `wayOf`; a
+  spec is `[from, to, start, end]`): a downlifter starts it, the glitch and
+  the bass leave first, the rest sinks slowly as every lowpass closes, kick
+  and bass too, but still sounds. The levels hold there through the brake.
+- **The vinyl brake** (`braking()`, `engine.brake` from its first loop to the
+  end) takes the whole mix: a delay line between the limiter and the trim
+  stretches as t²/2T, so its slope (one minus the speed) climbs from 0 to 1
+  and pitch and tempo fall to nothing over its 4 or 8 bars, with the level
+  following over its last 30 %. At most `BRAKE_MAX` (24 s, 8 bars down to
+  80 BPM): longer, it starts late so it still stops at the end. Its end is
+  fixed in audio time, so the tempo holds still under it: a ramp on its way
+  goes, and the BPM slider, the ramp and tap are off (a new style's ramp too). `unbrake()` (🤖 off, a new
   seed, the next ▶) lets go of it. The visuals slow to a stop with it (a
   `brake` event: `show.js` scales its clock by `1 - brake`).
 - **The end**: past the outro's last loop `advance` says `end` and the page

@@ -105,10 +105,11 @@ const SWEEP_FROM = 30;
 const SWEEP_TO = 900;
 const SWEEP_Q = 0;
 const SWEEP_SNAP = 0.015;
-// The vinyl brake: at most this long (s), its delay line half as long; the
-// level holds for the first BRAKE_HOLD of it, then falls with the platter.
-const BRAKE_MAX = 4;
-const BRAKE_HOLD = 0.6;
+// The vinyl brake: at most this long (s; 8 bars down to 80 BPM), its delay
+// line half as long; the level holds for the first BRAKE_HOLD of it, then
+// falls with the platter.
+const BRAKE_MAX = 24;
+const BRAKE_HOLD = 0.7;
 const BRAKE_POINTS = 64;
 
 const layerOf = (variant) => variant.split(".")[0];
@@ -745,12 +746,13 @@ export function createEngine({
    * platter slows to a stop, so the pitch and the tempo fall to nothing. A
    * delay line stretches under the mix (its delay grows as t²/2T: its slope,
    * one minus the speed, climbs from 0 to 1) and the level goes with it.
+   * Longer than BRAKE_MAX, it starts late, so it still stops at the end.
    * Held until unbrake() or the next start().
    */
   function brake(at, seconds) {
     if (!ctx || !brakeNodes) return;
-    const t0 = Math.max(at, ctx.currentTime);
     const span = Math.min(BRAKE_MAX, Math.max(0.05, seconds));
+    const t0 = Math.max(at + seconds - span, ctx.currentTime);
     const curve = Float32Array.from({ length: BRAKE_POINTS }, (_, i) => {
       const t = (i / (BRAKE_POINTS - 1)) * span;
       return (t * t) / (2 * span);

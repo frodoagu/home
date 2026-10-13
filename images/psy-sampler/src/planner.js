@@ -501,7 +501,7 @@ export function normalizeForm(raw) {
 // The outro (autopilot.js OUTRO): what the pilot does with it, for the
 // plan of it and the closing's.
 const OUTRO_BARS = barsOf(OUTRO);
-const OUTRO_WHAT = `the outro (${OUTRO_BARS.join(", ")} bars; ${counts(OUTRO)}), which drops in like a peak and goes wild, everything at full and wide open with more percussion and glitch, rolls and FX, until its last 16 bars, which fade out bit by bit with the lowpass closing; on its very last bar the whole mix slows to a stop like a vinyl`;
+const OUTRO_WHAT = `the outro (${OUTRO_BARS.join(", ")} bars; ${counts(OUTRO)}), which drops in like a peak and goes wild, everything at full and wide open with more percussion and glitch, rolls and FX, for 16 bars or more, then fades out bit by bit over 8 to 16 bars with the lowpass closing, and over its last 4 or 8 bars the whole mix slows to a stop like a vinyl`;
 const OUTRO_LINE = `The outro is the last thing the audience hears: ${OUTRO_WHAT}. Pick sounds that carry both: a driving lead and a big pad for the madness, that still say goodbye as they fade (the theme's lead, or a last melody that resolves to the root); the pilot brings the extra percussion and glitch itself. Take the longest lengths unless the set has little time left.`;
 
 /** The line saying the set is closing: `seconds` left at most, the `route` coming (the outro last). */

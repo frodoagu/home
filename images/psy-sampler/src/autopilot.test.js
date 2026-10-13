@@ -3,12 +3,12 @@ import {
   CHANGE_BARS,
   CLOSE_MAX,
   CLOSE_ROUTE,
-  FADE_LOOPS,
   FRENZY_MIX,
   IMPROVISE,
   MIX,
   OUTRO,
   OUTRO_MIN,
+  OUTRO_PARTS,
   OPENING_MIX,
   OPENING_TONE,
   PHRASE_LOOPS,
@@ -809,12 +809,13 @@ describe("🌅 the closing", () => {
   it("keeps only the sections that fit at their shortest, at most CLOSE_MAX", () => {
     const { pilot } = startPilot(lists, seeded(1));
     const now = { ...pilot, section: "groove", left: 4, length: 8 };
-    // 4 playing + 16 for the outro: 6 loops left, a build (4) fits and a peak (12) does not.
-    expect(closeSet(now, 26).queue).toEqual(["build", OUTRO]);
-    expect(closeSet(now, 20).queue).toEqual([OUTRO]);
+    // 4 playing + 20 for the outro: 6 loops left, a build (4) fits and a peak (12) does not.
+    expect(OUTRO_MIN).toBe(20);
+    expect(closeSet(now, 30).queue).toEqual(["build", OUTRO]);
+    expect(closeSet(now, 24).queue).toEqual([OUTRO]);
     expect(closeWith(closeSet(now, 400), Array(8).fill("groove")).queue).toEqual([...Array(CLOSE_MAX).fill("groove"), OUTRO]);
     // A section that would not leave the outro its room is cut short.
-    expect(closeSet({ ...now, left: 8 }, 20).left).toBe(4);
+    expect(closeSet({ ...now, left: 8 }, 24).left).toBe(4);
   });
 
   it("ends the set within its loops, with the outro last, whatever the queue and the plans say", () => {
@@ -852,7 +853,10 @@ describe("🌅 the closing", () => {
     const move = advance(peak, quiet, lists, seeded(4));
     expect(move.pilot).toMatchObject({ section: OUTRO, closing: { left: 40 } });
     expect(SECTIONS.outro.loops).toContain(move.pilot.length);
-    expect((move.pilot.length - FADE_LOOPS) * 2).toBeGreaterThanOrEqual(16); // bars of frenzy
+    const { fade, brake } = move.pilot.ending;
+    expect(OUTRO_PARTS.fade).toContain(fade); // 8, 12 or 16 bars
+    expect(OUTRO_PARTS.brake).toContain(brake); // 4 or 8 bars
+    expect((move.pilot.length - fade - brake) * 2).toBeGreaterThanOrEqual(16); // bars of frenzy
     expect(["fx.crash", "fx.impact"]).toContain(move.fx[0]);
     expect(count(move.active, "kick")).toBe(1);
     expect(count(move.active, "perc")).toBe(2);
@@ -866,20 +870,42 @@ describe("🌅 the closing", () => {
       for (const tone of Object.values(toneOf(pilot, active))) expect(tone).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
       const next = advance(pilot, active, lists, seeded(pilot.left), { changeBars: 2 });
       expect(next.active).toEqual(active); // no swaps
+      expect(next.pilot.ending).toEqual(move.pilot.ending);
       fx.push(...next.fx);
       ({ pilot, active } = next);
     }
-    expect(pilot.left).toBe(FADE_LOOPS);
+    expect(pilot.left).toBe(fade + brake);
     expect(fx.at(-1)).toBe("fx.down"); // the fade starts on a downlifter
-    expect(fx.length).toBe(Math.ceil((move.pilot.length - FADE_LOOPS) / PHRASE_LOOPS)); // one more per phrase
+    expect(fx.length).toBe(Math.ceil((move.pilot.length - fade - brake) / PHRASE_LOOPS)); // one more per phrase
     expect(IMPROVISE.outro.glitch).toBeGreaterThan(0);
   });
 
-  it("then fades out bit by bit over 16 bars, the lowpass closing, still sounding on its last loop, which brakes", () => {
+  it("the drawn fade and brake always leave the frenzy its 16 bars, every outro length, every draw", () => {
+    for (const length of SECTIONS.outro.loops) {
+      const seen = new Set();
+      for (let seed = 1; seed < 60; seed++) {
+        const peak = { section: "peak", left: 1, length: 12, queue: [OUTRO], next: OUTRO, closing: { left: length + 1 } };
+        const { pilot } = advance(peak, {}, lists, seeded(seed), { style: "psytrance" });
+        if (pilot.length !== length) continue;
+        const { fade, brake } = pilot.ending;
+        seen.add(`${fade}/${brake}`);
+        expect(length - fade - brake).toBeGreaterThanOrEqual(OUTRO_PARTS.frenzy);
+      }
+      expect(seen.size, `${length}`).toBeGreaterThan(1); // drawn, not fixed
+    }
+    // Squeezed by the set's time, the fade gives way first, then the brake.
+    const peak = { section: "peak", left: 1, length: 12, queue: [OUTRO], next: OUTRO, closing: { left: 15 } };
+    const { pilot } = advance(peak, {}, lists, seeded(3));
+    expect(pilot.length).toBe(14);
+    expect(pilot.ending).toEqual({ fade: 4, brake: 2 });
+  });
+
+  it("then fades out bit by bit, the lowpass closing, and holds through the brake, still sounding", () => {
     const mix = { kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid", "pad.chord": "pad.chord", "glitch.zips": "glitch.zips" };
-    const outro = (left) => ({ section: OUTRO, left, length: 20, queue: [], closing: { left } });
+    const ending = { fade: 6, brake: 4 };
+    const outro = (left) => ({ section: OUTRO, left, length: 24, queue: [], closing: { left }, ending });
     const fade = [];
-    for (let left = FADE_LOOPS; left >= 1; left--) fade.push(mixOf(outro(left), mix));
+    for (let left = 10; left >= 5; left--) fade.push(mixOf(outro(left), mix));
     for (const id of Object.values(mix)) {
       const line = fade.map((levels) => levels[id]);
       for (let i = 1; i < line.length; i++) expect(line[i], id).toBeLessThanOrEqual(line[i - 1]);
@@ -889,11 +915,16 @@ describe("🌅 the closing", () => {
     expect(end["glitch.zips"]).toBeLessThan(0.2);
     expect(end["pad.chord"]).toBeGreaterThan(0.4); // what the vinyl brake takes
     expect(end["kick.punchy"]).toBeGreaterThan(0.2);
-    expect(toneOf(outro(1), mix)["bass.rolling"].lp).toBe(200);
-    expect(toneOf(outro(1), mix)["pad.chord"].lp).toBe(900);
-    expect(toneOf(outro(FADE_LOOPS + 1), mix)["pad.chord"].lp).toBe(LP_OPEN);
-    expect(braking(outro(1))).toBe(true);
-    expect(braking(outro(2))).toBe(false);
+    for (let left = 4; left >= 1; left--) {
+      expect(mixOf(outro(left), mix)).toEqual(end); // the brake holds the fade's end
+      expect(braking(outro(left))).toBe(true);
+    }
+    expect(braking(outro(5))).toBe(false);
+    expect(frenzy(outro(11))).toBe(true);
+    expect(frenzy(outro(10))).toBe(false);
+    expect(toneOf(outro(5), mix)["bass.rolling"].lp).toBe(200);
+    expect(toneOf(outro(5), mix)["pad.chord"].lp).toBe(900);
+    expect(toneOf(outro(11), mix)["pad.chord"].lp).toBe(LP_OPEN);
     expect(braking({ ...outro(1), closing: undefined })).toBe(false);
     expect(frenzy({ ...outro(12), closing: undefined })).toBe(false);
   });
@@ -916,7 +947,7 @@ describe("🌅 the closing", () => {
     expect(closingOpen({ ...closed, queue: [OUTRO], left: 1, next: OUTRO })).toBe(false);
     expect(closingOpen({ ...closed, section: OUTRO })).toBe(false);
     expect(closingOpen(pilot)).toBe(false);
-    const jumped = moveTo({ ...closed, closing: { left: 22 } }, "peak");
-    expect(jumped).toMatchObject({ section: "peak", left: 4, closing: { left: 22 } }); // cut to leave the outro its room
+    const jumped = moveTo({ ...closed, closing: { left: 26 } }, "peak");
+    expect(jumped).toMatchObject({ section: "peak", left: 4, closing: { left: 26 } }); // cut to leave the outro its room
   });
 });

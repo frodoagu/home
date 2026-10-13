@@ -35,7 +35,6 @@ import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
   CLOSE_SECONDS,
-  FADE_LOOPS,
   OPENING_OPEN,
   OUTRO,
   PUMP,
@@ -1153,6 +1152,7 @@ export function mountApp(root, engine, opts = {}) {
     closeBtn.setAttribute("aria-pressed", String(Boolean(p?.closing)));
     closeBtn.disabled = !engine.isRunning() || state.armed || Boolean(p?.closing && !closingOpen(p));
     for (const b of phaseBtns) b.disabled = Boolean(p?.closing); // nothing plays after the outro
+    for (const c of [bpm, rampTo, rampBtn, tapBtn]) c.disabled = braking(p); // a vinyl stopping keeps its tempo
     const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
     dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // the outro has its own drop
@@ -1347,7 +1347,15 @@ export function mountApp(root, engine, opts = {}) {
       const tame = !frenzy(state.pilot);
       state.pilot = move.pilot;
       // The set goes wild: the visuals flash until the fade.
-      if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (state.pilot.left - FADE_LOOPS) * loopSeconds());
+      const { left, ending } = state.pilot;
+      if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (left - ending.fade - ending.brake) * loopSeconds());
+      // The set's last loops: the mix slows to a stop, like a vinyl, until the
+      // end. Its end is fixed in audio time, so the tempo holds still till then.
+      if (braking(state.pilot) && left === ending.brake) {
+        state.ramp = null;
+        showRamp();
+        engine.brake(time, left * loopSeconds());
+      }
       const sectionStart = move.pilot.left === move.pilot.length;
       if (move.style) {
         styleNow(move.style); // before any part is written: it takes the new scale
@@ -1394,8 +1402,6 @@ export function mountApp(root, engine, opts = {}) {
     }
     if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
     setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? fillKinds(step));
-    // The set's last bar: the mix slows to a stop, like a vinyl.
-    if (state.auto && step === BAR_STEPS && braking(state.pilot)) engine.brake(time, BAR_STEPS * stepDuration(state.tempo));
     if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) {
@@ -1464,7 +1470,8 @@ export function mountApp(root, engine, opts = {}) {
   // The frenzy's last two loops roll every drum it plays, bar after bar;
   // null elsewhere (its other phrases end in the usual fills).
   function frenzyKinds() {
-    if (!state.auto || !frenzy(state.pilot) || state.pilot.left - FADE_LOOPS > 2) return null;
+    const p = state.pilot;
+    if (!state.auto || !frenzy(p) || p.left - p.ending.fade - p.ending.brake > 2) return null;
     const out = {};
     for (const id of Object.values(laneMap())) if (defOf(id).kind === "drum") out[id] = "build";
     return out;
@@ -1860,6 +1867,7 @@ export function mountApp(root, engine, opts = {}) {
 
   // With the loop stopped there are no bar lines: the BPM just changes.
   function startRamp() {
+    if (state.auto && braking(state.pilot)) return; // a new style's ramp too: the brake ends where it was set
     const to = clampBpm(Number(rampTo.value));
     rampTo.value = String(to);
     if (!engine.isRunning()) setTempo(to);
