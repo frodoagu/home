@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCENES, createDirector, hash, lasersOf, moodOf, strobeOf } from "./director.js";
+import { SCENES, createDirector, hash, moodOf, strobeOf } from "./director.js";
 
 const BEAT_MS = 400;
 // A stage frame (stage.js) with what the director reads.
@@ -92,7 +92,7 @@ describe("director", () => {
   });
 });
 
-describe("moods, strobe and lasers", () => {
+describe("moods and strobe", () => {
   it("reads the mood from the kick and the drop", () => {
     expect(moodOf(frame({ layers: new Set(["pad"]) }))).toBe("calm");
     expect(moodOf(frame({ playing: false }))).toBe("calm");
@@ -118,18 +118,6 @@ describe("moods, strobe and lasers", () => {
   it("flashes by hand, briefly", () => {
     expect(strobeOf(frame({ time: 1000, layers: new Set() }), 1000)).toBe(1);
     expect(strobeOf(frame({ time: 2000, layers: new Set() }), 1000)).toBeLessThan(0.01);
-  });
-
-  it("keeps the lasers faint at rest, fuller with a kick, full on the drop and rising with a build", () => {
-    const rest = lasersOf(frame({ playing: false, layers: new Set() }));
-    const breakdown = lasersOf(frame({ layers: new Set(["pad"]) }));
-    const groove = lasersOf(frame());
-    expect(rest).toBeGreaterThan(0);
-    expect(rest).toBeLessThan(breakdown);
-    expect(breakdown).toBeLessThan(groove);
-    expect(lasersOf(frame({ sinceDrop: 0 }))).toBe(1);
-    expect(lasersOf(frame({ sinceDrop: 60 }))).toBeLessThan(lasersOf(frame({ sinceDrop: 1 })));
-    expect(lasersOf(frame({ build: 0.9 }))).toBeGreaterThan(groove);
   });
 
   it("hashes text into 0..1", () => {

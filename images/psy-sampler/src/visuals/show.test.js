@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { adapt, scaleOf } from "./renderer.js";
-import { actionOf, loadSettings } from "./show.js";
+import { DICTS } from "../i18n/index.js";
+import { SCENES } from "./director.js";
+import { SCENES as SHADERS } from "./shaders.js";
+import { actionOf, loadSettings, TRAILS } from "./show.js";
 
 const memory = (value) => ({ getItem: () => value, setItem() {} });
 
@@ -10,8 +13,20 @@ describe("keys", () => {
     expect(actionOf("ArrowLeft")).toBe("prev");
     expect(actionOf("L")).toBe("lock");
     expect(actionOf("3")).toEqual({ pick: 2 });
-    expect(actionOf("9")).toBe(null);
+    expect(actionOf("9")).toEqual({ pick: 8 });
+    expect(actionOf("0")).toEqual({ pick: 9 });
+    expect(actionOf("0", 9)).toBe(null);
+    expect(actionOf("5", 4)).toBe(null);
     expect(actionOf("q")).toBe(null);
+  });
+});
+
+describe("scenes", () => {
+  it("each has a shader, a trail and a name", () => {
+    const ids = SCENES.map((s) => s.id).sort();
+    expect(Object.keys(SHADERS).sort()).toEqual(ids);
+    expect(Object.keys(TRAILS).sort()).toEqual(ids);
+    expect(Object.keys(DICTS.es.visuals.scenes).sort()).toEqual(ids);
   });
 });
 

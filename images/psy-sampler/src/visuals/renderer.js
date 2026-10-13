@@ -1,24 +1,25 @@
-// WebGL2 plumbing for the show: one program per scene plus the laser layer,
-// the bloom (BLOOM + BLUR), POST and FINAL, drawn as a full-screen triangle
-// pair.
+// WebGL2 plumbing for the show: one program per scene plus the bloom
+// (BLOOM + BLUR), POST and FINAL, drawn as a full-screen triangle pair.
 //
 //   scene ──> target "scene" ──> BLOOM ─> BLUR ×4 ─> "bloom" ┐
-//   previous scene ──> "prev"                                ┤
-//   lasers ──> "lasers"                                      ┼─> POST ──> feed[i] ──> FINAL ──> canvas
+//   previous scene ──> "prev"                                ┼─> POST ──> feed[i] ──> FINAL ──> canvas
 //   feed[1-i] (last frame) ──────────────────────────────────┘           (FXAA, grain)
+//
+// Scenes with a simulation (sims.js) step it first and read its state.
 //
 // Scenes render below the canvas resolution: `level` (0..1) sets both that
 // fraction and the raymarch steps, and adapt() moves it with the frame time,
 // so a weak GPU (a phone, a TV) gets a softer picture instead of a slideshow.
 
-import { BLOOM, BLUR, FINAL, POST, VERTEX, laserSource, sceneSource } from "./shaders.js";
+import { BLOOM, BLUR, FINAL, POST, VERTEX, sceneSource } from "./shaders.js";
+import { RATES, createSims } from "./sims.js";
 
 const MAX_PIXELS = 1920 * 1080; // the canvas never goes past this, whatever the screen
 const SLOW_MS = 22; // frame time above this: drop a notch
 const FAST_MS = 18; // below this for RISE_MS: go up a notch
 const RISE_MS = 1500;
 const INTS = new Set(["uPalette"]);
-const LASER_OFF = 0.003; // below this the laser layer is not drawn at all
+const STATE_UNIT = 5; // where a scene reads its simulation, clear of POST's
 
 export const scaleOf = (level) => 0.3 + 0.7 * level ** 0.8;
 
@@ -46,9 +47,9 @@ function compile(gl, type, source) {
   return shader;
 }
 
-function link(gl, fragment) {
+function link(gl, fragment, vertex = VERTEX) {
   const program = gl.createProgram();
-  const vs = compile(gl, gl.VERTEX_SHADER, VERTEX);
+  const vs = compile(gl, gl.VERTEX_SHADER, vertex);
   const fs = compile(gl, gl.FRAGMENT_SHADER, fragment);
   gl.attachShader(program, vs);
   gl.attachShader(program, fs);
@@ -64,14 +65,16 @@ function check(gl, p, name) {
   throw new Error(`shader ${name}: ${log}`);
 }
 
-function target(gl, w, h) {
+// A texture to draw into: RGBA8, bilinear and clamped unless `opts` says otherwise.
+function target(gl, w, h, opts = {}) {
+  const { internal = gl.RGBA8, type = gl.UNSIGNED_BYTE, filter = gl.LINEAR, wrap = gl.CLAMP_TO_EDGE } = opts;
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
   const fb = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
@@ -95,6 +98,8 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
   let targets = null;
   let flip = 0;
   let quality = { level, ema: 16, fastFor: 0 };
+  let sims = null;
+  let painted = new Set(); // the scenes drawn last frame: any other comes in fresh
 
   function build() {
     gl.getExtension("KHR_parallel_shader_compile");
@@ -106,12 +111,18 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     programs = {
       scenes: Object.fromEntries(sceneIds.map((id) => [id, link(gl, sceneSource(id))])),
       post: link(gl, POST),
-      lasers: link(gl, laserSource()),
       bloom: link(gl, BLOOM),
       blur: link(gl, BLUR),
       final: link(gl, FINAL),
     };
     targets = null;
+    sims = createSims({ gl, link: (fs, vs) => link(gl, fs, vs), use, sampler, setAll, target: (w, h, o) => target(gl, w, h, o), release, draw });
+    painted = new Set();
+  }
+
+  function release(t) {
+    gl.deleteTexture(t.texture);
+    gl.deleteFramebuffer(t.fb);
   }
 
   function use(p, name) {
@@ -172,14 +183,12 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     // Small swings keep their targets: re-allocating every frame would stutter.
     if (targets && Math.abs(targets.scene.w - tw) / tw < 0.08 && targets.w === w && targets.h === h) return;
     if (targets) {
-      for (const t of [targets.scene, targets.prev, targets.lasers, ...targets.feed, ...targets.bloom]) {
-        gl.deleteTexture(t.texture);
-        gl.deleteFramebuffer(t.fb);
-      }
+      for (const t of [targets.scene, targets.prev, ...targets.feed, ...targets.bloom]) release(t);
     }
+    sims?.resize(w, h);
     const make = () => target(gl, tw, th);
     const quarter = () => target(gl, Math.max(8, Math.round(tw / 4)), Math.max(8, Math.round(th / 4)));
-    targets = { w, h, scene: make(), prev: make(), lasers: make(), feed: [make(), make()], bloom: [quarter(), quarter()] };
+    targets = { w, h, scene: make(), prev: make(), feed: [make(), make()], bloom: [quarter(), quarter()] };
   }
 
   function draw(into) {
@@ -190,28 +199,29 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
 
   /**
    * One frame. `frame` has the shared uniforms (uTime, uBeats, uKick...),
-   * `scene` / `previous` are { id, palette, vars }, `lasers` is { amount,
-   * palette, vars } and `post` POST's own.
+   * `scene` / `previous` are { id, palette, vars }, `post` POST's own, and
+   * `seconds` the show time since the last frame, which steps the
+   * simulations.
    */
-  function render({ uniforms, scene, previous, lasers, post }) {
+  function render({ uniforms, scene, previous, post, seconds = 0 }) {
     if (lost) return;
     size();
     const res = [targets.scene.w, targets.scene.h];
     const shared = { ...uniforms, uRes: res, uQuality: quality.level };
+    const drawn = new Set();
     const paint = (look, into) => {
       const p = programs.scenes[look.id];
+      const own = { ...shared, uPalette: look.palette, uVar: look.vars };
+      const state = sims?.has(look.id) ? sims.advance(look.id, own, seconds, !painted.has(look.id)) : null;
       use(p, look.id);
-      setAll(p, { ...shared, uPalette: look.palette, uVar: look.vars });
+      setAll(p, own);
+      if (state) sampler(p, "uState", STATE_UNIT, state);
       draw(into);
+      drawn.add(look.id);
     };
     paint(scene, targets.scene);
     if (previous) paint(previous, targets.prev);
-    const beams = lasers && lasers.amount > LASER_OFF;
-    if (beams) {
-      use(programs.lasers, "lasers");
-      setAll(programs.lasers, { ...shared, uPalette: lasers.palette, uVar: lasers.vars });
-      draw(targets.lasers);
-    }
+    painted = drawn;
 
     // Bloom: the scene's bright parts at a quarter size, blurred twice each
     // way, the second time twice as wide.
@@ -237,15 +247,13 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
     sampler(pp, "uScene", 0, targets.scene);
     sampler(pp, "uPrev", 1, previous ? targets.prev : targets.scene);
     sampler(pp, "uFeed", 2, last);
-    sampler(pp, "uLaser", 3, beams ? targets.lasers : targets.scene);
-    sampler(pp, "uBloom", 4, b0);
+    sampler(pp, "uBloom", 3, b0);
     setAll(pp, {
       ...shared,
       uPalette: scene.palette,
       uVar: scene.vars,
       ...post,
       uMix: previous ? post.uMix : 1,
-      uLaserMix: beams ? lasers.amount : 0,
     });
     draw(out);
 
@@ -273,6 +281,8 @@ export function createRenderer(canvas, { sceneIds, level = 0.75 } = {}) {
       quality = adapt(quality, dt);
     },
     level: () => quality.level,
+    /** Whether scene `id` can be drawn here: the simulations need float targets. */
+    supports: (id) => Boolean(sims) || !(id in RATES),
     destroy: () => gl.getExtension("WEBGL_lose_context")?.loseContext(),
   };
 }

@@ -79,8 +79,10 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      endpoint or the listener's own OpenAI/Anthropic/Gemini API key plans
                      the autopilot's next section, called from the listener's browser.
                      🌀 Visuals (src/visuals/, WebGL2, second page visuals.html): raymarched
-                     fractals, lasers, mandalas synced to engine.listen() events, or to
-                     another window (BroadcastChannel) or the microphone.
+                     fractals, mandalas, organic textures and two float-texture simulations
+                     (src/visuals/sims.js: reaction-diffusion, physarum) synced to
+                     engine.listen() events, or to another window (BroadcastChannel) or the
+                     microphone.
   psy-sync/          Cloud save for psy.agu.com.ar (Bun + bun:sqlite, no deps) AND its Dockerfile:
                      any Google account signs in (ID token verified server-side, own HMAC
                      cookie), one opaque JSON workspace + the user's uploaded audio samples

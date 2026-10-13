@@ -15,8 +15,8 @@ model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
 listener's machine, or the listener's own OpenAI, Anthropic or Google Gemini
 account, linked with an API key). A second one, the snapshot autopilot, plays the user's
 saved snapshots in order instead. What plays exports to WAV, as a loop or as a
-live recording, and 🌀 turns the screen into a show of 3D fractals and
-mandalas with lasers behind them that follows the music ([Visuals](#visuals)).
+live recording, and 🌀 turns the screen into a show of fractals, mandalas
+and organic textures that follows the music ([Visuals](#visuals)).
 The UI is in Spanish, English and Portuguese. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
@@ -1662,7 +1662,8 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 ## Visuals
 
 🌀 in the top bar turns the screen into a show: raymarched 3D fractals,
-mandalas and op-art tunnels with laser beams behind them, following the music. It is
+mandalas, op-art tunnels and organic textures (some of them living
+simulations), following the music. It is
 WebGL2 only (no library: the 3D is raymarched in fragment shaders), under
 `src/visuals/`:
 
@@ -1712,10 +1713,9 @@ build's second half, the kicks through the peak. The strobe starts at full
 one-time photosensitivity warning; the slider or S takes it down to 0.
 
 The **renderer** (`renderer.js`, shaders in `shaders.js`) draws each scene into
-a target, the previous one into another while they crossfade, and the laser
-layer into a third. POST mixes the scenes with its own last frame (trails),
-lays the lasers faintly behind them (where the scene is dark, 10 % where it
-is bright) and adds the strobe, and FINAL puts it on the canvas.
+a target and the previous one into another while they crossfade. POST mixes
+them with its own last frame (trails) and adds the strobe, and FINAL puts it
+on the canvas.
 
 What takes the synthetic edge off is all post-processing:
 
@@ -1743,18 +1743,50 @@ fold, rings of light per beat), **mandala** (a flower: rings of lotus, daisy
 or cosmos petals opening forever out of a seed head of Fibonacci spirals) and
 **op-art tunnel** (spirals, moiré or dots in relief: ribs, ripples or domes,
 lit by a lamp circling behind the eye and grazed by each beat's ring of
-light). Each takes four numbers from the director (`uVar`) for its variant.
+light). The organic and 2D-fractal ones:
 
-The **lasers** are not a scene but a layer behind every scene: analytic beams
-in haze from one of three rigs (a fan from the back, two crossing banks, a cone
-around the camera), switching every 4 bars, with their own four numbers per
-scene. They stay a hint (`LASER_LEVEL`, a fifth of full) and barely move with
-the kick. The director sets how bright they are within that (`lasersOf`): faint at rest and
-in breakdowns, more with a kick, full on a drop easing back over its peak, and
-rising through a build. At rest no hit reaches them, so they drift without
-pulsing.
+- **Liquid** (`flow`): fbm warped by fbm warped by fbm (domain warping), lit
+  in relief: marble with veins, an oil slick's thin film or a nebula with
+  stars. The bass and the kick push the warp, the pad stirs it.
+- **Julia**: c walks the rim of the Mandelbrot set's main cardioid (or of the
+  bulb left of it), so the set always sits on the edge between one shape and
+  dust; the bass breathes it across. Escape bands, a boundary glow from the
+  distance estimate and orbit traps inside. No deep zoom: highp floats
+  pixelate past ~1e-5.
+- **Gyroid flesh** (`gyroid`): the gyroid minimal surface thickened into a
+  wall and flown through, wrinkled by a finer gyroid, throbbing with the bass
+  and the kick, veins of light with the lead.
+- **Fractal reef** (`coral`): Knighty's pseudo-Kleinian fractal (box folds and
+  sphere inversions) repeated along the flight; polyps glow with the hats.
+- **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
+  their borders, nuclei, grains and an out-of-focus layer behind; a ripple per
+  kick swells them. Dark field or stained.
+- **Romanesco** (`phyllo`): buds on two families of Fibonacci log spirals (a
+  lattice in log r and angle, so one `floor()` finds a pixel's bud), growing
+  out forever, each bud optionally a smaller head of buds.
+- **Hyperbolic tiling** (`hyper`): a {p,q} tiling of the Poincaré disc, each
+  point folded into one triangle by mirrors and circle inversions, drifting
+  under a Möbius translation; a ring of tiles lights up per beat.
+- **Turing patterns** (`turing`) and **Physarum** (`physarum`) are living
+  simulations, below.
 
-Keys: ← → / space change scene, 1-4 pick one, L holds it, P palette, F flash,
+Each takes four numbers from the director (`uVar`) for its variant.
+
+**Simulations** (`sims.js`): the two scenes that carry a state from frame to
+frame step it in float textures before they draw, and read it as `uState`.
+`turing` is Gray-Scott reaction-diffusion on a torus (256 rows, four regimes:
+coral, mitosis, a maze, worms); the kick drops more B on a spot hashed per
+beat. `physarum` is Jeff Jones' slime mould: 131k agents in a float texture
+smell a trail ahead, ahead-left and ahead-right, turn and move, then land on
+the trail as points (additive blending) that a 3×3 blur spreads and fades;
+four species and three starts. Steps follow show time (`RATES`, carrying the
+fraction, capped per frame), so the pace doesn't depend on the frame rate;
+the picture itself does, a little, so a seed gives the same scene choices
+everywhere but not the same pixels. A scene that comes in starts from a fresh
+state and grows on screen. They need `EXT_color_buffer_float`: without it
+`renderer.supports()` says no and the show leaves them out.
+
+Keys: ← → / space change scene, 1-9 and 0 pick one, L holds it, P palette, F flash,
 S strobe (100/50/0 %), M microphone, H hides the HUD, Enter fullscreen, Esc
 closes. Touch: swipe sideways to change scene, tap to flash, double tap for
 fullscreen. A Screen Wake Lock keeps the display on while it plays.
