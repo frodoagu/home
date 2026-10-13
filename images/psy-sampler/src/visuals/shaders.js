@@ -664,13 +664,21 @@ vec3 scene(vec2 uv) {
 }
 `;
 
-// Under a microscope: Voronoi cells drifting, membranes from the exact
-// distance to each cell's border (iq), a nucleus off centre, grains in the
+// Under a microscope: a tissue that grows by mitosis. Each square of a
+// lattice holds a mother cell; over a generation (GROW beats) it splits in
+// two on one beat and each daughter splits again on a later one, a furrow
+// pinching in from the rim while the two nuclei part and glow. The view
+// zooms in by two per generation, so the four granddaughters end where the
+// next generation's mothers start: it grows forever with no seam. Membranes
+// from the exact distance to each cell's border (iq), grains in the
 // cytoplasm and a second layer out of focus behind. A ripple from the centre
 // runs through the tissue on each kick and swells the cells it passes; the
 // nuclei light up with the hats. Dark field or stained (uVar.x), with or
 // without the eyepiece's round field (uVar.y).
 const CELLS = `
+const float GROW = 16.0; // beats a generation lasts: every cell splits twice
+const float SPLIT = 0.75; // beats a division takes, from its beat on
+
 vec2 hash22(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
   q += dot(q, q.yzx + 33.33);
@@ -681,9 +689,9 @@ vec2 centre(vec2 n, float t) {
   return 0.5 + 0.38 * sin(t + TAU * hash22(n));
 }
 
-// x: distance to the nearest border; yz: the cell's id. mr runs from x to its centre.
-vec3 cell(vec2 x, float t, out vec2 mr) {
-  vec2 n = floor(x), f = fract(x), mg = vec2(0.0);
+// The out-of-focus layer. x: distance to the nearest border.
+float cell(vec2 x, float t) {
+  vec2 n = floor(x), f = fract(x), mr = vec2(0.0), mg = vec2(0.0);
   float md = 8.0;
   for (int j = -1; j <= 1; j++) {
     for (int i = -1; i <= 1; i++) {
@@ -701,44 +709,104 @@ vec3 cell(vec2 x, float t, out vec2 mr) {
       if (dot(mr - r, mr - r) > 1e-5) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
     }
   }
-  return vec3(md, n + mg);
+  return md;
+}
+
+// How far mother n of generation k is through its divisions at beat c:
+// x into left and right, y and z each daughter (left, right) into top and bottom.
+vec3 splits(vec2 n, float k, float c) {
+  float t1 = floor(hash21(n + 31.0 * k) * 8.0);
+  vec2 t2 = t1 + 1.0 + floor(hash22(n + 17.0 * k) * (GROW - 1.0 - t1));
+  return vec3(smoothstep(t1, t1 + SPLIT, c), smoothstep(t2, t2 + SPLIT, vec2(c)));
+}
+
+// Granddaughter q (0..3) of mother n at zoom z, in screen units, and in z its
+// size. Before a division the two halves sit on one point: one cell.
+vec3 daughter(vec2 n, int q, vec3 s, float z) {
+  vec2 side = vec2(q & 1, q >> 1) * 2.0 - 1.0;
+  float b = side.x < 0.0 ? s.y : s.z;
+  vec2 at = (n + 0.5 + 0.25 * side * vec2(s.x, b)) * z;
+  float t = uTime * 0.2;
+  at += 0.16 * vec2(sin(1.3 * at.y + t + 1.7 * sin(0.9 * at.x - 0.5 * t)), sin(1.1 * at.x - 0.8 * t + 1.7 * sin(0.8 * at.y + 0.3 * t)));
+  return vec3(at, z * exp2(-0.5 * (s.x + b)));
 }
 
 vec3 scene(vec2 uv) {
-  float scale = 3.2 + 1.5 * uVar.z;
-  vec2 drift = vec2(uTime * 0.05, 0.4 * sin(uTime * 0.03));
+  float scale = 2.0 + 1.0 * uVar.z;
+  float c = mod(uBeats, GROW);
+  float k = mod(floor(uBeats / GROW), 64.0);
+  float z = exp2(c / GROW);
+  vec2 drift = 0.4 * vec2(sin(uTime * 0.05), sin(uTime * 0.03));
   vec2 p = uv * rot(uTime * 0.01) * scale + drift;
   p += 0.35 * (vec2(noise2(p * 0.7 + uTime * 0.05), noise2(p * 0.7 + 5.3 - uTime * 0.05)) - 0.5);
-  vec2 mr;
-  vec3 c = cell(p, uTime * 0.25, mr);
-  float id = hash21(c.yz);
-  vec2 at = (p + mr - drift) / scale;
-  float ripple = exp(-abs(length(at) - fract(uBeat) * 1.8) * 4.0) * uKick;
+
+  // The nearest cell: where it is, its size, its mother and which granddaughter.
+  vec2 n0 = floor(p / z), mn = n0, mp = p;
+  float md = 1e9, size = 1.0;
+  int mq = 0;
+  vec3 ms = vec3(0.0);
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 n = n0 + vec2(i, j);
+      vec3 s = splits(n, k, c);
+      for (int q = 0; q < 4; q++) {
+        vec3 d = daughter(n, q, s, z);
+        float e = dot(d.xy - p, d.xy - p);
+        if (e < md) { md = e; mp = d.xy; size = d.z; mn = n; mq = q; ms = s; }
+      }
+    }
+  }
+  // The distance to its border. A furrow to a sister forms as they part,
+  // pinching in from the rim: until it closes there, it isn't a border.
+  float edge = 8.0;
+  vec2 mr = mp - p;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 n = mn + vec2(i, j);
+      vec3 s = splits(n, k, c);
+      for (int q = 0; q < 4; q++) {
+        vec2 r = daughter(n, q, s, z).xy - p;
+        if (dot(r - mr, r - mr) < 1e-6) continue;
+        vec2 dir = normalize(r - mr);
+        vec2 mid = 0.5 * (mr + r);
+        float d = dot(mid, dir);
+        if (n == mn) {
+          float prog = (q & 1) != (mq & 1) ? s.x : ((mq & 1) == 0 ? s.y : s.z);
+          float open = (1.0 - prog) * (0.6 * size + 0.08) - 0.04;
+          d += 1.0 - smoothstep(open - 0.04, open + 0.04, length(mid - d * dir)) * smoothstep(0.0, 0.2, prog);
+        }
+        edge = min(edge, d);
+      }
+    }
+  }
+
+  float b = (mq & 1) == 0 ? ms.y : ms.z;
+  float dividing = max(4.0 * ms.x * (1.0 - ms.x), 4.0 * b * (1.0 - b));
+  float id = noise2(mp * 0.37 + 3.0);
+  float ripple = exp(-abs(length(mp - drift) / scale - fract(uBeat) * 1.8) * 4.0) * uKick;
   float swell = 1.0 + 0.3 * ripple + 0.08 * uBass;
-  vec2 off = (hash22(c.yz + 3.1) - 0.5) * 0.2;
-  float rn = (0.13 + 0.05 * hash21(c.yz + 7.0)) * swell;
-  float nd = length(mr + off);
-  float nucleus = smoothstep(rn, rn - 0.03, nd);
-  float nucleolus = smoothstep(rn * 0.35, rn * 0.15, length(mr + off + (hash22(c.yz + 9.0) - 0.5) * 0.1));
-  float body = smoothstep(0.0, 0.25 * swell, c.x);
-  float membrane = exp(-c.x * (45.0 - 15.0 * uBass)) + 0.5 * exp(-abs(c.x - 0.05) * 60.0);
-  float grain = noise2(p * 9.0 + id * 31.0) * noise2(p * 23.0 - uTime * 0.2);
-  vec2 mb;
-  vec3 b = cell(uv * scale * 0.55 + drift * 0.5 + 17.0, uTime * 0.15, mb);
-  float back = smoothstep(0.15, 0.0, b.x);
-  vec3 tint = pal(id * 0.25 + uTime * 0.01 + uVar.w);
+  float rn = (0.11 + 0.05 * noise2(mp * 0.5 + 7.0)) * swell * size;
+  float nucleus = smoothstep(rn, rn - 0.03, length(mr));
+  vec2 off = (vec2(noise2(mp * 0.5 + 11.0), noise2(mp * 0.5 + 23.0)) - 0.5) * 0.1 * size;
+  float nucleolus = smoothstep(rn * 0.35, rn * 0.15, length(mr + off));
+  float body = smoothstep(0.0, 0.25 * swell * size, edge);
+  float membrane = exp(-edge * (45.0 - 15.0 * uBass)) + 0.5 * exp(-abs(edge - 0.05) * 60.0);
+  vec2 inside = (p - mp) / size;
+  float grain = noise2(inside * 9.0 + id * 31.0) * noise2(inside * 23.0 - uTime * 0.2);
+  float back = smoothstep(0.15, 0.0, cell(uv * scale * 0.55 + drift * 0.5 + 17.0, uTime * 0.15));
+  vec3 tint = pal(id * 0.6 + uTime * 0.01 + uVar.w);
   vec3 col;
   if (uVar.x < 0.5) {
     // Dark field: light only where something scatters it.
     col = pal(0.6 + uVar.w) * 0.02 + pal(0.7 + uVar.w) * back * 0.1;
     col += tint * (membrane * (0.7 + 0.8 * ripple) + body * 0.05 + grain * body * 0.15);
-    col += pal(id * 0.25 + 0.5 + uVar.w) * (nucleus * (0.2 + 0.7 * uPerc) + nucleolus * (0.4 + 0.8 * uPerc));
+    col += pal(id * 0.6 + 0.5 + uVar.w) * (nucleus * (0.2 + 0.7 * uPerc + 0.6 * dividing) + nucleolus * (0.4 + 0.8 * uPerc));
   } else {
     // Stained: a pale slide, tinted cytoplasm, dark nuclei.
     col = mix(vec3(0.55), pal(0.1 + uVar.w), 0.3) * (1.0 - 0.2 * back);
     col = mix(col, tint * 0.8 + 0.1, body * 0.4 + grain * 0.1);
     col *= 1.0 - 0.6 * min(membrane, 1.0);
-    col = mix(col, pal(0.65 + uVar.w) * 0.25, nucleus * 0.85);
+    col = mix(col, pal(0.65 + uVar.w) * (0.25 + 0.3 * dividing), nucleus * 0.85);
     col += pal(0.65 + uVar.w) * nucleolus * 0.3 * uPerc + tint * ripple * 0.3;
   }
   if (uVar.y > 0.6) col *= smoothstep(1.0, 0.94, length(uv));

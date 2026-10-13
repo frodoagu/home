@@ -1854,10 +1854,15 @@ spirals). The organic and 2D-fractal ones:
   `flight.test.js` checks never fires over 30 s of kicks. Picks are hashed
   from the turn's count, so the same song flies the same way.
   `prefers-reduced-motion` flies straight.
-- **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
-  their borders, nuclei, grains and an out-of-focus layer behind; a ripple per
-  kick swells them. Dark field or stained. A calm scene only, like the liquid:
-  the director shows it in breakdowns and silence.
+- **Cells** (`cells`): a tissue that grows by mitosis. Each square of a lattice
+  holds a mother cell that, over a 16-beat generation, splits in two on one
+  beat and each half again on a later one: the nucleus glows and parts while
+  a furrow pinches in from the rim, so every beat some cells divide. The view
+  zooms in ×2 per generation, which lands the four granddaughters on the next
+  generation's mothers: it grows forever, with no seam. Voronoi membranes from
+  the exact distance to each border, grains and an out-of-focus layer behind;
+  a ripple per kick swells them. Dark field or stained. A calm scene only, like
+  the liquid: the director shows it in breakdowns and silence.
 - **Romanesco** (`phyllo`): buds on two families of Fibonacci log spirals (a
   lattice in log r and angle, so one `floor()` finds a pixel's bud), growing
   out forever, each bud optionally a smaller head of buds.
