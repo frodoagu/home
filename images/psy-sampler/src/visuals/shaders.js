@@ -227,10 +227,34 @@ vec2 path(float z) {
   return vec2(0.35 * sin(z * 0.21), 0.3 * cos(z * 0.17));
 }
 
+// The camera flies the path, so nothing comes nearer it than CLEAR.
+#define BORE 0.22
+#define CLEAR 0.08
+#define LIMB 2.0
+
+// A branch across the folded tunnel in some stretches LIMB long: a rod
+// from wall to wall, thinning towards the middle, along a chord that keeps
+// CLEAR off the path. The gasket's voids would leave it floating.
+float limb(vec2 q, float z) {
+  float cell = floor(z / LIMB) + 17.0 * uVar.z;
+  if (hash21(vec2(cell, 3.7)) > 0.5) return 1e3;
+  float a = TAU * hash21(vec2(cell, 5.1));
+  float r = 0.04 + 0.03 * hash21(vec2(cell, 7.9));
+  float h = CLEAR + r + 0.05 * hash21(vec2(cell, 9.3));
+  float zc = (floor(z / LIMB) + 0.5 + 0.3 * (hash21(vec2(cell, 1.3)) - 0.5)) * LIMB;
+  vec3 dir = normalize(vec3(cos(a), sin(a), 0.6 * (hash21(vec2(cell, 2.9)) - 0.5)));
+  vec3 v = vec3(q, z - zc) - vec3(-sin(a), cos(a), 0.0) * h;
+  float t = dot(v, dir) / BORE;
+  return 0.8 * (length(v - dir * dot(v, dir)) - r * (0.55 + 0.45 * min(t * t, 1.0)));
+}
+
 float tunnel(vec3 p, out vec4 orb) {
   float d = uVar.y < 0.5 ? apollo(p, orb) : folded(p, orb);
-  float bore = 0.22 - length(p.xy - path(p.z));
-  return max(d, bore);
+  vec2 q = p.xy - path(p.z);
+  float len = length(q);
+  float wall = max(d, BORE - len);
+  if (uVar.y < 0.5) return wall;
+  return max(min(wall, max(limb(q, p.z), len - BORE - 0.05)), CLEAR - len);
 }
 
 float tunnelD(vec3 p) {
