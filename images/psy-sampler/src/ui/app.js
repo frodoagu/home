@@ -1152,6 +1152,7 @@ export function mountApp(root, engine, opts = {}) {
     closeBtn.setAttribute("aria-pressed", String(Boolean(p?.closing)));
     closeBtn.disabled = !engine.isRunning() || state.armed || Boolean(p?.closing && !closingOpen(p));
     for (const b of phaseBtns) b.disabled = Boolean(p?.closing); // nothing plays after the outro
+    for (const c of [bpm, rampTo, rampBtn, tapBtn]) c.disabled = braking(p); // a vinyl stopping keeps its tempo
     const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
     dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // the outro has its own drop
@@ -1348,8 +1349,13 @@ export function mountApp(root, engine, opts = {}) {
       // The set goes wild: the visuals flash until the fade.
       const { left, ending } = state.pilot;
       if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (left - ending.fade - ending.brake) * loopSeconds());
-      // The set's last loops: the mix slows to a stop, like a vinyl, until the end.
-      if (braking(state.pilot) && left === ending.brake) engine.brake(time, left * loopSeconds());
+      // The set's last loops: the mix slows to a stop, like a vinyl, until the
+      // end. Its end is fixed in audio time, so the tempo holds still till then.
+      if (braking(state.pilot) && left === ending.brake) {
+        state.ramp = null;
+        showRamp();
+        engine.brake(time, left * loopSeconds());
+      }
       const sectionStart = move.pilot.left === move.pilot.length;
       if (move.style) {
         styleNow(move.style); // before any part is written: it takes the new scale
@@ -1861,6 +1867,7 @@ export function mountApp(root, engine, opts = {}) {
 
   // With the loop stopped there are no bar lines: the BPM just changes.
   function startRamp() {
+    if (state.auto && braking(state.pilot)) return; // a new style's ramp too: the brake ends where it was set
     const to = clampBpm(Number(rampTo.value));
     rampTo.value = String(to);
     if (!engine.isRunning()) setTempo(to);

@@ -2387,7 +2387,7 @@ describe("🌅 closing", () => {
     expect(levels().every((l) => l > 0.35)).toBe(true);
   });
 
-  it("🤖 off on the last bar lets go of the vinyl brake and brings the levels back", () => {
+  it("the tempo holds under the vinyl brake; 🤖 off lets go of it and brings the levels back", () => {
     seed("goa");
     $("button.auto").click();
     closeBtn().click();
@@ -2395,7 +2395,15 @@ describe("🌅 closing", () => {
     const unbrake = vi.spyOn(engine, "unbrake");
     for (let i = 0; i < 2000 && !brake.mock.calls.length; i++) advanceSeconds(BAR / 4);
     expect(brake).toHaveBeenCalledTimes(1);
+    // The tempo holds still under the brake, whose end is set in audio time.
+    const tempo = [$("#bpm"), $("#ramp-to"), $('[data-action="ramp"]'), $('[data-action="tap"]')];
+    expect(tempo.every((c) => c.disabled)).toBe(true);
+    $('[data-control="style"]').value = "techno";
+    $('[data-control="style"]').dispatchEvent(new Event("change"));
+    advanceSeconds(BAR);
+    expect($("#bpm").value).toBe("145"); // no ramp to the new style's range
     $("button.auto").click();
+    expect(tempo.some((c) => c.disabled)).toBe(false);
     expect(unbrake).toHaveBeenCalled();
     expect(engine.isRunning()).toBe(true); // the mix plays on, by hand
     advanceSeconds(2 * BAR);

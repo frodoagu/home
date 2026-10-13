@@ -1378,7 +1378,9 @@ it takes the mix that plays first (as 🤖 over a mix).
   stretches as t²/2T, so its slope (one minus the speed) climbs from 0 to 1
   and pitch and tempo fall to nothing over its 4 or 8 bars, with the level
   following over its last 30 %. At most `BRAKE_MAX` (24 s, 8 bars down to
-  80 BPM): longer, it starts late so it still stops at the end. `unbrake()` (🤖 off, a new
+  80 BPM): longer, it starts late so it still stops at the end. Its end is
+  fixed in audio time, so the tempo holds still under it: a ramp on its way
+  goes, and the BPM slider, the ramp and tap are off (a new style's ramp too). `unbrake()` (🤖 off, a new
   seed, the next ▶) lets go of it. The visuals slow to a stop with it (a
   `brake` event: `show.js` scales its clock by `1 - brake`).
 - **The end**: past the outro's last loop `advance` says `end` and the page
