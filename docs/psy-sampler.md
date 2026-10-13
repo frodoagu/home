@@ -1785,9 +1785,14 @@ brakes over ~380 ms, further the deeper the beat (an accent, a loud low end).
 move along it: the fractal tunnel flies on, the liquid's current rushes and settles,
 the mandala grows, the bulb's orbit swings. `uSurge`, the speed, eased, is
 for what may swell with it (a tunnel's field of view, the gyroid's throb, the
-trails' zoom). Kicks near a drop also shake the camera, a tremor of at most
-0.5 % of the screen that dies out in ~170 ms and fades over the bars after
-the drop (to ~12 % far from one). POST applies it and leaves the trails where
+trails' zoom). `uHeart` is the one beat a shape may scale with: each kick
+gives a lub 70 ms after it and a softer dub 0.4 of a beat later, each a pulse
+(t²·e^-t) that leaves and returns to 0 with no speed, so nothing snaps; it is
+summed from the hits' own times, so every frame rate sees the same beat. The
+Mandelbulb beats with it, scaled whole (distances too, so the march holds),
+and its rim and glow flare on it. Kicks near a drop also shake the camera, a
+tremor of at most 0.5 % of the screen that dies out in ~170 ms and fades over
+the bars after the drop (to ~12 % far from one). POST applies it and leaves the trails where
 they were, so a shake smears the edges into the colour fringes.
 `prefers-reduced-motion` turns the tremor off.
 
@@ -1816,7 +1821,7 @@ share (30-100 %) and the raymarch steps, and it follows the frame time (down
 above 22 ms, up after 1.5 s below 18 ms), so a phone or a TV gets a softer
 picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
-Scenes: **Mandelbulb** (a whole power from 6 to 10, each step tilting slowly, an orbit the beat swings along),
+Scenes: **Mandelbulb** (a whole power from 6 to 10, each step tilting slowly, an orbit the beat swings along, a heartbeat on the kick),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
 fold, rings of light per beat; the fold's branches cross the bore here and
 there, never nearer the camera's path than `CLEAR`) and **mandala** (a flower: rings of lotus,

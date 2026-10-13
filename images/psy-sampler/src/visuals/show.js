@@ -342,6 +342,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
         uMusic: music,
         uPush: m.push,
         uSurge: m.surge,
+        uHeart: m.heart,
         uShake: m.shake,
         uEye: fl.eye,
         uAhead: fl.ahead,

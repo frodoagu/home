@@ -10,6 +10,8 @@
 //   uPush     how far the beat has thrown the picture: it only goes forward,
 //             fast on a kick and braking by friction after (motion.js);
 //             uSurge its speed, eased, for what swells with it
+//   uHeart    a lub-dub on each kick that leaves and returns to 0 with no
+//             speed: the one beat a shape may scale with
 //   uShake    the camera's tremor near a drop: x, y (short side) and a turn,
 //             applied by POST
 //   uEnergy   how busy the mix is, uBuild the sweep into a drop, uDrop 1 on
@@ -39,7 +41,7 @@ out vec4 outColor;
 uniform vec2 uRes;
 uniform float uTime, uBeats, uBeat, uBar;
 uniform float uKick, uBass, uPerc, uLead, uPad, uGlitch, uFx;
-uniform float uEnergy, uBuild, uDrop, uQuality, uMusic, uPush, uSurge;
+uniform float uEnergy, uBuild, uDrop, uQuality, uMusic, uPush, uSurge, uHeart;
 uniform vec3 uLow, uShake;
 uniform vec4 uVar;
 uniform int uPalette;
@@ -111,7 +113,9 @@ vec3 tone(vec3 c) {
 `;
 
 // A Mandelbulb seen from an orbit that the beat swings along; each step
-// tilts as it goes, so it slowly morphs. Colour from an orbit trap. The power
+// tilts as it goes, so it slowly morphs, and it beats like a heart (uHeart):
+// scaled whole, distances and all, so the march and the colours hold.
+// Colour from an orbit trap. The power
 // is whole and the tilt a rotation: a fractional power, or an offset added
 // to th, tears the set along a seam (atan's cut, the z axis).
 const BULB = `
@@ -158,7 +162,8 @@ vec3 scene(vec2 uv) {
   col += pal(0.2 + uBeats * 0.03) * 0.25 * exp(-abs(r - 0.3 - fract(uBeat) * 1.5) * 12.0) * uKick;
 
   // Only inside the bulb's bounding sphere.
-  float b = dot(ro, rd), c = dot(ro, ro) - 1.3 * 1.3, h = b * b - c;
+  float s = 1.0 + 0.14 * uHeart;
+  float b = dot(ro, rd), c = dot(ro, ro) - 1.3 * 1.3 * s * s, h = b * b - c;
   if (h < 0.0) return col;
   h = sqrt(h);
   float near = max(-b - h, 0.0), far = -b + h;
@@ -167,23 +172,23 @@ vec3 scene(vec2 uv) {
   bool hit = false;
   for (i = 0; i < 140; i++) {
     if (i >= n) break;
-    d = bulb(ro + rd * x, trap);
+    d = s * bulb((ro + rd * x) / s, trap);
     glow += exp(-d * 30.0);
     if (d < 0.0007 * x) { hit = true; break; }
     x += d * 0.9;
     if (x > far) break;
   }
-  vec3 g = pal(uTime * 0.03 + 0.5 + uVar.w) * glow * (0.012 + 0.03 * uKick + 0.02 * uLead);
+  vec3 g = pal(uTime * 0.03 + 0.5 + uVar.w) * glow * (0.012 + 0.03 * uKick + 0.02 * uLead + 0.03 * uHeart);
   if (!hit) return col + g;
   vec3 p = ro + rd * x;
-  vec3 nor = normalBulb(p, 0.0005 * x);
+  vec3 nor = normalBulb(p / s, 0.0005 * x / s);
   vec3 light = normalize(vec3(0.6, 0.8, -0.5));
   float dif = clamp(dot(nor, light), 0.0, 1.0);
   float ao = 1.0 - float(i) / float(n);
   float rim = pow(1.0 - clamp(dot(-rd, nor), 0.0, 1.0), 3.0);
   vec3 base = pal(sqrt(trap) * 0.6 + uTime * 0.03 + uVar.w);
   vec3 lit = base * (0.15 + 1.1 * dif) * (0.4 + 0.6 * ao);
-  lit += pal(sqrt(trap) * 0.6 + 0.5) * rim * (0.6 + uKick * 1.5);
+  lit += pal(sqrt(trap) * 0.6 + 0.5) * rim * (0.6 + uKick * 1.5 + uHeart * 1.5);
   lit += base * uKick * 0.35 + base * uPerc * 0.1;
   return lit + g;
 }
