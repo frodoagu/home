@@ -317,7 +317,8 @@ const pick = (list, rng) => list[Math.floor(rng() * list.length)];
 /**
  * A new 2-bar part over `rows` (the editor's scale rows, highest first).
  * Not random noise: each style follows the genre's habits.
- *   bass  rolling 16ths between the kicks, mostly on the root
+ *   bass  between the kicks, mostly on the root: a gallop or an offbeat, now
+ *         and then rolling 16ths
  *   lead  an 8-step motif played A A' A B, so it repeats like a riff
  *   pad   one triad per bar built on scale degrees
  *   perc  sparse pitched hits leaning on the offbeats, with a fill at the end
@@ -335,7 +336,7 @@ export function improvise(style, rows, rng = Math.random) {
 
 function improviseBass(asc, root, rng) {
   const near = asc.filter((m) => m > root && m <= root + 12);
-  const rhythm = pick([[1, 2, 3], [2], [2, 3], [1, 2, 3]], rng);
+  const rhythm = pick([[1, 2, 3], [2], [2, 3], [2, 3]], rng);
   const out = [];
   for (let s = 0; s < LOOP_STEPS; s++) {
     if (!rhythm.includes(s % 4)) continue;

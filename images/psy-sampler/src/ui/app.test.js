@@ -2332,7 +2332,7 @@ describe("✨ AI", () => {
   };
   const BREAK = { why: "a dark break", section: "breakdown", bars: 16, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
   const BUILD = { why: "rising", section: "build", bars: 8, layers: {} };
-  const PEAK = { section: "peak", bars: 16, layers: {} };
+  const PEAK = { section: "peak", bars: 24, layers: {} };
   const GROOVE = { section: "groove", bars: 16, layers: {} };
   // The queued section when there is one, else `free`.
   const queuedOr = (free) => (opts, schema) => {
@@ -2550,7 +2550,7 @@ describe("✨ AI", () => {
     expect(ai.asks).toHaveLength(4); // one in, one more asked for
     expect(ai.asks[3].prompt).toContain("Sections so far: intro, breakdown.");
     expect(ai.asks[3].prompt).toMatch(/What the sections before it opened with:\n- intro: kick\./);
-    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- build, 8 bars\n- peak, 16 bars\n");
+    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- build, 8 bars\n- peak, 24 bars\n");
     await flushPromises();
     expect(queue()).toEqual(["build", "peak", "groove"]);
     expect(ai.asks).toHaveLength(4);

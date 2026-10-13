@@ -36,7 +36,7 @@ const goa = { lists, style: "goa" };
 
 describe("the prompt", () => {
   it("teaches the sections' forms, read off the autopilot", () => {
-    expect(SYSTEM).toContain("- peak: 16 or 24 bars; kick 1, bass 1, perc 2-3, lead 1, pad 1, glitch 1");
+    expect(SYSTEM).toContain("- peak: 24 or 32 bars; kick 1, bass 1, perc 2-3, lead 1, pad 1, glitch 1");
     expect(SYSTEM).toContain("- breakdown: 8 or 16 bars; kick 0, bass 0, perc 0-1, lead 1, pad 1, glitch 0-1");
     expect(SYSTEM).toContain("An empty list leaves that layer out.");
     expect(SYSTEM).toContain("The listener's wishes come first");
@@ -169,7 +169,7 @@ describe("the schema", () => {
     expect(schema.required).toEqual(["why", "section", "bars", "layers", "dress", "parts"]);
     expect(schema.properties.section.enum).toEqual(PLAN_SECTIONS);
     expect(PLAN_SECTIONS).not.toContain("intro");
-    expect(schema.properties.bars.enum).toEqual([8, 16, 24]);
+    expect(schema.properties.bars.enum).toEqual([8, 16, 24, 32]);
     const layers = schema.properties.layers;
     expect(Object.keys(layers.properties)).toEqual(["kick", "bass", "perc", "lead", "pad", "glitch"]);
     expect(layers.required).toEqual(Object.keys(layers.properties));
@@ -413,7 +413,7 @@ describe("the opening", () => {
     expect(schema.required).toContain("fx");
     expect(planSchema(psy).properties).not.toHaveProperty("fx");
     // another section opens within its own shape
-    expect(openingSchema({ ...psy, section: "peak" }).properties.bars.enum).toEqual([16, 24]);
+    expect(openingSchema({ ...psy, section: "peak" }).properties.bars.enum).toEqual([24, 32]);
   });
 
   it("keeps a good opening, with its swell, and is idempotent", () => {

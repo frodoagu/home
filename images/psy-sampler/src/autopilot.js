@@ -69,7 +69,7 @@ export const SECTIONS = {
     shape: { kick: 1, bass: 1, perc: [2, 2], lead: 1, pad: [0, 1], glitch: 1 },
   },
   peak: {
-    loops: [8, 12],
+    loops: [12, 16],
     next: ["breakdown", "groove"],
     shape: { kick: 1, bass: 1, perc: [2, 3], lead: 1, pad: 1, glitch: 1 },
   },
@@ -134,7 +134,7 @@ export const STYLES = {
     bpm: [140, 148],
     pool: {
       kick: ["kick.punchy", "kick.fullon"],
-      bass: ["bass.rolling", "bass.rollingOct", "bass.gallop"],
+      bass: ["bass.rolling", "bass.rollingOct", "bass.gallop", "bass.offbeat"],
       perc: ["perc.hat", "perc.chat", "perc.clap", "perc.snare", "perc.ride"],
       lead: ["lead.acid", "lead.arp", "lead.melodic", "lead.stabs", "lead.soaring", "lead.grid", "lead.vowel"],
       pad: ["pad.chord", "pad.prog", "pad.supersaw"],
@@ -146,7 +146,7 @@ export const STYLES = {
     scale: "phrygian",
     pool: {
       kick: ["kick.psytech", "kick.punchy"],
-      bass: ["bass.fm", "bass.rolling"],
+      bass: ["bass.fm", "bass.rolling", "bass.gallop"],
       perc: ["perc.chat", "perc.clap", "perc.rim", "perc.hat"],
       lead: ["lead.acidPhryg", "lead.arp", "lead.zap", "lead.bits", "lead.vowel", "lead.rubber"],
       pad: ["pad.dark", "pad.drone", "pad.prog"],
@@ -175,7 +175,7 @@ export const STYLES = {
     scale: "harmonic",
     pool: {
       kick: ["kick.long", "kick.fullon"],
-      bass: ["bass.rolling", "bass.rollingOct"],
+      bass: ["bass.rolling", "bass.rollingOct", "bass.gallop"],
       perc: ["perc.hat", "perc.shaker", "perc.toms", "perc.snare"],
       lead: ["lead.acid", "lead.melodic", "lead.arp"],
       pad: ["pad.prog", "pad.chord", "pad.fifths"],
@@ -287,8 +287,8 @@ const DUCK = 0.85; // a pad under a lead
 // engine takes the deeper of the two): the peak pumps its pads and leads.
 export const PUMP = { peak: { pad: 0.6, lead: 0.35 } };
 
-// A phrase is 8 bars: 4 loops. Sections are 4, 8 or 12 loops, so phrases
-// line up with them.
+// A phrase is 8 bars: 4 loops. Sections are 4, 8, 12 or 16 loops, so
+// phrases line up with them.
 export const PHRASE_LOOPS = 4;
 
 // A manual layer (the classics) is the listener's: the pilot never draws for
