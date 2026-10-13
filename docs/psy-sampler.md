@@ -1836,14 +1836,17 @@ spirals). The organic and 2D-fractal ones:
   flies through it, veins of light with the lead.
 - **Fractal reef** (`coral`): Knighty's pseudo-Kleinian fractal (box folds and
   sphere inversions) repeated along the flight; polyps glow with the hats.
-  The flight (`flight.js`) turns on the beat: each kick (each bar in a
-  breakdown) puts a corner just ahead of the camera and the path leaves it
-  10-30° off the heading, the way hashed from the turn's count (never steeper
-  than 40°). The tunnel is bored along that path, the stretch past the corner
-  swings to the new heading over 0.4 beats and is done before the camera gets
-  there, and the camera rounds each corner within 0.05 of it, so the walls
-  (0.12 away) never come closer than 0.07: `flight.test.js` checks it on every
-  frame. A kick that comes before the last leg is long enough flies on.
+  The flight (`flight.js`) turns on the beat and steers through the reef's
+  gaps: each kick (each bar in a breakdown) puts a corner just ahead of the
+  camera and tries up to 12 hashed ways out of it, 10-30° off the heading
+  first and 30-70° after, taking the first with a unit of open water ahead
+  (else the freest). It measures the reef with `reefAt()`, a JS copy of the
+  shader's distance estimate (keep the two in step), and turns off the beat
+  only to dodge, when the way ahead closes within 0.3. Nothing is bored in
+  the distance: the shader cuts away only what still comes within a cone
+  from the camera (0.1 wide) to a point 0.3 ahead, a last resort that
+  `flight.test.js` checks never fires over 30 s of kicks. Picks are hashed
+  from the turn's count, so the same song flies the same way.
   `prefers-reduced-motion` flies straight.
 - **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
   their borders, nuclei, grains and an out-of-focus layer behind; a ripple per

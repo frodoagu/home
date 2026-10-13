@@ -311,7 +311,8 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     const m = motion(s);
     const seconds = (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
     time += seconds;
-    const fl = flight(s, seconds, m.push);
+    const reef = [d.scene, d.previous].find((look) => look?.id === "coral");
+    const fl = flight(s, seconds, m.push, reef?.vars ?? null);
     music += ((s.playing ? 1 : 0) - music) * (1 - Math.exp(-dt / MUSIC_MS));
     if (now - labelAt > 500) {
       labelAt = now;
@@ -344,10 +345,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
         uShake: m.shake,
         uEye: fl.eye,
         uAhead: fl.ahead,
-        uPath: fl.path,
-        uFrom: fl.from,
-        uTo: fl.to,
-        uBend: fl.bend,
+        uReach: fl.reach,
       },
       scene: d.scene,
       previous: d.previous,
