@@ -49,8 +49,9 @@ flowchart LR
 
 | Parameter | Value | What for |
 |---|---|---|
-| `TICK_MS` | 25 ms | `setInterval` period |
+| `TICK_MS` | 25 ms | tick period (page `setInterval` + worker clock) |
 | `LOOKAHEAD` | 120 ms | how far ahead of `ctx.currentTime` it schedules |
+| `LOOKAHEAD_HIDDEN` | 1.5 s | the same while the tab is hidden |
 | `SAFETY` | 15 ms | nothing is scheduled closer than this (see Gotchas) |
 | `FADE` | 30 ms | linear fade of a lane on a variant change (on the next step) or on Stop (right away) |
 | `START_DELAY` | 60 ms | where step 0 lands on start |
@@ -62,6 +63,15 @@ what's already scheduled doesn't move and the grid doesn't drift. Measured in
 Chromium (145 → 175 BPM): ~413 ms kick intervals, **one** in-between transition
 beat (e.g. 378 ms = two sixteenths already scheduled at 145 + two at 175), then
 ~343 ms.
+
+**Background tabs.** A hidden tab throttles the page's timers (one tick a second
+or less), which would let the 120 ms queue run dry and leave holes. Two things
+keep it fed: the same tick is also driven by a dedicated worker
+([`clock.worker.js`](../images/psy-sampler/src/audio/clock.worker.js)), whose
+timers aren't throttled, and while `document.hidden` the lookahead grows to
+`LOOKAHEAD_HIDDEN`, longer than a throttled tick. The cost is that a BPM change
+made right after coming back to the tab takes up to that long to be heard; lane
+changes are unaffected (they fade on the next safe step, as always).
 
 The pure logic (`collectSteps`, `nextBeatTime`) lives in
 [`timing.js`](../images/psy-sampler/src/audio/timing.js), without Web Audio, and
