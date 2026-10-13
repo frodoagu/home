@@ -69,3 +69,24 @@ export function saveFolds(storage, folds) {
     // Blocked: every box starts folded again next visit.
   }
 }
+
+// The master volume: how loud this browser's speakers want it, never part of
+// the workspace, a share link or the cloud.
+const VOLUME_KEY = "psy-sampler:volume";
+
+export function loadVolume(storage) {
+  try {
+    const v = Number(storage?.getItem(VOLUME_KEY) ?? 1);
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function saveVolume(storage, volume) {
+  try {
+    storage?.setItem(VOLUME_KEY, String(volume));
+  } catch {
+    // Blocked: it starts at full volume again next visit.
+  }
+}

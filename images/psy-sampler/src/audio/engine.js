@@ -1,7 +1,7 @@
 // Audio engine: owns the AudioContext, the output chain, the lookahead
 // scheduler and one gain "lane" per playing variant.
 //
-//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> compressor ─> limiter ─> trim ─> destination
+//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> compressor ─> limiter ─> trim ─> volume ─> destination
 //                                   fx gain  ───┤                      ▲
 //                                               ├─ delay send ─> delay 3/16 ─> return ─┤
 //                                               └─ reverb send ─> convolver ─> return ─┘
@@ -28,7 +28,8 @@
 // Tap sync: restart() takes the loop back to its first step at a tap, and
 // align() moves the grid onto the beat the taps lay down (tempo.js).
 //
-// tap() hands out what the trim sends to the destination, for recording.
+// tap() hands out what the trim sends to the volume, for recording: the
+// listener's volume knob (setVolume) never reaches a take or the visuals.
 //
 // listen() reports what the scheduler queues, with its audio time, for the
 // visuals: every lane's hits per step, bar lines, lane changes, FX shots, the
@@ -126,7 +127,7 @@ function impulse(ctx, seconds) {
 }
 
 // Output chain: master -> DJ filter -> sweep -> compressor -> limiter ->
-// brake -> trim -> destination, plus the shared delay and reverb buses (their
+// brake -> trim -> volume -> destination, plus the shared delay and reverb buses (their
 // returns go through the DJ filter and the sweep too). Built once per
 // context, live or offline; a render keeps the sweep open and never brakes.
 // The brake is a delay line at 0 and a gain at 1 until brake() slows the
@@ -153,6 +154,7 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   limiter.release.value = 0.08;
   const trim = ctx.createGain();
   trim.gain.value = OUTPUT_TRIM;
+  const volume = ctx.createGain();
   const master = ctx.createGain();
   master.gain.value = MASTER_GAIN;
   const dj = { low: ctx.createBiquadFilter(), high: ctx.createBiquadFilter() };
@@ -170,8 +172,8 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   const bus = buildBus(ctx, dj.low, bpm, effects);
   const brake = { line: ctx.createDelay(BRAKE_MAX / 2 + 0.1), gain: ctx.createGain() };
   master.connect(dj.low).connect(dj.high).connect(sweep).connect(comp).connect(limiter);
-  limiter.connect(brake.line).connect(brake.gain).connect(trim).connect(ctx.destination);
-  return { master, dj, sweep, brake, out: trim, bus, side: buildSidechain(ctx) };
+  limiter.connect(brake.line).connect(brake.gain).connect(trim).connect(volume).connect(ctx.destination);
+  return { master, dj, sweep, brake, out: trim, volume, bus, side: buildSidechain(ctx) };
 }
 
 // The kick lanes' sum in `input`, its envelope out of `env` (never heard).
@@ -277,7 +279,9 @@ export function createEngine({
 } = {}) {
   let ctx = null;
   let master = null;
-  let out = null; // the last node before the destination
+  let out = null; // the trim: the mix before the listener's volume
+  let volumeGain = null;
+  let volumeValue = 1;
   let tapModule = null; // addModule()'s promise, once per context
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
@@ -325,7 +329,8 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, sweep: sweepFilter, brake: brakeNodes, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
+      ({ master, dj, sweep: sweepFilter, brake: brakeNodes, out, volume: volumeGain, bus, side } = buildChain(ctx, bpm, effects, djValue));
+      volumeGain.gain.value = volumeValue ** 2;
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -692,6 +697,13 @@ export function createEngine({
     dj.high.frequency.setTargetAtTime(high, ctx.currentTime, 0.03);
   }
 
+  // The master volume, 0..1: squared into the gain, so the knob's travel
+  // follows loudness. Only the speakers hear it.
+  function setVolume(value) {
+    volumeValue = value;
+    if (volumeGain) volumeGain.gain.setTargetAtTime(value ** 2, ctx.currentTime, 0.02);
+  }
+
   /**
    * The drop's sweep: from `at` the whole mix goes through a highpass rising
    * exponentially to `to` Hz at `end`, where it holds until sweepOff(). Only
@@ -952,7 +964,7 @@ export function createEngine({
   }
 
   /**
-   * An AnalyserNode on what the trim sends to the speakers, for the visuals'
+   * An AnalyserNode on what the trim sends to the volume, for the visuals'
    * levels; null until the context exists.
    */
   function levels() {
@@ -984,6 +996,7 @@ export function createEngine({
     restart,
     align,
     setMasterFilter,
+    setVolume,
     sweep,
     sweepOff: drop,
     frenzy,

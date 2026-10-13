@@ -1313,7 +1313,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   accent-color: var(--current);
 }
 
-.dj-value {
+.dj-value,
+.volume-value {
   min-width: 9ch;
   font-size: 0.85rem;
   font-weight: 400;

@@ -3589,6 +3589,18 @@ describe("filter, distortion and the DJ filter", () => {
     expect($(".dj-value").textContent).toBe("abierto");
     expect(saved()).not.toHaveProperty("dj"); // a performance control, never stored
   });
+
+  it("the volume knob sets the master volume and keeps it per browser, out of the workspace", () => {
+    const spy = vi.spyOn(engine, "setVolume");
+    const volume = $("#volume");
+    expect($(".volume-value").textContent).toBe("100 %");
+    volume.value = "0.4";
+    volume.dispatchEvent(new Event("input"));
+    expect(spy).toHaveBeenLastCalledWith(0.4);
+    expect($(".volume-value").textContent).toBe("40 %");
+    expect(localStorage.getItem("psy-sampler:volume")).toBe("0.4");
+    expect(saved()).not.toHaveProperty("volume");
+  });
 });
 
 describe("usage counts", () => {

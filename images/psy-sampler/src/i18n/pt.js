@@ -193,6 +193,7 @@ export default {
     djOff: "aberto",
     djLow: (hz) => `LP ${hz}`,
     djHigh: (hz) => `HP ${hz}`,
+    volume: "Volume",
     quantize: "Entrar no tempo",
     quantizeTitle: "Cada clique fica na fila e entra no próximo compasso",
     auto: "🤖 Piloto automático",

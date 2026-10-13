@@ -38,7 +38,7 @@ flowchart LR
     K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n] & CL[classic ×n]
   end
   FX[one insert + GainNode per playing FX]
-  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> D[destination]
+  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> V[volume] --> D[destination]
   FX --> M
   lanes -. send .-> DL[delay 3/16] -.-> DJ
   lanes -. send .-> RV[reverb] -.-> DJ
@@ -291,6 +291,13 @@ compressor and after the effect returns: left closes a lowpass from Nyquist to
 the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
+
+The **Volume** knob (transport, next to it) is the last gain before the
+speakers, after the trim: 0-100 %, squared into the gain so its travel follows
+loudness (`engine.setVolume`). It is the listener's monitor level, kept per
+browser in `psy-sampler:volume` (never in the workspace, a link or the cloud),
+and it reaches neither a ⏺ take, a WAV export nor the visuals' levels, which
+all read the trim.
 
 After it sits the **drop sweep**, a highpass of its own that only a drop
 moves (`engine.sweep(at, end)` / `sweepOff(at)`), so it never fights your hand
@@ -738,7 +745,7 @@ makes itself (a new version, another tab or device took over) skip the question.
   sound is trimmed. `engine.tap()` connects an AudioWorklet
   (`audio/tap.worklet.js`, loaded as its own file via `?url&no-inline`) after
   the output trim, so the DJ filter, FX, auditions and the limiter are all in
-  it, at the context's own sample rate. `audio/take.js` encodes 24-bit PCM as
+  it (the Volume knob is not), at the context's own sample rate. `audio/take.js` encodes 24-bit PCM as
   blocks arrive and folds it into a Blob every 16 MB, so memory holds about the
   file's size, not the floats. **Capped at 15 min** (`MAX_SECONDS` in
   `audio/recorder.js`, ~260 MB at 48 kHz: a whole track, and still safe in a

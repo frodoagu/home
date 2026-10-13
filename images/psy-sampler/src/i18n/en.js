@@ -193,6 +193,7 @@ export default {
     djOff: "open",
     djLow: (hz) => `LP ${hz}`,
     djHigh: (hz) => `HP ${hz}`,
+    volume: "Volume",
     quantize: "On the beat",
     quantizeTitle: "Every click is queued and comes in on the next bar",
     auto: "🤖 Autopilot",
