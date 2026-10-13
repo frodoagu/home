@@ -1856,7 +1856,8 @@ spirals). The organic and 2D-fractal ones:
   `prefers-reduced-motion` flies straight.
 - **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
   their borders, nuclei, grains and an out-of-focus layer behind; a ripple per
-  kick swells them. Dark field or stained.
+  kick swells them. Dark field or stained. A calm scene only, like the liquid:
+  the director shows it in breakdowns and silence.
 - **Romanesco** (`phyllo`): buds on two families of Fibonacci log spirals (a
   lattice in log r and angle, so one `floor()` finds a pixel's bud), growing
   out forever, each bud optionally a smaller head of buds.

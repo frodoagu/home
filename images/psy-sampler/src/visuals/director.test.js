@@ -71,11 +71,11 @@ describe("director", () => {
     for (const id of shown.slice(16)) expect(calm).toContain(id);
   });
 
-  it("keeps the liquid to the breakdowns", () => {
+  it.each(["flow", "cells"])("keeps %s to the breakdowns", (id) => {
     const withKick = (b) => at(b, { variants: [`kick.${Math.floor(b / 5)}`], drops: Math.floor(b / 24), sinceDrop: (b % 24) * 4 });
-    expect(play(createDirector(), 400, withKick)).not.toContain("flow");
+    expect(play(createDirector(), 400, withKick)).not.toContain(id);
     const calm = (b) => at(b, { layers: new Set(["pad"]), variants: [`pad.${Math.floor(b / 5)}`] });
-    expect(play(createDirector(), 400, calm)).toContain("flow");
+    expect(play(createDirector(), 400, calm)).toContain(id);
   });
 
   it("stays put while locked, and moves by hand", () => {
