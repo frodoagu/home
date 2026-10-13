@@ -261,6 +261,12 @@ export default {
     vibePlaceholder: "oscuro, hipnótico, breaks largos…",
     apply: "Aplicar",
     applyTitle: "Vuelve a planear con esta onda ahora; la próxima fase, si ya está planeada, queda como estaba",
+    set: "Duración",
+    setTitle: "Más o menos cuánto dura el set: la IA arma el arco de la noche (warm-up, subida, clímax y cierre) según por dónde va",
+    sets: { 0: "Libre", 60: "~1 h", 120: "~2 h", 180: "~3 h" },
+    setShort: (len) => `set ${len}`,
+    setSaved: (len) => `Set de ${len}: la IA planea cada fase según por dónde va la noche.`,
+    setOpen: "Set libre: la IA planea sin pensar en cuánto dura.",
     level: "Complejidad",
     levelTitle: "Cuánto decide la IA en cada fase: más complejidad, prompts más largos y respuestas más lentas",
     levels: {

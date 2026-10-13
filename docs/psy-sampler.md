@@ -1469,6 +1469,13 @@ breakdown has no kick, every section plays a lead or a pad).
   waits the same way (`armForAi`), with the pilot joining it instead of
   drawing an intro, so ✨ or 🤖 after a stop plans as on a fresh page. A share
   link's replay and a mix already playing never wait.
+- **Length** (Libre / ~1 h / ~2 h / ~3 h, `prefs.set` in minutes) is how long
+  the set should last. Every ask (opening, form, each section) gets a line
+  placing it in the night (`setLine` in `planner.js`): the warm-up up to 25 %,
+  the rise up to 60 %, the heart of the set up to 90 %, then the closing (also
+  past the end). The clock is `state.setSeconds`: the bars played under the
+  autopilot since ▶, at the BPM each was played at; ⏹ resets it, a new seed or
+  style doesn't. Changing it asks nothing again: the next asks take it.
 - **Aplicar** (or Enter in the field) applies the **Vibe** (`revibe`): the
   plans made with the old words go, with any ask on its way for them, and the
   model plans again with the new ones, even when the words are the same.
