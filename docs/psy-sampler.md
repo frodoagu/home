@@ -1080,20 +1080,39 @@ whether it comes from a Build-up or from a queued section, and is a drop.
   silence it builds it from scratch; over a mix, it reshapes it to that form on
   the next loop).
 - **Style**: each style (`STYLES`) restricts every layer to the sounds that suit
-  it (copies follow their base sound), sets the BPM and the scale of new
-  melodies, and swaps some entry FX. Picking one takes the BPM to the style's
-  (with the "BPM change" ramp if the loop is running) and, with the autopilot
-  running, reshapes the section with the new sounds on the next loop.
+  it (copies follow their base sound), sets a BPM range and the scale of new
+  melodies, and swaps some entry FX. Picking one takes the BPM to the nearest
+  end of the style's range (`bpmFor`; a BPM already inside it stays), so
+  switching styles back and forth doesn't always land on the same tempo.
+  With the loop stopped or the autopilot off it applies at once (with the
+  "BPM change" ramp if the loop is running).
+  - **While the autopilot plays** the new style doesn't cut in on the next loop:
+    it comes in on the **next drop out of a breakdown** (`styleOnDrop`). The
+    sections missing up to that drop are queued ahead of the rest: breakdown →
+    build → peak, or just build → peak from inside a breakdown. They go after
+    the section the last loop already announced, so a drop on its way still
+    lands. The old style plays them; the peak after the break arranges with the
+    new style's pool, lets go of the breakdown's theme (an old-style lead) and
+    tags its chip `→ <style>`. The BPM rides the break: when the breakdown
+    starts (or right away, if the style is picked inside one), a ramp runs
+    across what's left of it plus the build, so the new tempo is there by the
+    drop. Picking another style retargets the handoff; picking the playing
+    style again calls it off (the queued sections stay, ✕ drops them). Stopping,
+    switching to the snapshot autopilot or re-engaging applies it at once.
+  - **With ✨ AI**, the queue change re-plans as any other does, and each section
+    is asked in the style it will play (`styleAt`), at that style's BPM. A plan
+    made in another style than its section's goes (the entry's `style`), so a
+    plan for the landing peak made in the old style is asked again.
 
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
-| Techno | 132 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
-| Progressive psytrance | 138 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
-| Psytrance | 145 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
-| Psytech | 142 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, talking, rubber, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
-| Hi-tech | 180 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp, rubber; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
-| Goa | 145 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
-| Dark psy | 155 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, talking, rubber, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
+| Techno | 125-135 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
+| Progressive psytrance | 132-140 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
+| Psytrance | 140-148 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
+| Psytech | 138-146 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, talking, rubber, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
+| Hi-tech | 170-195 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp, rubber; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
+| Goa | 140-150 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
+| Dark psy | 148-165 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, talking, rubber, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
 **Volumes** (`mixOf`): on every loop the autopilot also sets the volume of each

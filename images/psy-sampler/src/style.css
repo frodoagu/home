@@ -1143,6 +1143,12 @@ html:has(dialog.help[open], dialog.intro[open]) {
   border-color: var(--current);
 }
 
+/* The section a new style comes in on. */
+.queued .restyle {
+  font-weight: 400;
+  font-style: italic;
+}
+
 .unqueue {
   padding: 0 4px;
   font: inherit;

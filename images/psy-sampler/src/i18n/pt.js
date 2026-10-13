@@ -282,7 +282,11 @@ export default {
   },
   pilot: {
     style: "Estilo",
-    styleTitle: "Quais sons o piloto usa; trocar leva o BPM ao do estilo",
+    styleTitle: "Quais sons o piloto usa e sua faixa de BPM. Com o piloto tocando, o estilo novo entra no próximo drop depois de um break",
+    styleWaits: (name) => `${name} entra no próximo drop, depois de um break: o piloto prepara a virada e o BPM se ajusta no break.`,
+    styleKept: (name) => `Continua ${name}.`,
+    styleIn: (name) => `${name} entrou com o drop.`,
+    styleOn: (name) => `${name} entra aqui`,
     changes: "Mudanças",
     changesTitle: "A cada quantos compassos o piloto troca um som dentro de uma seção, ou o de snapshots passa ao seguinte",
     every: (n) => `a cada ${n} compassos`,

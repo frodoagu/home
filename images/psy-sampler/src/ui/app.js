@@ -17,7 +17,10 @@
 // before the playing section's last loop. From silence it plans before ▶: the
 // opening first (the section the track starts with, laid over the seed's
 // draw), then the first AHEAD, while the autopilot waits armed. A share
-// link's opening and plans stand in for it section by section.
+// link's opening and plans stand in for it section by section. A style picked
+// while the pilot plays comes in on its next drop out of a breakdown; the BPM
+// rides that break into the style's range, and the plans from the drop on are
+// asked in the new style.
 // The signed-in user's samples (samples.js) load as the sounds using them
 // need them; until then those sounds play their own voice. The record button
 // drives recorder.js, which outlives remounts like the engine.
@@ -33,10 +36,12 @@ import {
   CHANGE_BARS,
   OPENING_OPEN,
   PUMP,
+  SECTIONS,
   SECTION_IDS,
   STYLES,
   STYLE_IDS,
   advance,
+  bpmFor,
   dequeue,
   dropNext,
   dropping,
@@ -53,6 +58,8 @@ import {
   rearrange,
   skip,
   startPilot,
+  styleAt,
+  styleOnDrop,
   toneOf,
   sequence,
   unbanned,
@@ -1038,6 +1045,13 @@ export function mountApp(root, engine, opts = {}) {
     if (p && !chips.length && p.left === 1 && p.next) {
       chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
     }
+    // The section a new style comes in on.
+    if (p?.handoff) {
+      const chip = chips[coming.findIndex((_, i) => styleAt(p, i, ws.style) !== ws.style)];
+      const name = tx.styles[p.handoff.style];
+      chip?.firstChild.after(el("span", { class: "restyle", text: `→ ${name}` }));
+      if (chip) chip.title = tx.pilot.styleOn(name);
+    }
     if (p && planning) {
       const slot = planning.form ? chips.length : planning.at - sectionNo() - 1;
       const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
@@ -1239,6 +1253,10 @@ export function mountApp(root, engine, opts = {}) {
       const plan = state.pilot.plan;
       state.pilot = move.pilot;
       const sectionStart = move.pilot.left === move.pilot.length;
+      if (move.style) {
+        styleNow(move.style); // before any part is written: it takes the new scale
+        status(tx.pilot.styleIn(tx.styles[move.style]));
+      } else if (sectionStart && move.pilot.section === "breakdown") rampBreak();
       // The plan the new section was built from: its dress and parts land now.
       const own = sectionStart && plan?.section === move.pilot.section ? plan : null;
       const playing = new Set(Object.values(move.active));
@@ -2224,6 +2242,7 @@ export function mountApp(root, engine, opts = {}) {
   // first sections and then plays (`arm`: until ▶).
   function engageAuto(section = null, { arm = false } = {}) {
     if (!state.auto) stats?.count("autopilot"); // a new seed re-engages: not a start
+    landStyle();
     const rearm = state.auto && state.armed; // still from silence
     const playing = rearm ? {} : { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
@@ -2284,6 +2303,7 @@ export function mountApp(root, engine, opts = {}) {
   // from the first, and turns the other autopilot off.
   function engageTour() {
     stats?.count("autopilot");
+    landStyle();
     state.auto = false;
     state.pilot = null;
     cancelPlanning();
@@ -2314,7 +2334,12 @@ export function mountApp(root, engine, opts = {}) {
   // the ✨ AI plans what now does.
   function requeue() {
     if (!state.pilot || !state.run || replaying()) return;
-    dropAhead(keptAhead(state.run.ahead, sequence(state.pilot)));
+    const p = state.pilot;
+    const ahead = state.run.ahead;
+    const kept = keptAhead(ahead, sequence(p));
+    // So do the plans made in another style than the one their section plays.
+    const restyled = ahead.findIndex((e, i) => e.style !== styleAt(p, i, ws.style));
+    dropAhead(restyled < 0 ? kept : Math.min(kept, restyled));
     planAhead();
   }
 
@@ -2353,16 +2378,62 @@ export function mountApp(root, engine, opts = {}) {
     if (planning && planning.at - sectionNo() - 1 >= from) cancelPlanning();
   }
 
-  // A style narrows the autopilot's sounds and takes the BPM to its own.
+  // A style narrows the autopilot's sounds and takes the BPM into its range,
+  // to the end nearest the BPM now (one inside it stays). While the pilot
+  // plays, it waits for the next drop out of a breakdown (autopilot.js
+  // styleOnDrop): the sections up to it are queued, the BPM rides the break,
+  // and the plans from the drop on are asked again in the new style.
   function setStyle(value) {
-    ws.style = value;
-    persist();
-    const target = STYLES[value].bpm;
-    if (target) {
-      rampTo.value = String(target);
-      startRamp();
+    if (!state.auto || !state.pilot || state.armed || !engine.isRunning()) {
+      styleNow(value);
+      if (state.auto && state.pilot) state.pilot = rearrange(state.pilot);
+      return;
     }
-    if (state.auto && state.pilot) state.pilot = rearrange(state.pilot);
+    state.pilot = styleOnDrop(state.pilot, value, ws.style);
+    const handoff = state.pilot.handoff;
+    if (handoff) rampBreak();
+    else {
+      // Called off: the break's ramp goes, back into the playing style's range.
+      state.ramp = null;
+      showRamp();
+      startRampTo(bpmFor(ws.style, state.tempo));
+    }
+    status(handoff ? tx.pilot.styleWaits(tx.styles[value]) : tx.pilot.styleKept(tx.styles[value]));
+    requeue();
+    showSection();
+  }
+
+  function styleNow(value) {
+    ws.style = value;
+    style.value = value;
+    persist();
+    startRampTo(bpmFor(value, state.tempo));
+  }
+
+  function startRampTo(bpm) {
+    if (bpm === state.tempo) return;
+    rampTo.value = String(bpm);
+    startRamp();
+  }
+
+  // A style the pilot has not reached yet: it plays from now on.
+  function landStyle() {
+    const handoff = state.pilot?.handoff;
+    if (handoff) styleNow(handoff.style);
+  }
+
+  // A style on its way rides the BPM into its range over the break, once in
+  // it: what is left of the breakdown and the build after it, so the new BPM
+  // is there by the drop.
+  function rampBreak() {
+    const p = state.pilot;
+    const handoff = p?.handoff;
+    if (!handoff?.broke) return;
+    const to = bpmFor(handoff.style, state.tempo);
+    rampTo.value = String(to);
+    const loops = p.left + (p.section === "breakdown" ? SECTIONS.build.loops[0] : 0);
+    state.ramp = to === state.tempo ? null : { from: state.tempo, to, bars: loops * 2, done: 0 };
+    showRamp();
   }
 
   function setSeed(value) {
@@ -2635,7 +2706,7 @@ export function mountApp(root, engine, opts = {}) {
     const at = sectionNo() + 1 + slot;
     const abort = new AbortController();
     planning = { at, abort };
-    const ctx = { lists: pilotLists(), style: ws.style, next };
+    const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next };
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
@@ -2646,7 +2717,7 @@ export function mountApp(root, engine, opts = {}) {
       form: coming.slice(slot + 1),
       planned,
       theme: themeAfter(p, mix, planned),
-      bpm: state.tempo,
+      bpm: ctx.style === ws.style ? state.tempo : bpmFor(ctx.style, state.tempo),
       active: mix,
       sections: state.run.sections,
       sounds: state.run.sounds,
@@ -2664,11 +2735,11 @@ export function mountApp(root, engine, opts = {}) {
         (raw) => {
           if (planning?.abort !== abort) return;
           failing = false;
-          const plan = normalizePlan(raw, { lists: pilotLists(), style: ws.style });
+          const plan = normalizePlan(raw, { lists: pilotLists(), style: ctx.style });
           // The section it plans may be the next one by now.
           const ahead = state.run.ahead;
           if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
-          ahead.push({ plan, why: whyOf(raw), queued: Boolean(next) });
+          ahead.push({ plan, why: whyOf(raw), queued: Boolean(next), style: ctx.style });
           more = true;
           if (fresh) {
             vibeFresh = false;
@@ -2962,6 +3033,7 @@ export function mountApp(root, engine, opts = {}) {
     state.active = {};
     state.armed = Object.keys(playing).length > 0;
     state.pending = state.armed ? playing : null;
+    landStyle();
     state.auto = false;
     state.pilot = null;
     state.tour = null;
@@ -3024,6 +3096,7 @@ export function mountApp(root, engine, opts = {}) {
       cue(); // armed, it starts now with the plans it has
       return;
     }
+    landStyle();
     state.auto = false;
     state.pilot = null;
     cancelPlanning();

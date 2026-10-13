@@ -5,6 +5,7 @@ import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "../audio/engine.js";
 import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
+import { STYLES } from "../autopilot.js";
 import { mountApp } from "./app.js";
 
 let ctx;
@@ -2180,11 +2181,11 @@ describe("autopilot", () => {
     expect(button("bass.rolling").parentElement.classList.contains("is-edited")).toBe(true);
   });
 
-  it("a style picks its sounds and takes the BPM to its own", () => {
+  it("a style picks its sounds and takes the BPM into its range", () => {
     const style = $('[data-control="style"]');
     style.value = "techno";
     style.dispatchEvent(new Event("change"));
-    expect($("#bpm").value).toBe("132");
+    expect($("#bpm").value).toBe("135"); // 145 down to the top of techno's range
     expect(saved().style).toBe("techno");
     autoBtn().click();
     const techno = {
@@ -2199,6 +2200,59 @@ describe("autopilot", () => {
       for (const v of pressed()) expect(techno[v.split(".")[0]]).toContain(v);
       advanceSeconds(2 * BAR);
     }
+  });
+
+  it("a style picked while it plays comes in on the drop after a break; the BPM rides the break", () => {
+    autoBtn().click();
+    advanceSeconds(2 * BAR);
+    const style = $('[data-control="style"]');
+    style.value = "hitech";
+    style.dispatchEvent(new Event("change"));
+    expect(saved().style).toBe("psytrance");
+    expect($("#bpm").value).toBe("145");
+    const queue = () => [...root.querySelectorAll(".section-queue [data-queued]")].map((li) => li.dataset.queued);
+    expect(queue()).toEqual(["breakdown", "build", "peak"]);
+    expect($('.section-queue [data-queued="peak"] .restyle').textContent).toBe("→ Hi-tech");
+    const hitech = (id) => STYLES.hitech.pool[id.split(".")[0]].includes(id);
+    const badge = () => $(".section-badge").textContent;
+    const seen = [];
+    for (let i = 0; i < 4000 && badge() !== "Pico"; i++) {
+      if (badge() !== seen.at(-1)) {
+        seen.push(badge());
+        if (badge() === "Break") expect(Number($("#bpm").value)).toBeLessThan(150); // it ramps from here
+      }
+      expect(saved().style).toBe("psytrance");
+      advanceSeconds(0.1);
+    }
+    expect(seen.slice(-2)).toEqual(["Break", "Subida"]);
+    expect($("#bpm").value).toBe("170"); // there by the drop: the bottom of hi-tech's range
+    expect(saved().style).toBe("hitech");
+    expect(style.value).toBe("hitech");
+    expect(pressed().filter((id) => !id.startsWith("fx.")).every(hitech)).toBe(true);
+  });
+
+  it("the playing style picked again calls the handoff off, and its ramp with it", () => {
+    $('[data-section="breakdown"]').click();
+    advanceSeconds(BAR);
+    const style = $('[data-control="style"]');
+    const pick = (value) => {
+      style.value = value;
+      style.dispatchEvent(new Event("change"));
+    };
+    pick("hitech");
+    pick("psytrance"); // at once: the BPM is already where it goes back to
+    advanceSeconds(4 * BAR);
+    expect($("#bpm").value).toBe("145");
+    pick("hitech");
+    expect($("#ramp-to").value).toBe("170"); // inside the breakdown: it rides this one
+    advanceSeconds(6 * BAR);
+    pick("psytrance");
+    const bpm = Number($("#bpm").value);
+    expect(bpm).toBeGreaterThan(145);
+    advanceSeconds(16 * BAR);
+    expect(Number($("#bpm").value)).toBe(Math.min(bpm, 148)); // back inside psytrance's range, no further
+    expect(saved().style).toBe("psytrance");
+    expect($(".section-queue .restyle")).toBeNull();
   });
 
   it("phases: a click starts there, later ones queue up and ✕ drops one before it plays", () => {
@@ -2594,6 +2648,26 @@ describe("✨ AI", () => {
     expect(ai.asks.at(-1).schema.properties.section.enum).toContain("breakdown");
     await flushPromises();
     expect(queue()).toEqual(["breakdown", "breakdown", "breakdown"]);
+  });
+
+  it("a new style while it plays: the plans up to its drop stay in the old style, the drop's is asked in the new one", async () => {
+    const ai = await remountWith(fakeAi({ answers: [queuedOr(GROOVE)] }));
+    playing();
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    const before = ai.asks.length;
+    const style = $('[data-control="style"]');
+    style.value = "techno";
+    style.dispatchEvent(new Event("change"));
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown", "build", "peak"]);
+    const asked = (section) => ai.asks.slice(before).find((a) => a.schema.properties.section.enum.join() === section);
+    expect(asked("breakdown").prompt).toContain("Style: Psytrance, 145 BPM.");
+    expect(asked("build").prompt).toContain("Style: Psytrance, 145 BPM.");
+    expect(asked("peak").prompt).toContain("Style: Techno, 135 BPM.");
+    expect(asked("breakdown").prompt).toContain("lead.melodic");
+    expect(asked("peak").prompt).not.toContain("lead.melodic"); // psytrance's, not techno's
   });
 
   it("Aplicar plans again with the vibe, keeping the next section's plan as a buffer", async () => {
