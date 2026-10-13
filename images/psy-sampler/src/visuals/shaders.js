@@ -4,7 +4,14 @@
 //
 //   uTime     seconds, running faster the busier the mix
 //   uBeats    beats since ▶ (uBeat, uBar: phase in the beat and the bar)
-//   uKick ... each layer's envelope: 1 on its hit, decaying (stage.js DECAY)
+//   uKick ... each layer's envelope: 1 on its hit, decaying (stage.js DECAY):
+//             for light only. Added to a position it snaps out on the hit
+//             and slides back, so whatever moves rides uPush instead
+//   uPush     how far the beat has thrown the picture: it only goes forward,
+//             fast on a kick and braking by friction after (motion.js);
+//             uSurge its speed, eased, for what swells with it
+//   uShake    the camera's tremor near a drop: x, y (short side) and a turn,
+//             applied by POST
 //   uEnergy   how busy the mix is, uBuild the sweep into a drop, uDrop 1 on
 //             the drop fading over a bar
 //   uLow      the levels heard, low/mid/high; uMusic 1 while something
@@ -32,8 +39,8 @@ out vec4 outColor;
 uniform vec2 uRes;
 uniform float uTime, uBeats, uBeat, uBar;
 uniform float uKick, uBass, uPerc, uLead, uPad, uGlitch, uFx;
-uniform float uEnergy, uBuild, uDrop, uQuality, uMusic;
-uniform vec3 uLow;
+uniform float uEnergy, uBuild, uDrop, uQuality, uMusic, uPush, uSurge;
+uniform vec3 uLow, uShake;
 uniform vec4 uVar;
 uniform int uPalette;
 
@@ -103,13 +110,13 @@ vec3 tone(vec3 c) {
 }
 `;
 
-// A Mandelbulb seen from an orbit that breathes with the kick; its power
+// A Mandelbulb seen from an orbit that the beat swings along; its power
 // drifts, so it slowly morphs between bulbs. Colour from an orbit trap.
 const BULB = `
 float bulb(vec3 p, out float trap) {
   vec3 z = p;
   float dr = 1.0, r = 0.0;
-  float power = 8.0 + 2.0 * sin(uTime * 0.07 + uVar.x * TAU) + uBass * 0.4;
+  float power = 8.0 + 2.0 * sin((uTime + 0.6 * uPush) * 0.07 + uVar.x * TAU);
   trap = 1e9;
   for (int i = 0; i < 6; i++) {
     r = length(z);
@@ -134,11 +141,11 @@ vec3 normalBulb(vec3 p, float e) {
 }
 
 vec3 scene(vec2 uv) {
-  float t = uTime * 0.18 + uVar.z * TAU;
-  float dist = 2.25 - 0.35 * uEnergy - 0.15 * uKick + 0.3 * sin(uTime * 0.05);
+  float t = (uTime + 0.6 * uPush) * 0.18 + uVar.z * TAU;
+  float dist = 2.25 - 0.35 * uEnergy + 0.3 * sin(uTime * 0.05);
   vec3 ro = dist * vec3(sin(t), 0.45 * sin(t * 0.6 + uVar.y * TAU), cos(t));
   mat3 cam = camera(ro, vec3(0.0), 0.2 * sin(uTime * 0.1));
-  vec3 rd = cam * normalize(vec3(uv, 1.7 + 0.25 * uKick));
+  vec3 rd = cam * normalize(vec3(uv, 1.7));
 
   float r = length(uv);
   vec3 col = pal(0.7 + r * 0.25 + uTime * 0.02) * 0.07 * (1.2 - r * 0.5);
@@ -178,6 +185,7 @@ vec3 scene(vec2 uv) {
 
 // A flight down a tunnel bored through an infinite fractal: an Apollonian
 // gasket or a kaleidoscopic fold (uVar.y), lit by a glow that rides the kick.
+// Each beat flies the camera on, further the deeper it is.
 const KIFS = `
 float apollo(vec3 p, out vec4 orb) {
   float s = 1.15 + 0.2 * uVar.x;
@@ -201,7 +209,7 @@ float folded(vec3 p, out vec4 orb) {
   for (int i = 0; i < 7; i++) {
     p = abs(p) - vec3(0.7, 0.55 + 0.2 * uVar.x, 0.35 + 0.3 * uVar.w);
     p.xy *= rot(0.35 + 0.25 * uVar.x + 0.05 * sin(uTime * 0.2));
-    p.yz *= rot(0.5 + 0.2 * uVar.z + 0.04 * uBass);
+    p.yz *= rot(0.5 + 0.2 * uVar.z);
     p *= 1.5;
     s *= 1.5;
     orb = min(orb, vec4(abs(p), dot(p, p)));
@@ -215,7 +223,7 @@ vec2 path(float z) {
 
 float tunnel(vec3 p, out vec4 orb) {
   float d = uVar.y < 0.5 ? apollo(p, orb) : folded(p, orb);
-  float bore = 0.22 + 0.04 * uBass - length(p.xy - path(p.z));
+  float bore = 0.22 - length(p.xy - path(p.z));
   return max(d, bore);
 }
 
@@ -225,11 +233,11 @@ float tunnelD(vec3 p) {
 }
 
 vec3 scene(vec2 uv) {
-  float z = uTime * (0.45 + 0.35 * uEnergy);
+  float z = uTime * (0.45 + 0.35 * uEnergy) + 0.7 * uPush;
   vec3 ro = vec3(path(z), z);
   vec3 ta = vec3(path(z + 1.0), z + 1.0);
   mat3 cam = camera(ro, ta, uTime * 0.12 + 0.6 * sin(uTime * 0.07));
-  vec3 rd = cam * normalize(vec3(uv, 1.3 - 0.2 * uKick));
+  vec3 rd = cam * normalize(vec3(uv, 1.3 - 0.12 * uSurge));
 
   float x = 0.0, d = 0.0, glow = 0.0;
   vec4 orb;
@@ -264,7 +272,7 @@ vec3 scene(vec2 uv) {
 // A mandala that is a flower: rings of n petals (pointed, round or fanned,
 // uVar.y), each laid over and shading the one behind it, opening out from
 // under a seed head of Fibonacci spirals in log scale, so the bloom never
-// ends. Rays along the folds behind; everything breathes with the bass.
+// ends, faster on each beat. Rays along the folds behind.
 const MANDALA = `
 float sectors() {
   return 6.0 + 2.0 * floor(uVar.x * 4.0);
@@ -289,7 +297,7 @@ float petalWidth(float t, float style) {
 vec3 scene(vec2 uv) {
   float n = sectors();
   float style = floor(uVar.y * 3.0);
-  float breathe = 1.0 + 0.1 * uBass + 0.05 * uKick;
+  float breathe = 1.0 + 0.04 * uSurge;
   vec2 p = uv * 0.9 / breathe * rot(uTime * 0.02);
   float r = max(length(p), 1e-4);
   float ang = atan(p.y, p.x) / TAU;
@@ -304,12 +312,13 @@ vec3 scene(vec2 uv) {
   // drawn from the outside in, each over (and shading) the ones behind it.
   const int K = 7;
   float stepK = 0.42;
-  float g0 = fract(uTime * 0.05);
+  float grow = (uTime + uPush) * 0.05;
+  float g0 = fract(grow);
   float m = style == 1.0 ? 2.0 * n : n;
-  float open = 0.86 + 0.1 * uKick + 0.04 * uPad;
+  float open = 0.86 + 0.06 * uSurge;
   for (int j = K - 1; j >= 0; j--) {
     float g = float(j) + g0;
-    float id = float(j) - floor(uTime * 0.05);
+    float id = float(j) - floor(grow);
     float R = 0.13 * exp(g * stepK);
     float base = R * 0.3;
     float fade = smoothstep(0.0, 0.6, g) * smoothstep(float(K), float(K) - 1.8, g);
@@ -338,10 +347,10 @@ vec3 scene(vec2 uv) {
   }
 
   // The seed head: florets on Fibonacci spirals (13 one way, 21 the
-  // other), turning slowly, swelling with the kick.
-  float Rc = 0.17 * (1.0 + 0.06 * uKick);
+  // other), turning slowly, swelling with the beat.
+  float Rc = 0.17 * (1.0 + 0.04 * uSurge);
   col *= 1.0 - 0.55 * smoothstep(Rc * 1.4, Rc, r);
-  float l = log(r) - uTime * 0.04;
+  float l = log(r) - (uTime + uPush) * 0.04;
   vec2 cell = vec2(13.0 * ang + 21.0 * l / TAU, 21.0 * ang - 13.0 * l / TAU);
   vec2 f = fract(cell) - 0.5;
   // Florets per pixel, from r alone: fwidth(cell) jumps on atan's seam.
@@ -363,16 +372,16 @@ vec3 scene(vec2 uv) {
 // An op-art tunnel: the plane taken to (angle, 1/radius), which is a
 // cylinder (or a square duct, uVar.y) seen from its axis, flying in. Its wall
 // carries a pattern per variant (uVar.x) in relief: spiral ribs, moiré
-// ripples or domed studs, deeper with the bass. A lamp circles behind the
-// eye, and the ring of light rolling down each beat grazes the relief as it
-// passes.
+// ripples or domed studs, deeper with the beat, which also flies it on. A
+// lamp circles behind the eye, and the ring of light rolling down each beat
+// grazes the relief as it passes.
 const TUNNEL = `
 // The wall's height at (angle, depth): 0 in the grooves, 1 on top.
 float relief(float a, float z, float n, float mode) {
   if (mode < 1.0) return smoothstep(-0.9, 0.9, sin((a * n + z * 1.5) * TAU));
   if (mode < 2.0) return 0.5 + 0.5 * sin(z * 24.0) * sin(z * 25.3 + a * TAU * n);
   vec2 cell = fract(vec2(a * n * 2.0, z * 2.0)) - 0.5;
-  float R = 0.32 + 0.08 * uKick;
+  float R = 0.32 + 0.06 * uSurge;
   return smoothstep(0.0, 1.0, 1.0 - dot(cell, cell) / (R * R));
 }
 
@@ -384,8 +393,8 @@ vec3 scene(vec2 uv) {
   bool squared = uVar.y >= 0.6;
   float r = max(squared ? square : round_, 1e-3);
   float a = atan(uv.y, uv.x) / TAU + 0.5;
-  float z = 0.4 / r + uTime * (0.8 + 0.8 * uEnergy);
-  a += z * 0.04 * sin(uTime * 0.21) + 0.02 * uBass;
+  float z = 0.4 / r + uTime * (0.8 + 0.8 * uEnergy) + 0.9 * uPush;
+  a += z * 0.04 * sin(uTime * 0.21);
   float n = 4.0 + 4.0 * floor(uVar.z * 3.0);
   float mode = floor(uVar.x * 3.0);
   float v;
@@ -397,7 +406,7 @@ vec3 scene(vec2 uv) {
   } else {
     vec2 cell = fract(vec2(a * n * 2.0, z * 2.0)) - 0.5;
     float d = length(cell);
-    v = smoothstep(0.32 + 0.08 * uKick, 0.28, d);
+    v = smoothstep(0.32 + 0.06 * uSurge, 0.28, d);
   }
 
   // The wall point and its frame: outward normal, around, and down the tube.
@@ -410,7 +419,7 @@ vec3 scene(vec2 uv) {
   float ea = 0.004 / n, ez = 0.004;
   vec2 grad = vec2((relief(a + ea, z, n, mode) - h) / ea / TAU, (relief(a, z + ez, n, mode) - h) / ez);
   float freq = mode < 1.0 ? 1.5 : mode < 2.0 ? 25.0 : 2.0;
-  float depth = (mode < 1.0 ? 0.07 : mode < 2.0 ? 0.025 : 0.05) * (1.0 + 0.8 * uBass);
+  float depth = (mode < 1.0 ? 0.07 : mode < 2.0 ? 0.025 : 0.05) * (1.0 + 0.5 * uSurge);
   depth /= 1.0 + 8.0 * freq * fwidth(z);
   vec3 nor = normalize(N - depth * (grad.x * Ta + vec3(0.0, 0.0, grad.y)));
   vec3 V = -normalize(P);
@@ -450,9 +459,10 @@ vec3 scene(vec2 uv) {
 `;
 
 // A liquid: fbm warped by fbm warped by fbm (iq's domain warping), turning
-// over itself. The bass and the kick push the warp, the pad stirs it, and a
-// light grazing its folds gives it a wet relief. Three looks (uVar.x): marble
-// with veins, an oil slick's thin-film colours, a nebula with stars.
+// over itself. Each kick and bass note sends the current rushing on and
+// friction brakes it, and a light grazing its folds gives it a wet relief.
+// Three looks (uVar.x): marble with veins, an oil slick's thin-film colours,
+// a nebula with stars.
 const FLOW = `
 float fbm(vec2 p) {
   float s = 0.0, a = 0.5;
@@ -465,21 +475,22 @@ float fbm(vec2 p) {
 }
 
 // The warped field at p; q and r are its two warps.
-float field(vec2 p, out vec2 q, out vec2 r) {
-  float t = uTime * 0.05;
-  float warp = 1.3 + 0.9 * uVar.z + 0.7 * uBass + 0.4 * uKick + 0.4 * uPad;
+float field(vec2 p, float time, out vec2 q, out vec2 r) {
+  float t = time * 0.05;
+  float warp = 1.45 + 0.9 * uVar.z + 0.25 * uEnergy;
   q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t * 0.8));
   r = vec2(fbm(p + warp * q + vec2(1.7, 9.2) + t * 1.4), fbm(p + warp * q + vec2(8.3, 2.8) - t * 1.1));
   return fbm(p + warp * r);
 }
 
 vec3 scene(vec2 uv) {
-  vec2 p = uv * (0.7 + 0.4 * uVar.y) * rot(uTime * 0.015) + vec2(uTime * 0.02, 0.0);
+  float time = uTime + 1.2 * uPush;
+  vec2 p = uv * (0.7 + 0.4 * uVar.y) * rot(time * 0.015) + vec2(time * 0.02, 0.0);
   vec2 q, r, q2, r2;
   float e = 2.0 / min(uRes.x, uRes.y);
-  float f = field(p, q, r);
-  vec2 grad = vec2(field(p + vec2(e, 0.0), q2, r2) - f, field(p + vec2(0.0, e), q2, r2) - f) / e;
-  vec3 nor = normalize(vec3(-grad * (0.035 + 0.03 * uBass), 1.0));
+  float f = field(p, time, q, r);
+  vec2 grad = vec2(field(p + vec2(e, 0.0), time, q2, r2) - f, field(p + vec2(0.0, e), time, q2, r2) - f) / e;
+  vec3 nor = normalize(vec3(-grad * (0.035 + 0.02 * uSurge), 1.0));
   vec3 L = normalize(vec3(0.6 * cos(uTime * 0.2), 0.6 * sin(uTime * 0.2), 0.8));
   float dif = max(dot(nor, L), 0.0);
   float spec = pow(max(dot(nor, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 40.0);
@@ -511,7 +522,7 @@ vec3 scene(vec2 uv) {
 
 // A Julia set whose c walks the rim of the Mandelbrot set's main cardioid
 // (or of the bulb left of it, uVar.y), so it is always on the edge between
-// one connected shape and dust; the bass breathes c across that edge.
+// one connected shape and dust; each beat walks c on along it.
 // Outside, bands of escape time, a glow on the boundary from the distance
 // estimate and a band per beat rolling through them; inside, orbit traps.
 const JULIA = `
@@ -520,12 +531,13 @@ vec2 cmul(vec2 a, vec2 b) {
 }
 
 vec3 scene(vec2 uv) {
-  float a = uTime * 0.03 + uVar.x * TAU;
+  float time = uTime + 0.5 * uPush;
+  float a = time * 0.03 + uVar.x * TAU;
   vec2 e = vec2(cos(a), sin(a));
   vec2 c = uVar.y < 0.7 ? 0.5 * e - 0.25 * cmul(e, e) : vec2(-1.0, 0.0) + 0.25 * e;
-  c *= 1.0 + 0.015 * sin(uTime * 0.11) + 0.012 * uBass;
-  float zoom = 1.5 - 0.25 * uVar.z - 0.08 * uKick;
-  vec2 z = uv * zoom * rot(uTime * 0.025);
+  c *= 1.0 + 0.015 * sin(time * 0.11);
+  float zoom = 1.5 - 0.25 * uVar.z;
+  vec2 z = uv * zoom * rot(time * 0.025);
   vec2 dz = vec2(1.0, 0.0);
   vec2 tp = 0.5 * vec2(cos(uBeats * PI * 0.25), sin(uBeats * PI * 0.25));
   float trapP = 1e9, trapX = 1e9, m = 0.0;
@@ -559,8 +571,9 @@ vec3 scene(vec2 uv) {
 
 // Flesh: a gyroid, the minimal surface that splits space into two
 // interlocked labyrinths, thickened into a wall and flown through. A finer
-// gyroid wrinkles it, the bass and the kick make it throb, and veins of
-// light (a third gyroid) glow with the lead. Its two faces get two colours.
+// gyroid wrinkles it, the beat flies on through it and makes it throb, and
+// veins of light (a third gyroid) glow with the lead. Its two faces get two
+// colours.
 const GYROID = `
 float gyroid(vec3 p) {
   return dot(sin(p), cos(p.yzx));
@@ -576,7 +589,7 @@ vec2 path(float z) {
 
 float flesh(vec3 p) {
   float s = scale();
-  float th = 0.3 + 0.25 * uVar.y + 0.12 * uBass + 0.08 * uKick;
+  float th = 0.3 + 0.25 * uVar.y + 0.1 * uSurge;
   float d = (abs(gyroid(p * s)) - th) / (s * 1.8);
   d -= 0.03 * gyroid(p * s * 3.1 + vec3(0.0, 0.0, uTime * 0.3)) + 0.02 * noise3(p * 14.0);
   float bore = 0.3 - length(p.xy - path(p.z));
@@ -584,10 +597,10 @@ float flesh(vec3 p) {
 }
 
 vec3 scene(vec2 uv) {
-  float z = uTime * (0.35 + 0.3 * uEnergy);
+  float z = uTime * (0.35 + 0.3 * uEnergy) + 0.45 * uPush;
   vec3 ro = vec3(path(z), z);
   mat3 cam = camera(ro, vec3(path(z + 1.0), z + 1.0), 0.3 * sin(uTime * 0.1));
-  vec3 rd = cam * normalize(vec3(uv, 1.2 - 0.15 * uKick));
+  vec3 rd = cam * normalize(vec3(uv, 1.2 - 0.1 * uSurge));
   float x = 0.0, d = 0.0;
   int n = steps(40.0, 100.0), i;
   bool hit = false;
@@ -642,7 +655,7 @@ float reef(vec3 p, out vec4 orb) {
   for (int i = 0; i < 8; i++) {
     p = 2.0 * clamp(p, -C, C) - p;
     float r2 = dot(p, p);
-    float s = max((1.0 + 0.04 * uBass) / r2, 1.0);
+    float s = max(1.0 / r2, 1.0);
     p *= s;
     k *= s;
     orb = min(orb, vec4(abs(p), r2));
@@ -658,10 +671,10 @@ float reefD(vec3 p) {
 }
 
 vec3 scene(vec2 uv) {
-  float z = uTime * (0.12 + 0.1 * uEnergy);
+  float z = uTime * (0.12 + 0.1 * uEnergy) + 0.12 * uPush;
   vec3 ro = vec3(path(z), z);
   mat3 cam = camera(ro, vec3(path(z + 0.5), z + 0.5), uTime * 0.05);
-  vec3 rd = cam * normalize(vec3(uv, 1.1 - 0.1 * uKick));
+  vec3 rd = cam * normalize(vec3(uv, 1.1 - 0.06 * uSurge));
   float x = 0.0, d = 0.0;
   vec4 orb;
   int n = steps(50.0, 120.0), i;
@@ -842,8 +855,9 @@ vec3 scene(vec2 uv) {
 // colours) in the Poincaré disc: each point is folded into one triangle by
 // reflecting it across the polygon's mirrors and inverting it in the circle
 // of its edge until it lands. A Möbius translation drifts the disc, so the
-// tiles flow out to the rim, where they shrink without end. Petals inside
-// each tile, and a ring of tiles lighting up per beat, counted outwards.
+// tiles flow out to the rim (faster on each beat), where they shrink without
+// end. Petals inside each tile, and a ring of tiles lighting up per beat,
+// counted outwards.
 const HYPER = `
 const vec2 PQ[4] = vec2[4](vec2(5.0, 4.0), vec2(6.0, 4.0), vec2(4.0, 6.0), vec2(3.0, 8.0));
 
@@ -862,13 +876,14 @@ vec3 scene(vec2 uv) {
   float cx = 1.0 / sqrt(1.0 - sp * sp / (cq * cq));
   float cr = cx * sp / cq;
   vec2 C = vec2(cx, 0.0);
-  vec2 z = uv / (1.0 - 0.02 * uKick);
+  vec2 z = uv;
   float rr = length(z);
   vec3 halo = pal(0.6 + uTime * 0.02 + uVar.w) * exp(-abs(rr - 1.0) * 12.0) * (0.15 + 0.4 * uKick);
   if (rr >= 1.0) return halo;
-  vec2 a = 0.6 * vec2(cos(uTime * 0.07 + uVar.z * TAU), sin(uTime * 0.05 + uVar.y * TAU));
+  float time = uTime + 0.8 * uPush;
+  vec2 a = 0.6 * vec2(cos(time * 0.07 + uVar.z * TAU), sin(time * 0.05 + uVar.y * TAU));
   z = cdiv(z - a, vec2(1.0, 0.0) - cmul(vec2(a.x, -a.y), z));
-  z *= rot(uTime * 0.04);
+  z *= rot(time * 0.04);
   float depth = 0.0;
   for (int i = 0; i < 48; i++) {
     float m = mod(atan(z.y, z.x), 2.0 * seg);
@@ -884,7 +899,7 @@ vec3 scene(vec2 uv) {
   float t = length(z) / (cx - cr);
   float ang = atan(z.y, z.x) / seg;
   float par = mod(depth, 2.0);
-  float bound = 0.3 + 0.55 * pow(cos(ang * PI * 0.5), 3.0) * (1.0 + 0.1 * uBass);
+  float bound = 0.3 + 0.55 * pow(cos(ang * PI * 0.5), 3.0) * (1.0 + 0.08 * uSurge);
   float fw = fwidth(t) + 1e-4;
   float petal = smoothstep(fw, -fw, t - bound);
   vec3 tile = pal(par * 0.5 + depth * 0.04 + uTime * 0.02 + uVar.w);
@@ -919,11 +934,11 @@ float chem(vec2 uv) {
 vec3 scene(vec2 uv) {
   vec2 size = vec2(textureSize(uState, 0));
   vec2 asp = vec2(size.x / size.y, 1.0);
-  vec2 q = rot(uTime * 0.02) * ((vUv - 0.5) * asp) * (0.85 - 0.05 * uBass);
+  vec2 q = rot((uTime + 0.5 * uPush) * 0.02) * ((vUv - 0.5) * asp) * 0.85;
   vec2 suv = q / asp + 0.5;
   float b = chem(suv);
   vec2 g = vec2(chem(suv + vec2(1.0 / size.x, 0.0)) - b, chem(suv + vec2(0.0, 1.0 / size.y)) - b);
-  vec3 nor = normalize(vec3(-g * (5.0 + 3.0 * uBass), 1.0));
+  vec3 nor = normalize(vec3(-g * (5.0 + 2.0 * uSurge), 1.0));
   vec3 L = normalize(vec3(cos(uTime * 0.3), sin(uTime * 0.3), 1.2));
   float dif = max(dot(nor, L), 0.0);
   float spec = pow(max(dot(nor, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 30.0);
@@ -1110,10 +1125,12 @@ float fbm(vec3 p) {
 }
 
 void main() {
-  vec2 uv = lens(vUv);
+  // The camera's tremor (uShake), in short-side units; the trails stay
+  // where they were, so a shake smears the edges into colour.
+  vec2 uv = 0.5 + rot(uShake.z) * (lens(vUv) - 0.5) + uShake.xy * min(uRes.x, uRes.y) / uRes;
   vec2 d = vUv - 0.5;
-  // Colour fringes: always a little towards the edges, more on the kick.
-  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop + 0.012 * dot(d, d);
+  // Colour fringes: always a little towards the edges, more on the kick and the tremor.
+  float split = 0.004 * uKick + 0.01 * uGlitch + 0.006 * uDrop + 0.012 * dot(d, d) + 0.8 * length(uShake.xy);
   vec3 col = sceneAt(uScene, uv, split);
   if (uMix < 1.0) {
     // The scene going out zooms away while the new one comes in.
@@ -1121,7 +1138,7 @@ void main() {
     col = mix(sceneAt(uPrev, zuv, split), col, smoothstep(0.0, 1.0, uMix));
   }
   // Trails: the last frame, a little zoomed and turned, where it is brighter.
-  vec2 fuv = 0.5 + (vUv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.01 * uKick);
+  vec2 fuv = 0.5 + (vUv - 0.5) * rot(0.004 * sin(uTime * 0.3)) * (0.985 - 0.012 * uSurge);
   col = max(col, texture(uFeed, fuv).rgb * uTrails);
 
   // Bloom: light bleeding past the bright parts.

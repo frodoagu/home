@@ -132,6 +132,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
       barPhase: beats / 4 - Math.floor(beats / 4),
       bar: Math.floor(beats / 4),
       env,
+      hitAt: Object.fromEntries(LAYERS.map((l) => [l, last[l].time])),
       accent: last.kick.accent,
       levels: { ...heard },
       energy,
