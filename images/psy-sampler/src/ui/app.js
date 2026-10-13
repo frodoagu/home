@@ -249,6 +249,7 @@ export function mountApp(root, engine, opts = {}) {
     ramp: resume?.ramp ?? null, // { from, to, bars, done }: a BPM change on its way
     bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
+    reseed: false, // a new seed the playing pilot takes on the next loop
     leaving: new Set(), // sounds just banned that the autopilot takes out on the next bar line
     queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
@@ -942,6 +943,7 @@ export function mountApp(root, engine, opts = {}) {
 
   function renderButtons(playingFx = engine.activeFx()) {
     const target = state.pending ?? state.active;
+    diceBtn.classList.toggle("is-queued", state.auto && state.reseed);
     for (const [id, { layer, node, tile, vary, solo, ban, levelBar }] of tiles) {
       const on = layer.oneShot ? playingFx.has(id) : isOn(state.active, id);
       const level = `${Math.round((dataOf(id).level / LEVEL.max) * 1000) / 10}%`;
@@ -1253,10 +1255,13 @@ export function mountApp(root, engine, opts = {}) {
       state.newParts.clear();
       varyAll();
     }
+    // A new seed re-engages the pilot here, on the grid, in place of its step.
+    const reseeded = loopStart && state.auto && state.reseed;
+    if (reseeded) engageAuto();
     runQueued();
     rollBuildUp(step);
     stepRamp();
-    let changed = false;
+    let changed = reseeded;
     if (state.pending) {
       if (state.queuedSnap) load(state.queuedSnap, step);
       else if (state.tour) state.tour = countBar(state.tour, step); // the hand wins this line
@@ -1275,7 +1280,7 @@ export function mountApp(root, engine, opts = {}) {
         } else state.tour = null;
         changed = true;
       }
-    } else if (state.auto && loopStart) {
+    } else if (state.auto && loopStart && !reseeded) {
       const move = advance(state.pilot, state.active, pilotLists(), state.rng, {
         style: ws.style,
         changeBars: ws.changeBars,
@@ -2321,6 +2326,7 @@ export function mountApp(root, engine, opts = {}) {
     const playing = rearm ? {} : { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
     state.auto = true;
+    state.reseed = false;
     state.tour = null;
     state.bare = 0;
     state.rng = seeded(hashSeed(ws.seed));
@@ -2516,7 +2522,12 @@ export function mountApp(root, engine, opts = {}) {
     state.replayOpening = null;
     seedInput.value = ws.seed;
     persist();
-    if (state.auto) engageAuto();
+    if (!state.auto) return;
+    // Playing, the new track comes in on the next loop, not mid-bar.
+    if (engine.isRunning()) {
+      state.reseed = true;
+      renderButtons();
+    } else engageAuto();
   }
 
   /* ---- ✨ AI ---- */
