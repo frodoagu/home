@@ -33,7 +33,7 @@
 // listen() reports what the scheduler queues, with its audio time, for the
 // visuals: every lane's hits per step, bar lines, lane changes, FX shots, the
 // build's sweep and the drop. Hits are reported as they are queued, so they
-// arrive up to LOOKAHEAD early; perfTimeOf() turns their time into the
+// arrive up to LOOKAHEAD (LOOKAHEAD_HIDDEN in a hidden tab) early; perfTimeOf() turns their time into the
 // performance.now() moment they leave the speakers.
 //
 // The arrangement has two moves of its own, never stored: sweep() runs a
@@ -48,6 +48,7 @@ import {
   BPM_DEFAULT,
   BPM_MIN,
   LOOKAHEAD,
+  LOOKAHEAD_HIDDEN,
   LOOP_STEPS,
   SAFETY,
   TICK_MS,
@@ -245,11 +246,23 @@ function withInsert(ctx, gain, insert, stepDur, at) {
   return { gain, input, chain, ducker, depth: null };
 }
 
+// Calls `fn` every `ms` from a worker, whose timers a background tab does not
+// throttle; returns its stop(), or null where there are no workers.
+function workerClock(ms, fn) {
+  if (typeof Worker === "undefined") return null;
+  const worker = new Worker(new URL("./clock.worker.js", import.meta.url), { type: "module" });
+  worker.onmessage = fn;
+  worker.postMessage(ms);
+  return () => worker.terminate();
+}
+
 export function createEngine({
   createContext = () => new AudioContext(),
   createOffline = (channels, length, rate) => new OfflineAudioContext(channels, length, rate),
   createWorklet = (c, name, options) => new AudioWorkletNode(c, name, options),
   sampleBuffer = () => null, // sample id -> decoded AudioBuffer, or null while it is not there
+  createClock = workerClock,
+  hidden = () => globalThis.document?.hidden ?? false,
 } = {}) {
   let ctx = null;
   let master = null;
@@ -264,6 +277,7 @@ export function createEngine({
   let side = null; // the kick sidechain: { input, env }
   let bpm = BPM_DEFAULT;
   let timer = null;
+  let stopClock = null; // the worker clock's, next to the page's own timer
   let cursor = null; // { step, time, loop } of the next step to schedule; null when stopped
   let queued = []; // steps already scheduled, oldest first: step bar + lane backfill
   let effects = { delay: true, reverb: true };
@@ -356,7 +370,8 @@ export function createEngine({
 
   function tick() {
     const stepDur = stepDuration(bpm); // read every tick: the BPM slider applies live
-    const { due, cursor: next } = collectSteps(cursor, ctx.currentTime, LOOKAHEAD, stepDur);
+    const ahead = hidden() ? LOOKAHEAD_HIDDEN : LOOKAHEAD;
+    const { due, cursor: next } = collectSteps(cursor, ctx.currentTime, ahead, stepDur);
     cursor = next;
     for (const s of due) queueStep(s, stepDur);
     const horizon = ctx.currentTime - 1;
@@ -491,7 +506,10 @@ export function createEngine({
     bars = 0;
     stopAt = null;
     tick();
+    // Both clocks drive the same tick, which only queues what is due: the
+    // page's covers the worker's start-up, the worker's a background tab.
     timer = setInterval(tick, TICK_MS);
+    stopClock = createClock(TICK_MS, () => cursor && tick());
   }
 
   // The audio time of what leaves the speakers at `heard`, a performance.now()
@@ -539,9 +557,11 @@ export function createEngine({
   function stopLoop() {
     if (timer !== null) {
       clearInterval(timer);
+      stopClock?.();
       played += ctx.currentTime - runFrom;
     }
     timer = null;
+    stopClock = null;
     cursor = null;
     queued = [];
     stopAt = null;

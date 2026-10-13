@@ -109,6 +109,38 @@ describe("scheduler", () => {
     }
   });
 
+  it("in a hidden tab, queues enough to outlast a throttled second-long tick", () => {
+    let hidden = false;
+    engine = createEngine({ createContext, hidden: () => hidden });
+    engine.setLanes({ perc: "perc.shaker" });
+    run(0.1);
+    hidden = true;
+    run(0.025);
+    const ahead = Math.max(...startTimes("buffer")) - ctx.currentTime;
+    expect(ahead).toBeGreaterThan(1.3);
+    expect(ahead).toBeLessThan(1.5 + 1e-9);
+  });
+
+  it("the worker clock keeps ticking when the page's timer does not, and stops with the loop", () => {
+    const clock = { fn: null, stopped: false };
+    engine = createEngine({
+      createContext,
+      createClock: (ms, fn) => {
+        clock.fn = fn;
+        return () => (clock.stopped = true);
+      },
+    });
+    engine.setLanes({ perc: "perc.shaker" });
+    const before = startTimes("buffer").length;
+    ctx.currentTime += 0.5; // the page's timer held back, as in a background tab
+    clock.fn();
+    const after = startTimes("buffer");
+    expect(after.length).toBeGreaterThan(before);
+    expect(Math.max(...after)).toBeGreaterThan(ctx.currentTime);
+    engine.stop();
+    expect(clock.stopped).toBe(true);
+  });
+
   it("plays the offbeat bass on steps 2, 6, 10... of the grid", () => {
     engine.setLanes({ bass: "bass.offbeat" });
     run(1.5);

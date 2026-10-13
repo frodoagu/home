@@ -4,6 +4,9 @@ export const LOOP_STEPS = 32; // 2 bars of 16ths
 export const BAR_STEPS = 16;
 export const TICK_MS = 25; // setInterval period of the scheduler
 export const LOOKAHEAD = 0.12; // seconds scheduled ahead of ctx.currentTime
+// In a hidden tab: nobody is editing, and the page's timers may tick only once
+// a second, so the queue must outlast a whole throttled tick.
+export const LOOKAHEAD_HIDDEN = 1.5;
 // Minimum lead for anything scheduled. A note whose start time is already past
 // when the audio thread sees it starts mid-envelope (non-zero gain): a click.
 export const SAFETY = 0.015;
