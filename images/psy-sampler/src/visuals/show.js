@@ -7,6 +7,7 @@
 
 import { el } from "../ui/dom.js";
 import { SCENES, createDirector } from "./director.js";
+import { createMotion } from "./motion.js";
 import { createRenderer } from "./renderer.js";
 import { micSource, withIdle } from "./sources.js";
 import { createStage } from "./stage.js";
@@ -101,6 +102,8 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   let micOn = false;
   const stage = createStage({ now: performance.now() });
   const director = createDirector({ scenes });
+  const still = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const motion = createMotion({ shake: !still });
   let last = null; // the latest stage frame, for the keys
   let time = 0;
   let music = 0; // 1 while something plays, eased so a stop fades the beat out
@@ -304,6 +307,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     const s = stage.frame(now);
     last = s;
     const d = director.frame(s);
+    const m = motion(s);
     const seconds = (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
     time += seconds;
     music += ((s.playing ? 1 : 0) - music) * (1 - Math.exp(-dt / MUSIC_MS));
@@ -333,6 +337,9 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
         uDrop: s.sinceDrop >= 0 ? Math.exp(-s.sinceDrop / 4) : 0,
         uLow: [s.levels.low, s.levels.mid, s.levels.high],
         uMusic: music,
+        uPush: m.push,
+        uSurge: m.surge,
+        uShake: m.shake,
       },
       scene: d.scene,
       previous: d.previous,

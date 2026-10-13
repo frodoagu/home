@@ -1712,6 +1712,22 @@ build's second half, the kicks through the peak. The strobe starts at full
 (`psy-sampler:visuals` in localStorage keeps the viewer's level), behind a
 one-time photosensitivity warning; the slider or S takes it down to 0.
 
+**Motion** (`motion.js`) is how the beat moves the picture. The envelopes are
+for light only: added to a position (a zoom, a warp, a camera distance) one
+snaps out on the hit and slides back over the next frames, a broken
+boomerang. Instead each kick, and each bass note a little, throws the
+picture forward: a velocity that eases in over 60 ms and that friction
+brakes over ~380 ms, further the deeper the beat (an accent, a loud low end).
+`uPush`, the distance it has travelled, only goes forward, and the scenes
+move along it: the tunnels fly on, the liquid's current rushes and settles,
+the mandala grows, the bulb's orbit swings. `uSurge`, the speed, eased, is
+for what may swell with it (a tunnel's field of view, the gyroid's throb, the
+trails' zoom). Kicks near a drop also shake the camera, a tremor of at most
+0.5 % of the screen that dies out in ~170 ms and fades over the bars after
+the drop (to ~12 % far from one). POST applies it and leaves the trails where
+they were, so a shake smears the edges into the colour fringes.
+`prefers-reduced-motion` turns the tremor off.
+
 The **renderer** (`renderer.js`, shaders in `shaders.js`) draws each scene into
 a target and the previous one into another while they crossfade. POST mixes
 them with its own last frame (trails) and adds the strobe, and FINAL puts it
@@ -1727,7 +1743,7 @@ What takes the synthetic edge off is all post-processing:
   at rest and thicker with the energy (`uHaze`), lit by the bloom: the light
   catches in it the way it does in a club's smoke.
 - **Lens and grade**: a touch of barrel distortion, colour fringes growing
-  towards the edges (more on the kick), a soft S curve, blacks lifted a hair
+  towards the edges (more on the kick and the tremor), a soft S curve, blacks lifted a hair
   and a little less saturation, then the vignette.
 - **FXAA and grain**: FINAL smooths the upscaled frame's edges (FXAA in its
   luma-edge form, on the render's own texels) and only then adds an animated
@@ -1737,7 +1753,7 @@ share (30-100 %) and the raymarch steps, and it follows the frame time (down
 above 22 ms, up after 1.5 s below 18 ms), so a phone or a TV gets a softer
 picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
-Scenes: **Mandelbulb** (power drifting, orbit breathing with the kick),
+Scenes: **Mandelbulb** (power drifting, an orbit the beat swings along),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
 fold, rings of light per beat), **mandala** (a flower: rings of lotus, daisy
 or cosmos petals opening forever out of a seed head of Fibonacci spirals) and
@@ -1747,15 +1763,15 @@ light). The organic and 2D-fractal ones:
 
 - **Liquid** (`flow`): fbm warped by fbm warped by fbm (domain warping), lit
   in relief: marble with veins, an oil slick's thin film or a nebula with
-  stars. The bass and the kick push the warp, the pad stirs it.
+  stars. Each kick sends the current rushing on, and friction brakes it.
 - **Julia**: c walks the rim of the Mandelbrot set's main cardioid (or of the
   bulb left of it), so the set always sits on the edge between one shape and
-  dust; the bass breathes it across. Escape bands, a boundary glow from the
+  dust; each beat walks it on along that rim. Escape bands, a boundary glow from the
   distance estimate and orbit traps inside. No deep zoom: highp floats
   pixelate past ~1e-5.
 - **Gyroid flesh** (`gyroid`): the gyroid minimal surface thickened into a
-  wall and flown through, wrinkled by a finer gyroid, throbbing with the bass
-  and the kick, veins of light with the lead.
+  wall and flown through, wrinkled by a finer gyroid, throbbing as the beat
+  flies through it, veins of light with the lead.
 - **Fractal reef** (`coral`): Knighty's pseudo-Kleinian fractal (box folds and
   sphere inversions) repeated along the flight; polyps glow with the hats.
 - **Cells** (`cells`): Voronoi cells with membranes from the exact distance to
@@ -2030,7 +2046,8 @@ npm run build
   `take` (silence gate, cap, tail trim), `recorder`, `i18n`, `planner` (the
   ✨ AI's prompt, schema and `normalizePlan`), `ai` (Chrome's model, LM
   Studio and the three linked accounts against fakes, the settings), and the
-  visuals' `stage`, `director`, `listen`, `feed` and `show` (keys, settings,
+  visuals' `stage`, `director`, `motion` (only forward, eased, braking,
+  the tremor), `listen`, `feed` and `show` (keys, settings,
   adaptive quality). The shaders have no unit tests: render them in a browser.
 - `voices.test.js` / `engine.test.js` run against a fake `AudioContext`
   ([`src/test/fakeAudio.js`](../images/psy-sampler/src/test/fakeAudio.js)) that

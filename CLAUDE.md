@@ -502,7 +502,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   pad (a bare kick/bass/perc mix lives one bar at most). Bar overlays (the
   build-up roll, a drop's silenced kick/bass bar, fills) live in `feed()` for
   one bar and never reach storage. The tone hp/lp pair is always in the insert
-  chain (an identity when open) so an autopilot ride never swaps chains. All UI text lives in `src/i18n/{es,en,pt}.js`
+  chain (an identity when open) so an autopilot ride never swaps chains. Visuals: never
+  add a beat envelope (`uKick`, `uBass`...) to a position, zoom or warp in a
+  shader — it snaps out and slides back (a broken boomerang); motion rides
+  `uPush` (only forward, braking by friction, src/visuals/motion.js) and
+  swells ride `uSurge`; envelopes are for light. All UI text lives in `src/i18n/{es,en,pt}.js`
   (same shape, enforced by a test). One browser runs ONE sampler (`src/tabs.js`): the tab in use holds a
   Web Lock and the app mounts only once a new tab steals it (the notice
   asks first); the robbed tab stops, flushes and reloads. Don't mount the app

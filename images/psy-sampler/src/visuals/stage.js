@@ -102,7 +102,12 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
   /** Everything the renderer needs at `t` (ms). Advances the stage: call once per frame. */
   function frame(t) {
     let n = 0;
-    while (n < pending.length && pending[n].time <= t) apply(pending[n++]);
+    const hits = []; // every hit reached this frame, so a slow frame loses none
+    while (n < pending.length && pending[n].time <= t) {
+      const e = pending[n++];
+      apply(e);
+      if (e.kind === "hit") hits.push({ layer: e.layer, time: e.time, accent: Boolean(e.accent) });
+    }
     if (n) pending = pending.slice(n);
 
     const dt = Math.max(0, t - lastFrame);
@@ -132,6 +137,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
       barPhase: beats / 4 - Math.floor(beats / 4),
       bar: Math.floor(beats / 4),
       env,
+      hits,
       accent: last.kick.accent,
       levels: { ...heard },
       energy,
