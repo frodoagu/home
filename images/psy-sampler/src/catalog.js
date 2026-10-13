@@ -17,6 +17,7 @@ export const LAYERS = [
     variants: [
       "bass.offbeat", "bass.rolling", "bass.rollingOct", "bass.gallop", "bass.fm",
       "bass.prog", "bass.techno", "bass.hitech", "bass.phrygian", "bass.house", "bass.techHouse",
+      "bass.deep",
     ],
   },
   {

@@ -409,7 +409,7 @@ describe("render", () => {
     const r = renderer();
     r.setSolo("lead.arp");
     await r.render({ lanes: { bass: "bass.offbeat" } });
-    expect(offline.nodes.some((n) => n.kind === "gain" && Math.abs(n.gain.value - 0.6) < 1e-9)).toBe(true);
+    expect(offline.nodes.some((n) => n.kind === "gain" && Math.abs(n.gain.value - 0.45) < 1e-9)).toBe(true);
   });
 
   it("an FX renders from time 0 and is trimmed at its tail", async () => {
@@ -513,7 +513,7 @@ describe("edits (setData)", () => {
     run(0.2);
     const [lane] = laneGains();
     engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 });
-    expect(lane.gain.events.at(-1)).toEqual(["target", 0.3, ctx.currentTime, 0.02]);
+    expect(lane.gain.events.at(-1)).toEqual(["target", 0.225, ctx.currentTime, 0.02]);
     // Same level again: nothing new is automated.
     engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 });
     expect(lane.gain.events).toHaveLength(1);
@@ -528,16 +528,16 @@ describe("edits (setData)", () => {
     expect(lane.gain.events).toEqual([
       ["cancel", t0],
       ["set", lane.gain.value, t0],
-      ["linear", 0.3, t0 + 2],
+      ["linear", 0.225, t0 + 2],
     ]);
     const from = lane.gain.value;
     ctx.currentTime = t0 + 1; // halfway
     engine.setLayerVolume("bass", 0.5);
     expect(lane.gain.events.slice(3, 5)).toEqual([
       ["cancel", t0 + 1],
-      ["set", from + (0.3 - from) / 2, t0 + 1],
+      ["set", from + (0.225 - from) / 2, t0 + 1],
     ]);
-    expect(lane.gain.events.at(-1)).toEqual(["target", 0.15, t0 + 1, 0.02]);
+    expect(lane.gain.events.at(-1)).toEqual(["target", 0.1125, t0 + 1, 0.02]);
   });
 
   it("a lane leaving mid-ramp fades from where the line is", () => {
@@ -546,7 +546,7 @@ describe("edits (setData)", () => {
     const [lane] = laneGains();
     const t0 = ctx.currentTime;
     const from = lane.gain.value;
-    const line = (t) => from + ((0.3 - from) * (t - t0)) / 2;
+    const line = (t) => from + ((0.225 - from) * (t - t0)) / 2;
     engine.setData("bass.offbeat", { ...defaultData("bass.offbeat"), level: 0.5 }, 2);
     ctx.currentTime = t0 + 0.5;
     engine.setLanes({});
@@ -596,7 +596,7 @@ describe("edits (setData)", () => {
     engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp", pad: "pad.chord" });
     expect(laneGains().at(-1).gain.value).toBe(0);
     engine.setSolo(null);
-    expect(bass.gain.events.at(-1)[1]).toBeCloseTo(0.6, 9);
+    expect(bass.gain.events.at(-1)[1]).toBeCloseTo(0.45, 9);
     expect(lead.gain.events.at(-1)[1]).toBeCloseTo(0.3, 9);
   });
 

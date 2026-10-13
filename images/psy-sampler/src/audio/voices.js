@@ -548,16 +548,16 @@ export function organ(ctx, out, t, ev, stepDur) {
   play([...oscs, perc], t, end);
 }
 
-// The organ's bass: the low drawbars only, falling to 60 % across the note
-// like the saw pluck, so it bounces instead of droning.
-const ORGAN_BASS = [[1, 0.7], [2, 0.45], [3, 0.2]];
+// The organ's bass: the low drawbars only (peaking where the saw bass does),
+// falling to 40 % across the note, so it bounces instead of droning.
+const ORGAN_BASS = [[1, 0.7], [2, 0.3], [3, 0.12]];
 export function organBass(ctx, out, t, ev, stepDur) {
   const dur = noteLen(ev, stepDur, 0.85);
   const lp = filter(ctx, "lowpass", cut(1500, ev), 0.7);
   const amp = ctx.createGain();
   amp.gain.setValueAtTime(0, t);
-  amp.gain.linearRampToValueAtTime(0.9 * vel(ev), t + 0.003);
-  amp.gain.linearRampToValueAtTime(0.55 * vel(ev), t + dur * 0.6);
+  amp.gain.linearRampToValueAtTime(0.8 * vel(ev), t + 0.003);
+  amp.gain.linearRampToValueAtTime(0.32 * vel(ev), t + dur * 0.6);
   amp.gain.linearRampToValueAtTime(0, t + dur);
   lp.connect(amp).connect(out);
   const oscs = ORGAN_BASS.map(([ratio, level]) => {

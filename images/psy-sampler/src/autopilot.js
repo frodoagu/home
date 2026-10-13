@@ -86,7 +86,7 @@ export const STYLES = {
     bpm: [120, 126],
     pool: {
       kick: ["kick.house", "kick.prog"],
-      bass: ["bass.house", "bass.offbeat", "bass.prog"],
+      bass: ["bass.house", "bass.offbeat", "bass.prog", "bass.deep"],
       perc: ["perc.hat", "perc.clap", "perc.shaker", "perc.shuffle", "perc.bongos", "perc.ride"],
       lead: ["lead.piano", "lead.organ", "lead.bell"],
       pad: ["pad.deep", "pad.chord", "pad.sus"],
@@ -98,7 +98,7 @@ export const STYLES = {
     bpm: [124, 128],
     pool: {
       kick: ["kick.techHouse", "kick.house"],
-      bass: ["bass.techHouse", "bass.house", "bass.techno"],
+      bass: ["bass.techHouse", "bass.house", "bass.techno", "bass.deep"],
       perc: ["perc.shuffle", "perc.hat", "perc.clap", "perc.rim", "perc.bongos", "perc.shaker"],
       lead: ["lead.organ", "lead.vowel", "lead.rubber", "lead.techno"],
       pad: ["pad.deep", "pad.air", "pad.drone"],

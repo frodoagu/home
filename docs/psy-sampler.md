@@ -1121,8 +1121,8 @@ whether it comes from a Build-up or from a queued section, and is a drop.
 
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
-| House | 120-126 | each sound's own | house 909 kick, organ bass, shuffled hats, bongos, piano, organ stab, bell, Am9 → Dm9; crackle, bwip; noise sweep or reverse cymbal into the groove |
-| Tech house | 124-128 | each sound's own | tech house kick, tech house bass, organ bass, reese, shuffled hats, rim, bongos, organ stab, talking, rubber, Am7 stab, Am9 → Dm9; bleeps, stutter, bitcrush; stutter roll into the groove |
+| House | 120-126 | each sound's own | house 909 kick, organ bass, deep house bass, shuffled hats, bongos, piano, organ stab, bell, Am9 → Dm9; crackle, bwip; noise sweep or reverse cymbal into the groove |
+| Tech house | 124-128 | each sound's own | tech house kick, tech house bass, organ bass, deep house bass, reese, shuffled hats, rim, bongos, organ stab, talking, rubber, Am7 stab, Am9 → Dm9; bleeps, stutter, bitcrush; stutter roll into the groove |
 | Techno | 125-135 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
 | Progressive psytrance | 132-140 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
 | Psytrance | 140-148 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
@@ -1928,8 +1928,9 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Techno reese | reese on steps 2 and 7 of every half bar |
 | | Jumping rolling | FM, A1-A2-E2 between kicks |
 | | Phrygian rolling | rolling with B♭ on the last 3 steps of every bar |
-| | Organ bass | organ bass, the offbeat answered by its octave a 16th later, G, then C and E in the second bar |
+| | Organ bass | organ bass, one note per offbeat, the octave answering a 16th later once a bar (on A, then on C), G, then E at the end |
 | | Tech house | saw pluck, short notes around the offbeat (accented), E and G at the end of the bars |
+| | Deep house | sub, long notes off the beat (3 steps on 3, 2 on 10) with gaps, C then E and G at the end of the bars, ducking 0.35 under the kick |
 | Percussion (stack) | Open hi-hat | offbeat, HP 7 kHz, 140 ms |
 | | Closed hi-hat | odd sixteenths, HP 9 kHz, 35 ms |
 | | Shaker | every step, accent on the eighths |
@@ -2027,7 +2028,7 @@ cutoff, capped at 18 kHz):
 | | Sub | sine + a triangle an octave up |
 | | FM bass | 2 operators at ratio 1, index 5 → 0.3 over 120 ms (Operator style) |
 | | Reese | 2 saws ±12 cents + sub, LP 700 Hz |
-| | Organ bass | sines on harmonics 1, 2 and 3, falling to 60 % across the note, LP 1.5 kHz (the M1 organ bass) |
+| | Organ bass | sines on harmonics 1, 2 and 3 (0.7, 0.3, 0.12), peaking where the saw bass does and falling to 40 % across the note, LP 1.5 kHz (the M1 organ bass) |
 | Leads | Acid 303 | saw + LP Q 14 with an envelope on the drifting cutoff |
 | | Supersaw | 5 saws at ±9/±18 cents (Wavetable style) |
 | | Analog | 2 squares ±6 cents, enveloped LP (Analog style) |
