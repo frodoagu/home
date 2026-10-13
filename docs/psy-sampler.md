@@ -1826,6 +1826,7 @@ spirals). The organic and 2D-fractal ones:
 - **Liquid** (`flow`): fbm warped by fbm warped by fbm (domain warping), lit
   in relief: marble with veins, an oil slick's thin film or a nebula with
   stars. Each kick sends the current rushing on, and friction brakes it.
+  It is a calm scene only: the director shows it in breakdowns and silence.
 - **Julia**: c walks the rim of the Mandelbrot set's main cardioid (or of the
   bulb left of it), so the set always sits on the edge between one shape and
   dust; each beat walks it on along that rim. Escape bands, a boundary glow from the

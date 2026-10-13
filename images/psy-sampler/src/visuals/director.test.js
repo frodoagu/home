@@ -71,6 +71,13 @@ describe("director", () => {
     for (const id of shown.slice(16)) expect(calm).toContain(id);
   });
 
+  it("keeps the liquid to the breakdowns", () => {
+    const withKick = (b) => at(b, { variants: [`kick.${Math.floor(b / 5)}`], drops: Math.floor(b / 24), sinceDrop: (b % 24) * 4 });
+    expect(play(createDirector(), 400, withKick)).not.toContain("flow");
+    const calm = (b) => at(b, { layers: new Set(["pad"]), variants: [`pad.${Math.floor(b / 5)}`] });
+    expect(play(createDirector(), 400, calm)).toContain("flow");
+  });
+
   it("stays put while locked, and moves by hand", () => {
     const d = createDirector();
     d.frame(at(0));
