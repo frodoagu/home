@@ -28,12 +28,14 @@
 // tease or the first breakdown on.
 //
 // A style narrows each layer to the variants that fit it (copies follow their
-// base) and sets the BPM and the scale new melodies use; a style with no pool
+// base) and sets the BPM range and the scale new melodies use; a style with no pool
 // for a layer leaves it out, and so does banning every sound of its pool
 // (`unbanned`: the UI hands the pilot its lists without them). Every choice comes
 // from `rng`, so a seeded rng replays the same track: pools are read in id
 // order (never in the user's tile order). A run from silence starts an intro;
-// over a playing mix it carries on from that mix.
+// over a playing mix it carries on from that mix. A style picked while the
+// pilot plays waits for the next drop out of a breakdown (`styleOnDrop`): the
+// sections up to it are queued and the old style plays them.
 //
 // It also rides the faders (`mixOf`): each section has its own balance, a
 // build swells into the peak, stacked sounds share their layer's room and a
@@ -81,7 +83,7 @@ export const SECTION_IDS = Object.keys(SECTIONS);
 
 export const STYLES = {
   techno: {
-    bpm: 132,
+    bpm: [125, 135],
     pool: {
       kick: ["kick.techno", "kick.rumble"],
       bass: ["bass.techno", "bass.offbeat"],
@@ -93,7 +95,7 @@ export const STYLES = {
     entryFx: { groove: [null, null, "fx.sweep", "fx.reverse"] },
   },
   progressive: {
-    bpm: 138,
+    bpm: [132, 140],
     pool: {
       kick: ["kick.prog", "kick.long"],
       bass: ["bass.prog", "bass.gallop", "bass.offbeat"],
@@ -105,7 +107,7 @@ export const STYLES = {
     entryFx: { groove: [null, null, "fx.sweep"] },
   },
   psytrance: {
-    bpm: 145,
+    bpm: [140, 148],
     pool: {
       kick: ["kick.punchy", "kick.fullon"],
       bass: ["bass.rolling", "bass.rollingOct", "bass.gallop"],
@@ -116,7 +118,7 @@ export const STYLES = {
     },
   },
   psytech: {
-    bpm: 142,
+    bpm: [138, 146],
     scale: "phrygian",
     pool: {
       kick: ["kick.psytech", "kick.punchy"],
@@ -129,7 +131,7 @@ export const STYLES = {
     entryFx: { groove: [null, null, "fx.stutter"] },
   },
   hitech: {
-    bpm: 180,
+    bpm: [170, 195],
     scale: "phrygian",
     pool: {
       kick: ["kick.tok", "kick.dark"],
@@ -145,7 +147,7 @@ export const STYLES = {
     entryFx: { groove: [null, "fx.stutter", "fx.siren"], breakdown: ["fx.down", "fx.tapeStop"] },
   },
   goa: {
-    bpm: 145,
+    bpm: [140, 150],
     scale: "harmonic",
     pool: {
       kick: ["kick.long", "kick.fullon"],
@@ -158,7 +160,7 @@ export const STYLES = {
     entryFx: { groove: [null, "fx.siren", "fx.siren"] },
   },
   darkpsy: {
-    bpm: 155,
+    bpm: [148, 165],
     scale: "phrygian",
     pool: {
       kick: ["kick.dark", "kick.tok"],
@@ -174,6 +176,12 @@ export const STYLES = {
 };
 export const STYLE_IDS = Object.keys(STYLES);
 export const STYLE_DEFAULT = "psytrance";
+
+/** The BPM nearest `bpm` within `style`'s range (any, for a style without one). */
+export function bpmFor(style, bpm) {
+  const range = STYLES[style]?.bpm;
+  return range ? Math.min(range[1], Math.max(range[0], Math.round(bpm))) : bpm;
+}
 
 // How often a section swaps one variant, in bars.
 export const CHANGE_BARS = [2, 4, 8, 16, 32];
@@ -434,7 +442,10 @@ export function joinPilot(active, section = null) {
 }
 
 /** Jumps the pilot to `section` (a recalled snapshot's), keeping the queue. */
-export const moveTo = (pilot, section) => ({ ...fresh(section, SECTIONS[section].loops[0], pilot.queue, pilot.form) });
+export const moveTo = (pilot, section) => ({
+  ...fresh(section, SECTIONS[section].loops[0], pilot.queue, pilot.form),
+  ...handedOn(pilot.handoff, section),
+});
 
 /**
  * Hands the pilot a plan (planner.js normalizePlan) for the section after
@@ -462,6 +473,67 @@ export const unform = (pilot, index) => withForm(pilot, (pilot.form ?? []).filte
 export const skip = (pilot) => ({ ...pilot, left: 1, next: undefined });
 // The next loop rearranges the section with the new style's sounds.
 export const rearrange = (pilot) => ({ ...pilot, rearrange: true });
+
+/* ---- a new style: in on the next drop out of a breakdown ---- */
+
+// The sections settled after this one: the one its last loop announced.
+const settled = (pilot) => (pilot.left === 1 && pilot.next !== undefined ? [pilot.queue[0] ?? pilot.next] : []);
+
+/**
+ * A style picked while the pilot plays (`playing` is the one it plays): it
+ * comes in on the next drop out of a breakdown, so the track changes over a
+ * break instead of on the next loop. The sections still missing up to that
+ * drop (a breakdown, a build, a peak) are queued ahead of the rest, after
+ * the one already announced. One on its way is only retargeted, and picking
+ * the playing style again calls it off (what it queued stays: ✕ drops it).
+ */
+export function styleOnDrop(pilot, style, playing) {
+  if (pilot.handoff) {
+    if (style === playing) {
+      const { handoff: _off, ...rest } = pilot;
+      return rest;
+    }
+    return { ...pilot, handoff: { ...pilot.handoff, style } };
+  }
+  if (style === playing) return pilot;
+  const ahead = settled(pilot);
+  let broke = pilot.section === "breakdown";
+  for (const section of ahead) broke ||= section === "breakdown";
+  const last = ahead.at(-1) ?? pilot.section;
+  const route = !broke ? ["breakdown", "build", "peak"] : last === "breakdown" ? ["build", "peak"] : ["peak"];
+  let { queue } = pilot;
+  let form = pilot.form ?? [];
+  if (!ahead.length) queue = [...route, ...queue];
+  else if (queue.length) queue = [queue[0], ...route, ...queue.slice(1)];
+  else {
+    // The announced section moves to the queue, which goes before it.
+    if (form[0] === ahead[0]) form = form.slice(1);
+    queue = [ahead[0], ...route];
+  }
+  return { ...withForm({ ...pilot, queue }, form), handoff: { style, broke: pilot.section === "breakdown" } };
+}
+
+// A new style still on its way as `section` starts: a breakdown is the break it waits for.
+const handedOn = (handoff, section) =>
+  handoff ? { handoff: { ...handoff, broke: handoff.broke || section === "breakdown" } } : {};
+
+// Whether a new style comes in as `section` starts: a peak, after a breakdown.
+const lands = (handoff, section) => Boolean(handoff) && section === "peak" && handoff.broke;
+
+/**
+ * The style the section `slot` places after this one (in sequence()) plays:
+ * the new one from the peak it lands on.
+ */
+export function styleAt(pilot, slot, playing) {
+  const handoff = pilot.handoff;
+  if (!handoff) return playing;
+  let broke = handoff.broke;
+  for (const section of sequence(pilot).slice(0, slot + 1)) {
+    if (section === "peak" && broke) return handoff.style;
+    broke ||= section === "breakdown";
+  }
+  return playing;
+}
 
 /** By hand: a drop on the next loop. The section ends there and a peak comes in after it. */
 export function dropNext(pilot) {
@@ -505,7 +577,8 @@ export function fillMelodic(active, lists, rng, style = STYLE_DEFAULT) {
 
 /**
  * The next loop: { pilot, active, fx: [fx ids], rewrite: [variant ids] }.
- * `fx` fire on the boundary; `rewrite` are parts to write anew.
+ * `fx` fire on the boundary; `rewrite` are parts to write anew; `style`, a
+ * new style that came in with this section (the pilot played it).
  */
 export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, changeBars = CHANGE_DEFAULT } = {}) {
   const queue = pilot.queue ?? [];
@@ -537,6 +610,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         ...(pilot.theme ? { theme: pilot.theme } : {}),
         ...(plan ? { plan } : {}),
         ...(pilot.opening ? { opening: true } : {}),
+        ...(pilot.handoff ? { handoff: pilot.handoff } : {}),
       },
       active: next,
       fx,
@@ -545,9 +619,12 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
   }
   const section = queue[0] ?? pilot.next ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
   const own = plan?.section === section ? plan : null; // a queued section beats the plan's
-  const theme = themeOf(pilot, section, active);
-  const next = arrange(section, active, lists, rng, style, theme, own?.layers);
-  const entryFx = { ...ENTRY_FX, ...STYLES[style]?.entryFx }[section];
+  // A new style lands with its own lead: the theme was the old style's.
+  const landed = lands(pilot.handoff, section) ? pilot.handoff.style : null;
+  const now = landed ?? style;
+  const theme = landed ? [] : themeOf(pilot, section, active);
+  const next = arrange(section, active, lists, rng, now, theme, own?.layers);
+  const entryFx = { ...ENTRY_FX, ...STYLES[now]?.entryFx }[section];
   const entry = entryFx ? pick(entryFx, rng) : null;
   const rewrite = new Set(newLeads(active, next));
   const [layerId, chance] = REWRITE[section] ?? [];
@@ -566,10 +643,12 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         !queue[0] && form[0] === section ? form.slice(1) : form,
       ),
       ...(theme.length ? { theme } : {}),
+      ...(landed ? {} : handedOn(pilot.handoff, section)),
     },
     active: next,
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),
+    ...(landed ? { style: landed } : {}),
   };
 }
 

@@ -282,7 +282,11 @@ export default {
   },
   pilot: {
     style: "Style",
-    styleTitle: "Which sounds the autopilot uses; changing it takes the BPM to the style's",
+    styleTitle: "Which sounds the autopilot uses, and its BPM range. While the autopilot plays, a new style comes in on the next drop after a break",
+    styleWaits: (name) => `${name} comes in on the next drop, after a break: the autopilot builds up to it and the BPM shifts during the break.`,
+    styleKept: (name) => `${name} stays.`,
+    styleIn: (name) => `${name} came in with the drop.`,
+    styleOn: (name) => `${name} comes in here`,
     changes: "Changes",
     changesTitle: "How many bars between the autopilot's sound swaps inside a section, or the snapshot autopilot's moves to the next one",
     every: (n) => `every ${n} bars`,

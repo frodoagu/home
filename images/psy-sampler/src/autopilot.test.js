@@ -13,6 +13,7 @@ import {
   TONE_LAYERS,
   advance,
   arrange,
+  bpmFor,
   dequeue,
   dropNext,
   dropping,
@@ -30,6 +31,8 @@ import {
   skip,
   startPilot,
   sequence,
+  styleAt,
+  styleOnDrop,
   toneOf,
   unbanned,
   unform,
@@ -652,5 +655,93 @@ describe("plans (✨ AI)", () => {
   it("the same seed and the same plans make the same track", () => {
     const plan = { section: "breakdown", bars: 16, layers: { pad: ["pad.prog"], lead: ["lead.arp"] } };
     expect(toNext(plan, { seed: 11 })).toEqual(toNext(plan, { seed: 11 }));
+  });
+
+});
+
+describe("a new style while it plays", () => {
+  const inPool = (style, active) =>
+    Object.values(active).every((id) => STYLES[style].pool[layerOfVariant(id)].includes(baseOf(id)));
+  // Walks section starts until `section`, handing the pilot the style it plays.
+  function walkTo(section, from, style) {
+    const rng = seeded(3);
+    let { pilot, active } = from;
+    const walked = [];
+    for (let i = 0; i < 100; i++) {
+      const move = advance(pilot, active, lists, rng, { style });
+      ({ pilot, active } = move);
+      if (pilot.left === pilot.length) walked.push({ section: pilot.section, active, style: move.style, pilot });
+      if (move.style) style = move.style;
+      if (pilot.left === pilot.length && pilot.section === section && walked.length > 1) break;
+    }
+    return walked;
+  }
+
+  it("comes in on the drop after the next breakdown; the old style plays up to it", () => {
+    const start = startPilot(lists, seeded(6), "psytrance");
+    const pilot = styleOnDrop(start.pilot, "techno", "psytrance");
+    expect(pilot.queue).toEqual(["breakdown", "build", "peak"]);
+    expect(pilot.handoff).toEqual({ style: "techno", broke: false });
+    expect([0, 1, 2].map((slot) => styleAt(pilot, slot, "psytrance"))).toEqual(["psytrance", "psytrance", "techno"]);
+    const walked = walkTo("peak", { ...start, pilot }, "psytrance");
+    expect(walked.map((w) => w.section)).toEqual(["breakdown", "build", "peak"]);
+    for (const w of walked.slice(0, 2)) {
+      expect(inPool("psytrance", w.active)).toBe(true);
+      expect(w.style).toBeUndefined();
+    }
+    const peak = walked.at(-1);
+    expect(peak.style).toBe("techno");
+    expect(inPool("techno", peak.active)).toBe(true);
+    expect(peak.pilot.handoff).toBeUndefined();
+    expect(peak.pilot.theme).toBeUndefined(); // the breakdown's lead was the old style's
+  });
+
+  it("in a breakdown it only waits for the build and its drop", () => {
+    const start = { pilot: joinPilot({ pad: "pad.chord", lead: "lead.acid" }), active: { pad: "pad.chord", lead: "lead.acid" } };
+    expect(start.pilot.section).toBe("breakdown");
+    const pilot = styleOnDrop(start.pilot, "hitech", "psytrance");
+    expect(pilot.queue).toEqual(["build", "peak"]);
+    expect(pilot.handoff.broke).toBe(true);
+    const walked = walkTo("peak", { ...start, pilot }, "psytrance");
+    expect(walked.map((w) => [w.section, w.style])).toEqual([
+      ["build", undefined],
+      ["peak", "hitech"],
+    ]);
+  });
+
+  it("goes after the section the last loop announced, and takes it off the form", () => {
+    const last = { section: "groove", left: 1, length: 4, queue: [], next: "build", form: ["build", "peak"] };
+    expect(styleOnDrop(last, "goa", "psytrance")).toMatchObject({
+      queue: ["build", "breakdown", "build", "peak"],
+      form: ["peak"],
+    });
+    const tease = { section: "build", left: 1, length: 4, queue: [], next: "breakdown" };
+    expect(styleOnDrop(tease, "goa", "psytrance").queue).toEqual(["breakdown", "build", "peak"]);
+    const queued = { section: "build", left: 1, length: 4, queue: ["groove", "peak"], next: "groove" };
+    expect(styleOnDrop(queued, "goa", "psytrance").queue).toEqual(["groove", "breakdown", "build", "peak", "peak"]);
+  });
+
+  it("another pick retargets it, the playing style calls it off, and a jump keeps it", () => {
+    const { pilot } = startPilot(lists, seeded(1), "psytrance");
+    const once = styleOnDrop(pilot, "techno", "psytrance");
+    const twice = styleOnDrop(once, "goa", "psytrance");
+    expect(twice.queue).toEqual(once.queue); // the way to the drop is queued once
+    expect(twice.handoff.style).toBe("goa");
+    expect(styleOnDrop(twice, "psytrance", "psytrance").handoff).toBeUndefined();
+    expect(styleOnDrop(pilot, "psytrance", "psytrance")).toBe(pilot);
+    expect(moveTo(once, "breakdown").handoff).toEqual({ style: "techno", broke: true });
+    expect(styleAt(pilot, 0, "psytrance")).toBe("psytrance");
+  });
+
+  it("a style takes the BPM to the nearest end of its range, or leaves it inside", () => {
+    expect(bpmFor("techno", 145)).toBe(135);
+    expect(bpmFor("hitech", 145)).toBe(170);
+    expect(bpmFor("goa", 145)).toBe(145);
+    expect(bpmFor("goa", 144.6)).toBe(145);
+    expect(bpmFor("all", 101.5)).toBe(101.5);
+    for (const id of STYLE_IDS.filter((s) => STYLES[s].bpm)) {
+      const [lo, hi] = STYLES[id].bpm;
+      expect(lo, id).toBeLessThan(hi);
+    }
   });
 });
