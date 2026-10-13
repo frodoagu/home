@@ -2516,6 +2516,72 @@ describe("✨ AI", () => {
     expect(ai.asks[0].opts).not.toHaveProperty("endpoint");
   });
 
+  it("after ⏹, ✨ arms the autopilot again and plans its first sections, no reload needed", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK] }));
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.asks).toHaveLength(3);
+    cue().click();
+    advanceSeconds(4 * BAR);
+    $("button.stop").click(); // its mix stays armed for ▶
+    aiBtn().click(); // off
+    aiBtn().click(); // and on
+    await flushPromises();
+    expect($("button.auto").getAttribute("aria-pressed")).toBe("true");
+    expect(ai.asks).toHaveLength(6);
+    expect($(".status").textContent).toBe("✨ Las primeras 3 fases están planeadas: ▶ para arrancar.");
+  });
+
+  it("after ⏹, 🤖 waits for the ✨ AI's first sections and then plays", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK] }));
+    aiBtn().click();
+    await flushPromises();
+    cue().click();
+    advanceSeconds(4 * BAR);
+    $("button.stop").click();
+    $("button.auto").click();
+    expect(cue().classList.contains("is-armed")).toBe(true); // waiting for the plans
+    await flushPromises();
+    expect(ai.asks).toHaveLength(6);
+    expect(cue().classList.contains("is-armed")).toBe(false); // planned: it plays
+    expect(queue()).toEqual(["peak", "peak", "peak"]); // the model's last answer, three times
+  });
+
+  it("an answer that never comes is cut off after two minutes and the ✨ AI asks again", async () => {
+    const never = () => new Promise(() => {});
+    const ai = await remountWith(fakeAi({ answers: [never, BREAK, BUILD, PEAK] }));
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.asks).toHaveLength(1);
+    expect(aiBtn().classList.contains("is-thinking")).toBe(true);
+    vi.advanceTimersByTime(120_000);
+    await flushPromises();
+    expect(aiBtn().classList.contains("is-thinking")).toBe(false);
+    expect($(".status").textContent).toBe("La IA no respondió: el piloto sigue por su cuenta y le vuelve a preguntar en un rato.");
+    vi.advanceTimersByTime(15_000);
+    await flushPromises();
+    expect(ai.asks).toHaveLength(4);
+    expect($(".status").textContent).toBe("✨ Las primeras 3 fases están planeadas: ▶ para arrancar.");
+  });
+
+  it("✕ drops a section the ✨ AI planned, and the ones after it, and it plans that one again; never the one already announced", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK, GROOVE] }));
+    aiBtn().click();
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown", "build", "peak"]);
+    const unqueue = () => [...root.querySelectorAll(".section-queue .unqueue")];
+    expect(unqueue()).toHaveLength(3);
+    unqueue()[1].click(); // the build: the peak followed from it
+    await flushPromises();
+    expect(queue()).toEqual(["breakdown", "groove", "groove"]);
+    expect(ai.asks).toHaveLength(5);
+    cue().click();
+    advanceSeconds(7 * BAR); // the intro's last loop: the break is announced
+    expect($(".section-queue .is-next").dataset.queued).toBe("breakdown");
+    expect($(".section-queue .is-next .unqueue")).toBeNull();
+    expect(unqueue()).toHaveLength(2);
+  });
+
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {
     const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK, GROOVE] }));
     aiBtn().click();
@@ -2541,7 +2607,7 @@ describe("✨ AI", () => {
     expect(second.opts.system).toContain('The listener\'s wish for the track: "oscuro y largo".');
     expect(third.prompt).toContain("- breakdown, 16 bars: lead.acid, pad.chord\n- build, 8 bars\n");
     expect(queue()).toEqual(["breakdown", "build", "peak"]);
-    expect([...root.querySelectorAll(".section-queue .is-ai")].map((li) => li.textContent)).toEqual(["✨ Break", "✨ Subida", "✨ Pico"]);
+    expect([...root.querySelectorAll(".section-queue .is-ai")].map((li) => li.firstChild.textContent)).toEqual(["✨ Break", "✨ Subida", "✨ Pico"]);
     expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: a dark break");
     advanceSeconds(8 * BAR);
     expect($(".section-badge").textContent).toBe("Break");

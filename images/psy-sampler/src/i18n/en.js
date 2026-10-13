@@ -285,7 +285,7 @@ export default {
     ready: (name) => `✨ ${name} ready: it plans the sections ahead, before starting too.`,
     chromeFailed: "Chrome's AI did not start: press ✨ AI to download it or try again.",
     unreachable: (url) => `LM Studio does not answer at ${url}: start its server with CORS on.`,
-    failed: "The AI did not answer: the autopilot carries on by itself.",
+    failed: "The AI did not answer: the autopilot carries on by itself and asks again in a while.",
     badEndpoint: "That is not a valid http(s) URL.",
     varies: "With ✨ AI on the track will vary: turn it off to hear the seed's.",
   },
