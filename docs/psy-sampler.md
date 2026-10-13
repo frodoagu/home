@@ -717,6 +717,11 @@ so nothing is lost. Another browser, device or private window is another
 sampler, which is the way to Tap two together. Without Web Locks the guard is
 off and tabs behave as before.
 
+Closing or reloading the tab while it plays asks first (`closeGuard.js`, a
+`beforeunload` that the browser words as "Leave site?"), so a stray Ctrl+W
+doesn't cut the music; stopped, it closes without a word. The reloads the page
+makes itself (a new version, another tab or device took over) skip the question.
+
 ### Export
 
 - **⬇ Mix audio**: a 2-bar WAV of what plays. **⬇ WAV** in each editor: that
