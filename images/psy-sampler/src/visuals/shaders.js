@@ -162,7 +162,7 @@ vec3 scene(vec2 uv) {
   col += pal(0.2 + uBeats * 0.03) * 0.25 * exp(-abs(r - 0.3 - fract(uBeat) * 1.5) * 12.0) * uKick;
 
   // Only inside the bulb's bounding sphere.
-  float s = 1.0 + 0.14 * uHeart;
+  float s = 1.0 + 0.1 * uHeart;
   float b = dot(ro, rd), c = dot(ro, ro) - 1.3 * 1.3 * s * s, h = b * b - c;
   if (h < 0.0) return col;
   h = sqrt(h);
@@ -178,7 +178,7 @@ vec3 scene(vec2 uv) {
     x += d * 0.9;
     if (x > far) break;
   }
-  vec3 g = pal(uTime * 0.03 + 0.5 + uVar.w) * glow * (0.012 + 0.03 * uKick + 0.02 * uLead + 0.03 * uHeart);
+  vec3 g = pal(uTime * 0.03 + 0.5 + uVar.w) * glow * (0.012 + 0.03 * uKick + 0.02 * uLead + 0.02 * uHeart);
   if (!hit) return col + g;
   vec3 p = ro + rd * x;
   vec3 nor = normalBulb(p / s, 0.0005 * x / s);
@@ -188,7 +188,7 @@ vec3 scene(vec2 uv) {
   float rim = pow(1.0 - clamp(dot(-rd, nor), 0.0, 1.0), 3.0);
   vec3 base = pal(sqrt(trap) * 0.6 + uTime * 0.03 + uVar.w);
   vec3 lit = base * (0.15 + 1.1 * dif) * (0.4 + 0.6 * ao);
-  lit += pal(sqrt(trap) * 0.6 + 0.5) * rim * (0.6 + uKick * 1.5 + uHeart * 1.5);
+  lit += pal(sqrt(trap) * 0.6 + 0.5) * rim * (0.6 + uKick * 1.5 + uHeart);
   lit += base * uKick * 0.35 + base * uPerc * 0.1;
   return lit + g;
 }
