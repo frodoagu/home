@@ -21,7 +21,6 @@ export const TRAILS = {
   bulb: 0.55,
   kifs: 0.7,
   mandala: 0.78,
-  tunnel: 0.5,
   flow: 0.4,
   julia: 0.6,
   gyroid: 0.55,

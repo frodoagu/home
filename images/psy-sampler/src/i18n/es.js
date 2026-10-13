@@ -861,7 +861,7 @@ export default {
     title: "Psy Layers · Visuales",
     button: "🌀 Visuales",
     buttonTitle: "Fractales, mandalas y texturas orgánicas a pantalla completa, al ritmo de lo que suena",
-    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", tunnel: "Túnel op-art", flow: "Fluido", julia: "Julia", gyroid: "Carne de gyroid", coral: "Arrecife fractal", cells: "Células", phyllo: "Romanesco", hyper: "Mosaico hiperbólico", turing: "Patrones de Turing", physarum: "Physarum" },
+    scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", flow: "Fluido", julia: "Julia", gyroid: "Carne de gyroid", coral: "Arrecife fractal", cells: "Células", phyllo: "Romanesco", hyper: "Mosaico hiperbólico", turing: "Patrones de Turing", physarum: "Physarum" },
     sources: {
       sampler: "🎛 Siguiendo al sampler",
       stopped: "⏸ El sampler está parado: en reposo hasta que des ▶",
