@@ -78,6 +78,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      ✨ AI (src/planner.js + src/ai.js): Chrome's Prompt API, an LM Studio
                      endpoint or the listener's own OpenAI/Anthropic/Gemini API key plans
                      the autopilot's next section, called from the listener's browser.
+                     Complexity (planner.js LEVELS): low = short prompt for Nano, mid =
+                     default, high = also each sound's insert/echo (dress.js TWEAKS).
                      🌀 Visuals (src/visuals/, WebGL2, second page visuals.html): raymarched
                      fractals, mandalas, organic textures and two float-texture simulations
                      (src/visuals/sims.js: reaction-diffusion, physarum) synced to

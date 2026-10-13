@@ -7,8 +7,10 @@ import {
   FORM,
   OPENING_FX,
   PLAN_MAX,
+  LEVELS,
   PLAN_SECTIONS,
   SYSTEM,
+  asksForm,
   formPrompt,
   formSchema,
   keptAhead,
@@ -21,6 +23,7 @@ import {
   planPrompt,
   planSchema,
   readPlans,
+  systemOf,
   themeAfter,
   whyOf,
 } from "./planner.js";
@@ -436,5 +439,110 @@ describe("the opening", () => {
     expect(over({ kick: ["kick.fullon"], pad: ["pad.supersaw"] })).toEqual({ kick: "kick.fullon", "perc.hat": "perc.hat", "pad.supersaw": "pad.supersaw" });
     expect(over({ pad: [] })).toEqual(drawn); // no lead, no pad: the draw's pad stays
     expect(over({ lead: ["lead.techno"] })).toEqual(drawn); // not psytrance's
+  });
+});
+
+describe("levels", () => {
+  const ask = {
+    ...goa,
+    bpm: 145,
+    active: { lead: "lead.acid", kick: "kick.long" },
+    sections: ["intro", "groove"],
+    sounds: [["kick.long"], ["lead.acid"]],
+    bars: 16,
+  };
+  const dressed = [{ id: "lead.acid", tone: -1 }];
+
+  it("are low, mid and high; mid is the full prompt it always was", () => {
+    expect(LEVELS).toEqual(["low", "mid", "high"]);
+    expect(systemOf("mid")).toBe(SYSTEM);
+    expect(systemOf("nonsense")).toBe(SYSTEM);
+    expect(systemOf("high").startsWith(SYSTEM)).toBe(true);
+    expect(systemOf("high")).toMatch(/filter \(off, lowpass, highpass, bandpass, vowel a/);
+    expect(planPrompt({ ...ask, dressed })).toBe(planPrompt({ ...ask, dressed, level: "mid", describe: true }));
+  });
+
+  it("low asks for the sections and their sounds in far fewer words: no form, dress or parts", () => {
+    expect(asksForm("low")).toBe(false);
+    expect(asksForm("mid") && asksForm("high")).toBe(true);
+    expect(systemOf("low").length).toBeLessThan(SYSTEM.length / 2);
+    expect(systemOf("low")).not.toMatch(/dress|parts|form of the track/);
+    const low = planPrompt({ ...ask, dressed, level: "low" });
+    expect(low.length).toBeLessThan(planPrompt({ ...ask, dressed }).length / 2);
+    expect(low).not.toContain("How you dressed them");
+    expect(low).not.toContain("What the sections before it opened with");
+    expect(low).not.toContain("Synths a melodic sound can switch to");
+    expect(low).toContain("lead.acid (squelchy, hypnotic, driving)");
+    const schema = planSchema({ ...goa, level: "low" });
+    expect(schema.required).toEqual(["why", "section", "bars", "layers"]);
+    expect(schema.properties).not.toHaveProperty("dress");
+    const opening = openingPrompt({ ...goa, bpm: 145, section: "intro", level: "low" });
+    expect(opening).not.toContain("Write the parts");
+    expect(opening.length).toBeLessThan(openingPrompt({ ...goa, bpm: 145, section: "intro" }).length / 2);
+    expect(openingSchema({ ...goa, section: "intro", level: "low" }).required).toEqual(["why", "section", "bars", "layers", "fx"]);
+  });
+
+  it("describe off lists each sound by its id alone", () => {
+    const bare = planPrompt({ ...ask, describe: false });
+    expect(bare).toMatch(/^lead: lead\.acid, /m);
+    expect(bare).not.toContain("squelchy");
+    expect(bare).toMatch(/^lead: acid, /m); // the synths a lead may switch to, by id
+    expect(planPrompt({ ...ask, level: "low", describe: false })).not.toContain("(");
+    expect(openingPrompt({ ...goa, bpm: 145, section: "intro", describe: false })).toContain("fx.sweep, fx.reverse, fx.siren");
+  });
+
+  it("high asks for every tweak in each dress entry, as enums", () => {
+    const item = planSchema({ ...goa, level: "high" }).properties.dress.items;
+    expect(item.required).toEqual([
+      "id",
+      "tone",
+      "length",
+      "drive",
+      "motion",
+      "synth",
+      "filter",
+      "cutoff",
+      "res",
+      "sweep",
+      "shape",
+      "env",
+      "distortion",
+      "trem",
+      "autopan",
+      "echo",
+    ]);
+    expect(item.properties.filter.enum).toEqual(["", "off", "lowpass", "highpass", "bandpass", "vowel a", "vowel e", "vowel i", "vowel o", "vowel u"]);
+    expect(item.properties.sweep.enum).toEqual(["", "off", "beat", "half bar", "bar", "2 bars", "4 bars"]);
+    expect(item.properties.cutoff.enum).toEqual([-2, -1, 0, 1, 2]);
+    expect(planSchema(goa).properties.dress.items.properties).not.toHaveProperty("filter");
+  });
+
+  it("a plan keeps the tweaks each sound takes, whatever level made it, and is idempotent", () => {
+    const plan = { section: "peak", bars: 16, layers: { kick: ["kick.long"], bass: ["bass.rolling"], lead: ["lead.acid"], pad: [] } };
+    const empty = { filter: "", cutoff: 0, res: 0, sweep: "", shape: "", env: 0, distortion: "", trem: "", autopan: "", echo: "" };
+    const out = normalizePlan(
+      {
+        ...plan,
+        dress: [
+          { id: "lead.acid", tone: 0, ...empty, filter: "lowpass", res: 2, sweep: "2 bars", shape: "triangle", echo: "dotted 1/8" },
+          { id: "kick.long", ...empty, distortion: "fold", filter: "highpass", trem: "1/8" }, // a kick only takes grit
+          { id: "bass.rolling", ...empty, filter: "bandpass", env: 2, sweep: "bar", echo: "1/4" }, // a lowpass at most, no sweep, no echo
+        ],
+      },
+      goa,
+    );
+    expect(out.dress).toEqual([
+      { id: "bass.rolling", env: 2 },
+      { id: "kick.long", distortion: "fold" },
+      { id: "lead.acid", filter: "lowpass", res: 2, sweep: "2 bars", shape: "triangle", echo: "dotted 1/8" },
+    ]);
+    expect(normalizePlan(out, goa)).toEqual(out);
+    const bad = normalizePlan({ ...plan, dress: [{ id: "lead.acid", filter: "notch", cutoff: 3, sweep: "constructor", res: 1.5 }] }, goa);
+    expect(bad).not.toHaveProperty("dress");
+  });
+
+  it("high recalls the tweaks it dressed the playing sounds with", () => {
+    const prompt = planPrompt({ ...ask, level: "high", dressed: [{ id: "lead.acid", drive: 1, filter: "vowel o", sweep: "bar" }] });
+    expect(prompt).toContain("How you dressed them: lead.acid drive 1 filter vowel o sweep bar.");
   });
 });

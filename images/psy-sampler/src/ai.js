@@ -16,7 +16,7 @@
 //   schema its own way: `response_format`, a forced tool, `responseJsonSchema`.
 //
 // Like the engine, they outlive the app's remounts: the session stays.
-import { SYSTEM } from "./planner.js";
+import { LEVELS, LEVEL_DEFAULT, SYSTEM } from "./planner.js";
 
 export const LMSTUDIO_URL = "http://localhost:1234/v1";
 
@@ -37,10 +37,10 @@ const textIn = (languages) => ({
 
 function chromeModel(api) {
   let options = textIn(["en"]); // what availability() found the model takes
-  let base = null;
-  let starting = null;
+  const bases = new Map(); // instructions -> the base session that holds them, once made
+  const starting = new Map(); // instructions -> that session on its way
   const supported = () => typeof api?.availability === "function" && typeof api?.create === "function";
-  const system = [{ role: "system", content: SYSTEM }];
+  const initial = (system) => [{ role: "system", content: system }];
 
   // "unavailable" | "downloadable" | "downloading" | "available". The prompt
   // is English; the page's language too when the model takes it (the vibe).
@@ -62,31 +62,38 @@ function chromeModel(api) {
   }
 
   // Inside a click when the model still has to download; `onProgress` gets 0-1.
-  function start(onProgress = () => {}) {
-    starting ??= api
-      .create({
-        ...options,
-        initialPrompts: system,
-        monitor(m) {
-          m.addEventListener("downloadprogress", (e) => onProgress(e.total ? e.loaded / e.total : e.loaded));
-        },
-      })
-      .then(
-        (session) => (base = session),
-        (err) => {
-          starting = null;
-          throw err;
-        },
-      );
-    return starting;
+  // One base session per set of instructions (a level's, planner.js systemOf).
+  function start(onProgress = () => {}, system = SYSTEM) {
+    if (!starting.has(system)) {
+      const made = api
+        .create({
+          ...options,
+          initialPrompts: initial(system),
+          monitor(m) {
+            m.addEventListener("downloadprogress", (e) => onProgress(e.total ? e.loaded / e.total : e.loaded));
+          },
+        })
+        .then(
+          (session) => {
+            bases.set(system, session);
+            return session;
+          },
+          (err) => {
+            starting.delete(system);
+            throw err;
+          },
+        );
+      starting.set(system, made);
+    }
+    return starting.get(system);
   }
 
-  async function plan(prompt, schema, { signal } = {}) {
-    const root = base ?? (await start());
+  async function plan(prompt, schema, { signal, system = SYSTEM } = {}) {
+    const root = bases.get(system) ?? (await start(undefined, system));
     const session =
       typeof root.clone === "function"
         ? await root.clone({ signal })
-        : await api.create({ ...options, initialPrompts: system, signal });
+        : await api.create({ ...options, initialPrompts: initial(system), signal });
     try {
       return JSON.parse(await session.prompt(prompt, { responseConstraint: schema, signal }));
     } finally {
@@ -142,7 +149,7 @@ function openAiModel(fetchFn) {
     },
     // The chat models the endpoint listed when it last started, or null.
     known: (endpoint) => lists.get(endpoint) ?? null,
-    async plan(prompt, schema, { endpoint, model, signal } = {}) {
+    async plan(prompt, schema, { endpoint, model, signal, system = SYSTEM } = {}) {
       const body = await call(`${endpoint}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,11 +157,11 @@ function openAiModel(fetchFn) {
         body: JSON.stringify({
           model: await modelOf({ endpoint, model, signal }),
           messages: [
-            { role: "system", content: SYSTEM },
+            { role: "system", content: system },
             { role: "user", content: prompt },
           ],
           temperature: 0.8,
-          max_tokens: 800,
+          max_tokens: 2000, // a high level plan dresses every sound in full
           response_format: { type: "json_schema", json_schema: { name: "section_plan", strict: true, schema } },
         }),
       });
@@ -185,7 +192,7 @@ const PROVIDERS = {
         .sort((a, b) => (Number(b.created) || 0) - (Number(a.created) || 0))
         .map((m) => m.id);
     },
-    async plan(call, { key, model, prompt, schema, signal }) {
+    async plan(call, { key, model, prompt, schema, signal, system }) {
       // Reasoning models take no temperature; a short think is plenty here.
       const reasons = /^(o\d|gpt-5)/.test(model) && !/chat/.test(model);
       const body = await call(
@@ -193,7 +200,7 @@ const PROVIDERS = {
         post(this.headers(key), signal, {
           model,
           messages: [
-            { role: "system", content: SYSTEM },
+            { role: "system", content: system },
             { role: "user", content: prompt },
           ],
           max_completion_tokens: 4000,
@@ -217,13 +224,13 @@ const PROVIDERS = {
         .filter((id) => typeof id === "string" && id.startsWith("claude-"));
     },
     // The plan is the input of a tool the model must call: its schema holds.
-    async plan(call, { key, model, prompt, schema, signal }) {
+    async plan(call, { key, model, prompt, schema, signal, system }) {
       const body = await call(
         `${ANTHROPIC}/messages`,
         post(this.headers(key), signal, {
           model,
-          max_tokens: 1024,
-          system: SYSTEM,
+          max_tokens: 2048,
+          system,
           messages: [{ role: "user", content: prompt }],
           tools: [{ name: "section_plan", description: "Plays what you planned.", input_schema: schema }],
           tool_choice: { type: "tool", name: "section_plan" },
@@ -244,11 +251,11 @@ const PROVIDERS = {
         .filter((id) => id.startsWith("gemini-") && !/tts|image|embedding|live|audio|computer-use|robotics/.test(id))
         .sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
     },
-    async plan(call, { key, model, prompt, schema, signal }) {
+    async plan(call, { key, model, prompt, schema, signal, system }) {
       const body = await call(
         `${GEMINI}/models/${encodeURIComponent(model)}:generateContent`,
         post(this.headers(key), signal, {
-          systemInstruction: { parts: [{ text: SYSTEM }] },
+          systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: { responseMimeType: "application/json", responseJsonSchema: schema },
         }),
@@ -295,8 +302,8 @@ function cloudModel(fetchFn, id) {
     },
     // The chat models the key listed when it last started, or null.
     known: (key) => (listed && listed.key === key ? listed.ids : null),
-    async plan(prompt, schema, { key, model, signal } = {}) {
-      return provider.plan(call, { key, model: await modelOf({ key, model, signal }), prompt, schema, signal });
+    async plan(prompt, schema, { key, model, signal, system = SYSTEM } = {}) {
+      return provider.plan(call, { key, model: await modelOf({ key, model, signal }), prompt, schema, signal, system });
     },
   };
 }
@@ -306,7 +313,7 @@ export function createAi({ api = globalThis.LanguageModel, fetch = globalThis.fe
   return { chrome: chromeModel(api), lmstudio: openAiModel(fetch), ...clouds };
 }
 
-/* ---- per-browser settings: on, engine, endpoint, model, keys, models, vibe, open ---- */
+/* ---- per-browser settings: on, engine, endpoint, model, keys, models, vibe, open, level, describe ---- */
 
 /** An http(s) base URL with no trailing slash ("/v1" when it has no path), or null. */
 export function cleanEndpoint(value) {
@@ -348,6 +355,8 @@ export function cleanPrefs(raw) {
     models: perCloud(p.models, (m) => line(m, 120)),
     vibe: line(p.vibe, 200),
     open: p.open !== false, // the settings unfolded
+    level: LEVELS.includes(p.level) ? p.level : LEVEL_DEFAULT, // how much it asks (planner.js LEVELS)
+    describe: p.describe !== false, // the sounds described in the prompt, or listed by id
   };
 }
 

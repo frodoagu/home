@@ -6,6 +6,7 @@ import { createEngine } from "../audio/engine.js";
 import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
 import { STYLES } from "../autopilot.js";
+import { systemOf } from "../planner.js";
 import { mountApp } from "./app.js";
 
 let ctx;
@@ -2575,6 +2576,22 @@ describe("✨ AI", () => {
     expect(ai.asks.at(-1).prompt).toContain("How you dressed them: lead.acid drive 2 synth supersaw.");
   });
 
+  it("a plan at Alta builds the sound: its filter, sweep and echo land with the section", async () => {
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ level: "high" }));
+    const empty = { tone: 0, length: 0, drive: 0, motion: 0, synth: "", cutoff: 0, res: 0, shape: "", env: 0, distortion: "", trem: "", autopan: "" };
+    const plan = { ...BREAK, dress: [{ id: "lead.acid", ...empty, filter: "vowel o", sweep: "2 bars", echo: "dotted 1/8" }] };
+    const ai = await remountWith(fakeAi({ answers: [plan] }));
+    aiBtn().click();
+    $("button.auto").click();
+    await flushPromises();
+    advanceSeconds(8 * BAR);
+    expect($(".section-badge").textContent).toBe("Break");
+    const lead = saved().variants["lead.acid"];
+    expect(lead.insert).toMatchObject({ filter: "vowel", vowel: "o", lfo: 0.4, rate: 32 });
+    expect(lead.echo).toEqual({ steps: 3, semis: 0 });
+    expect(ai.asks.at(-1).prompt).toContain("How you dressed them: lead.acid filter vowel o sweep 2 bars echo dotted 1/8.");
+  });
+
   it("an answer that comes after the section's last loop started is dropped", async () => {
     let answer;
     const ai = await remountWith(fakeAi({ answers: [() => new Promise((resolve) => (answer = resolve))] }));
@@ -2839,6 +2856,51 @@ describe("✨ AI", () => {
     $('[data-section="peak"]').click(); // by hand: before the form
     expect(queue().slice(0, 3)).toEqual(["peak", "build", "breakdown"]);
     expect(ai.formAsks).toHaveLength(1); // once per run
+  });
+
+  it("the complexity: Baja asks no form and in few words, Alta for the whole sound; remembered", async () => {
+    const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
+    aiBtn().click();
+    expect($("#ai-level").value).toBe("mid");
+    expect([...root.querySelectorAll("#ai-level option")].map((o) => o.textContent)).toEqual(["Baja", "Media", "Alta"]);
+    $("#ai-level").value = "low";
+    $("#ai-level").dispatchEvent(new Event("change"));
+    expect(ai.chrome.start).toHaveBeenLastCalledWith(expect.any(Function), systemOf("low")); // its own base session
+    await flushPromises();
+    expect(ai.formAsks).toHaveLength(0);
+    expect(ai.asks.length).toBeGreaterThan(0);
+    for (const ask of [...ai.openings, ...ai.asks]) {
+      expect(ask.opts.system).toBe(systemOf("low"));
+      expect(ask.schema.properties).not.toHaveProperty("dress");
+    }
+    expect($(".ai-summary").textContent).toBe("Chrome (Gemini Nano) · Complejidad baja");
+    expect($("#ai-level").closest("label").title).toMatch(/Baja: Solo las fases y sus sonidos/);
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).level).toBe("low");
+
+    const high = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
+    expect($("#ai-level").value).toBe("low"); // remembered
+    $("#ai-level").value = "high";
+    $("#ai-level").dispatchEvent(new Event("change"));
+    aiBtn().click(); // off, and on again: armed in silence
+    aiBtn().click();
+    await flushPromises();
+    expect(high.formAsks).toHaveLength(1);
+    expect(high.asks.at(-1).opts.system).toBe(systemOf("high"));
+    expect(high.asks.at(-1).schema.properties.dress.items.required).toContain("filter");
+  });
+
+  it("describing the sounds is a tick away: off, the AI sees their ids alone", async () => {
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ describe: false }));
+    const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
+    aiBtn().click();
+    await flushPromises();
+    expect($("#ai-describe").checked).toBe(false);
+    expect($("#ai-describe").closest("label").title).toMatch(/Sin tilde solo ve los ids/);
+    expect(ai.asks.length).toBeGreaterThan(0);
+    for (const ask of ai.asks) expect(ask.prompt).not.toMatch(/squelchy|hypnotic, driving/);
+    $("#ai-describe").checked = true;
+    $("#ai-describe").dispatchEvent(new Event("change"));
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).describe).toBe(true);
   });
 
   it("■ lets go of the armed autopilot", async () => {
@@ -3239,6 +3301,30 @@ describe("filter, distortion and the DJ filter", () => {
     const shown = knob(pad, "lp").closest(".knob").querySelector("output").textContent;
     expect(shown).toBe(lp >= 1000 ? `${(lp / 1000).toFixed(1)} kHz` : `${lp} Hz`);
     expect(editor(pad).querySelector('[data-fold="insert"] .fold-on').hidden).toBe(false);
+  });
+
+  it("the autopilot's filter ride shows on the tile, a band that follows it frame by frame", () => {
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    $("button.auto").click();
+    const pad = pressed().find((v) => v.startsWith("pad."));
+    const tile = $(`[data-variant="${pad}"]`);
+    const lpAt = () => parseFloat(tile.querySelector(".tone-band").style.getPropertyValue("--lp"));
+    openEditor(pad);
+    const shown = () => knob(pad, "lp").value;
+    advanceSeconds(2 * BAR);
+    const to = saved().variants[pad].insert.lp;
+    flushFrame();
+    const first = [lpAt(), shown()];
+    advanceSeconds(BAR);
+    flushFrame();
+    expect(tile.classList.contains("is-toned")).toBe(true);
+    expect(lpAt()).toBeLessThan(100);
+    expect(lpAt()).not.toBe(first[0]); // it moves between frames
+    expect(shown()).not.toBe(first[1]); // and so does the open editor's knob
+    expect(to).toBeLessThan(20000);
+    const kick = pressed().find((v) => v.startsWith("kick."));
+    expect(kick && $(`[data-variant="${kick}"]`).classList.contains("is-toned")).toBe(false);
   });
 
   it("the DJ knob filters the master, reads out its cutoff and recentres on a double click", () => {

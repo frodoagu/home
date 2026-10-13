@@ -10,14 +10,28 @@
 // from the seed. Before those, a run asks once for the form of the whole
 // track (formPrompt): the order of its next FORM sections, which the pilot
 // walks (autopilot.js withForm) and each section's plan then fills in.
+//
+// How much it asks is the listener's LEVEL: low is the short prompt a small
+// model on a laptop (Gemini Nano) answers in time, the sections and their
+// sounds only: no form, no dress, no parts. mid adds those; high also has
+// the model build each sound's filter, sweep, distortion, tremolo, autopan
+// and echo (dress.js TWEAKS). `describe` off lists the sounds by id alone.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
-import { MACROS, MACRO_MAX, moves, synthsFor } from "./dress.js";
+import { CHOICES, MACROS, MACRO_MAX, TWEAKS, UNIT_TWEAKS, fits, moves, synthsFor } from "./dress.js";
 import { DEGREES, PART_LENGTHS, REST } from "./editing.js";
 import { laneKey } from "./selection.js";
 import en from "./i18n/en.js";
+
+export const LEVELS = ["low", "mid", "high"];
+export const LEVEL_DEFAULT = "mid";
+const levelOf = (level) => (LEVELS.includes(level) ? level : LEVEL_DEFAULT);
+// What a level asks the model to answer besides the sounds.
+export const asksForm = (level) => levelOf(level) !== "low";
+const dresses = (level) => levelOf(level) !== "low";
+const tweaks = (level) => levelOf(level) === "high";
 
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
 // An intro opens a track; a plan always picks what follows one.
@@ -32,6 +46,7 @@ export const FORM = 20;
 const HISTORY = 8; // sections the prompt recalls
 const RECALLED = 3; // of those, the ones it lists the sounds of
 const WHY_MAX = 200;
+const WHY_LOW = 80; // the low level's: every token a small model writes is time
 
 // What each sound sounds like, in the words a listener asks with: the
 // i18n names say how a sound is made, not whether it is dark or euphoric.
@@ -131,11 +146,36 @@ function follows(section) {
 const UNITS = Array.from({ length: MACRO_MAX * 2 + 1 }, (_, i) => i - MACRO_MAX);
 const PART_LAYERS = Object.keys(PART_LENGTHS);
 
+const SECTION_LINES = SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} bars; ${counts(s)}`);
+
+// The low level's: the forms and the rules, in as few words as they take.
+const LOW_SYSTEM = [
+  "You arrange a live electronic dance track made of 2-bar loops grouped in sections.",
+  "Sections, their lengths in bars and how many sounds each layer plays:",
+  ...SECTION_LINES,
+  "Usual flow: intro, groove, build, peak, then breakdown or groove, then build again. A breakdown drops the kick and the bass.",
+  "Every section plays a lead or a pad. Keep some sounds of the section before and change a layer or two.",
+  "You plan one section: which one, its bars and the ids of each layer, only from the lists given. An empty list leaves the layer out.",
+  "The listener's wishes come first.",
+  "Start the answer with why: a few words.",
+].join("\n");
+
+// Level high: the tweaks on top of the macros (dress.js TWEAKS). A function:
+// dress.js imports this module through share.js, so CHOICES may not be there yet.
+const tweakLine = () => `At this level each dress entry also builds the sound's insert ("" or 0 leaves the factory's): filter (${CHOICES.filter.join(", ")}), cutoff (-${MACRO_MAX} dark to ${MACRO_MAX} bright: where that filter sits), res (-${MACRO_MAX} smooth to ${MACRO_MAX} screaming), sweep (an LFO on the cutoff, one cycle per ${CHOICES.sweep.filter((k) => k !== "off").join(", ")}; or off) with its shape (${CHOICES.shape.join(", ")}), env (a filter envelope on every note: -${MACRO_MAX} closes, ${MACRO_MAX} opens, a pluck or a wah), distortion (${CHOICES.distortion.join(", ")}; drive sets how much), trem (a tremolo, one cycle per ${CHOICES.trem.filter((k) => k !== "off").join(", ")}), autopan (slow, fast) and echo (each note answered ${CHOICES.echo.filter((k) => k !== "off").join(", ")} later; melodic sounds only). Leads and pads take all of it, percussion and glitches all but echo, the bass only a lowpass, cutoff, res, env and distortion, the kick only distortion. Dress every lead and pad you plan, boldly, so each section sounds its own: an acid lead through a resonant lowpass sweeping over 2 bars, a pad through a slow vowel, a pluck from a closing envelope, a dotted echo on a sparse motif; and a gritty bass in a peak.`;
+
+/** The instructions for `level`: low, mid (the full ones) or high (mid's, plus the tweaks). */
+export function systemOf(level) {
+  const at = levelOf(level);
+  if (at === "low") return LOW_SYSTEM;
+  return at === "high" ? `${SYSTEM}\n${tweakLine()}` : SYSTEM;
+}
+
 // Read off SECTIONS, so the model learns the same forms the pilot keeps.
 export const SYSTEM = [
   "You arrange a live electronic dance track (psytrance, techno) made of 2-bar loops grouped in sections.",
   "Sections, their lengths in bars and how many sounds each layer usually plays in them:",
-  ...SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} bars; ${counts(s)}`),
+  ...SECTION_LINES,
   "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
   "The lead a breakdown plays is the track's theme: it stays through the build and the peak after it.",
   "Every section plays a lead or a pad. With no wishes from the listener, keep some of the sounds of the section before it and change a layer or two at each section: continuity first, contrast from the section's form.",
@@ -158,9 +198,22 @@ function describe(id, names, synths) {
   return `${id} (${what}${detail ? `: ${detail}` : ""}${character ? `; ${character}` : ""}${synth})`;
 }
 
-// "lead.acid tone -1, drive 2, synth acid"
+// "kick.dark (dark, sharp, minimal)": the low level's, the character alone.
+function brief(id, names) {
+  const character = CHARACTER[baseOf(id)];
+  const name = isCopy(id) && names[id] ? JSON.stringify(names[id]) : "";
+  const what = [name, character].filter(Boolean).join("; ");
+  return what ? `${id} (${what})` : id;
+}
+
+// "lead.acid tone -1 drive 2 synth acid filter lowpass sweep 2 bars"
 const dressLine = ({ id, synth, ...macros }) =>
-  [id, ...MACROS.filter((k) => macros[k]).map((k) => `${k} ${macros[k]}`), ...(synth ? [`synth ${synth}`] : [])].join(" ");
+  [
+    id,
+    ...MACROS.filter((k) => macros[k]).map((k) => `${k} ${macros[k]}`),
+    ...(synth ? [`synth ${synth}`] : []),
+    ...TWEAKS.filter((k) => macros[k]).map((k) => `${k} ${macros[k]}`),
+  ].join(" ");
 
 // "- groove, 16 bars: kick.long, bass.rolling; no pad", the layers it leaves
 // to the pilot unsaid.
@@ -185,19 +238,21 @@ function synthGroups(lists, style) {
   return groups;
 }
 
-// Every sound the style lets the model use, by layer, and the synths the
-// melodic ones can switch to.
-function soundLines(lists, style, names, synths) {
+// Every sound the style lets the model use, by layer, and (where it dresses
+// them) the synths the melodic ones can switch to. Described in full, by
+// character alone at the low level, or by id alone.
+function soundLines(lists, style, names, synths, { level, describe: told = true }) {
   const lines = ["Sounds you can use, by layer:"];
+  const say = !told ? (id) => id : levelOf(level) === "low" ? (id) => brief(id, names) : (id) => describe(id, names, synths);
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue;
-    lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map((id) => describe(id, names, synths)).join("; ")}`);
+    lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map(say).join(told ? "; " : ", ")}`);
   }
-  const groups = synthGroups(lists, style);
+  const groups = dresses(level) ? synthGroups(lists, style) : new Map();
   if (groups.size) {
     lines.push("Synths a melodic sound can switch to, by group:");
     for (const [group, ids] of groups) {
-      lines.push(`${group}: ${ids.map((id) => `${id} (${en.synths[id].join(": ")})`).join("; ")}`);
+      lines.push(`${group}: ${told ? ids.map((id) => `${id} (${en.synths[id].join(": ")})`).join("; ") : ids.join(", ")}`);
     }
   }
   return lines;
@@ -237,7 +292,10 @@ export function planPrompt({
   form = [],
   theme = [],
   planned = [],
+  level = LEVEL_DEFAULT,
+  describe: told = true,
 }) {
+  const low = !dresses(level);
   const now = sections.at(-1);
   const last = planned.at(-1)?.section ?? now;
   const playing = [...new Set(Object.values(active))].sort();
@@ -249,19 +307,19 @@ export function planPrompt({
     .map((section, i) => ({ section, ids: sounds[i] }))
     .slice(0, -1)
     .slice(-RECALLED)
-    .filter(({ ids }) => Array.isArray(ids) && ids.length);
+    .filter(({ ids }) => !low && Array.isArray(ids) && ids.length);
   if (recalled.length) {
     lines.push("What the sections before it opened with:", ...recalled.map(({ section, ids }) => `- ${section}: ${ids.join(", ")}`));
   }
   lines.push(`Sounds playing now: ${playing.length ? playing.join(", ") : "none"}.`);
-  const worn = dressed.filter((d) => playing.includes(d.id));
+  const worn = low ? [] : dressed.filter((d) => playing.includes(d.id));
   if (worn.length) lines.push(`How you dressed them: ${worn.map(dressLine).join("; ")}.`);
   if (planned.length) lines.push("Already planned to follow it, in order:", ...planned.map(plannedLine));
   const into = THEME_PATH[last];
   if (theme.length && into && (!next || next === into)) {
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
-  lines.push(...soundLines(lists, style, names, synths));
+  lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
   if (vibe && fresh) {
     lines.push(`The listener just asked for: ${JSON.stringify(vibe)}. That comes first: shape this section to it boldly, so the change is clearly heard, and leave out the layers that do not fit.`);
   } else if (vibe) {
@@ -284,24 +342,41 @@ export function planPrompt({
  * that draw, `vibe` the listener's words; `synths` and `names` as in
  * planPrompt().
  */
-export function openingPrompt({ style, bpm, lists, section, active = {}, vibe = "", names = {}, synths = {} }) {
+export function openingPrompt({
+  style,
+  bpm,
+  lists,
+  section,
+  active = {},
+  vibe = "",
+  names = {},
+  synths = {},
+  level = LEVEL_DEFAULT,
+  describe: told = true,
+}) {
+  const low = !dresses(level);
   const drawn = [...new Set(Object.values(active))].sort();
   const lines = [
     keyLine(style, bpm),
     "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Let it rise slowly and pull them in: spacey, hypnotic, trippy, never a jolt.",
     `Plan the ${section} it opens with: ${openBars(section).join(" or ")} bars; ${counts(section, openRange)}.`,
   ];
-  if (section === "intro") {
+  if (section === "intro" && low) {
+    lines.push("An intro: pads and atmosphere first, maybe a distant lead; the pilot fades the kick and the bass in later, so pick them too (or no kick, for no beat).");
+  } else if (section === "intro") {
     lines.push(
       "An intro drifts in like the first track of a festival set: atmosphere first, deep or airy pads, a subtle glitch texture, at most a distant lead floating a slow motif or a melody that tells a story. The pilot then fades the kick in muffled from 40 % of the way and the bass from halfway, quiet and filtered, opening up little by little, and ends the intro in a drop: the groove explodes with the bass wide open. So pick a kick and a bass for that (a rolling one builds best), or leave the kick out for an intro with no beat at all. Take the longest lengths: it has time.",
     );
   }
   lines.push(`The seed drew: ${drawn.length ? drawn.join(", ") : "nothing"}. Keep what serves the opening, change the rest.`);
-  lines.push(...soundLines(lists, style, names, synths));
-  lines.push(
-    `fx: a soft swell on the very first beat, or "" for none (usually none): ${OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ")}.`,
-    "Write the parts of the melodic sounds you pick: sparse and slow, long notes and rests, a lead motif that hangs in the air; dress the sounds to the mood (long, with motion, never driven).",
-  );
+  lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
+  const swells = told ? OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ") : OPENING_FX.join(", ");
+  lines.push(`fx: a soft swell on the very first beat, or "" for none (usually none): ${swells}.`);
+  if (!low) {
+    lines.push(
+      "Write the parts of the melodic sounds you pick: sparse and slow, long notes and rests, a lead motif that hangs in the air; dress the sounds to the mood (long, with motion, never driven).",
+    );
+  }
   if (vibe) lines.push(`The listener asked for: ${JSON.stringify(vibe)}. That comes first: open the track on it boldly, and leave out the layers that do not fit.`);
   lines.push(`Plan the opening ${section}.`);
   return lines.join("\n");
@@ -347,26 +422,27 @@ export function normalizeForm(raw) {
  * bars, each layer's ids, how to dress them and the melodic parts, all as
  * enums, so a model that decodes against it cannot name what is not there
  * (`next`, queued by hand, is the only section it may name). Engines differ in how much of a schema they enforce:
- * normalizePlan() checks it all again, and keeps no `why`.
+ * normalizePlan() checks it all again, and keeps no `why`. The low level
+ * asks for no dress or parts; high, for the tweaks in every dress entry.
  */
-export function planSchema({ lists, style, next = null }) {
+export function planSchema({ lists, style, next = null, level = LEVEL_DEFAULT }) {
   const sections = PLAN_SECTIONS.includes(next) ? [next] : PLAN_SECTIONS;
   const bars = [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
-  return schemaOf({ lists, style, sections, bars, range: countRange, most: PLAN_SECTIONS });
+  return schemaOf({ lists, style, sections, bars, range: countRange, most: PLAN_SECTIONS, level });
 }
 
 /**
  * The JSON Schema of an opening: a plan for `section` alone, with the room
  * OPENING gives it, its lengths and a swell for its first beat ("" for none).
  */
-export function openingSchema({ lists, style, section }) {
-  const schema = schemaOf({ lists, style, sections: [section], bars: openBars(section), range: openRange, most: [section] });
+export function openingSchema({ lists, style, section, level = LEVEL_DEFAULT }) {
+  const schema = schemaOf({ lists, style, sections: [section], bars: openBars(section), range: openRange, most: [section], level });
   schema.properties.fx = { type: "string", enum: ["", ...OPENING_FX] };
   schema.required.push("fx");
   return schema;
 }
 
-function schemaOf({ lists, style, sections, bars, range, most: over }) {
+function schemaOf({ lists, style, sections, bars, range, most: over, level }) {
   const layers = {};
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue;
@@ -375,9 +451,22 @@ function schemaOf({ lists, style, sections, bars, range, most: over }) {
     const most = Math.max(...over.map((s) => range(s, layer.id)[1]));
     layers[layer.id] = { type: "array", items: { type: "string", enum: pool }, maxItems: most };
   }
+  const plan = {
+    type: "object",
+    properties: {
+      why: { type: "string", maxLength: dresses(level) ? WHY_MAX : WHY_LOW },
+      section: { type: "string", enum: sections },
+      bars: { type: "integer", enum: bars },
+      layers: { type: "object", properties: layers, required: Object.keys(layers), additionalProperties: false },
+    },
+    required: ["why", "section", "bars", "layers"],
+    additionalProperties: false,
+  };
+  if (!dresses(level)) return plan;
   const ids = Object.values(layers).flatMap((l) => l.items.enum);
   const synths = [...new Set(ids.flatMap(synthsFor))];
   const unit = { type: "integer", enum: UNITS };
+  const tweaked = tweaks(level) ? TWEAKS : [];
   const dress = {
     type: "array",
     maxItems: Object.values(layers).reduce((sum, l) => sum + l.maxItems, 0),
@@ -387,8 +476,11 @@ function schemaOf({ lists, style, sections, bars, range, most: over }) {
         id: { type: "string", enum: ids },
         ...Object.fromEntries(MACROS.map((k) => [k, unit])),
         synth: { type: "string", enum: ["", ...synths] },
+        ...Object.fromEntries(
+          tweaked.map((k) => [k, UNIT_TWEAKS.includes(k) ? unit : { type: "string", enum: ["", ...CHOICES[k]] }]),
+        ),
       },
-      required: ["id", ...MACROS, "synth"],
+      required: ["id", ...MACROS, "synth", ...tweaked],
       additionalProperties: false,
     },
   };
@@ -397,19 +489,12 @@ function schemaOf({ lists, style, sections, bars, range, most: over }) {
     if (!layers[layer]) continue;
     parts[layer] = { type: "array", items: { type: "string", enum: DEGREES }, maxItems: PART_LENGTHS[layer] };
   }
-  return {
-    type: "object",
-    properties: {
-      why: { type: "string", maxLength: WHY_MAX },
-      section: { type: "string", enum: sections },
-      bars: { type: "integer", enum: bars },
-      layers: { type: "object", properties: layers, required: Object.keys(layers), additionalProperties: false },
-      dress,
-      parts: { type: "object", properties: parts, required: Object.keys(parts), additionalProperties: false },
-    },
-    required: ["why", "section", "bars", "layers", "dress", "parts"],
-    additionalProperties: false,
-  };
+  Object.assign(plan.properties, {
+    dress,
+    parts: { type: "object", properties: parts, required: Object.keys(parts), additionalProperties: false },
+  });
+  plan.required.push("dress", "parts");
+  return plan;
 }
 
 /**
@@ -446,7 +531,8 @@ export const whyOf = (raw) =>
 const isObject = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
 // The dress entries for sounds the plan names, each with only the macros it
-// moves (a synth of the sound's group, whole units within range), in id order.
+// moves (a synth of the sound's group, whole units within range) and the
+// tweaks the sound takes (dress.js fits), in id order.
 function cleanDress(raw, layers) {
   if (!Array.isArray(raw)) return [];
   const named = new Set(Object.values(layers).flat());
@@ -458,6 +544,7 @@ function cleanDress(raw, layers) {
       if (Number.isInteger(d[k]) && d[k] && Math.abs(d[k]) <= MACRO_MAX && moves(d.id, k)) entry[k] = d[k];
     }
     if (typeof d.synth === "string" && synthsFor(d.id).includes(d.synth)) entry.synth = d.synth;
+    for (const k of TWEAKS) if (Object.hasOwn(d, k) && fits(d.id, k, d[k])) entry[k] = d[k];
     if (Object.keys(entry).length > 1) out.set(d.id, entry);
   }
   return [...out.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
