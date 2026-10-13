@@ -61,7 +61,7 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> brake -> trim -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> brake -> trim -> volume -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
@@ -86,7 +86,9 @@ describe("context lifecycle", () => {
     expect(brakeGain.gain.value).toBe(1);
     const trim = brakeGain.outputs[0];
     expect(trim.gain.value).toBe(0.8);
-    expect(trim.outputs[0]).toBe(ctx.destination);
+    const [volume] = trim.outputs;
+    expect(volume.gain.value).toBe(1);
+    expect(volume.outputs[0]).toBe(ctx.destination);
   });
 
   it("counts the seconds the loop runs, across runs, by the audio clock", () => {
@@ -793,6 +795,20 @@ describe("DJ filter", () => {
   });
 });
 
+describe("master volume", () => {
+  const volume = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
+
+  it("starts the context at the knob's level and glides it squared, after the trim the takes and visuals read", () => {
+    engine.setVolume(0.5);
+    engine.setLanes({ kick: "kick.punchy" });
+    expect(volume().gain.value).toBe(0.25);
+    engine.setVolume(0);
+    expect(volume().gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.02]);
+    const trim = ctx.nodes.find((n) => n.outputs.includes(volume()));
+    expect(engine.levels()).toBe(trim.outputs.at(-1));
+  });
+});
+
 describe("the vinyl brake", () => {
   const brakeLine = () => ctx.nodes.filter((n) => n.kind === "delay").at(-1);
 
@@ -920,7 +936,7 @@ describe("pump", () => {
 });
 
 describe("tap", () => {
-  const trim = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
+  const trim = () => ctx.nodes.find((n) => n.kind === "gain" && n.gain.value === 0.8);
 
   it("hands out what goes to the speakers until untapped", async () => {
     const blocks = [];

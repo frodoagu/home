@@ -195,6 +195,7 @@ export default {
     djOff: "abierto",
     djLow: (hz) => `LP ${hz}`,
     djHigh: (hz) => `HP ${hz}`,
+    volume: "Volumen",
     quantize: "Entrar a tiempo",
     quantizeTitle: "Cada clic queda en cola y entra en el próximo compás",
     auto: "🤖 Piloto automático",

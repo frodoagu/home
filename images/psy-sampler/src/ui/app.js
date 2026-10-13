@@ -152,7 +152,7 @@ import {
   tourDue,
   tourLeft,
 } from "../snapshots.js";
-import { browserStorage, loadFolds, loadState, saveFolds, saveState } from "../storage.js";
+import { browserStorage, loadFolds, loadState, loadVolume, saveFolds, saveState, saveVolume } from "../storage.js";
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
   SNAP_PANEL,
@@ -352,6 +352,9 @@ export function mountApp(root, engine, opts = {}) {
   const djOut = el("output", { for: "dj", class: "dj-value" });
   const djBox = el("label", { class: "dj", for: "dj" }, el("span", { text: tx.transport.djFilter }), djInput, djOut);
   djBox.title = tx.transport.djTitle;
+  const volumeInput = el("input", { type: "range", id: "volume", min: "0", max: "1", step: "0.01", value: String(loadVolume(storage)) });
+  const volumeOut = el("output", { for: "volume", class: "volume-value" });
+  const volumeBox = el("label", { class: "dj", for: "volume" }, el("span", { text: tx.transport.volume }), volumeInput, volumeOut);
   const delay = checkbox("delay", tx.transport.delay, ws.effects.delay);
   const reverb = checkbox("reverb", tx.transport.reverb, ws.effects.reverb);
   const stopBtn = el("button", { type: "button", class: "stop", text: tx.transport.stop });
@@ -940,6 +943,7 @@ export function mountApp(root, engine, opts = {}) {
       delay.node,
       reverb.node,
       djBox,
+      volumeBox,
     ),
     el(
       "div",
@@ -3281,6 +3285,14 @@ export function mountApp(root, engine, opts = {}) {
   }
   djInput.addEventListener("input", () => setDj(Number(djInput.value)));
   djInput.addEventListener("dblclick", () => setDj(0));
+  function setVolume(value) {
+    engine.setVolume(value);
+    volumeOut.textContent = `${Math.round(value * 100)} %`;
+  }
+  volumeInput.addEventListener("input", () => {
+    setVolume(Number(volumeInput.value));
+    saveVolume(storage, Number(volumeInput.value));
+  });
   for (const [key, box] of [
     ["bgKick", bgKick],
     ["quantize", quantize],
@@ -3580,6 +3592,7 @@ export function mountApp(root, engine, opts = {}) {
   showRec();
   showRamp();
   setDj(state.dj);
+  setVolume(Number(volumeInput.value));
   syncSamples();
   if (resume) {
     persist();
