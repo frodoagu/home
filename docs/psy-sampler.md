@@ -1315,7 +1315,10 @@ A track the ✨ AI planned also carries `&ai=…`: the plans the pilot took (see
 Opening the link loads seed, style and BPM (the sounds too, with a confirmation
 if you already had your own), clears the fragment and says to press the
 autopilot: audio needs that click. 🎲 draws a new seed (6 characters without
-0/o/1/l/i).
+0/o/1/l/i). Under a playing autopilot a new seed (🎲 or typed) is saved at once
+but the pilot takes it on the next loop line (`state.reseed`, 🎲 pulses), where
+it re-engages in place of that loop's step, so the sounds are never redressed
+mid-bar.
 
 A link is anyone's input. The sounds go through `normalize()` like any preset
 (a snapshot link through `importSnapshots()`, which ends in it too), and both

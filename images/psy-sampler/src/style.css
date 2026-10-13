@@ -1914,6 +1914,11 @@ html:has(dialog.help[open], dialog.intro[open]) {
   animation: pulse 0.9s ease-in-out infinite alternate;
 }
 
+/* A new seed the playing pilot takes on the next loop. */
+.icon.is-queued {
+  animation: pulse 0.9s ease-in-out infinite alternate;
+}
+
 /* The snapshot the snapshot autopilot plays next, in its last loop. */
 .variant.is-next {
   border-style: dotted;
@@ -2977,6 +2982,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
     transition: none;
   }
   .variant.is-queued,
+  .icon.is-queued,
   .variant.is-next,
   .variant.is-leaving,
   .variant::after,

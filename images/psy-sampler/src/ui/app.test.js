@@ -2164,6 +2164,26 @@ describe("autopilot", () => {
     expect(saved().variants[kick]).toEqual(ws.variants[kick]);
   });
 
+  it("a new seed under a playing pilot comes in on the next loop, not mid-bar", () => {
+    $("#seed").value = "goa";
+    $("#seed").dispatchEvent(new Event("change"));
+    autoBtn().click();
+    advanceSeconds(2.5 * BAR); // halfway through the second loop
+    const dice = [...document.querySelectorAll("button.icon")].find((b) => b.textContent === "🎲");
+    const playing = pressed();
+    const before = playing.map((id) => saved().variants[id]);
+    $("#seed").value = "trance";
+    $("#seed").dispatchEvent(new Event("change"));
+    expect(saved().seed).toBe("trance");
+    expect(dice.classList.contains("is-queued")).toBe(true);
+    expect(playing.map((id) => saved().variants[id])).toEqual(before); // nothing redressed mid-loop
+    advanceSeconds(BAR);
+    expect(dice.classList.contains("is-queued")).toBe(true);
+    advanceSeconds(BAR); // past the loop line
+    expect(dice.classList.contains("is-queued")).toBe(false);
+    expect(playing.map((id) => saved().variants[id])).not.toEqual(before);
+  });
+
   it("rides the volume of every sound it plays, yours too, over the loop, and leaves the rest of your edit", () => {
     click("bass.rolling");
     advanceSeconds(BAR);
