@@ -1385,14 +1385,22 @@ breakdown has no kick, every section plays a lead or a pad).
   the first lists the sections already planned ("Already planned to follow
   it": section, bars, the ids each names, the layers it leaves out) and asks
   for the one after the last. The prompt (`planner.js` `planPrompt`) carries the
-  style and BPM, the last 8 sections and what the 3 before the current one
+  last 8 sections and what the 3 before the current one
   opened with (`run.sounds`), what plays, where the pilot usually goes from
-  here (read off `SECTIONS[…].next` and its `odds`), the vibe, and every id the
+  here (read off `SECTIONS[…].next` and its `odds`), the vibe when it is fresh, and every id the
   style allows per layer with its English name and a few words of character
   (`CHARACTER`: "dark, tense, ominous"; the i18n names say how a sound is made,
   which doesn't map a vibe like "darker" to anything). A test keeps
-  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words. The
-  system prompt (`SYSTEM`) teaches the section forms, read off `SECTIONS`.
+  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words.
+- The system prompt is built per ask from the settings (`systemOf`): a
+  **brief** of the track (`briefOf`) — the style's genre in a sentence
+  (`GENRE`: what it is and its signature sounds, so the model arranges house
+  as house and not as psytrance), the BPM it plays at and the style's range,
+  the key, and the listener's vibe as their wish for the whole track — then
+  the level's rules (`SYSTEM`: the section forms, read off `SECTIONS`). A plan
+  asked in the old style while a new one waits for its drop gets the old
+  style's brief. A test keeps `GENRE` in step with `STYLES`, so a new style
+  needs its sentence.
 - The theme line appears only where the pilot holds it (`THEME_PATH`: the
   build after a breakdown, the peak after a build), and says so plainly: the
   pilot keeps that lead whatever the plan picks for the layer. Past planned
@@ -1412,9 +1420,9 @@ breakdown has no kick, every section plays a lead or a pad).
   which is how a vibe like "minimal" gets a peak with no pad (the pilot still
   plays a lead or a pad). A layer whose ids are all foreign is dropped and the
   pilot draws it. Outside names are looked up with `Object.hasOwn`.
-- The vibe weighs: the system prompt puts the listener's wishes before the
-  usual counts and continuity (with examples of what to leave out), and the
-  prompt ends on the vibe, right before asking for the plan. A vibe no plan has
+- The vibe weighs: the brief states it, the rules put the listener's wishes
+  before the usual counts and continuity (with examples of what to leave out),
+  and the prompt ends on it, right before asking for the plan. A vibe no plan has
   followed yet is **just asked** ("follow boldly, so the change is heard");
   after that it is **standing** ("keep to it while the sections rise and
   fall"), so a kept vibe doesn't push every section into a new contrast.
@@ -1571,7 +1579,7 @@ small model can keep ahead of the music:
 
 | | Baja (`low`) | Media (`mid`, default) | Alta (`high`) |
 | --- | --- | --- | --- |
-| Instructions | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) |
+| Instructions (after the brief) | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) |
 | Asks | the opening and the sections | + the form of the track | same as Media |
 | Answer | `why` (80 chars), section, bars, layers | + `dress` (macros, synth) and `parts` | + the tweaks in every dress entry |
 | Prompt | the sounds by character only; no recall, no dress, no synths | as it was | as Media, plus how it dressed them with tweaks |
@@ -1579,9 +1587,10 @@ small model can keep ahead of the music:
 
 Baja is for Chrome's Gemini Nano on a laptop: with Media the asks were taking
 longer than the sections, so some came in unplanned. It skips the form
-(`asksForm`), which is one ask less before the first section. Each set of
-instructions gets its own Chrome base session (`ai.js` keeps one per system
-text), and the engines take it as `system` in `plan()`'s options. A new level
+(`asksForm`), which is one ask less before the first section. Chrome keeps
+one base session, for the latest instructions: a new style, BPM, vibe or
+level makes a new one and drops the old (`ai.js`), and the engines take the
+instructions as `system` in `plan()`'s options. A new level
 asks again right away (`startAi`). LM Studio and Anthropic get more output room
 than before (2000 / 2048 tokens), since an Alta plan dresses every sound in full.
 

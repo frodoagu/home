@@ -81,7 +81,7 @@ describe("Chrome's built-in model", () => {
     expect(clones.every((s) => s.destroyed)).toBe(true);
   });
 
-  it("keeps one base session per set of instructions: a level's", async () => {
+  it("keeps the base session of the latest instructions and drops the one before", async () => {
     const api = fakeLanguageModel();
     const { chrome } = createAi({ api });
     await chrome.plan("a", SCHEMA);
@@ -89,6 +89,9 @@ describe("Chrome's built-in model", () => {
     await chrome.plan("c", SCHEMA, { system: "short" });
     const bases = api.create.mock.calls.map(([o]) => o.initialPrompts[0].content);
     expect(bases).toEqual([SYSTEM, "short"]);
+    expect(api.sessions[0].destroyed).toBe(true);
+    await chrome.plan("d", SCHEMA);
+    expect(api.create.mock.calls.at(-1)[0].initialPrompts[0].content).toBe(SYSTEM); // made again
   });
 
   it("without clone(), opens and closes a fresh session per plan", async () => {

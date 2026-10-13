@@ -2534,8 +2534,11 @@ export function mountApp(root, engine, opts = {}) {
   // What the engine needs to be asked: an endpoint, or a linked account's key.
   const reach = (engine) =>
     isCloud(engine) ? { key: keyOf(engine), model: modelOf(engine) } : { endpoint: state.aiPrefs.endpoint, model: modelOf(engine) };
-  // An ask goes with the instructions of its level.
-  const asking = (engine, signal) => ({ ...reach(engine), system: systemOf(state.aiPrefs.level), signal });
+  // An ask goes with the instructions for the track it plans: the brief of
+  // its style at its BPM and the listener's wish, then its level's rules.
+  const systemFor = (style = ws.style, bpm = state.tempo) =>
+    systemOf({ level: state.aiPrefs.level, style, bpm, vibe: state.aiPrefs.vibe });
+  const asking = (engine, signal, track = {}) => ({ ...reach(engine), system: systemFor(track.style, track.bpm), signal });
   // What a prompt and its schema take from the settings.
   // An empty vibe is no message: the sounds go by id, with no words to match.
   const asked = () => ({ level: state.aiPrefs.level, describe: Boolean(state.aiPrefs.vibe) });
@@ -2639,7 +2642,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     const started =
       engine === "chrome"
-        ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))), systemOf(state.aiPrefs.level))
+        ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))), systemFor())
         : ai[engine].start(reach(engine));
     started.then(
       () => {
@@ -2728,7 +2731,6 @@ export function mountApp(root, engine, opts = {}) {
     const { vibe } = state.aiPrefs;
     const prompt = openingPrompt({
       ...ctx,
-      bpm: state.tempo,
       active: state.pending ?? state.active,
       vibe,
       names: ws.names,
@@ -2796,13 +2798,13 @@ export function mountApp(root, engine, opts = {}) {
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
     const mix = state.pending ?? state.active; // armed, what ▶ plays
+    const bpm = ctx.style === ws.style ? state.tempo : bpmFor(ctx.style, state.tempo);
     const prompt = planPrompt({
       ...ctx,
       formed: slot >= p.queue.length,
       form: coming.slice(slot + 1),
       planned,
       theme: themeAfter(p, mix, planned),
-      bpm: ctx.style === ws.style ? state.tempo : bpmFor(ctx.style, state.tempo),
       active: mix,
       sections: state.run.sections,
       sounds: state.run.sounds,
@@ -2815,7 +2817,7 @@ export function mountApp(root, engine, opts = {}) {
     });
     let more = false;
     ai[engine]
-      .plan(prompt, planSchema(ctx), asking(engine, abort.signal))
+      .plan(prompt, planSchema(ctx), asking(engine, abort.signal, { style: ctx.style, bpm }))
       .then(
         (raw) => {
           if (planning?.abort !== abort) return;
@@ -2872,8 +2874,6 @@ export function mountApp(root, engine, opts = {}) {
       return coming;
     };
     const prompt = formPrompt({
-      style: ws.style,
-      bpm: state.tempo,
       sections: state.run.sections,
       coming: comingNow(),
       vibe: state.aiPrefs.vibe,

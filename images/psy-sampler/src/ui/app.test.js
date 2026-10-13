@@ -6,7 +6,7 @@ import { createEngine } from "../audio/engine.js";
 import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
 import { STYLES } from "../autopilot.js";
-import { systemOf } from "../planner.js";
+import { GENRE, systemOf } from "../planner.js";
 import { mountApp } from "./app.js";
 
 let ctx;
@@ -2531,11 +2531,14 @@ describe("✨ AI", () => {
     expect(ask.name).toBe("chrome");
     expect(ask.prompt).toContain("Now playing: intro, 8 bars.");
     expect(ask.prompt).toContain('The listener just asked for: "oscuro y largo".');
+    expect(ask.opts.system).toBe(systemOf({ style: "psytrance", bpm: 145, vibe: "oscuro y largo" }));
+    expect(ask.opts.system.startsWith(`You arrange ${GENRE.psytrance}.`)).toBe(true);
     expect(ask.prompt).not.toContain("Already planned");
     expect(ask.schema.properties.section.enum).toContain("breakdown");
     expect(second.prompt).toContain("Already planned to follow it, in order:\n- breakdown, 16 bars: lead.acid, pad.chord\n");
     expect(second.prompt).toContain("After the planned breakdown, the usual next is build. Plan the section after it.");
-    expect(second.prompt).toContain('The listener\'s standing wish: "oscuro y largo".'); // a plan followed it
+    expect(second.prompt).toContain("The listener's wish comes first: keep the track true to it"); // a plan followed it
+    expect(second.opts.system).toContain('The listener\'s wish for the track: "oscuro y largo".');
     expect(third.prompt).toContain("- breakdown, 16 bars: lead.acid, pad.chord\n- build, 8 bars\n");
     expect(queue()).toEqual(["breakdown", "build", "peak"]);
     expect([...root.querySelectorAll(".section-queue .is-ai")].map((li) => li.textContent)).toEqual(["✨ Break", "✨ Subida", "✨ Pico"]);
@@ -2680,16 +2683,16 @@ describe("✨ AI", () => {
     await flushPromises();
     expect(queue()).toEqual(["breakdown", "build", "peak"]);
     const asked = (section) => ai.asks.slice(before).find((a) => a.schema.properties.section.enum.join() === section);
-    expect(asked("breakdown").prompt).toContain("Style: Psytrance, 145 BPM.");
-    expect(asked("build").prompt).toContain("Style: Psytrance, 145 BPM.");
-    expect(asked("peak").prompt).toContain("Style: Techno, 135 BPM.");
+    expect(asked("breakdown").opts.system).toBe(systemOf({ style: "psytrance", bpm: 145 }));
+    expect(asked("build").opts.system).toBe(systemOf({ style: "psytrance", bpm: 145 }));
+    expect(asked("peak").opts.system).toBe(systemOf({ style: "techno", bpm: 135 }));
     expect(asked("breakdown").prompt).toContain("lead.melodic");
     expect(asked("peak").prompt).not.toContain("lead.melodic"); // psytrance's, not techno's
   });
 
   it("Aplicar plans again with the vibe, keeping the next section's plan as a buffer", async () => {
-    // The model follows the vibe: a full peak, or a break.
-    const follows = (opts, schema, prompt) => Promise.resolve(prompt.includes("full peak") ? PEAK : BREAK);
+    // The model follows the vibe its instructions hold: a full peak, or a break.
+    const follows = (opts) => Promise.resolve(opts.system.includes("full peak") ? PEAK : BREAK);
     const ai = await remountWith(fakeAi({ answers: [follows] }));
     aiBtn().click();
     $("button.auto").click();
@@ -2703,14 +2706,15 @@ describe("✨ AI", () => {
     expect(queue()).toEqual(["breakdown"]);
     expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…"); // the form, first
     expect($(".status").textContent).toBe("✨ Onda «a full peak»: Break queda como estaba y la IA vuelve a planear lo que sigue…");
-    expect(ai.formAsks[1].prompt).toContain('The listener\'s wish: "a full peak".');
+    expect(ai.formAsks[1].prompt).toContain("Shape the form to the listener's wish");
+    expect(ai.formAsks[1].opts.system).toContain('The listener\'s wish for the track: "a full peak".');
     expect(ai.formAsks[1].prompt).toContain("Already coming after it, in order: breakdown.");
     await flushPromises();
     expect(ai.asks[3].prompt).toContain('The listener just asked for: "a full peak".');
     expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- breakdown, 16 bars");
     expect(queue()).toEqual(["breakdown", "peak", "peak"]);
     expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada desde Pico.");
-    expect(ai.asks[4].prompt).toContain('The listener\'s standing wish: "a full peak".');
+    expect(ai.asks[4].prompt).toContain("The listener's wish comes first: keep the track true to it");
     apply(" a full  peak "); // the same words: asked again all the same
     await flushPromises();
     expect(ai.asks).toHaveLength(7);
@@ -2776,7 +2780,8 @@ describe("✨ AI", () => {
     expect(ask.schema.properties.section.enum).toEqual(["intro"]);
     expect(ai.asks[0].prompt).toContain("Now playing: intro, 16 bars.");
     expect(ai.asks[0].prompt).toMatch(/Sounds playing now: .*lead\.soaring/);
-    expect(ai.asks[0].prompt).toContain('standing wish: "volado"'); // the opening followed it
+    expect(ai.asks[0].prompt).toContain("The listener's wish comes first"); // the opening followed it
+    expect(ai.asks[0].opts.system).toContain('wish for the track: "volado"');
     expect(engine.isRunning()).toBe(false);
     expect($(".section-left").textContent).toBe("16 compases");
     expect($(".section-badge").title).toBe("Lo eligió la IA: a floating opener, the bass creeping in");
@@ -2865,12 +2870,13 @@ describe("✨ AI", () => {
     expect([...root.querySelectorAll("#ai-level option")].map((o) => o.textContent)).toEqual(["Baja", "Media", "Alta"]);
     $("#ai-level").value = "low";
     $("#ai-level").dispatchEvent(new Event("change"));
-    expect(ai.chrome.start).toHaveBeenLastCalledWith(expect.any(Function), systemOf("low")); // its own base session
+    const low = systemOf({ level: "low", style: "psytrance", bpm: 145 });
+    expect(ai.chrome.start).toHaveBeenLastCalledWith(expect.any(Function), low); // its own base session
     await flushPromises();
     expect(ai.formAsks).toHaveLength(0);
     expect(ai.asks.length).toBeGreaterThan(0);
     for (const ask of [...ai.openings, ...ai.asks]) {
-      expect(ask.opts.system).toBe(systemOf("low"));
+      expect(ask.opts.system).toBe(low);
       expect(ask.schema.properties).not.toHaveProperty("dress");
     }
     expect($(".ai-summary").textContent).toBe("Chrome (Gemini Nano) · Complejidad baja");
@@ -2885,7 +2891,7 @@ describe("✨ AI", () => {
     aiBtn().click();
     await flushPromises();
     expect(high.formAsks).toHaveLength(1);
-    expect(high.asks.at(-1).opts.system).toBe(systemOf("high"));
+    expect(high.asks.at(-1).opts.system).toBe(systemOf({ level: "high", style: "psytrance", bpm: 145 }));
     expect(high.asks.at(-1).schema.properties.dress.items.required).toContain("filter");
   });
 
@@ -2902,7 +2908,7 @@ describe("✨ AI", () => {
     expect($(".ai-vibe-note").textContent).toMatch(/cómo suena cada sonido/);
     vibe.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await flushPromises();
-    expect(ai.asks.at(-1).prompt).toMatch(/oscuro/);
+    expect(ai.asks.at(-1).opts.system).toMatch(/oscuro/);
     expect(ai.asks.at(-1).prompt).toMatch(/squelchy|hypnotic, driving/);
   });
 

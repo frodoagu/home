@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { LAYERS } from "./catalog.js";
 import { DEFAULTS } from "./audio/patterns.js";
-import { SECTIONS, STYLES, countRange, poolOf } from "./autopilot.js";
+import { SECTIONS, STYLES, STYLE_IDS, countRange, poolOf } from "./autopilot.js";
 import {
   CHARACTER,
   FORM,
+  GENRE,
   OPENING_FX,
   PLAN_MAX,
   LEVELS,
   PLAN_SECTIONS,
   SYSTEM,
   asksForm,
+  briefOf,
   formPrompt,
   formSchema,
   keptAhead,
@@ -41,16 +43,29 @@ describe("the prompt", () => {
     expect(SYSTEM).toContain("its length in bars (one of the lengths that section has)");
   });
 
+  it("opens on a brief of the track read off the settings: the style's genre, BPM, key and the wish", () => {
+    expect(Object.keys(GENRE).sort()).toEqual([...STYLE_IDS].sort());
+    const house = briefOf({ style: "house", bpm: 123.6, vibe: "deep, de noche" });
+    expect(house).toContain(`You arrange ${GENRE.house}.`);
+    expect(house).toContain("Tempo: 124 BPM (the style runs 120-126). Key: A, each sound in its own scale");
+    expect(house).toContain('The listener\'s wish for the track: "deep, de noche".');
+    expect(house).not.toMatch(/psytrance|techno/);
+    expect(briefOf({ style: "darkpsy", bpm: 150 })).toMatch(/dark psytrance track.*\nTempo: 150 BPM \(the style runs 148-165\)\. Key: A Phrygian/);
+    expect(briefOf({ style: "darkpsy", bpm: 150 })).not.toContain("wish");
+    expect(briefOf({ style: "all", bpm: 140 })).toMatch(/^You arrange an electronic dance track of no one style.*\nTempo: 140 BPM\. Key:/);
+    expect(systemOf({ style: "house", bpm: 124 })).toBe(`${briefOf({ style: "house", bpm: 124 })}\n${SYSTEM}`);
+    expect(systemOf({ style: "techno", bpm: 130 })).not.toBe(systemOf({ style: "house", bpm: 130 }));
+  });
+
   it("knows the character of every looping sound, and of nothing else", () => {
     const loops = new Set(LAYERS.filter((l) => !l.oneShot && !l.manual).map((l) => l.id));
     const ids = Object.keys(DEFAULTS).filter((id) => loops.has(id.split(".")[0]));
     expect(Object.keys(CHARACTER).sort()).toEqual(ids.sort());
   });
 
-  it("says the style, what played, what plays now, the vibe and every sound it may use", () => {
+  it("says what played, what plays now, the vibe and every sound it may use", () => {
     const prompt = planPrompt({
       ...goa,
-      bpm: 145.4,
       active: { kick: "kick.long", "lead.acid~1": "lead.acid~1" },
       sections: ["intro", "groove", "build", "peak", "breakdown", "build", "peak", "groove", "build", "peak"],
       sounds: [[], [], [], [], [], [], ["kick.long", "pad.prog"], ["kick.long", "bass.rolling"], [], ["kick.long"]],
@@ -59,7 +74,7 @@ describe("the prompt", () => {
       fresh: true,
       names: { "lead.acid~1": "Mi ácido" },
     });
-    expect(prompt).toContain("Style: Goa, 145 BPM.");
+    expect(prompt).not.toContain("BPM"); // the brief says it
     expect(prompt).toContain("Sections so far: build, peak, breakdown, build, peak, groove, build, peak."); // the last 8
     expect(prompt).toContain("Now playing: peak, 16 bars.");
     expect(prompt).toContain("Sounds playing now: kick.long, lead.acid~1.");
@@ -75,9 +90,10 @@ describe("the prompt", () => {
   });
 
   it("leaves the vibe out when there is none, and asks for the queued section when there is one", () => {
-    const base = { ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8 };
+    const base = { ...goa, active: {}, sections: ["intro"], bars: 8 };
     expect(planPrompt(base)).not.toContain("listener");
-    expect(planPrompt({ ...base, vibe: "dark" })).toContain('The listener\'s standing wish: "dark".');
+    expect(planPrompt({ ...base, vibe: "dark" })).toContain("The listener's wish comes first: keep the track true to it");
+    expect(planPrompt({ ...base, vibe: "dark" })).not.toContain('"dark"'); // the brief holds it
     expect(planPrompt(base)).not.toContain("What the sections before it");
     expect(planPrompt(base)).toContain("After the intro, the usual next is groove. Plan the next section.");
     expect(planPrompt({ ...base, sections: ["groove", "build"] })).toContain("the usual next is peak; now and then breakdown.");
@@ -89,7 +105,7 @@ describe("the prompt", () => {
   });
 
   it("says the theme only where the pilot holds it: the step after a breakdown or a build", () => {
-    const base = { ...goa, bpm: 145, active: {}, bars: 8, theme: ["lead.acid"] };
+    const base = { ...goa, active: {}, bars: 8, theme: ["lead.acid"] };
     const held = "If you plan a build, its lead is the theme, lead.acid: the pilot keeps it there whatever you pick.";
     expect(planPrompt({ ...base, sections: ["breakdown"] })).toContain(held);
     expect(planPrompt({ ...base, sections: ["build"] })).toContain("If you plan a peak, its lead is the theme");
@@ -100,7 +116,7 @@ describe("the prompt", () => {
 });
 
 describe("planning ahead", () => {
-  const base = { ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8 };
+  const base = { ...goa, active: {}, sections: ["intro"], bars: 8 };
   const planned = [
     { section: "groove", bars: 16, layers: { kick: ["kick.long"], bass: ["bass.rolling"], pad: [] } },
     { section: "build", bars: null, layers: {} },
@@ -186,7 +202,7 @@ describe("the schema", () => {
     STYLES[style] = { bpm: 140, pool: { ...STYLES.goa.pool, glitch: undefined } };
     try {
       expect(planSchema({ lists, style }).properties.layers.properties).not.toHaveProperty("glitch");
-      expect(planPrompt({ lists, style, bpm: 140, active: {}, sections: ["intro"], bars: 8 })).not.toMatch(/^glitch:/m);
+      expect(planPrompt({ lists, style, active: {}, sections: ["intro"], bars: 8 })).not.toMatch(/^glitch:/m);
     } finally {
       delete STYLES[style];
     }
@@ -230,17 +246,16 @@ describe("dress and parts in a plan", () => {
     expect(normalizePlan({ ...plan, parts: "1 3 5" }, goa)).not.toHaveProperty("parts");
   });
 
-  it("tells the model the key, the synths it may switch to and how it dressed what plays", () => {
+  it("tells the model the synths it may switch to and how it dressed what plays", () => {
     const prompt = planPrompt({
       ...goa,
-      bpm: 145,
       active: { lead: "lead.acid" },
       sections: ["intro"],
       bars: 8,
       dressed: [{ id: "lead.acid", tone: -1, synth: "acid" }, { id: "pad.chord", tone: 2 }],
       synths: { "lead.acid": "acid" },
     });
-    expect(prompt).toContain("Key: A harmonic minor.");
+    expect(systemOf({ style: "goa", bpm: 145 })).toContain("Key: A harmonic minor.");
     expect(prompt).toContain("How you dressed them: lead.acid tone -1 synth acid.");
     expect(prompt).not.toContain("pad.chord tone");
     expect(prompt).toContain("lead.acid (Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving; synth acid)");
@@ -332,12 +347,11 @@ describe("normalizePlan", () => {
 
 describe("the form of the track", () => {
   it("asks for the next FORM sections after the ones coming, following the vibe", () => {
-    const prompt = formPrompt({ style: "goa", bpm: 145, sections: ["intro"], vibe: "dark, long breaks" });
-    expect(prompt).toContain("Style: Goa, 145 BPM. Key: ");
+    const prompt = formPrompt({ sections: ["intro"], vibe: "dark, long breaks" });
     expect(prompt).toContain("Now playing: intro.");
-    expect(prompt).toContain('The listener\'s wish: "dark, long breaks".');
+    expect(prompt).toContain("Shape the form to the listener's wish: which sections, how often.");
     expect(prompt).toContain(`the next ${FORM} sections, in order, after the intro.`);
-    const after = formPrompt({ style: "goa", bpm: 145, sections: ["intro", "groove"], coming: ["build", "peak"] });
+    const after = formPrompt({ sections: ["intro", "groove"], coming: ["build", "peak"] });
     expect(after).toContain("Already coming after it, in order: build, peak.");
     expect(after).toContain("after the peak already coming.");
     expect(after).not.toContain("wish");
@@ -355,7 +369,7 @@ describe("the form of the track", () => {
   });
 
   it("tells a plan where the form goes on", () => {
-    const prompt = planPrompt({ ...goa, bpm: 145, active: {}, sections: ["intro"], bars: 8, next: "groove", formed: true, form: ["build", "peak"] });
+    const prompt = planPrompt({ ...goa, active: {}, sections: ["intro"], bars: 8, next: "groove", formed: true, form: ["build", "peak"] });
     expect(prompt).toContain("After it, the track goes on with: build, peak.");
     expect(prompt).toContain("Your form of the track has groove next: plan that section.");
     expect(prompt).not.toContain("The listener queued");
@@ -375,8 +389,7 @@ describe("the opening", () => {
   const psy = { lists, style: "psytrance", section: "intro" };
 
   it("asks for the section the track starts with: long, spacey, building into a drop", () => {
-    const prompt = openingPrompt({ ...psy, bpm: 145, active: { kick: "kick.punchy", "pad.chord": "pad.chord" }, vibe: "épico" });
-    expect(prompt).toContain("Style: Psytrance, 145 BPM.");
+    const prompt = openingPrompt({ ...psy, active: { kick: "kick.punchy", "pad.chord": "pad.chord" }, vibe: "épico" });
     expect(prompt).toContain("This is the opening of the track and of the show");
     expect(prompt).toContain("Plan the intro it opens with: 16 or 24 or 32 bars; kick 0-1, bass 0-1, perc 0-2, lead 0-1, pad 0-2, glitch 0-1.");
     expect(prompt).toContain("never a jolt");
@@ -386,7 +399,7 @@ describe("the opening", () => {
     for (const id of OPENING_FX) expect(prompt).toContain(`${id} (`);
     expect(prompt).toContain('The listener asked for: "épico".');
     expect(prompt.trim().endsWith("Plan the opening intro.")).toBe(true);
-    expect(openingPrompt({ ...psy, bpm: 145 })).not.toContain("listener");
+    expect(openingPrompt(psy)).not.toContain("listener");
     expect(SYSTEM).toContain("or, when asked, the opening the track starts with");
   });
 
@@ -445,7 +458,6 @@ describe("the opening", () => {
 describe("levels", () => {
   const ask = {
     ...goa,
-    bpm: 145,
     active: { lead: "lead.acid", kick: "kick.long" },
     sections: ["intro", "groove"],
     sounds: [["kick.long"], ["lead.acid"]],
@@ -455,18 +467,21 @@ describe("levels", () => {
 
   it("are low, mid and high; mid is the full prompt it always was", () => {
     expect(LEVELS).toEqual(["low", "mid", "high"]);
-    expect(systemOf("mid")).toBe(SYSTEM);
-    expect(systemOf("nonsense")).toBe(SYSTEM);
-    expect(systemOf("high").startsWith(SYSTEM)).toBe(true);
-    expect(systemOf("high")).toMatch(/filter \(off, lowpass, highpass, bandpass, vowel a/);
+    const track = { style: "goa", bpm: 145 };
+    const brief = briefOf(track);
+    expect(systemOf({ ...track, level: "mid" })).toBe(`${brief}\n${SYSTEM}`);
+    expect(systemOf({ ...track, level: "nonsense" })).toBe(`${brief}\n${SYSTEM}`);
+    expect(systemOf({ ...track, level: "high" }).startsWith(`${brief}\n${SYSTEM}`)).toBe(true);
+    expect(systemOf({ ...track, level: "high" })).toMatch(/filter \(off, lowpass, highpass, bandpass, vowel a/);
     expect(planPrompt({ ...ask, dressed })).toBe(planPrompt({ ...ask, dressed, level: "mid", describe: true }));
   });
 
   it("low asks for the sections and their sounds in far fewer words: no form, dress or parts", () => {
     expect(asksForm("low")).toBe(false);
     expect(asksForm("mid") && asksForm("high")).toBe(true);
-    expect(systemOf("low").length).toBeLessThan(SYSTEM.length / 2);
-    expect(systemOf("low")).not.toMatch(/dress|parts|form of the track/);
+    const track = { style: "goa", bpm: 145 };
+    expect(systemOf({ ...track, level: "low" }).length).toBeLessThan(systemOf(track).length / 2);
+    expect(systemOf({ ...track, level: "low" })).not.toMatch(/dress|parts|form of the track/);
     const low = planPrompt({ ...ask, dressed, level: "low" });
     expect(low.length).toBeLessThan(planPrompt({ ...ask, dressed }).length / 2);
     expect(low).not.toContain("How you dressed them");
@@ -476,9 +491,9 @@ describe("levels", () => {
     const schema = planSchema({ ...goa, level: "low" });
     expect(schema.required).toEqual(["why", "section", "bars", "layers"]);
     expect(schema.properties).not.toHaveProperty("dress");
-    const opening = openingPrompt({ ...goa, bpm: 145, section: "intro", level: "low" });
+    const opening = openingPrompt({ ...goa, section: "intro", level: "low" });
     expect(opening).not.toContain("Write the parts");
-    expect(opening.length).toBeLessThan(openingPrompt({ ...goa, bpm: 145, section: "intro" }).length / 2);
+    expect(opening.length).toBeLessThan(openingPrompt({ ...goa, section: "intro" }).length / 2);
     expect(openingSchema({ ...goa, section: "intro", level: "low" }).required).toEqual(["why", "section", "bars", "layers", "fx"]);
   });
 
@@ -488,7 +503,7 @@ describe("levels", () => {
     expect(bare).not.toContain("squelchy");
     expect(bare).toMatch(/^lead: acid, /m); // the synths a lead may switch to, by id
     expect(planPrompt({ ...ask, level: "low", describe: false })).not.toContain("(");
-    expect(openingPrompt({ ...goa, bpm: 145, section: "intro", describe: false })).toContain("fx.sweep, fx.reverse, fx.siren");
+    expect(openingPrompt({ ...goa, section: "intro", describe: false })).toContain("fx.sweep, fx.reverse, fx.siren");
   });
 
   it("high asks for every tweak in each dress entry, as enums", () => {

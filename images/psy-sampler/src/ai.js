@@ -5,7 +5,8 @@
 //   starting that download needs a click. Offered only where the browser
 //   exposes `LanguageModel` and says the model can run. Each plan runs on a
 //   clone of one base session that holds the instructions, so the context
-//   never grows.
+//   never grows; new instructions (another style, BPM, wish or level) make
+//   a new base and drop the old one.
 // - "lmstudio": any OpenAI-compatible chat endpoint, LM Studio's by default
 //   (its server on, with CORS). The answer is held to the plan's JSON Schema
 //   through `response_format`.
@@ -37,7 +38,7 @@ const textIn = (languages) => ({
 
 function chromeModel(api) {
   let options = textIn(["en"]); // what availability() found the model takes
-  const bases = new Map(); // instructions -> the base session that holds them, once made
+  const bases = new Map(); // instructions -> the base session that holds them, once made: the latest only
   const starting = new Map(); // instructions -> that session on its way
   const supported = () => typeof api?.availability === "function" && typeof api?.create === "function";
   const initial = (system) => [{ role: "system", content: system }];
@@ -62,7 +63,7 @@ function chromeModel(api) {
   }
 
   // Inside a click when the model still has to download; `onProgress` gets 0-1.
-  // One base session per set of instructions (a level's, planner.js systemOf).
+  // One base session for the latest instructions (planner.js systemOf).
   function start(onProgress = () => {}, system = SYSTEM) {
     if (!starting.has(system)) {
       const made = api
@@ -75,6 +76,11 @@ function chromeModel(api) {
         })
         .then(
           (session) => {
+            for (const [old, base] of bases) {
+              base.destroy?.();
+              bases.delete(old);
+              starting.delete(old);
+            }
             bases.set(system, session);
             return session;
           },
