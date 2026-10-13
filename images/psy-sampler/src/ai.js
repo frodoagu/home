@@ -313,7 +313,7 @@ export function createAi({ api = globalThis.LanguageModel, fetch = globalThis.fe
   return { chrome: chromeModel(api), lmstudio: openAiModel(fetch), ...clouds };
 }
 
-/* ---- per-browser settings: on, engine, endpoint, model, keys, models, vibe, open, level, describe ---- */
+/* ---- per-browser settings: on, engine, endpoint, model, keys, models, vibe, open, level ---- */
 
 /** An http(s) base URL with no trailing slash ("/v1" when it has no path), or null. */
 export function cleanEndpoint(value) {
@@ -356,7 +356,6 @@ export function cleanPrefs(raw) {
     vibe: line(p.vibe, 200),
     open: p.open !== false, // the settings unfolded
     level: LEVELS.includes(p.level) ? p.level : LEVEL_DEFAULT, // how much it asks (planner.js LEVELS)
-    describe: p.describe !== false, // the sounds described in the prompt, or listed by id
   };
 }
 

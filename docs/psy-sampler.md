@@ -1578,11 +1578,12 @@ text), and the engines take it as `system` in `plan()`'s options. A new level
 asks again right away (`startAi`). LM Studio and Anthropic get more output room
 than before (2000 / 2048 tokens), since an Alta plan dresses every sound in full.
 
-**Contarle a la IA cómo suena cada sonido** (`describe`, on by default) is a
-separate tick: on, the prompt gives each sound its name, how it is made and
-its character (Baja: the character only); off, the ids alone, and the synths and
-swells by id. It saves about 2,600 characters a section at Media and Alta,
-at the cost of the model matching the vibe by id names only.
+The **vibe** decides how the sounds are told (`describe` in the prompts): with
+words in it, the prompt gives each sound its name, how it is made and its
+character (Baja: the character only), so the model can match them to the
+vibe; empty, there is no message for the model, and it gets the ids alone,
+and the synths and swells by id. That saves about 2,600 characters a section
+at Media and Alta. A note under the field says which it is as it is typed.
 
 ### Seeds, share links and replay
 
@@ -1609,7 +1610,7 @@ when its section comes.
 While ✨ is on its settings show under the autopilot row as **AI settings**, a
 `<details>` that folds away; folded, its summary still says the engine (and
 model), the complexity when it isn't Media, and the vibe. The settings (on,
-engine, endpoint, model, vibe, complexity, describe, and whether that panel is
+engine, endpoint, model, vibe, complexity, and whether that panel is
 unfolded) live per browser in
 `localStorage` (`psy-sampler:ai`, `ai.js` `loadPrefs` / `cleanPrefs`), not in
 the workspace: what a browser can run is that browser's, so it never travels
