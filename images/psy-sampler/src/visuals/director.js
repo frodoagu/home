@@ -10,7 +10,7 @@ export const SCENES = [
   { id: "bulb", moods: ["calm", "high", "peak"] },
   { id: "kifs", moods: ["high", "peak"] },
   { id: "mandala", moods: ["calm", "high"] },
-  { id: "flow", moods: ["calm", "high"] },
+  { id: "flow", moods: ["calm"] },
   { id: "julia", moods: ["calm", "high", "peak"] },
   { id: "gyroid", moods: ["high", "peak"] },
   { id: "coral", moods: ["calm", "high"] },
