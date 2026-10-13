@@ -82,6 +82,30 @@ export const SECTIONS = {
 export const SECTION_IDS = Object.keys(SECTIONS);
 
 export const STYLES = {
+  house: {
+    bpm: [120, 126],
+    pool: {
+      kick: ["kick.house", "kick.prog"],
+      bass: ["bass.house", "bass.offbeat", "bass.prog"],
+      perc: ["perc.hat", "perc.clap", "perc.shaker", "perc.shuffle", "perc.bongos", "perc.ride"],
+      lead: ["lead.piano", "lead.organ", "lead.bell"],
+      pad: ["pad.deep", "pad.chord", "pad.sus"],
+      glitch: ["glitch.crackle", "glitch.rise"],
+    },
+    entryFx: { groove: [null, null, "fx.sweep", "fx.reverse"] },
+  },
+  techhouse: {
+    bpm: [124, 128],
+    pool: {
+      kick: ["kick.techHouse", "kick.house"],
+      bass: ["bass.techHouse", "bass.house", "bass.techno"],
+      perc: ["perc.shuffle", "perc.hat", "perc.clap", "perc.rim", "perc.bongos", "perc.shaker"],
+      lead: ["lead.organ", "lead.vowel", "lead.rubber", "lead.techno"],
+      pad: ["pad.deep", "pad.air", "pad.drone"],
+      glitch: ["glitch.blips", "glitch.stutter", "glitch.crush"],
+    },
+    entryFx: { groove: [null, null, "fx.sweep", "fx.stutter"] },
+  },
   techno: {
     bpm: [125, 135],
     pool: {
