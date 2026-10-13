@@ -2,6 +2,7 @@ import "./style.css";
 import { createAi } from "./ai.js";
 import { createEngine } from "./audio/engine.js";
 import { createCloud } from "./cloud.js";
+import { guardClose } from "./closeGuard.js";
 import { createMediaKeys } from "./mediaKeys.js";
 import { createSamples } from "./samples.js";
 import { detectLang, setLang } from "./i18n/index.js";
@@ -25,6 +26,12 @@ const stopPlaying = () => {
   if (engine.isRunning()) document.querySelector("button.stop")?.click();
 };
 let leaving = false; // cut off: reloading, and the account is not ours to let go
+// Closing the tab while it plays asks first; the page's own reloads don't.
+const closing = guardClose({ playing: engine.isRunning });
+const reload = () => {
+  closing.leave();
+  location.reload();
+};
 // The account plays on one device: with another one on it, this one asks
 // before taking it; one that lost it stops and reloads into that question.
 const cloud = createCloud({
@@ -38,7 +45,7 @@ const cloud = createCloud({
     leaving = true;
     stopPlaying();
     stats.report();
-    location.reload();
+    reload();
   },
 });
 // Seconds played and a few counts for psy-sync's usage numbers (stats.js).
@@ -62,7 +69,7 @@ claimTab({
     leaving = true;
     engine.stop();
     stats.report();
-    cloud.flush().finally(() => location.reload());
+    cloud.flush().finally(reload);
   },
 }).then(() => {
   mountApp(document.getElementById("app"), engine, { cloud, samples, stats, mediaKeys, ai });
@@ -90,6 +97,6 @@ watchVersion({
   current: import.meta.env.BUILD_ID,
   onNew: () =>
     showUpdate({
-      reload: () => cloud.flush().finally(() => location.reload()),
+      reload: () => cloud.flush().finally(reload),
     }),
 });
