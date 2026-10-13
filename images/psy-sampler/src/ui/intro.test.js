@@ -23,7 +23,7 @@ describe("first-visit welcome", () => {
   it("shows once per browser, counted from the moment it opens", () => {
     expect(showIntro({ storage: localStorage, openHelp: () => {} })).not.toBeNull();
     expect($("dialog.intro").open).toBe(true);
-    expect($("#intro-title").textContent).toBe("Esto es Psy Layers");
+    expect($("#intro-title").textContent).toBe("Esto es Psy Layers DAW");
     document.body.replaceChildren(); // a reload without closing it
     expect(showIntro({ storage: localStorage, openHelp: () => {} })).toBeNull();
     expect($("dialog.intro")).toBeNull();

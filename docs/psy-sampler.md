@@ -1,6 +1,6 @@
 # psy-sampler
 
-A live electronic music machine at `https://psy.agu.com.ar`. Each button loops a
+**Psy Layers DAW**: a live electronic music DAW in the browser, at `https://psy.agu.com.ar`. Each button loops a
 layer (kick, bass, percussion, lead, pad, glitch; 9-15 sounds per layer) over a
 grid of 32 sixteenths (2 bars), plus a layer of classics (famous melodies,
 whole, several loops long) played by hand; FX are one-shots outside the loop. **Everything

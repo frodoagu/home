@@ -927,7 +927,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "header",
       { class: "top" },
-      el("h1", { text: "Psy Layers" }),
+      el("h1", { text: "Psy Layers DAW" }),
       el("p", { class: "synth-note", text: tx.synthNote }),
       el("p", { class: "lede", text: tx.lede }),
     ),

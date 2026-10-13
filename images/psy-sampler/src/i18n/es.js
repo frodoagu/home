@@ -4,12 +4,12 @@ export default {
   langName: "Español",
   synthNote: "∿ Cero samples: cada sonido de fábrica es una fórmula matemática que se calcula en vivo. Nada grabado, nada comprimido: lossless.",
   lede:
-    "Una máquina de música electrónica en vivo: kick, bajo, percusión, glitches, leads, pads y FX que armás, " +
+    "Un DAW de música electrónica en vivo, en el navegador: kick, bajo, percusión, glitches, leads, pads y FX que armás, " +
     "editás, filtrás, distorsionás y mezclás mientras suenan, o tus propios samples. Elegí un estilo y dejá que el 🤖 Piloto automático arme el tema " +
     "desde una semilla, o tomá el control: encolá fases, improvisá partes y guardá momentos con 📸.",
   help: {
     open: "📖 Ayuda",
-    title: "Cómo se usa Psy Layers",
+    title: "Cómo se usa Psy Layers DAW",
     close: "Cerrar",
     intro: "Primero los trucos que no se ven a simple vista; después, todo lo que hace cada parte.",
     search: "Buscar en la ayuda…",
@@ -502,9 +502,9 @@ export default {
     },
   },
   intro: {
-    title: "Esto es Psy Layers",
+    title: "Esto es Psy Layers DAW",
     what:
-      "Una máquina de música electrónica psicodélica que corre entera en tu navegador. No hay samples: cada kick, " +
+      "Un DAW de música electrónica psicodélica que corre entero en tu navegador. No hay samples: cada kick, " +
       "bajo, lead y pad es una fórmula que se calcula en vivo, y vos elegís qué suena y cuándo.",
     points: [
       ["🎛️", "Cada fila es una capa: Kick, Bajo, Percusión, Lead, Pad, Glitch y FX. Un clic prende un sonido, otro lo apaga, y entra justo en el próximo compás."],
@@ -890,7 +890,7 @@ export default {
   scales: { minor: "La menor", phrygian: "La frigio", harmonic: "La menor armónica", chromatic: "Cromática" },
   noteNames: ["Do", "Do#", "Re", "Mi♭", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "Si♭", "Si"],
   visuals: {
-    title: "Psy Layers · Visuales",
+    title: "Psy Layers DAW · Visuales",
     button: "🌀 Visuales",
     buttonTitle: "Fractales, mandalas y texturas orgánicas a pantalla completa, al ritmo de lo que suena",
     scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", flow: "Fluido", julia: "Julia", gyroid: "Carne de gyroid", coral: "Arrecife fractal", cells: "Células", phyllo: "Romanesco", hyper: "Mosaico hiperbólico", turing: "Patrones de Turing", physarum: "Physarum" },

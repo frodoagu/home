@@ -2,12 +2,12 @@ export default {
   langName: "English",
   synthNote: "∿ Zero samples: every factory sound is a mathematical formula computed live. Nothing recorded, nothing compressed: lossless.",
   lede:
-    "A live electronic music machine: kick, bass, percussion, glitches, leads, pads and FX you build, " +
+    "A live electronic music DAW, in your browser: kick, bass, percussion, glitches, leads, pads and FX you build, " +
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
   help: {
     open: "📖 Help",
-    title: "How to use Psy Layers",
+    title: "How to use Psy Layers DAW",
     close: "Close",
     intro: "First the tricks you won't spot at a glance; then everything each part does.",
     search: "Search the help…",
@@ -500,9 +500,9 @@ export default {
     },
   },
   intro: {
-    title: "This is Psy Layers",
+    title: "This is Psy Layers DAW",
     what:
-      "A psychedelic electronic music machine that runs entirely in your browser. No samples: every kick, " +
+      "A psychedelic electronic music DAW that runs entirely in your browser. No samples: every kick, " +
       "bass, lead and pad is a formula computed live, and you choose what plays and when.",
     points: [
       ["🎛️", "Each row is a layer: Kick, Bass, Percussion, Lead, Pad, Glitch and FX. One click turns a sound on, another turns it off, and it comes in right on the next bar."],
@@ -888,7 +888,7 @@ export default {
   scales: { minor: "A minor", phrygian: "A Phrygian", harmonic: "A harmonic minor", chromatic: "Chromatic" },
   noteNames: ["C", "C#", "D", "E♭", "E", "F", "F#", "G", "G#", "A", "B♭", "B"],
   visuals: {
-    title: "Psy Layers · Visuals",
+    title: "Psy Layers DAW · Visuals",
     button: "🌀 Visuals",
     buttonTitle: "Full-screen fractals, mandalas and organic textures, in time with what plays",
     scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", flow: "Liquid", julia: "Julia", gyroid: "Gyroid flesh", coral: "Fractal reef", cells: "Cells", phyllo: "Romanesco", hyper: "Hyperbolic tiling", turing: "Turing patterns", physarum: "Physarum" },
