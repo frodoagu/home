@@ -11,6 +11,11 @@
 // track (formPrompt): the order of its next FORM sections, which the pilot
 // walks (autopilot.js withForm) and each section's plan then fills in.
 //
+// Every ask's instructions open on a brief of the track (briefOf): the
+// style's genre, tempo and key, the BPM and the listener's wish, read off the
+// settings, so the model arranges the genre picked and not another. The
+// rules of the listener's LEVEL follow it (systemOf).
+//
 // How much it asks is the listener's LEVEL: low is the short prompt a small
 // model on a laptop (Gemini Nano) answers in time, the sections and their
 // sounds only: no form, no dress, no parts. mid adds those; high also has
@@ -125,6 +130,29 @@ export const CHARACTER = {
   "glitch.lasers": "trippy, intense, busy",
 };
 
+// What each style is, in the words that make a model arrange it: the genre
+// and its signature sounds. en.styles names a style, this says how it goes.
+export const GENRE = {
+  house:
+    "a house track: four-on-the-floor and soulful, a round kick, a funky bass, open hats and claps, piano and organ hooks over warm, jazzy chords; it grooves rather than pounds",
+  techhouse:
+    "a tech house track: stripped back and groovy, a tight kick and a rolling bass that carry it, shuffled hats and percussion, rubbery or vocal stabs; little melody, all groove",
+  techno:
+    "a techno track: hypnotic and driving, a booming kick, a dark rumbling bass, repetitive stabs and drones; the tension comes from repetition and texture more than melody",
+  progressive:
+    "a progressive psytrance track: smooth, deep and melodic, a soft kick and a galloping bass, long builds, arpeggios and soaring leads over epic, emotional pads",
+  psytrance:
+    "a full-on psytrance track: a punchy kick and a rolling bass between the kicks, acid and arpeggiated leads, energetic, euphoric peaks",
+  psytech:
+    "a psytech track: tight and minimal, a dry kick and an FM bass, Phrygian acid lines and quirky glitches; darker and sparser than full-on",
+  hitech:
+    "a hi-tech psytrance track: very fast and twisted, a clicky kick and a busy bass, zapping leads and dense glitches; chaotic and intense",
+  goa: "a Goa trance track: the psychedelic sound of the 90s, rolling basses, squelchy acid and exotic melodic riffs, sirens and lasers",
+  darkpsy:
+    "a dark psytrance track: night-time, twisted and ominous, metallic and crackling textures, dark drones, little melody, relentless",
+  all: "an electronic dance track of no one style: every sound is open, so the listener's words pick the genre",
+};
+
 const barsOf = (section) => SECTIONS[section].loops.map((n) => n * 2);
 const counts = (section, range = countRange) =>
   LOOP_LAYERS.map((l) => {
@@ -160,7 +188,6 @@ const SECTION_LINES = SECTION_IDS.map((s) => `- ${s}: ${barsOf(s).join(" or ")} 
 
 // The low level's: the forms and the rules, in as few words as they take.
 const LOW_SYSTEM = [
-  "You arrange a live electronic dance track made of 2-bar loops grouped in sections.",
   "Sections, their lengths in bars and how many sounds each layer plays:",
   ...SECTION_LINES,
   "Usual flow: intro, groove, build, peak, then breakdown or groove, then build again. A breakdown drops the kick and the bass.",
@@ -174,16 +201,38 @@ const LOW_SYSTEM = [
 // dress.js imports this module through share.js, so CHOICES may not be there yet.
 const tweakLine = () => `At this level each dress entry also builds the sound's insert ("" or 0 leaves the factory's): filter (${CHOICES.filter.join(", ")}), cutoff (-${MACRO_MAX} dark to ${MACRO_MAX} bright: where that filter sits), res (-${MACRO_MAX} smooth to ${MACRO_MAX} screaming), sweep (an LFO on the cutoff, one cycle per ${CHOICES.sweep.filter((k) => k !== "off").join(", ")}; or off) with its shape (${CHOICES.shape.join(", ")}), env (a filter envelope on every note: -${MACRO_MAX} closes, ${MACRO_MAX} opens, a pluck or a wah), distortion (${CHOICES.distortion.join(", ")}; drive sets how much), trem (a tremolo, one cycle per ${CHOICES.trem.filter((k) => k !== "off").join(", ")}), autopan (slow, fast) and echo (each note answered ${CHOICES.echo.filter((k) => k !== "off").join(", ")} later; melodic sounds only). Leads and pads take all of it, percussion and glitches all but echo, the bass only a lowpass, cutoff, res, env and distortion, the kick only distortion. Dress every lead and pad you plan, boldly, so each section sounds its own: an acid lead through a resonant lowpass sweeping over 2 bars, a pad through a slow vowel, a pluck from a closing envelope, a dotted echo on a sparse motif; and a gritty bass in a peak.`;
 
-/** The instructions for `level`: low, mid (the full ones) or high (mid's, plus the tweaks). */
-export function systemOf(level) {
-  const at = levelOf(level);
-  if (at === "low") return LOW_SYSTEM;
-  return at === "high" ? `${SYSTEM}\n${tweakLine()}` : SYSTEM;
+const keyOf = (style) => {
+  const scale = STYLES[style]?.scale;
+  return scale ? en.scales[scale] : "A, each sound in its own scale (most in A minor)";
+};
+
+/**
+ * What the track is, from the settings: `style`'s genre (GENRE), its key and
+ * BPM range, the `bpm` it plays at and the listener's `vibe`, their standing
+ * wish (planPrompt says when it is fresh).
+ */
+export function briefOf({ style, bpm, vibe = "" }) {
+  const range = STYLES[style]?.bpm;
+  const lines = [
+    `You arrange ${GENRE[style] ?? GENRE.all}. It plays live, made of 2-bar loops grouped in sections.`,
+    `Tempo: ${Math.round(bpm)} BPM${range ? ` (the style runs ${range[0]}-${range[1]})` : ""}. Key: ${keyOf(style)}.`,
+  ];
+  if (vibe) lines.push(`The listener's wish for the track: ${JSON.stringify(vibe)}.`);
+  return lines.join("\n");
 }
 
-// Read off SECTIONS, so the model learns the same forms the pilot keeps.
+/**
+ * The instructions of an ask: the brief of the track (briefOf), then the
+ * rules of `level`: low, mid (the full ones) or high (mid's, plus the tweaks).
+ */
+export function systemOf({ level, ...track }) {
+  const at = levelOf(level);
+  const rules = at === "low" ? LOW_SYSTEM : at === "high" ? `${SYSTEM}\n${tweakLine()}` : SYSTEM;
+  return `${briefOf(track)}\n${rules}`;
+}
+
+// The rules, read off SECTIONS, so the model learns the same forms the pilot keeps.
 export const SYSTEM = [
-  "You arrange a live electronic dance track (psytrance, techno) made of 2-bar loops grouped in sections.",
   "Sections, their lengths in bars and how many sounds each layer usually plays in them:",
   ...SECTION_LINES,
   "The usual flow is intro, groove, build, peak, then breakdown or groove, then build again; now and then a build teases into a breakdown instead. A peak lands after a build; a breakdown drops the kick and the bass and lets a lead and a pad breathe.",
@@ -268,17 +317,12 @@ function soundLines(lists, style, names, synths, { level, describe: told = true 
   return lines;
 }
 
-const keyLine = (style, bpm) => {
-  const scale = STYLES[style]?.scale;
-  return `Style: ${en.styles[style] ?? style}, ${Math.round(bpm)} BPM. Key: ${scale ? en.scales[scale] : "A, each sound in its own scale (most in A minor)"}.`;
-};
-
 /**
  * What to ask for the section after the one playing, or after the `planned`
  * ones (normalized plans, in order) when there are some. `sections` are the ones
  * walked so far (the last one plays now, `bars` long) and `sounds`, beside
- * them, what each one opened with; `vibe` is the listener's own words, `fresh`
- * when no plan has followed them yet; `next`, a section queued by hand, is the
+ * them, what each one opened with; `vibe` is the listener's own words (the
+ * brief holds them), said again when `fresh`: no plan has followed them yet; `next`, a section queued by hand, is the
  * one to plan; `theme`, the lead the pilot will hold if what comes is the
  * step after the last section (themeAfter). `dressed` are the plans'
  * dress entries in force (the playing ones are recalled) and `synths` each
@@ -286,7 +330,6 @@ const keyLine = (style, bpm) => {
  */
 export function planPrompt({
   style,
-  bpm,
   lists,
   active,
   sections,
@@ -309,10 +352,7 @@ export function planPrompt({
   const now = sections.at(-1);
   const last = planned.at(-1)?.section ?? now;
   const playing = [...new Set(Object.values(active))].sort();
-  const lines = [
-    keyLine(style, bpm),
-    `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${now}, ${bars} bars.`,
-  ];
+  const lines = [`Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${now}, ${bars} bars.`];
   const recalled = sections
     .map((section, i) => ({ section, ids: sounds[i] }))
     .slice(0, -1)
@@ -333,7 +373,7 @@ export function planPrompt({
   if (vibe && fresh) {
     lines.push(`The listener just asked for: ${JSON.stringify(vibe)}. That comes first: shape this section to it boldly, so the change is clearly heard, and leave out the layers that do not fit.`);
   } else if (vibe) {
-    lines.push(`The listener's standing wish: ${JSON.stringify(vibe)}. That comes first: keep the track true to it and leave out the layers that do not fit, while the sections still rise and fall.`);
+    lines.push("The listener's wish comes first: keep the track true to it and leave out the layers that do not fit, while the sections still rise and fall.");
   }
   if (form.length) lines.push(`After it, the track goes on with: ${form.join(", ")}.`);
   if (next && formed) lines.push(`Your form of the track has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
@@ -354,7 +394,6 @@ export function planPrompt({
  */
 export function openingPrompt({
   style,
-  bpm,
   lists,
   section,
   active = {},
@@ -367,15 +406,14 @@ export function openingPrompt({
   const low = !dresses(level);
   const drawn = [...new Set(Object.values(active))].sort();
   const lines = [
-    keyLine(style, bpm),
-    "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Let it rise slowly and pull them in: spacey, hypnotic, trippy, never a jolt.",
+    "This is the opening of the track and of the show: the first thing the audience hears, out of silence. Let it rise slowly and pull them in, in the style's own way, never a jolt.",
     `Plan the ${section} it opens with: ${openBars(section).join(" or ")} bars; ${counts(section, openRange)}.`,
   ];
   if (section === "intro" && low) {
     lines.push("An intro: pads and atmosphere first, maybe a distant lead; the pilot fades the kick and the bass in later, so pick them too (or no kick, for no beat).");
   } else if (section === "intro") {
     lines.push(
-      "An intro drifts in like the first track of a festival set: atmosphere first, deep or airy pads, a subtle glitch texture, at most a distant lead floating a slow motif or a melody that tells a story. The pilot then fades the kick in muffled from 40 % of the way and the bass from halfway, quiet and filtered, opening up little by little, and ends the intro in a drop: the groove explodes with the bass wide open. So pick a kick and a bass for that (a rolling one builds best), or leave the kick out for an intro with no beat at all. Take the longest lengths: it has time.",
+      "An intro drifts in like the first track of a set: atmosphere first, deep or airy pads, a subtle glitch texture, at most a distant lead floating a slow motif or a melody that tells a story. The pilot then fades the kick in muffled from 40 % of the way and the bass from halfway, quiet and filtered, opening up little by little, and ends the intro in a drop: the groove explodes with the bass wide open. So pick a kick and a bass for that (a driving one builds best), or leave the kick out for an intro with no beat at all. Take the longest lengths: it has time.",
     );
   }
   lines.push(`The seed drew: ${drawn.length ? drawn.join(", ") : "nothing"}. Keep what serves the opening, change the rest.`);
@@ -395,15 +433,13 @@ export function openingPrompt({
 /**
  * What to ask for the form of the track: the order of the FORM sections
  * after the one playing (`sections` so far, the last one playing) and
- * the ones `coming` already (queued by hand, or a form kept).
+ * the ones `coming` already (queued by hand, or a form kept). With a `vibe`
+ * (the brief holds it), the form follows it.
  */
-export function formPrompt({ style, bpm, sections, coming = [], vibe = "" }) {
-  const lines = [
-    keyLine(style, bpm),
-    `Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}.`,
-  ];
+export function formPrompt({ sections, coming = [], vibe = "" }) {
+  const lines = [`Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}.`];
   if (coming.length) lines.push(`Already coming after it, in order: ${coming.join(", ")}.`);
-  if (vibe) lines.push(`The listener's wish: ${JSON.stringify(vibe)}. Shape the form to it: which sections, how often.`);
+  if (vibe) lines.push("Shape the form to the listener's wish: which sections, how often.");
   lines.push(
     `Lay out the form of the track: the next ${FORM} sections, in order, after ${coming.length ? `the ${coming.at(-1)} already coming` : `the ${sections.at(-1)}`}. Each one may be any of ${PLAN_SECTIONS.join(", ")}.`,
   );
