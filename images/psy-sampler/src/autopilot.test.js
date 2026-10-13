@@ -124,8 +124,8 @@ describe("autopilot", () => {
     }
   });
 
-  it("no section is longer than 24 bars", () => {
-    for (const { loops } of Object.values(SECTIONS)) expect(Math.max(...loops) * 2).toBeLessThanOrEqual(24);
+  it("no section is longer than 32 bars", () => {
+    for (const { loops } of Object.values(SECTIONS)) expect(Math.max(...loops) * 2).toBeLessThanOrEqual(32);
   });
 
   it("every section change matches the section's shape", () => {
@@ -370,7 +370,7 @@ describe("autopilot", () => {
   });
 
   it("never plays a banned sound; a layer with its whole pool banned sits out", () => {
-    const banned = ["lead.acid", "perc.hat", "bass.rolling", "bass.rollingOct", "bass.gallop"];
+    const banned = ["lead.acid", "perc.hat", "bass.rolling", "bass.rollingOct", "bass.gallop", "bass.offbeat"];
     const free = unbanned(lists, banned);
     expect(unbanned(lists, [])).toBe(lists);
     expect(free.lead).not.toContain("lead.acid");
@@ -583,7 +583,7 @@ describe("plans (✨ AI)", () => {
 
   it("with no length (normalizePlan drops one the section cannot have), the pilot draws one", () => {
     for (let seed = 1; seed < 10; seed++) {
-      expect([8, 12]).toContain(toNext({ section: "peak", bars: null, layers: {} }, { seed }).at(-1).pilot.length);
+      expect([12, 16]).toContain(toNext({ section: "peak", bars: null, layers: {} }, { seed }).at(-1).pilot.length);
     }
   });
 

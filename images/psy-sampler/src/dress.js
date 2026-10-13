@@ -190,11 +190,17 @@ export function restyle(id, seed, macros, insert) {
 
 // A phrase-end fill: the kick breaks for the last two beats, the percussion
 // rolls over them, both, or nothing. From the seed, the section and the
-// loop, like a sound's dress, so a section's fills come back with it.
+// loop, like a sound's dress, so a section's fills come back with it. The
+// kick breaks on a third of the phrases (FILL_WEIGHTS), so a section runs on.
 export const FILLS = [null, "break", "roll", "both"];
+const FILL_WEIGHTS = [2, 1, 2, 1];
+const FILL_TOTAL = FILL_WEIGHTS.reduce((a, b) => a + b);
 
 /** A number in [0, 1) for `seed` and `key`: the same in any browser, and it never touches a track's rng. */
 export const coin = (seed, key) => seeded(hashSeed(`${seed}/${key}`))();
 
 /** The fill ending loop `at` of `section` under `seed`. */
-export const fillOf = (seed, section, at) => FILLS[Math.floor(coin(seed, `fill/${section}/${at}`) * FILLS.length)];
+export function fillOf(seed, section, at) {
+  let r = coin(seed, `fill/${section}/${at}`) * FILL_TOTAL;
+  return FILLS.find((_, i) => (r -= FILL_WEIGHTS[i]) < 0) ?? null;
+}

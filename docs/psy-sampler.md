@@ -430,8 +430,9 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
   queued (the button pulses) and comes in at the next loop start; another click
   before then cancels it; with the loop stopped it comes in right away. It
   follows the genre's habits per layer
-  ([`editing.js`](../images/psy-sampler/src/editing.js)): a rolling bass between
-  kicks, mostly on the root; a lead with an 8-step motif in A A' A B form; a pad
+  ([`editing.js`](../images/psy-sampler/src/editing.js)): a bass between the
+  kicks, mostly on the root (a gallop or an offbeat, rolling 16ths one time in
+  four); a lead with an 8-step motif in A A' A B form; a pad
   with one triad per bar; sparse toms with a fill at the end.
 - Scales in A: minor, **Phrygian** (B♭, the typical psy tension), harmonic minor
   and chromatic. Notes outside the chosen scale stay visible (in italics) so
@@ -1050,7 +1051,7 @@ decides at every loop start what plays:
 | Intro | 8 | 1 | – | 1 | – | 1 | – | |
 | Groove | 8 or 16 | 1 | 1 | 1-2 | 0-1 | 0-1 | 1 | sometimes a siren; 25 % new bass |
 | Build-up | 8 | 1 | 1 | 2 | 1 | 0-1 | 1 | 50 % new lead |
-| Peak | 16 or 24 | 1 | 1 | 2-3 | 1 | 1 | 1 | crash or impact |
+| Peak | 24 or 32 | 1 | 1 | 2-3 | 1 | 1 | 1 | crash or impact |
 | Breakdown | 8 or 16 | – | – | 0-1 | 1 | 1 | 0-1 | downlifter; 60 % new lead |
 
 Every style has a glitch pool ("anything goes" picks from all of them), so the
@@ -1069,7 +1070,7 @@ moves its volume.
 After the Peak it goes to the Breakdown or the Groove; from the Breakdown to the
 Build-up. A Build-up lands on a Peak 9 times in 10; the tenth is a **tease**
 into a Breakdown (`odds`, see *Drops*). Each section's length is drawn from
-its options (always whole 8-bar phrases); none is longer than 24 bars. The
+its options (always whole 8-bar phrases); none is longer than 32 bars. The
 last loop of a Build-up, and of anything else going into a Peak, fires a 2-bar
 riser, riser + impact or reverse cymbal that lands right on the next section,
 whether it comes from a Build-up or from a queued section, and is a drop.
@@ -1125,10 +1126,10 @@ whether it comes from a Build-up or from a queued section, and is a drop.
 | Tech house | 124-128 | each sound's own | tech house kick, tech house bass, organ bass, deep house bass, reese, shuffled hats, rim, bongos, organ stab, talking, rubber, Am7 stab, Am9 → Dm9; bleeps, stutter, bitcrush; stutter roll into the groove |
 | Techno | 125-135 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
 | Progressive psytrance | 132-140 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
-| Psytrance | 140-148 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
-| Psytech | 138-146 | Phrygian | dry kick, FM rolling, rim, Phrygian acid, zapper, bits, talking, rubber, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
+| Psytrance | 140-148 | each sound's own | punchy and full-on, rolling, gallop or offbeat bass, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
+| Psytech | 138-146 | Phrygian | dry kick, FM rolling, rolling or gallop, rim, Phrygian acid, zapper, bits, talking, rubber, dark pad; zips, bleeps, stutter, ring mod, lasers; stutter roll |
 | Hi-tech | 170-195 | Phrygian | tok, jumping rolling, 16th hats, zapper, Phrygian acid, bits, chirp, rubber; every glitch but crackle and ring; stutter roll, tape stop into the breakdown |
-| Goa | 140-150 | harmonic minor | long body, rolling, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
+| Goa | 140-150 | harmonic minor | long body, rolling or gallop, toms, acid, melodic, sirens; zips, ring mod, bwip, bleeps, lasers |
 | Dark psy | 148-165 | Phrygian | dark tok, Phrygian rolling, rim, toms, zapper, chirp, talking, rubber, dark pad; crackle, ring mod, metal, bitcrush, tape stop; tape stop into the breakdown |
 | Anything goes | — | each sound's own | all of them (leaves the BPM alone) |
 
@@ -1205,11 +1206,12 @@ the breakdown taught instead of a new one. The first Build-up comes from a
 Groove and has no theme.
 
 **Fills.** The last loop of every 8-bar phrase (`phraseEnd`: every 4th loop of
-a section; sections are 4, 8 or 12 loops, so phrases line up) gets a fill on
+a section; sections are 4, 8, 12 or 16 loops, so phrases line up) gets a fill on
 its second bar, unless it is a drop. `fillOf(seed, section, loop)` in
 `dress.js` picks nothing, a **break** (the kick drops its last two beats), a
 **roll** (every drum percussion plays 8ths then accented 16ths over them) or
-both. Like a sound's dress it hashes the seed and not the track's PRNG, so a
+both, at odds of 2 : 1 : 2 : 1 (`FILL_WEIGHTS`): the kick breaks on a third
+of the phrases, so a section runs on between them. Like a sound's dress it hashes the seed and not the track's PRNG, so a
 section's fills come back with it.
 
 The roll bar, the gap and the fills are **bar overlays**: `feed()` lays them on
