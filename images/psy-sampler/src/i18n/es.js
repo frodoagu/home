@@ -287,7 +287,7 @@ export default {
     ready: (name) => `✨ ${name} listo: planea las próximas fases, también antes de arrancar.`,
     chromeFailed: "La IA de Chrome no arrancó: tocá ✨ IA para bajarla o probar de nuevo.",
     unreachable: (url) => `LM Studio no responde en ${url}: prendé su servidor con CORS activado.`,
-    failed: "La IA no respondió: el piloto sigue por su cuenta.",
+    failed: "La IA no respondió: el piloto sigue por su cuenta y le vuelve a preguntar en un rato.",
     badEndpoint: "Esa no es una URL http(s) válida.",
     varies: "Con ✨ IA prendida el tema va a variar: apagala para escuchar el de la semilla.",
   },
