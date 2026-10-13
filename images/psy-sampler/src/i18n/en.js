@@ -859,7 +859,7 @@ export default {
     title: "Psy Layers · Visuals",
     button: "🌀 Visuals",
     buttonTitle: "Full-screen fractals, mandalas and organic textures, in time with what plays",
-    scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", tunnel: "Op-art tunnel", flow: "Liquid", julia: "Julia", gyroid: "Gyroid flesh", coral: "Fractal reef", cells: "Cells", phyllo: "Romanesco", hyper: "Hyperbolic tiling", turing: "Turing patterns", physarum: "Physarum" },
+    scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", flow: "Liquid", julia: "Julia", gyroid: "Gyroid flesh", coral: "Fractal reef", cells: "Cells", phyllo: "Romanesco", hyper: "Hyperbolic tiling", turing: "Turing patterns", physarum: "Physarum" },
     sources: {
       sampler: "🎛 Following the sampler",
       stopped: "⏸ The sampler is stopped: at rest until you press ▶",

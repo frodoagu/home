@@ -1724,7 +1724,7 @@ it records. A flash replays by alternating two identical animations (`hit-a` /
 ## Visuals
 
 🌀 in the top bar turns the screen into a show: raymarched 3D fractals,
-mandalas, op-art tunnels and organic textures (some of them living
+mandalas, a fractal tunnel and organic textures (some of them living
 simulations), following the music. It is
 WebGL2 only (no library: the 3D is raymarched in fragment shaders), under
 `src/visuals/`:
@@ -1781,7 +1781,7 @@ boomerang. Instead each kick, and each bass note a little, throws the
 picture forward: a velocity that eases in over 60 ms and that friction
 brakes over ~380 ms, further the deeper the beat (an accent, a loud low end).
 `uPush`, the distance it has travelled, only goes forward, and the scenes
-move along it: the tunnels fly on, the liquid's current rushes and settles,
+move along it: the fractal tunnel flies on, the liquid's current rushes and settles,
 the mandala grows, the bulb's orbit swings. `uSurge`, the speed, eased, is
 for what may swell with it (a tunnel's field of view, the gyroid's throb, the
 trails' zoom). Kicks near a drop also shake the camera, a tremor of at most
@@ -1817,11 +1817,9 @@ picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
 Scenes: **Mandelbulb** (power drifting, an orbit the beat swings along),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
-fold, rings of light per beat), **mandala** (a flower: rings of lotus, daisy
-or cosmos petals opening forever out of a seed head of Fibonacci spirals) and
-**op-art tunnel** (spirals, moiré or dots in relief: ribs, ripples or domes,
-lit by a lamp circling behind the eye and grazed by each beat's ring of
-light). The organic and 2D-fractal ones:
+fold, rings of light per beat) and **mandala** (a flower: rings of lotus,
+daisy or cosmos petals opening forever out of a seed head of Fibonacci
+spirals). The organic and 2D-fractal ones:
 
 - **Liquid** (`flow`): fbm warped by fbm warped by fbm (domain warping), lit
   in relief: marble with veins, an oil slick's thin film or a nebula with
