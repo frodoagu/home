@@ -8,6 +8,7 @@ export const centsToRatio = (cents) => 2 ** (cents / 1200);
 export const NOTE = {
   A1: 33,
   Bb1: 34,
+  C2: 36,
   E2: 40,
   G2: 43,
   A2: 45,

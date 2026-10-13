@@ -40,7 +40,7 @@ import {
   withPlan,
 } from "./autopilot.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
-import { baseOf } from "./audio/patterns.js";
+import { DEFAULTS, baseOf } from "./audio/patterns.js";
 import { seeded } from "./editing.js";
 import { normalize, layerOfVariant } from "./workspace.js";
 
@@ -310,6 +310,17 @@ describe("autopilot", () => {
     const move = advance(skip(enqueue(pilot, "breakdown")), active, lists, rng);
     expect(move.pilot).toMatchObject({ section: "breakdown", queue: [] });
     expect(advance(skip(move.pilot), move.active, lists, rng).pilot.section).toBe("build");
+  });
+
+  it("every style's pools name sounds of their own layer", () => {
+    for (const style of STYLE_IDS.filter((s) => STYLES[s].pool)) {
+      for (const [layer, ids] of Object.entries(STYLES[style].pool)) {
+        for (const id of ids) {
+          expect(Object.hasOwn(DEFAULTS, id), `${style} ${id}`).toBe(true);
+          expect(layerOfVariant(id)).toBe(layer);
+        }
+      }
+    }
   });
 
   it("each style plays its own pool; a new style rearranges the section on the next loop", () => {

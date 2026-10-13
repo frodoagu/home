@@ -527,6 +527,65 @@ export function funky(ctx, out, t, ev, stepDur) {
   play(oscs, t, end);
 }
 
+// Drawbar organ (the M1's house organ): sines on the 8', 4', 2' and 1⅓'
+// harmonics, plus a 3rd harmonic dying in 80 ms as the key's percussion.
+const ORGAN = [[1, 0.5], [2, 0.35], [4, 0.2], [6, 0.1]];
+export function organ(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.9);
+  const lp = filter(ctx, "lowpass", cut(6000, ev), 0.7);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.6 * vel(ev), 0.002, dur - 0.02, 0.02);
+  lp.connect(amp).connect(out);
+  const oscs = ORGAN.map(([ratio, level]) => {
+    const o = osc(ctx, "sine", ev.freq * ratio);
+    o.connect(constGain(ctx, level)).connect(lp);
+    return o;
+  });
+  const perc = osc(ctx, "sine", ev.freq * 3);
+  const click = ctx.createGain();
+  percEnv(click.gain, t, 0.3 * vel(ev), 0.001, 0.08);
+  perc.connect(click).connect(lp);
+  play([...oscs, perc], t, end);
+}
+
+// The organ's bass: the low drawbars only, falling to 60 % across the note
+// like the saw pluck, so it bounces instead of droning.
+const ORGAN_BASS = [[1, 0.7], [2, 0.45], [3, 0.2]];
+export function organBass(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.85);
+  const lp = filter(ctx, "lowpass", cut(1500, ev), 0.7);
+  const amp = ctx.createGain();
+  amp.gain.setValueAtTime(0, t);
+  amp.gain.linearRampToValueAtTime(0.9 * vel(ev), t + 0.003);
+  amp.gain.linearRampToValueAtTime(0.55 * vel(ev), t + dur * 0.6);
+  amp.gain.linearRampToValueAtTime(0, t + dur);
+  lp.connect(amp).connect(out);
+  const oscs = ORGAN_BASS.map(([ratio, level]) => {
+    const o = osc(ctx, "sine", ev.freq * ratio);
+    o.connect(constGain(ctx, level)).connect(lp);
+    return o;
+  });
+  play(oscs, t, t + dur);
+}
+
+// House piano: 5 slightly stretched harmonics, each dying k times faster
+// than the fundamental, so the attack is bright and the tail round. It rings
+// past the note, like a held pedal.
+const PIANO = [[1, 0.85], [2, 0.42], [3, 0.25], [4, 0.14], [5, 0.08]];
+export function piano(ctx, out, t, ev, stepDur) {
+  const decay = Math.max(0.25, noteLen(ev, stepDur, 0.9) * 2);
+  const lp = filter(ctx, "lowpass", cut(5000, ev), 0.7);
+  lp.connect(out);
+  for (const [k, level] of PIANO) {
+    const o = osc(ctx, "sine", ev.freq * k * centsToRatio((k - 1) * 2));
+    const amp = ctx.createGain();
+    const end = percEnv(amp.gain, t, level * vel(ev), 0.002, decay / k);
+    o.connect(amp).connect(lp);
+    o.start(t);
+    o.stop(end);
+  }
+}
+
 export function pluck(ctx, out, t, ev, stepDur) {
   const dur = noteLen(ev, stepDur, 0.9);
   const lp = filter(ctx, "lowpass", cut(6000, ev), 1);
@@ -711,10 +770,13 @@ export const INSTRUMENTS = {
   sub,
   fmBass,
   reese,
+  organBass,
   acid,
   supersaw,
   analog,
   funky,
+  organ,
+  piano,
   pluck,
   arp,
   lead,

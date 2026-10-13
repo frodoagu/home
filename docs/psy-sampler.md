@@ -8,8 +8,8 @@ is editable**: every button has a ▾ that opens its editor (steps, notes, synth
 knobs, filter and distortion), any sound can be duplicated and renamed, and a
 signed-in user can upload samples to their profile and play any sound through
 one. A DJ filter sweeps the whole mix. An autopilot builds a track
-on its own in the chosen style (techno, progressive psytrance, psytrance,
-psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
+on its own in the chosen style (house, tech house, techno, progressive
+psytrance, psytrance, psytech, hi-tech, goa, dark psy) from a shareable seed that also decides how each
 sound sounds; its sections can be forced and queued, or planned by a language
 model (✨ AI: Chrome's built-in one or an LM Studio endpoint, both on the
 listener's machine, or the listener's own OpenAI, Anthropic or Google Gemini
@@ -1121,6 +1121,8 @@ whether it comes from a Build-up or from a queued section, and is a drop.
 
 | Style | BPM | Melody scale | Sounds |
 |---|---|---|---|
+| House | 120-126 | each sound's own | house 909 kick, organ bass, shuffled hats, bongos, piano, organ stab, bell, Am9 → Dm9; crackle, bwip; noise sweep or reverse cymbal into the groove |
+| Tech house | 124-128 | each sound's own | tech house kick, tech house bass, organ bass, reese, shuffled hats, rim, bongos, organ stab, talking, rubber, Am7 stab, Am9 → Dm9; bleeps, stutter, bitcrush; stutter roll into the groove |
 | Techno | 125-135 | each sound's own | 909 and rumble kicks, reese, 16th hats, rim, Am7 stab, drones and fifths; FM metal, bitcrush, stutter |
 | Progressive psytrance | 132-140 | each sound's own | progressive kick, long offbeat, bell, 3/16 arpeggio, soaring, grid, Am → F → G, sus4; crackle, FM metal, bwip |
 | Psytrance | 140-148 | each sound's own | punchy and full-on, rolling, acid, arpeggios, stabs, soaring, grid, talking, minor and Phrygian pads; zips, stutter, bwip, FM metal |
@@ -1915,6 +1917,8 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Progressive | 140→48 Hz in 90 ms, decay 240 ms, click at 40 % |
 | | Dry psytech | 190→55 Hz in 45 ms, decay 160 ms |
 | | Dark tok | 250→62 Hz in 25 ms, decay 90 ms |
+| | House 909 | 160→47 Hz in 60 ms, decay 300 ms, click at 70 % |
+| | Tech house | 175→50 Hz in 50 ms, decay 220 ms, click at 50 % |
 | Bass (exclusive, A1 = 55 Hz) | Offbeat | step % 4 == 2 |
 | | Rolling | step % 4 != 0 (3 notes between kicks) |
 | | Rolling octave | the same, with the step % 4 == 2 note an octave up |
@@ -1924,6 +1928,8 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Techno reese | reese on steps 2 and 7 of every half bar |
 | | Jumping rolling | FM, A1-A2-E2 between kicks |
 | | Phrygian rolling | rolling with B♭ on the last 3 steps of every bar |
+| | Organ bass | organ bass, the offbeat answered by its octave a 16th later, G, then C and E in the second bar |
+| | Tech house | saw pluck, short notes around the offbeat (accented), E and G at the end of the bars |
 | Percussion (stack) | Open hi-hat | offbeat, HP 7 kHz, 140 ms |
 | | Closed hi-hat | odd sixteenths, HP 9 kHz, 35 ms |
 | | Shaker | every step, accent on the eighths |
@@ -1933,6 +1939,8 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Tribal toms | `tom` synth on the piano roll, with a fill at the end |
 | | 16th hats | closed on every step, HP 10 kHz, accent on the offbeat |
 | | Rim | `rim` voice (1.7 kHz triangle + noise tick), syncopated |
+| | Shuffled hats | closed on every 16th but the beat, accent on the offbeat, swing 58 % |
+| | Bongos | `tom` synth at "Brightness" 0.6 (~170 ms), A3 / C4 / E4 in a Latin figure |
 | | Keys | `keys` voice: a metal sheet's inharmonic clang + 3-5 random keys (sine pairs + tick) ~12 ms apart; accented on the offbeat of beats 2 and 4, plus steps 3 and 9 |
 | Lead (stack) | Acid | 303: a 16-step line in A minor with rests and accents; base cutoff drifting 300 Hz ↔ 1.5 kHz every 16 s (audio clock, not the loop) |
 | | Arpeggio | square, A-C-E-A in sixteenths |
@@ -1949,6 +1957,8 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Grid | pluck, every accented note answered by its own unaccented echo 3 steps later (the dotted-8th delay, written in) |
 | | Talking | talking lead, A3 pairs on the offbeats with B♭3 and C4 (Phrygian) |
 | | Rubber | rubber, steps 3 and 6 of every half bar, A3 / C4 / G3 |
+| | House piano | piano, Am7 then Dm7 on x..x..x...x.x... (steps 0, 3, 6, 10, 12 of each bar) |
+| | Organ stab | organ, open Am7 (A3-E4-G4-C5) on steps 2, 6, 10 and 13 of each bar |
 | Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
 | | Am → B♭ | i → ♭II, the Phrygian move |
 | | Drone | A2 + E3, resonant LP with a 0.12 Hz LFO, 2 bars |
@@ -1958,6 +1968,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Am → F → G | i-VI-VII, the progressive lift |
 | | Supersaw | A minor with A4 on top, 2 bars |
 | | Fifths | A2-E3-A3, no third |
+| | Deep | Am9 → Dm9 without their roots (G-B-C-E → F-A-C-E) |
 | Glitch (stack) | Stutter | 4 band-passed noise bursts squeezed into one step, on steps 7, 14 and 15 |
 | | Bleeps | a square on a random semitone up to 2 octaves above 1.2 kHz, every hit different |
 | | Zips | a sine diving 4 octaves onto 180 Hz in 30 ms, the 16th before every kick |
@@ -2016,10 +2027,13 @@ cutoff, capped at 18 kHz):
 | | Sub | sine + a triangle an octave up |
 | | FM bass | 2 operators at ratio 1, index 5 → 0.3 over 120 ms (Operator style) |
 | | Reese | 2 saws ±12 cents + sub, LP 700 Hz |
+| | Organ bass | sines on harmonics 1, 2 and 3, falling to 60 % across the note, LP 1.5 kHz (the M1 organ bass) |
 | Leads | Acid 303 | saw + LP Q 14 with an envelope on the drifting cutoff |
 | | Supersaw | 5 saws at ±9/±18 cents (Wavetable style) |
 | | Analog | 2 squares ±6 cents, enveloped LP (Analog style) |
 | | Funky | 2 squares two octaves apart + a sub square an octave down at 5 %, LP 9 kHz, full sustain, 20 ms release (Funkytown's lead) |
+| | Organ | drawbar sines on harmonics 1, 2, 4 and 6 + the 3rd dying in 80 ms as the key's percussion, LP 6 kHz (M1 style) |
+| | Piano | 5 harmonics stretched 2 cents each, the k-th dying k times faster than the fundamental, ringing twice the note |
 | | Pluck | saw + square, LP 6 kHz → 300 Hz (Drift style) |
 | | Square | percussive square |
 | | Saw lead | sustained saw with delayed vibrato |

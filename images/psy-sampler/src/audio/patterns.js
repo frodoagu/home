@@ -35,7 +35,7 @@ export const OFF = 0;
 export const HIT = 1;
 export const ACCENT = 2;
 
-const { A1, Bb1, E2, G2, A2, Bb2, C3, D3, E3, F3, G3, A3, Bb3, B3, C4, D4, E4, F4, G4, A4, C5, D5, E5, A5 } = NOTE;
+const { A1, Bb1, C2, E2, G2, A2, Bb2, C3, D3, E3, F3, G3, A3, Bb3, B3, C4, D4, E4, F4, G4, A4, C5, D5, E5, A5 } = NOTE;
 
 export const KICK_PUNCHY = { f0: 170, f1: 50, sweep: 0.07, decay: 0.2, click: 1 };
 export const KICK_LONG = { f0: 120, f1: 42, sweep: 0.16, decay: 0.34, click: 0 };
@@ -46,6 +46,8 @@ export const KICK_RUMBLE = { f0: 110, f1: 38, sweep: 0.2, decay: 0.6, click: 0.3
 export const KICK_PROG = { f0: 140, f1: 48, sweep: 0.09, decay: 0.24, click: 0.4 };
 export const KICK_PSYTECH = { f0: 190, f1: 55, sweep: 0.045, decay: 0.16, click: 0.9 };
 export const KICK_DARK = { f0: 250, f1: 62, sweep: 0.025, decay: 0.09, click: 1 };
+export const KICK_HOUSE = { f0: 160, f1: 47, sweep: 0.06, decay: 0.3, click: 0.7 };
+export const KICK_TECHHOUSE = { f0: 175, f1: 50, sweep: 0.05, decay: 0.22, click: 0.5 };
 
 // 16-step acid line in A minor; null is a rest, accents open the filter further.
 export const ACID_LINE = [
@@ -89,6 +91,27 @@ export const SOARING_LINE = [
 // Every note answered by its own echo a dotted 8th later, written in.
 export const GRID_LINE = [[0, A3], [6, E4], [12, C4], [16, A3], [22, G4], [28, E4]];
 export const GRID_ECHO = 3;
+// House organ bass: the offbeat answered by its octave a 16th later, climbing to C at the end.
+export const HOUSE_BASS = [
+  [2, A1], [3, A2], [6, A1], [10, A1], [11, A2], [14, G2],
+  [18, A1], [19, A2], [22, A1], [26, C2], [27, C3], [30, E2],
+];
+// Tech house: short plucks around the offbeat, accented on it.
+export const TECH_BASS = [
+  [2, A1, true], [3, A1], [7, A1], [10, A1, true], [11, A1], [14, E2],
+  [18, A1, true], [19, A1], [23, A1], [26, A1, true], [28, G2], [30, A1],
+];
+export const BONGO_LINE = [
+  [3, E4], [6, A3], [7, A3], [11, E4], [14, A3],
+  [19, E4], [22, A3], [23, A3], [26, C4], [27, E4], [30, A3],
+];
+// Piano house: x..x..x...x.x... on Am7, then Dm7 over the same A and C.
+export const PIANO_HITS = [0, 3, 6, 10, 12];
+export const PIANO_CHORDS = [[A3, C4, E4, G4], [A3, C4, D4, F4]];
+export const ORGAN_STEPS = [2, 6, 10, 13, 18, 22, 26, 29];
+export const ORGAN_CHORD = [A3, E4, G4, C5]; // Am7, open
+// Am9 -> Dm9 without their roots: C and E stay, the rest steps down.
+export const DEEP_CHORDS = [[G3, B3, C4, E4], [F3, A3, C4, E4]];
 
 const steps = (fn) => Array.from({ length: LOOP_STEPS }, (_, s) => fn(s));
 const note = (step, midi, len = 1, accent = false, mod = null) => ({ step, midi, len, accent, ...mod });
@@ -143,6 +166,11 @@ function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
   };
 }
 
+// A variant whose odd 16ths land late from the start (GROOVE swing).
+const swung = (def, swing) => ({ ...def, data: { ...def.data, swing } });
+// A notes variant that starts from another "Brillo" (the tom's: its decay).
+const bright = (def, value) => ({ ...def, data: { ...def.data, params: { ...def.data.params, bright: value } } });
+
 function fx(id) {
   return { kind: "fx", data: { params: paramDefaults(id), level: 1, ...extras() } };
 }
@@ -177,6 +205,8 @@ export const DEFAULTS = {
   "kick.prog": drum("kick", BEATS, KICK_PROG),
   "kick.psytech": drum("kick", BEATS, KICK_PSYTECH),
   "kick.dark": drum("kick", BEATS, KICK_DARK),
+  "kick.house": drum("kick", BEATS, KICK_HOUSE),
+  "kick.techHouse": drum("kick", BEATS, KICK_TECHHOUSE),
 
   // Step positions: s % 4 === 0 is a beat (kick), s % 4 === 2 the offbeat.
   "bass.offbeat": notes("bass", every((s) => s % 4 === 2 && note(s, A1)), BASS),
@@ -192,6 +222,8 @@ export const DEFAULTS = {
     every((s) => s % 4 !== 0 && note(s, s % 16 >= 13 ? Bb1 : A1)),
     { ...BASS, scale: "phrygian" },
   ),
+  "bass.house": notes("organBass", HOUSE_BASS.map(([s, m]) => note(s, m)), BASS),
+  "bass.techHouse": notes("bass", TECH_BASS.map(([s, m, accent]) => note(s, m, 1, Boolean(accent))), BASS),
 
   "perc.hat": drum("hat", steps((s) => (s % 4 === 2 ? HIT : OFF))),
   "perc.chat": drum("chat", steps((s) => (s % 2 === 1 ? HIT : OFF))),
@@ -203,6 +235,8 @@ export const DEFAULTS = {
   "perc.hat16": drum("chat", steps((s) => (s % 4 === 2 ? ACCENT : HIT)), { tone: 10000, decay: 0.03 }),
   "perc.rim": drum("rim", steps((s) => ([3, 6, 11, 14].includes(s % 16) ? HIT : OFF))),
   "perc.keys": drum("keys", steps((s) => (s % 8 === 6 ? ACCENT : [3, 9].includes(s % 16) ? HIT : OFF))),
+  "perc.shuffle": swung(drum("chat", steps((s) => (s % 4 === 2 ? ACCENT : s % 2 ? HIT : OFF))), 0.16),
+  "perc.bongos": bright(notes("tom", BONGO_LINE.map(([s, m]) => note(s, m)), { low: A2, high: A4 }), 0.6),
 
   "lead.acid": notes(
     "acid",
@@ -258,6 +292,13 @@ export const DEFAULTS = {
     LEAD,
   ),
 
+  "lead.piano": notes(
+    "piano",
+    [0, 1].flatMap((bar) => PIANO_HITS.flatMap((s) => PIANO_CHORDS[bar].map((m) => note(bar * 16 + s, m, 2)))),
+    { ...LEAD, len: 2 },
+  ),
+  "lead.organ": notes("organ", ORGAN_STEPS.flatMap((s) => ORGAN_CHORD.map((m) => note(s, m))), LEAD),
+
   "pad.chord": notes("pad", [0, 16].flatMap((s) => PAD_CHORD.map((m) => note(s, m, 16))), { ...PAD, len: 16 }),
   // i -> bII: the Phrygian move that sounds like psy.
   "pad.prog": notes(
@@ -285,6 +326,11 @@ export const DEFAULTS = {
   ),
   "pad.supersaw": notes("supersaw", [A3, C4, E4, A4].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
   "pad.fifths": notes("pad", [A2, E3, A3].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
+  "pad.deep": notes(
+    "pad",
+    DEEP_CHORDS.flatMap((chord, i) => chord.map((m) => note(i * 16, m, 16))),
+    { ...PAD, len: 16 },
+  ),
 
   // Step positions as above; most glitches sit just before a kick or between beats.
   "glitch.stutter": drum("stutter", steps((s) => (s % 16 === 15 ? ACCENT : s % 16 === 14 || s === 7 ? HIT : OFF))),

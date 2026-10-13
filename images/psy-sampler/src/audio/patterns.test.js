@@ -257,7 +257,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(71);
+  expect(LOOP_VARIANTS).toHaveLength(80);
 });
 
 describe("copies", () => {
