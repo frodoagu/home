@@ -19,6 +19,10 @@ export class FakeParam {
     this.events.push(["exp", v, t]);
     return this;
   }
+  setValueCurveAtTime(curve, t, duration) {
+    this.events.push(["curve", [...curve], t, duration]);
+    return this;
+  }
   setTargetAtTime(v, t, tau) {
     this.events.push(["target", v, t, tau]);
     return this;

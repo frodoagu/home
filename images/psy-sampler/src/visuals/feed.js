@@ -32,7 +32,7 @@ export function createFeed(engine, { Channel = globalThis.BroadcastChannel, orig
   const channel = new Channel(CHANNEL);
   let until = 0; // posting while performance.now() is before this
   let batch = [];
-  let held = { lanes: null, bar: null, build: null, frenzy: null }; // the latest of each, in wall ms
+  let held = { lanes: null, bar: null, build: null, frenzy: null, brake: null }; // the latest of each, in wall ms
   let levelsTimer = null;
   let freq = null;
 
@@ -44,9 +44,9 @@ export function createFeed(engine, { Channel = globalThis.BroadcastChannel, orig
 
   const unlisten = engine.listen((event) => {
     const wall = toWall(event, engine.perfTimeOf, origin);
-    if (["lanes", "bar", "build", "frenzy"].includes(event.kind)) held[event.kind] = wall;
+    if (["lanes", "bar", "build", "frenzy", "brake"].includes(event.kind)) held[event.kind] = wall;
     if (event.kind === "drop" || event.kind === "stop") held.build = null;
-    if (event.kind === "stop") held = { lanes: null, bar: null, build: null, frenzy: null };
+    if (event.kind === "stop") held = { lanes: null, bar: null, build: null, frenzy: null, brake: held.brake };
     if (!listening()) return;
     if (!batch.length) queueMicrotask(flush);
     batch.push(wall);

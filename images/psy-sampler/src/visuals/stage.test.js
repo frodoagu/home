@@ -65,6 +65,16 @@ describe("stage", () => {
     expect(stage.frame(5000).frenzy).toBe(0);
   });
 
+  it("slows with a vinyl brake, through the loop's stop, until the brake ends", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "brake", time: 1000, end: 2000 });
+    stage.push({ kind: "stop", time: 1500 }); // the loop stops before the tail is out
+    expect(stage.frame(900).brake).toBe(0);
+    expect(stage.frame(1250).brake).toBeCloseTo(0.25, 5);
+    expect(stage.frame(1750).brake).toBeCloseTo(0.75, 5);
+    expect(stage.frame(2000).brake).toBe(0);
+  });
+
   it("stops playing on a stop, and its energy falls back", () => {
     const stage = createStage({ now: 0 });
     stage.push({ kind: "lanes", time: 0, variants: ["kick.a", "bass.b", "perc.c", "lead.d"] });

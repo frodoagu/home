@@ -105,6 +105,11 @@ const SWEEP_FROM = 30;
 const SWEEP_TO = 900;
 const SWEEP_Q = 0;
 const SWEEP_SNAP = 0.015;
+// The vinyl brake: at most this long (s), its delay line half as long; the
+// level holds for the first BRAKE_HOLD of it, then falls with the platter.
+const BRAKE_MAX = 4;
+const BRAKE_HOLD = 0.6;
+const BRAKE_POINTS = 64;
 
 const layerOf = (variant) => variant.split(".")[0];
 
@@ -119,10 +124,12 @@ function impulse(ctx, seconds) {
   return buf;
 }
 
-// Output chain: master -> DJ filter -> sweep -> compressor -> limiter -> trim
-// -> destination, plus the shared delay and reverb buses (their returns go
-// through the DJ filter and the sweep too). Built once per context, live or
-// offline; a render keeps the sweep open.
+// Output chain: master -> DJ filter -> sweep -> compressor -> limiter ->
+// brake -> trim -> destination, plus the shared delay and reverb buses (their
+// returns go through the DJ filter and the sweep too). Built once per
+// context, live or offline; a render keeps the sweep open and never brakes.
+// The brake is a delay line at 0 and a gain at 1 until brake() slows the
+// whole mix down like a vinyl.
 function buildChain(ctx, bpm, effects, djValue = 0) {
   // Gentle settings: it only catches peaks when layers stack up. The
   // defaults (-24 dB, 12:1) would flatten exactly the dynamics a solo
@@ -159,8 +166,11 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   sweep.type = "highpass";
   sweep.frequency.value = 0;
   sweep.Q.value = SWEEP_Q;
-  master.connect(dj.low).connect(dj.high).connect(sweep).connect(comp).connect(limiter).connect(trim).connect(ctx.destination);
-  return { master, dj, sweep, out: trim, bus: buildBus(ctx, dj.low, bpm, effects), side: buildSidechain(ctx) };
+  const bus = buildBus(ctx, dj.low, bpm, effects);
+  const brake = { line: ctx.createDelay(BRAKE_MAX / 2 + 0.1), gain: ctx.createGain() };
+  master.connect(dj.low).connect(dj.high).connect(sweep).connect(comp).connect(limiter);
+  limiter.connect(brake.line).connect(brake.gain).connect(trim).connect(ctx.destination);
+  return { master, dj, sweep, brake, out: trim, bus, side: buildSidechain(ctx) };
 }
 
 // The kick lanes' sum in `input`, its envelope out of `env` (never heard).
@@ -271,6 +281,7 @@ export function createEngine({
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
   let sweepFilter = null; // the drop's highpass
+  let brakeNodes = null; // { line, gain }: the vinyl brake (buildChain)
   let sweepLine = null; // { start, end, to }: the sweep on its way up, or holding at `to`
   let pump = {}; // layer -> the least duck its lanes get (the arrangement's sidechain)
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
@@ -313,7 +324,7 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, sweep: sweepFilter, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
+      ({ master, dj, sweep: sweepFilter, brake: brakeNodes, out, bus, side } = buildChain(ctx, bpm, effects, djValue));
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
@@ -500,6 +511,7 @@ export function createEngine({
   }
 
   function start() {
+    unbrake();
     runFrom = ctx.currentTime;
     cursor = { step: 0, time: ctx.currentTime + START_DELAY, loop: 0 };
     queued = [];
@@ -728,6 +740,40 @@ export function createEngine({
     sweepOff(at);
   }
 
+  /**
+   * A vinyl brake on everything that plays, from `at` over `seconds`: the
+   * platter slows to a stop, so the pitch and the tempo fall to nothing. A
+   * delay line stretches under the mix (its delay grows as t²/2T: its slope,
+   * one minus the speed, climbs from 0 to 1) and the level goes with it.
+   * Held until unbrake() or the next start().
+   */
+  function brake(at, seconds) {
+    if (!ctx || !brakeNodes) return;
+    const t0 = Math.max(at, ctx.currentTime);
+    const span = Math.min(BRAKE_MAX, Math.max(0.05, seconds));
+    const curve = Float32Array.from({ length: BRAKE_POINTS }, (_, i) => {
+      const t = (i / (BRAKE_POINTS - 1)) * span;
+      return (t * t) / (2 * span);
+    });
+    const { line, gain } = brakeNodes;
+    line.delayTime.cancelScheduledValues(t0);
+    line.delayTime.setValueAtTime(0, t0);
+    line.delayTime.setValueCurveAtTime(curve, t0, span);
+    gain.gain.cancelScheduledValues(t0);
+    gain.gain.setValueAtTime(1, t0 + span * BRAKE_HOLD);
+    gain.gain.linearRampToValueAtTime(0, t0 + span);
+    emit({ kind: "brake", time: t0, end: t0 + span });
+  }
+
+  /** The brake let go of: the mix plays at its speed and level again, now. */
+  function unbrake() {
+    if (!ctx || !brakeNodes) return;
+    const now = ctx.currentTime;
+    for (const param of [brakeNodes.line.delayTime, brakeNodes.gain.gain]) param.cancelScheduledValues(now);
+    brakeNodes.line.delayTime.setValueAtTime(0, now);
+    brakeNodes.gain.gain.setValueAtTime(1, now);
+  }
+
   /** The end of a set going wild from `at` to `end`: only the visuals hear it. */
   function frenzy(at, end) {
     if (ctx && timer !== null) emit({ kind: "frenzy", time: Math.max(at, ctx.currentTime), end });
@@ -939,6 +985,8 @@ export function createEngine({
     sweep,
     sweepOff: drop,
     frenzy,
+    brake,
+    unbrake,
     setPump,
     triggerFx,
     audition,
@@ -955,7 +1003,7 @@ export function createEngine({
     onBar: (fn) => {
       barHook = fn;
     },
-    /** fn(event) for every hit, bar line, lane change, FX, build, drop, frenzy and stop; returns the unsubscribe. */
+    /** fn(event) for every hit, bar line, lane change, FX, build, drop, frenzy, brake and stop; returns the unsubscribe. */
     listen: (fn) => {
       listeners.add(fn);
       return () => listeners.delete(fn);

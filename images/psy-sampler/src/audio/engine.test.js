@@ -61,7 +61,7 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> trim -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> brake -> trim -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
@@ -80,7 +80,11 @@ describe("context lifecycle", () => {
     const limiter = comp.outputs[0];
     expect(limiter.kind).toBe("compressor");
     expect([limiter.threshold.value, limiter.ratio.value]).toEqual([-1.5, 20]);
-    const trim = limiter.outputs[0];
+    const [line] = limiter.outputs;
+    expect([line.kind, line.delayTime.value]).toEqual(["delay", 0]); // the vinyl brake, still until a set's end
+    const [brakeGain] = line.outputs;
+    expect(brakeGain.gain.value).toBe(1);
+    const trim = brakeGain.outputs[0];
     expect(trim.gain.value).toBe(0.8);
     expect(trim.outputs[0]).toBe(ctx.destination);
   });
@@ -786,6 +790,42 @@ describe("DJ filter", () => {
     const high = low.outputs[0];
     expect(low.frequency.events.at(-1)).toEqual(["target", 24000, ctx.currentTime, 0.03]);
     expect(high.frequency.events.at(-1)[1]).toBeCloseTo(6000, 6);
+  });
+});
+
+describe("the vinyl brake", () => {
+  const brakeLine = () => ctx.nodes.filter((n) => n.kind === "delay").at(-1);
+
+  it("stretches a delay line under the whole mix as t²/2T, so pitch and tempo fall to zero, and the level goes with it", () => {
+    const heard = [];
+    engine.listen((e) => heard.push(e));
+    engine.setLanes({ kick: "kick.punchy" });
+    const line = brakeLine();
+    const [gain] = line.outputs;
+    engine.brake(2, 1.6);
+    const [, curve, at, span] = line.delayTime.events.find(([kind]) => kind === "curve");
+    expect([at, span]).toEqual([2, 1.6]);
+    expect(curve[0]).toBe(0);
+    expect(curve.at(-1)).toBeCloseTo(0.8, 6); // T/2: the platter has stopped
+    // Its slope is 1 - speed: 0 at the start, 1 (standing still) at the end.
+    const slope = (i) => (curve[i + 1] - curve[i]) / (1.6 / (curve.length - 1));
+    expect(slope(0)).toBeLessThan(0.05);
+    expect(slope(curve.length - 2)).toBeGreaterThan(0.95);
+    expect(gain.gain.events.slice(-2)).toEqual([["set", 1, 2 + 1.6 * 0.6], ["linear", 0, 3.6]]);
+    expect(heard.filter((e) => e.kind === "brake")).toEqual([{ kind: "brake", time: 2, end: 3.6 }]);
+  });
+
+  it("lets go on unbrake() and on the next start", () => {
+    engine.setLanes({ kick: "kick.punchy" });
+    const line = brakeLine();
+    engine.brake(1, 1);
+    engine.unbrake();
+    expect(line.delayTime.events.slice(-1)).toEqual([["set", 0, ctx.currentTime]]);
+    expect(line.outputs[0].gain.events.slice(-1)).toEqual([["set", 1, ctx.currentTime]]);
+    engine.brake(1, 1);
+    engine.stop();
+    engine.setLanes({ kick: "kick.punchy" });
+    expect(line.delayTime.events.slice(-1)).toEqual([["set", 0, ctx.currentTime]]);
   });
 });
 

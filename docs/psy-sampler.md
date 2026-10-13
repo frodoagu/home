@@ -1332,7 +1332,8 @@ the tab. Lookups of a name from outside (style, section, scale, language) use
 
 **🌅 Cierre** (in the pilot row) ends the set within **5 minutes**
 (`CLOSE_SECONDS`), the way a DJ ends a night: a last peak, then an **Outro**
-that winds down, goes wild in its last 4 bars and cuts. With the autopilot off
+that drops into 16 bars of frenzy or more, fades out bit by bit over 16 bars and
+stops like a vinyl on its last one. With the autopilot off
 it takes the mix that plays first (as 🤖 over a mix).
 
 - **The route** (`closeSet` in `autopilot.js`): the section playing plays out,
@@ -1345,25 +1346,36 @@ it takes the mix that plays first (as 🤖 over a mix).
   plays after the outro.
 - **The budget**: `CLOSE_SECONDS` in loops at the slowest tempo the set is
   heading to (`pilot.closing.left`, one less per loop). The outro is sure to
-  get `OUTRO_MIN` loops (16 bars): a route section that would not leave it
-  that room is cut to whole phrases or skipped, the section playing too, and
-  the outro takes what is left (`fitLength`, `closingPick`). Nothing drops
-  into it (no riser, 💥 off). Clicks on the tiles hold the pilot's step for
+  get `OUTRO_MIN` loops (32 bars: 16 of frenzy, 16 of fade): a route section
+  that would not leave it that room is cut to whole phrases or skipped, the
+  section playing too, and the outro takes what is left (`fitLength`,
+  `closingPick`). Clicks on the tiles hold the pilot's step for
   their bar line, as ever, so each stretches the set by a loop; a slower BPM
   picked by hand mid-closing stretches it too.
-- **The outro** (`SECTIONS.outro`, out of `SECTION_IDS`: no pick, plan, phase
-  button or snapshot leads there, so seeds replay as before) swaps nothing and
-  improvises nothing. Over all but its last 2 loops it **winds down**
-  (`MIX.outro` / `TONE.outro`, whose specs take an `end` too): the bass fades
-  and closes to 120 Hz by halfway, the kick by three quarters, the rest sinks
-  low. A spec is `[from, to, start, end]`.
-- **The frenzy** (`frenzy()`, the last `FRENZY_LOOPS` = 2 loops, 4 bars):
-  everything comes back at `FRENZY_MIX` (glitch at 135 %), every filter wide
-  open, a kick if there was none and fresh percussion and glitches up to two
-  each (`unleash`); every drum rolls the build-up pattern bar after bar
-  (`frenzyKinds`, the `build` overlay); a riser or siren starts it and a
-  stutter or tape stop ends it; the DJ sweep climbs the mix across it, and the
-  engine tells the visuals (`engine.frenzy` → a `frenzy` event).
+- **The outro** (`SECTIONS.outro`: 32, 40 or 48 bars, the one section past
+  the pilot's 32; out of `SECTION_IDS`: no pick, plan, phase button or
+  snapshot leads there, so seeds replay as before) swaps nothing. The section
+  before it **drops into it** like into a peak (riser, kick roll, the gap bar,
+  then a crash or an impact on its 1); 💥 is off from the moment it is
+  announced.
+- **The frenzy** (`frenzy()`: every loop but the last `FADE_LOOPS` = 8, so 16,
+  24 or 32 bars): everything at `FRENZY_MIX` (glitch at 135 %), every filter
+  wide open, a kick if there was none and fresh percussion and glitches up to
+  two each (`unleash`), the peak's pump, improvising like a build
+  (`IMPROVISE.outro`), an FX on every phrase (stutter, siren, riser or
+  impact) and the usual phrase-end fills; its last 4 bars roll every drum
+  bar after bar (`frenzyKinds`, the `build` overlay). The engine tells the
+  visuals (`engine.frenzy` → a `frenzy` event).
+- **The fade** (the last 16 bars, `MIX.outro` / `TONE.outro` over them alone,
+  `wayOf`; a spec is `[from, to, start, end]`): a downlifter starts it, the
+  glitch and the bass leave first, the rest sinks slowly as every lowpass
+  closes, kick and bass too, but still sounds on the last bar. There the
+  **vinyl brake** (`engine.brake`) takes the whole mix: a delay line between
+  the limiter and the trim stretches as t²/2T, so its slope (one minus the
+  speed) climbs from 0 to 1 and pitch and tempo fall to nothing over the bar,
+  with the level following over its last 40 %. `unbrake()` (🤖 off, a new
+  seed, the next ▶) lets go of it. The visuals slow to a stop with it (a
+  `brake` event: `show.js` scales its clock by `1 - brake`).
 - **The end**: past the outro's last loop `advance` says `end` and the page
   stops (`endSet`, off the engine's tick): nothing stays queued for ▶, the
   status line says *Fin del set*. The levels and filters the outro rode go back
@@ -1863,8 +1875,8 @@ at the peak). A drop cuts, with no crossfade, to a peak scene; anything else
 crossfades over a beat. Every pick is a hash of the lanes and the bar, never
 `Math.random`, so the same seed played the same way gives the same show. It
 also drives the **strobe**: 8ths through the drop's bar, 16ths rising over the
-build's second half, the kicks through the peak, and a set's frenzy (🌅) at
-full: 16ths, then 32nds over its second half, with the colours flipping on
+build's second half, the kicks through the peak, and a set's frenzy (🌅, 16
+bars or more) at full: 16ths, then 32nds over its second half, with the colours flipping on
 every other 16th (at a strobe of 75 % or more) and a cut to a new scene and
 palette on every beat (unless 🔒). The strobe starts at full
 (`psy-sampler:visuals` in localStorage keeps the viewer's level), behind a

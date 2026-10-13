@@ -3,7 +3,7 @@ import {
   CHANGE_BARS,
   CLOSE_MAX,
   CLOSE_ROUTE,
-  FRENZY_LOOPS,
+  FADE_LOOPS,
   FRENZY_MIX,
   IMPROVISE,
   MIX,
@@ -22,6 +22,7 @@ import {
   advance,
   arrange,
   bpmFor,
+  braking,
   closeSet,
   closeWith,
   closingOpen,
@@ -137,8 +138,8 @@ describe("autopilot", () => {
     }
   });
 
-  it("no section is longer than 32 bars", () => {
-    for (const { loops } of Object.values(SECTIONS)) expect(Math.max(...loops) * 2).toBeLessThanOrEqual(32);
+  it("no section the pilot picks is longer than 32 bars", () => {
+    for (const id of SECTION_IDS) expect(Math.max(...SECTIONS[id].loops) * 2).toBeLessThanOrEqual(32);
   });
 
   it("every section change matches the section's shape", () => {
@@ -269,7 +270,8 @@ describe("autopilot", () => {
 
   it("the peak pumps its pads and leads", () => {
     expect(PUMP.peak).toEqual({ pad: 0.6, lead: 0.35 });
-    expect(Object.keys(PUMP)).toEqual(["peak"]);
+    expect(PUMP.outro).toEqual(PUMP.peak); // and so does the frenzy
+    expect(Object.keys(PUMP)).toEqual(["peak", "outro"]);
   });
 
   it("dropNext: the next loop is a drop into a peak, from anywhere", () => {
@@ -807,12 +809,12 @@ describe("🌅 the closing", () => {
   it("keeps only the sections that fit at their shortest, at most CLOSE_MAX", () => {
     const { pilot } = startPilot(lists, seeded(1));
     const now = { ...pilot, section: "groove", left: 4, length: 8 };
-    // 4 playing + 8 for the outro: 6 loops left, a build (4) fits and a peak (12) does not.
-    expect(closeSet(now, 18).queue).toEqual(["build", OUTRO]);
-    expect(closeSet(now, 12).queue).toEqual([OUTRO]);
+    // 4 playing + 16 for the outro: 6 loops left, a build (4) fits and a peak (12) does not.
+    expect(closeSet(now, 26).queue).toEqual(["build", OUTRO]);
+    expect(closeSet(now, 20).queue).toEqual([OUTRO]);
     expect(closeWith(closeSet(now, 400), Array(8).fill("groove")).queue).toEqual([...Array(CLOSE_MAX).fill("groove"), OUTRO]);
     // A section that would not leave the outro its room is cut short.
-    expect(closeSet({ ...now, left: 8 }, 12).left).toBe(4);
+    expect(closeSet({ ...now, left: 8 }, 20).left).toBe(4);
   });
 
   it("ends the set within its loops, with the outro last, whatever the queue and the plans say", () => {
@@ -832,60 +834,68 @@ describe("🌅 the closing", () => {
     }
   });
 
-  it("goes straight to the outro when not a phrase is left before it, with no drop into it", () => {
+  it("goes straight to the outro when not a phrase is left before it, and drops into it", () => {
     const { pilot, active } = startPilot(lists, seeded(5));
-    const build = { ...pilot, section: "build", left: 2, length: 4, queue: ["peak", OUTRO], closing: { left: OUTRO_MIN + 4 } };
-    const last = advance(build, active, lists, seeded(1));
+    const groove = { ...pilot, section: "groove", left: 2, length: 4, queue: ["peak", OUTRO], closing: { left: OUTRO_MIN + 4 } };
+    const last = advance(groove, active, lists, seeded(1));
     expect(last.pilot.next).toBe(OUTRO);
-    expect(last.fx).toEqual([]); // no riser
-    expect(dropping(last.pilot)).toBe(false);
+    expect(last.fx).toHaveLength(1); // a riser
+    expect(dropping(last.pilot)).toBe(true);
     const outro = advance(last.pilot, last.active, lists, seeded(1));
     expect(outro.pilot).toMatchObject({ section: OUTRO, queue: [], closing: { left: OUTRO_MIN + 2 } });
     expect(outro.pilot.length).toBeLessThanOrEqual(OUTRO_MIN + 2); // what the set has left, at most
   });
 
-  it("the outro winds down without a swap, the bass and the kick out, the lowpass closing on them", () => {
-    const { active } = startPilot(lists, seeded(2));
-    const mix = { ...active, kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid", "pad.chord": "pad.chord" };
-    const outro = (left) => ({ section: OUTRO, left, length: 10, queue: [], closing: { left: left + 1 } });
-    for (let left = 10; left > FRENZY_LOOPS + 1; left--) {
-      expect(advance(outro(left), mix, lists, seeded(left), { changeBars: 2 }).active).toEqual(mix);
+  it("the outro drops into a frenzy of 16 bars or more: everything at full and wide open, more percussion and glitch", () => {
+    const quiet = { "pad.chord": "pad.chord", "lead.acid": "lead.acid" }; // a beatless outro
+    const peak = { section: "peak", left: 1, length: 12, queue: [OUTRO], next: OUTRO, closing: { left: 41 } };
+    const move = advance(peak, quiet, lists, seeded(4));
+    expect(move.pilot).toMatchObject({ section: OUTRO, closing: { left: 40 } });
+    expect(SECTIONS.outro.loops).toContain(move.pilot.length);
+    expect((move.pilot.length - FADE_LOOPS) * 2).toBeGreaterThanOrEqual(16); // bars of frenzy
+    expect(["fx.crash", "fx.impact"]).toContain(move.fx[0]);
+    expect(count(move.active, "kick")).toBe(1);
+    expect(count(move.active, "perc")).toBe(2);
+    expect(count(move.active, "glitch")).toBe(2);
+    let { pilot, active } = move;
+    const fx = [];
+    while (frenzy(pilot)) {
+      const levels = mixOf(pilot, active);
+      expect(levels[Object.values(active).find((id) => layerOfVariant(id) === "kick")]).toBe(FRENZY_MIX.kick);
+      expect(Math.min(...Object.values(levels))).toBeGreaterThan(0.5);
+      for (const tone of Object.values(toneOf(pilot, active))) expect(tone).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
+      const next = advance(pilot, active, lists, seeded(pilot.left), { changeBars: 2 });
+      expect(next.active).toEqual(active); // no swaps
+      fx.push(...next.fx);
+      ({ pilot, active } = next);
     }
-    const first = mixOf(outro(10), mix);
-    expect(first["pad.chord"]).toBeGreaterThan(0.8);
-    expect(first["kick.punchy"]).toBe(0.9); // whole until a third of the way
-    expect(mixOf(outro(6), mix)["bass.rolling"]).toBe(0); // the bass is gone by halfway
-    const wound = mixOf(outro(FRENZY_LOOPS + 1), mix); // the wind-down is done as the frenzy starts
-    expect(wound["kick.punchy"]).toBe(0);
-    expect(wound["pad.chord"]).toBeGreaterThan(0);
-    expect(wound["pad.chord"]).toBeLessThan(first["pad.chord"]);
-    const tone = toneOf(outro(FRENZY_LOOPS + 1), mix);
-    expect(tone["kick.punchy"].lp).toBe(150);
-    expect(tone["bass.rolling"].lp).toBe(120);
-    expect(toneOf(outro(10), mix)["kick.punchy"].lp).toBe(LP_OPEN);
-    expect(IMPROVISE.outro).toEqual({});
+    expect(pilot.left).toBe(FADE_LOOPS);
+    expect(fx.at(-1)).toBe("fx.down"); // the fade starts on a downlifter
+    expect(fx.length).toBe(Math.ceil((move.pilot.length - FADE_LOOPS) / PHRASE_LOOPS)); // one more per phrase
+    expect(IMPROVISE.outro.glitch).toBeGreaterThan(0);
   });
 
-  it("its last loops go wild: everything back at full and wide open, more percussion and glitch, FX on every loop", () => {
-    const quiet = { "pad.chord": "pad.chord", "lead.acid": "lead.acid" }; // a beatless outro
-    const outro = (left) => ({ section: OUTRO, left, length: 10, queue: [], closing: { left: left + 1 } });
-    expect(frenzy(outro(FRENZY_LOOPS + 1))).toBe(false);
-    const wild = advance(outro(FRENZY_LOOPS + 1), quiet, lists, seeded(4));
-    expect(frenzy(wild.pilot)).toBe(true);
-    expect(count(wild.active, "kick")).toBe(1);
-    expect(count(wild.active, "perc")).toBe(2);
-    expect(count(wild.active, "glitch")).toBe(2);
-    expect(Object.values(quiet).every((id) => Object.values(wild.active).includes(id))).toBe(true);
-    expect(["fx.riser", "fx.siren"]).toContain(wild.fx[0]);
-    const last = advance(wild.pilot, wild.active, lists, seeded(4));
-    expect(last.active).toEqual(wild.active);
-    expect(["fx.stutter", "fx.tapeStop"]).toContain(last.fx[0]);
-    const levels = mixOf(last.pilot, last.active);
-    expect(levels[Object.values(last.active).find((id) => layerOfVariant(id) === "kick")]).toBe(FRENZY_MIX.kick);
-    expect(Math.min(...Object.values(levels))).toBeGreaterThan(0.5);
-    for (const tone of Object.values(toneOf(last.pilot, last.active))) expect(tone).toEqual({ hp: HP_OPEN, lp: LP_OPEN });
-    expect(advance(last.pilot, last.active, lists, seeded(4)).end).toBe(true); // and cold
-    expect(frenzy({ ...outro(1), closing: undefined })).toBe(false);
+  it("then fades out bit by bit over 16 bars, the lowpass closing, still sounding on its last loop, which brakes", () => {
+    const mix = { kick: "kick.punchy", bass: "bass.rolling", "lead.acid": "lead.acid", "pad.chord": "pad.chord", "glitch.zips": "glitch.zips" };
+    const outro = (left) => ({ section: OUTRO, left, length: 20, queue: [], closing: { left } });
+    const fade = [];
+    for (let left = FADE_LOOPS; left >= 1; left--) fade.push(mixOf(outro(left), mix));
+    for (const id of Object.values(mix)) {
+      const line = fade.map((levels) => levels[id]);
+      for (let i = 1; i < line.length; i++) expect(line[i], id).toBeLessThanOrEqual(line[i - 1]);
+      expect(line[0], id).toBeLessThanOrEqual(FRENZY_MIX[layerOfVariant(id)]);
+    }
+    const end = fade.at(-1);
+    expect(end["glitch.zips"]).toBeLessThan(0.2);
+    expect(end["pad.chord"]).toBeGreaterThan(0.4); // what the vinyl brake takes
+    expect(end["kick.punchy"]).toBeGreaterThan(0.2);
+    expect(toneOf(outro(1), mix)["bass.rolling"].lp).toBe(200);
+    expect(toneOf(outro(1), mix)["pad.chord"].lp).toBe(900);
+    expect(toneOf(outro(FADE_LOOPS + 1), mix)["pad.chord"].lp).toBe(LP_OPEN);
+    expect(braking(outro(1))).toBe(true);
+    expect(braking(outro(2))).toBe(false);
+    expect(braking({ ...outro(1), closing: undefined })).toBe(false);
+    expect(frenzy({ ...outro(12), closing: undefined })).toBe(false);
   });
 
   it("past the outro's last loop the set is over", () => {
@@ -906,7 +916,7 @@ describe("🌅 the closing", () => {
     expect(closingOpen({ ...closed, queue: [OUTRO], left: 1, next: OUTRO })).toBe(false);
     expect(closingOpen({ ...closed, section: OUTRO })).toBe(false);
     expect(closingOpen(pilot)).toBe(false);
-    const jumped = moveTo({ ...closed, closing: { left: 14 } }, "peak");
-    expect(jumped).toMatchObject({ section: "peak", left: 4, closing: { left: 14 } }); // cut to leave the outro its room
+    const jumped = moveTo({ ...closed, closing: { left: 22 } }, "peak");
+    expect(jumped).toMatchObject({ section: "peak", left: 4, closing: { left: 22 } }); // cut to leave the outro its room
   });
 });

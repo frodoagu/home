@@ -309,7 +309,8 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     last = s;
     const d = director.frame(s);
     const m = motion(s);
-    const seconds = (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
+    // A vinyl brake slows the picture to a stop with the music.
+    const seconds = (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build) * (1 - s.brake);
     time += seconds;
     const reef = [d.scene, d.previous].find((look) => look?.id === "coral");
     const fl = flight(s, seconds, m.push, reef?.vars ?? null);

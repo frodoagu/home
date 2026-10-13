@@ -35,6 +35,7 @@ import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
   CLOSE_SECONDS,
+  FADE_LOOPS,
   OPENING_OPEN,
   OUTRO,
   PUMP,
@@ -45,6 +46,7 @@ import {
   advance,
   announced,
   bpmFor,
+  braking,
   closeSet,
   closeWith,
   closingOpen,
@@ -1153,7 +1155,7 @@ export function mountApp(root, engine, opts = {}) {
     for (const b of phaseBtns) b.disabled = Boolean(p?.closing); // nothing plays after the outro
     const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
-    dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // nothing drops into an outro
+    dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // the outro has its own drop
   }
 
   // The same row under the snapshot autopilot: the snapshot playing, its bars
@@ -1344,12 +1346,8 @@ export function mountApp(root, engine, opts = {}) {
       const plan = state.pilot.plan;
       const tame = !frenzy(state.pilot);
       state.pilot = move.pilot;
-      if (tame && frenzy(state.pilot)) {
-        // The set goes wild: the sweep climbs the mix to the end, the visuals flash.
-        const end = time + state.pilot.left * loopSeconds();
-        engine.sweep(time, end);
-        engine.frenzy(time, end);
-      }
+      // The set goes wild: the visuals flash until the fade.
+      if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (state.pilot.left - FADE_LOOPS) * loopSeconds());
       const sectionStart = move.pilot.left === move.pilot.length;
       if (move.style) {
         styleNow(move.style); // before any part is written: it takes the new scale
@@ -1396,6 +1394,8 @@ export function mountApp(root, engine, opts = {}) {
     }
     if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
     setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? fillKinds(step));
+    // The set's last bar: the mix slows to a stop, like a vinyl.
+    if (state.auto && step === BAR_STEPS && braking(state.pilot)) engine.brake(time, BAR_STEPS * stepDuration(state.tempo));
     if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) {
@@ -1461,9 +1461,10 @@ export function mountApp(root, engine, opts = {}) {
     return out;
   }
 
-  // The frenzy rolls every drum it plays, bar after bar; null out of it.
+  // The frenzy's last two loops roll every drum it plays, bar after bar;
+  // null elsewhere (its other phrases end in the usual fills).
   function frenzyKinds() {
-    if (!state.auto || !frenzy(state.pilot)) return null;
+    if (!state.auto || !frenzy(state.pilot) || state.pilot.left - FADE_LOOPS > 2) return null;
     const out = {};
     for (const id of Object.values(laneMap())) if (defOf(id).kind === "drum") out[id] = "build";
     return out;
@@ -1720,8 +1721,7 @@ export function mountApp(root, engine, opts = {}) {
   // A closing's outro rides every sound's level and lowpass, kick and bass
   // too: each goes back to where it was as the outro took it once the set
   // ends, or once anything else ends the outro (⏹, 🤖, a new seed), so
-  // nothing is left muted or muffled, nor the frenzy's sweep up. `glide`:
-  // over that long.
+  // nothing is left muted or muffled. `glide`: over that long.
   const outroFrom = new Map(); // variant -> { level, hp, lp } before the outro rode it
   function keepForEnd(id) {
     if (!state.pilot?.closing || state.pilot.section !== OUTRO || outroFrom.has(id)) return;
@@ -1729,7 +1729,6 @@ export function mountApp(root, engine, opts = {}) {
     outroFrom.set(id, { level, hp: insert.hp, lp: insert.lp });
   }
   function restoreOutro(glide = 0) {
-    if (frenzy(state.pilot)) engine.sweepOff();
     for (const [id, { level, hp, lp }] of outroFrom) {
       if (!tiles.has(id)) continue;
       setLevel(id, level, { pilot: true, glide });
@@ -2417,6 +2416,7 @@ export function mountApp(root, engine, opts = {}) {
     if (!state.auto) stats?.count("autopilot"); // a new seed re-engages: not a start
     landStyle();
     restoreOutro(loopSeconds()); // a new seed over an outro: the pilot rides the levels from where they were
+    engine.unbrake();
     const rearm = state.auto && state.armed; // still from silence
     const playing = rearm ? {} : { ...(state.pending ?? state.active) };
     state.armed = false; // the autopilot takes what was queued and starts
@@ -3412,6 +3412,7 @@ export function mountApp(root, engine, opts = {}) {
     }
     landStyle();
     restoreOutro(loopSeconds()); // an outro let go of comes back over a loop
+    engine.unbrake(); // and so does a vinyl stopping
     state.auto = false;
     state.pilot = null;
     cancelPlanning();
