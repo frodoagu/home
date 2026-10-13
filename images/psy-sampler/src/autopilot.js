@@ -52,9 +52,10 @@
 //
 // 🌅 closes the set (`closeSet`): the sections up to a last peak are queued,
 // then the outro, which drops into a frenzy (`frenzy`: everything at full,
-// wide open, more glitch and percussion, rolls and FX) for all but its last
-// FADE_LOOPS, then fades out bit by bit; the UI brakes the mix like a vinyl
-// on its last bar and the set ends with it (`advance` says `end`). It all
+// wide open, more glitch and percussion, rolls and FX), then fades out bit
+// by bit (`ending.fade` loops) and, over its last `ending.brake` loops
+// (`braking`), the UI slows the mix to a stop like a vinyl; the set ends
+// with it (`advance` says `end`). It all
 // fits in CLOSE_SECONDS: the pilot counts
 // the loops left (`closing.left`), shortens a section that would not leave
 // the outro its room and goes straight to it when not a phrase is left.
@@ -88,10 +89,11 @@ export const SECTIONS = {
     shape: { kick: 0, bass: 0, perc: [0, 1], lead: 1, pad: 1, glitch: [0, 1] },
   },
   // The end of a set, only ever queued by 🌅 (closeSet): it goes wild
-  // (FRENZY_MIX) for 16 to 32 bars, then fades (MIX.outro) over FADE_LOOPS,
-  // and the set ends with it. No pick leads here, so seeds replay as before.
+  // (FRENZY_MIX) for 16 bars or more, fades (MIX.outro) over 8 to 16 and
+  // brakes like a vinyl over 4 or 8 (OUTRO_PARTS), and the set ends with it.
+  // No pick leads here, so seeds replay as before.
   outro: {
-    loops: [16, 20, 24],
+    loops: [20, 24, 28],
     next: ["breakdown"],
     shape: { kick: [0, 1], bass: [0, 1], perc: [0, 2], lead: [0, 1], pad: [1, 2], glitch: [0, 1] },
   },
@@ -251,8 +253,8 @@ export const MIX = {
   peak: { lead: 1.1, pad: 0.95 },
   breakdown: { perc: 0.75, lead: [0.9, 1.1], pad: 1.3, glitch: 0.8 },
   // The outro's fade, from the frenzy's levels (the outro's `at` counts its
-  // FADE_LOOPS alone): the glitch and the bass go first, the rest sinks
-  // slowly and still sounds on the last bar, for the vinyl brake to take.
+  // fade alone, and holds through the brake): the glitch and the bass go
+  // first, the rest sinks slowly and still sounds, for the vinyl brake to take.
   // [from, to, start, end]: `from` holds until `start`, `to` from `end`.
   outro: {
     kick: [1, 0.35, 0.1],
@@ -263,9 +265,10 @@ export const MIX = {
     glitch: [1.35, 0.15, 0, 0.6],
   },
 };
-// The outro's frenzy: everything up and over the top, from its drop until
-// its last FADE_LOOPS, which fade out (16 bars).
-export const FADE_LOOPS = 8;
+// The outro's parts, in loops: the frenzy (everything up and over the top,
+// from its drop on) lasts `frenzy` at least, then a fade of one of `fade`
+// and a vinyl brake of one of `brake`, each drawn as the outro starts.
+export const OUTRO_PARTS = { frenzy: 8, fade: [4, 6, 8], brake: [2, 4] };
 export const FRENZY_MIX = { kick: 1, bass: 0.9, perc: 1.15, lead: 1.1, pad: 0.85, glitch: 1.35 };
 // What the frenzy stacks in, at least: a kick, and percussion and glitch to these many.
 const FRENZY_STACK = { kick: 1, perc: 2, glitch: 2 };
@@ -621,9 +624,10 @@ export function styleAt(pilot, slot, playing) {
 /* ---- 🌅 the closing: the set ends within CLOSE_SECONDS ---- */
 
 export const CLOSE_SECONDS = 300;
-// Loops the outro is sure to get (32 bars: 16 of frenzy, 16 of fade): a
-// section that would leave it less is cut short, to whole phrases, or skipped.
-export const OUTRO_MIN = 16;
+// Loops the outro is sure to get (40 bars: 16 of frenzy, 16 of fade and 8 of
+// brake at their longest): a section that would leave it less is cut short,
+// to whole phrases, or skipped.
+export const OUTRO_MIN = OUTRO_PARTS.frenzy + Math.max(...OUTRO_PARTS.fade) + Math.max(...OUTRO_PARTS.brake);
 // The sections a closing walks from each one before the outro, when no plan
 // lays them out: up to a last peak, the one the night says goodbye with.
 export const CLOSE_ROUTE = {
@@ -691,14 +695,27 @@ export function routeRoom(pilot) {
   return room;
 }
 
-// The loops of a closing outro `length` long that go wild, before its fade.
-const frenzyLoops = (length) => Math.max(0, length - FADE_LOOPS);
+// How an outro `length` loops long ends: { fade, brake } in loops, drawn
+// from OUTRO_PARTS, cut (the fade first) so the frenzy keeps its loops.
+function endingOf(length, rng) {
+  let fade = pick(OUTRO_PARTS.fade, rng);
+  let brake = pick(OUTRO_PARTS.brake, rng);
+  const fadeMin = Math.min(...OUTRO_PARTS.fade);
+  while (length - fade - brake < OUTRO_PARTS.frenzy && fade > fadeMin) fade -= 2;
+  while (length - fade - brake < OUTRO_PARTS.frenzy && brake > Math.min(...OUTRO_PARTS.brake)) brake -= 2;
+  brake = Math.min(brake, length);
+  return { fade: Math.max(0, Math.min(fade, length - brake)), brake };
+}
+
+const outroOf = (pilot) => (pilot?.closing && pilot.section === OUTRO && pilot.ending) || null;
+// The loops of a closing outro that go wild, before its fade and its brake.
+const frenzyLoops = (pilot) => pilot.length - pilot.ending.fade - pilot.ending.brake;
 
 /** Whether the pilot's loop is in a closing outro's frenzy: the set going wild, before its fade. */
-export const frenzy = (pilot) => Boolean(pilot?.closing) && pilot.section === OUTRO && pilot.left > FADE_LOOPS;
+export const frenzy = (pilot) => Boolean(outroOf(pilot)) && pilot.left > pilot.ending.fade + pilot.ending.brake;
 
-/** Whether the pilot's loop is a closing outro's last: its last bar brakes like a vinyl. */
-export const braking = (pilot) => Boolean(pilot?.closing) && pilot.section === OUTRO && pilot.left === 1;
+/** Whether the pilot's loop is in a closing outro's brake: the mix slowing to a stop like a vinyl. */
+export const braking = (pilot) => Boolean(outroOf(pilot)) && pilot.left <= pilot.ending.brake;
 
 // The frenzy's mix: what plays, plus a kick if there was none and fresh
 // percussion and glitches up to FRENZY_STACK.
@@ -787,8 +804,8 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       next = vary(active, lists, rng, style, pilot.opening ? [...hold, ...playingOf(active, "bass")] : hold);
     const fx = [];
     // A closing outro fires an FX on every phrase of its frenzy, and one as its fade starts.
-    if (closing && pilot.section === OUTRO) {
-      const wild = frenzyLoops(pilot.length);
+    if (outroOf(pilot)) {
+      const wild = frenzyLoops(pilot);
       if (done === wild) fx.push(FADE_FX);
       else if (done < wild && done % PHRASE_LOOPS === 0) fx.push(pick(FRENZY_FX, rng));
     }
@@ -811,6 +828,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         ...(pilot.opening ? { opening: true } : {}),
         ...(pilot.handoff ? { handoff: pilot.handoff } : {}),
         ...(closing ? { closing } : {}),
+        ...(pilot.ending ? { ending: pilot.ending } : {}),
       },
       active: next,
       fx,
@@ -839,6 +857,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
   // The outro is the last: what was queued after it, or skipped for it, goes.
   const ends = closing && section === OUTRO;
   const fitted = closing ? fitLength(section, length, closing.left) : length;
+  const ending = ends ? endingOf(fitted, rng) : null;
   return {
     pilot: {
       ...fresh(
@@ -850,8 +869,9 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       ...(theme.length ? { theme } : {}),
       ...(landed ? {} : handedOn(pilot.handoff, section)),
       ...(closing ? { closing } : {}),
+      ...(ending ? { ending } : {}),
     },
-    active: ends && frenzyLoops(fitted) ? unleash(next, lists, rng, now) : next, // the outro drops into its frenzy
+    active: ending && fitted > ending.fade + ending.brake ? unleash(next, lists, rng, now) : next, // the outro drops into its frenzy
     fx: entry ? [entry] : [],
     rewrite: [...rewrite].sort(),
     ...(landed ? { style: landed } : {}),
@@ -868,12 +888,11 @@ function themeOf(pilot, section, active) {
 }
 
 // How far into its section the pilot's current loop ends, 0..1. A closing
-// outro's counts its fade alone: 0 through the frenzy.
+// outro's counts its fade alone: 0 through the frenzy, 1 through the brake.
 function wayOf(pilot) {
   const done = pilot.length - pilot.left + 1;
-  if (!pilot.closing || pilot.section !== OUTRO) return done / pilot.length;
-  const wild = frenzyLoops(pilot.length);
-  return Math.max(0, done - wild) / (pilot.length - wild);
+  if (!outroOf(pilot)) return done / pilot.length;
+  return Math.min(1, Math.max(0, done - frenzyLoops(pilot)) / Math.max(1, pilot.ending.fade));
 }
 
 /** { variant id: volume } for every sound in `active`, as the pilot's current loop ends. */

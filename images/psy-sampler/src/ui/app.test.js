@@ -2315,7 +2315,7 @@ describe("🌅 closing", () => {
     $("#seed").dispatchEvent(new Event("change"));
   };
 
-  it("closes what plays within 5 minutes: a last peak, an outro that drops into 16 bars of frenzy, fades out and brakes", () => {
+  it("closes what plays within 5 minutes: a last peak, an outro that drops into 16 bars of frenzy, fades out and brakes slowly", () => {
     const wild = [];
     engine.listen((e) => e.kind === "frenzy" && wild.push(e));
     const brake = vi.spyOn(engine, "brake");
@@ -2335,13 +2335,13 @@ describe("🌅 closing", () => {
     let frenzied = Infinity; // the quietest level heard in the frenzy
     let last = null; // the levels of the last loop played
     for (let t = 0; t < 300 && engine.isRunning(); t += 2 * BAR) {
-      if (outro() && barsLeft() > 16) frenzied = Math.min(frenzied, ...playingLevels());
+      if (outro() && barsLeft() > 24) frenzied = Math.min(frenzied, ...playingLevels());
       last = playingLevels();
       advanceSeconds(2 * BAR);
       seen.push($(".section-badge").textContent);
     }
     expect(engine.isRunning()).toBe(false);
-    expect(seen.filter((s) => s === "Outro").length).toBeGreaterThanOrEqual(16); // 32 bars at least
+    expect(seen.filter((s) => s === "Outro").length).toBeGreaterThanOrEqual(20); // 40 bars at least
     expect(seen.at(-1)).toBe(""); // the badge goes with the pilot
     expect($(".status").textContent).toBe("🌅 Fin del set.");
     expect($("button.auto").getAttribute("aria-pressed")).toBe("false");
@@ -2353,8 +2353,9 @@ describe("🌅 closing", () => {
     expect(Math.max(...last)).toBeLessThanOrEqual(0.6); // faded by the last loop...
     expect(Math.min(...last)).toBeGreaterThan(0); // ...not to silence: the vinyl takes it
     expect(brake).toHaveBeenCalledTimes(1);
-    expect(brake.mock.calls[0][1]).toBeCloseTo(BAR, 6); // the last bar
-    expect(brake.mock.calls[0][0]).toBeCloseTo(wild[0].end + 15 * BAR, 3); // after the 16 bars of fade but one
+    const [at, seconds] = brake.mock.calls[0];
+    expect([4, 8]).toContain(Math.round(seconds / BAR)); // a slow brake: 4 or 8 bars, to the end
+    expect([8, 12, 16]).toContain(Math.round((at - wild[0].end) / BAR)); // after 8 to 16 bars of fade
     expect(levels().every((l) => l > 0)).toBe(true); // and every level is back
   });
 
@@ -2742,7 +2743,7 @@ describe("✨ AI", () => {
     }
     expect(outro().prompt).toContain("The outro is the last thing the audience hears");
     expect(outro().prompt).toContain("The listener is closing the set: it ends in");
-    expect(outro().schema.properties.bars.enum).toEqual([32, 40, 48]);
+    expect(outro().schema.properties.bars.enum).toEqual([40, 48, 56]);
   });
 
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {

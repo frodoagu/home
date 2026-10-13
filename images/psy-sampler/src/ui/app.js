@@ -35,7 +35,6 @@ import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
   CLOSE_SECONDS,
-  FADE_LOOPS,
   OPENING_OPEN,
   OUTRO,
   PUMP,
@@ -1347,7 +1346,10 @@ export function mountApp(root, engine, opts = {}) {
       const tame = !frenzy(state.pilot);
       state.pilot = move.pilot;
       // The set goes wild: the visuals flash until the fade.
-      if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (state.pilot.left - FADE_LOOPS) * loopSeconds());
+      const { left, ending } = state.pilot;
+      if (tame && frenzy(state.pilot)) engine.frenzy(time, time + (left - ending.fade - ending.brake) * loopSeconds());
+      // The set's last loops: the mix slows to a stop, like a vinyl, until the end.
+      if (braking(state.pilot) && left === ending.brake) engine.brake(time, left * loopSeconds());
       const sectionStart = move.pilot.left === move.pilot.length;
       if (move.style) {
         styleNow(move.style); // before any part is written: it takes the new scale
@@ -1394,8 +1396,6 @@ export function mountApp(root, engine, opts = {}) {
     }
     if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
     setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? fillKinds(step));
-    // The set's last bar: the mix slows to a stop, like a vinyl.
-    if (state.auto && step === BAR_STEPS && braking(state.pilot)) engine.brake(time, BAR_STEPS * stepDuration(state.tempo));
     if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) {
@@ -1464,7 +1464,8 @@ export function mountApp(root, engine, opts = {}) {
   // The frenzy's last two loops roll every drum it plays, bar after bar;
   // null elsewhere (its other phrases end in the usual fills).
   function frenzyKinds() {
-    if (!state.auto || !frenzy(state.pilot) || state.pilot.left - FADE_LOOPS > 2) return null;
+    const p = state.pilot;
+    if (!state.auto || !frenzy(p) || p.left - p.ending.fade - p.ending.brake > 2) return null;
     const out = {};
     for (const id of Object.values(laneMap())) if (defOf(id).kind === "drum") out[id] = "build";
     return out;

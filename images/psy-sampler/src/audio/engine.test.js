@@ -811,8 +811,18 @@ describe("the vinyl brake", () => {
     const slope = (i) => (curve[i + 1] - curve[i]) / (1.6 / (curve.length - 1));
     expect(slope(0)).toBeLessThan(0.05);
     expect(slope(curve.length - 2)).toBeGreaterThan(0.95);
-    expect(gain.gain.events.slice(-2)).toEqual([["set", 1, 2 + 1.6 * 0.6], ["linear", 0, 3.6]]);
+    expect(gain.gain.events.slice(-2)).toEqual([["set", 1, 2 + 1.6 * 0.7], ["linear", 0, 3.6]]);
     expect(heard.filter((e) => e.kind === "brake")).toEqual([{ kind: "brake", time: 2, end: 3.6 }]);
+  });
+
+  it("takes 8 bars when asked; past its longest it starts late, so it still stops at the end", () => {
+    engine.setLanes({ kick: "kick.punchy" });
+    const line = brakeLine();
+    engine.brake(1, 13); // 8 bars at 145 BPM
+    expect(line.delayTime.events.at(-1).slice(2)).toEqual([1, 13]);
+    expect(line.delayTime.events.at(-1)[1].at(-1)).toBeCloseTo(6.5, 6);
+    engine.brake(1, 30);
+    expect(line.delayTime.events.at(-1).slice(2)).toEqual([7, 24]); // ends at 31 all the same
   });
 
   it("lets go on unbrake() and on the next start", () => {

@@ -382,7 +382,7 @@ describe("🌅 the closing", () => {
   it("asks for the sections before the outro, in the time the set has left", () => {
     const prompt = closingPrompt({ sections: ["intro", "groove", "peak"], left: 12, coming: [], room: 40, seconds: 270, vibe: "dark" });
     expect(prompt).toContain("Now playing: peak, 12 bars left.");
-    expect(prompt).toContain("it must end in 5 minutes at most, and it ends with the outro (32, 40, 48 bars;");
+    expect(prompt).toContain("it must end in 5 minutes at most, and it ends with the outro (40, 48, 56 bars;");
     expect(prompt).toContain(`between the peak and the outro, in order: ${CLOSE_MAX} at most, 40 bars at most in all at their shortest (groove 8, build 8, peak 24, breakdown 8)`);
     expect(prompt).toContain("No intro.");
     expect(prompt).toContain("Shape the closing to the listener's wish.");
@@ -405,11 +405,11 @@ describe("🌅 the closing", () => {
   it("plans the outro like a queued section: its own lengths and counts, and what the pilot does with it", () => {
     const schema = planSchema({ ...goa, next: OUTRO });
     expect(schema.properties.section.enum).toEqual([OUTRO]);
-    expect(schema.properties.bars.enum).toEqual([32, 40, 48]);
+    expect(schema.properties.bars.enum).toEqual([40, 48, 56]);
     expect(schema.properties.layers.properties.pad.maxItems).toBe(countRange(OUTRO, "pad")[1]);
-    const raw = { section: OUTRO, bars: 48, layers: { kick: [], pad: ["pad.prog", "pad.chord", "pad.fifths"], lead: ["lead.acid"] } };
+    const raw = { section: OUTRO, bars: 56, layers: { kick: [], pad: ["pad.prog", "pad.chord", "pad.fifths"], lead: ["lead.acid"] } };
     const outro = normalizeOutro(raw, goa);
-    expect(outro).toEqual({ section: OUTRO, bars: 48, layers: { kick: [], pad: ["pad.prog", "pad.chord"], lead: ["lead.acid"] } });
+    expect(outro).toEqual({ section: OUTRO, bars: 56, layers: { kick: [], pad: ["pad.prog", "pad.chord"], lead: ["lead.acid"] } });
     expect(normalizeOutro(outro, goa)).toEqual(outro);
     expect(normalizeOutro({ ...raw, section: "peak" }, goa)).toBeNull();
     expect(normalizeOutro({ ...raw, bars: 16 }, goa).bars).toBeNull();
