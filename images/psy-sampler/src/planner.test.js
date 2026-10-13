@@ -10,7 +10,9 @@ import {
   PLAN_MAX,
   LEVELS,
   PLAN_SECTIONS,
+  SET_LENGTHS,
   SYSTEM,
+  setLine,
   asksForm,
   briefOf,
   formPrompt,
@@ -342,6 +344,32 @@ describe("normalizePlan", () => {
         expect(ids.length).toBeLessThanOrEqual(countRange(section, layer)[1]);
       }
     }
+  });
+});
+
+describe("the length of the set", () => {
+  it("places a plan in the arc of the night, from the warm-up to the closing", () => {
+    expect(SET_LENGTHS).toEqual([0, 60, 120, 180]);
+    expect(setLine({})).toBeNull();
+    expect(setLine({ minutes: 0, elapsed: 600 })).toBeNull(); // open-ended
+    expect(setLine({ minutes: 90, elapsed: 600 })).toBeNull(); // not a length offered
+    expect(setLine({ minutes: 120, elapsed: 10 * 60 + 59 })).toBe(
+      "The set lasts about 2 hours; 10 minutes have played (8 %), so this is the warm-up: patient energy, long grooves and breakdowns, few and gentle peaks.",
+    );
+    expect(setLine({ minutes: 60, elapsed: 20 * 60 })).toMatch(/^The set lasts about 1 hour; 20 minutes have played \(33 %\), so this is the rise of the night/);
+    expect(setLine({ minutes: 180, elapsed: 120 * 60 })).toContain("the heart of the set");
+    expect(setLine({ minutes: 60, elapsed: 55 * 60 })).toContain("the closing");
+    expect(setLine({ minutes: 60, elapsed: 90 * 60 })).toContain("60 minutes have played (100 %), so this is the closing"); // past its end
+  });
+
+  it("goes into every ask: the opening, the form and each section", () => {
+    const set = { minutes: 120, elapsed: 0 };
+    const line = setLine(set);
+    expect(openingPrompt({ ...goa, section: "intro", set })).toContain(line);
+    expect(formPrompt({ sections: ["intro"], set })).toContain(`${line} Shape the form to that point of the set.`);
+    const base = { ...goa, active: {}, sections: ["intro"], bars: 8 };
+    expect(planPrompt({ ...base, set })).toContain(line);
+    expect(planPrompt(base)).not.toContain("The set lasts");
   });
 });
 

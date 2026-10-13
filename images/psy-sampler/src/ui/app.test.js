@@ -2602,6 +2602,24 @@ describe("✨ AI", () => {
     expect(unqueue()).toHaveLength(2);
   });
 
+  it("the set's length goes into every ask with how much of it has played, and is remembered", async () => {
+    const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK, GROOVE] }));
+    aiBtn().click();
+    $("#ai-set").value = "120";
+    $("#ai-set").dispatchEvent(new Event("change"));
+    expect($(".status").textContent).toBe("Set de ~2 h: la IA planea cada fase según por dónde va la noche.");
+    expect($(".ai-summary").textContent).toContain("set ~2 h");
+    expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).set).toBe(120);
+    $("button.auto").click();
+    await flushPromises();
+    expect(ai.asks[0].prompt).toContain("The set lasts about 2 hours; 0 minutes have played (0 %), so this is the warm-up");
+    advanceSeconds(60 * 4 * BAR); // ~4 minutes at 145 BPM
+    await flushPromises();
+    expect(ai.asks.at(-1).prompt).toMatch(/The set lasts about 2 hours; [3-6] minutes have played/);
+    await remountWith(fakeAi());
+    expect($("#ai-set").value).toBe("120");
+  });
+
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {
     const ai = await remountWith(fakeAi({ answers: [BREAK, BUILD, PEAK, GROOVE] }));
     aiBtn().click();

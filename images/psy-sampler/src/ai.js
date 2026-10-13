@@ -17,7 +17,7 @@
 //   schema its own way: `response_format`, a forced tool, `responseJsonSchema`.
 //
 // Like the engine, they outlive the app's remounts: the session stays.
-import { LEVELS, LEVEL_DEFAULT, SYSTEM } from "./planner.js";
+import { LEVELS, LEVEL_DEFAULT, SET_LENGTHS, SYSTEM } from "./planner.js";
 
 export const LMSTUDIO_URL = "http://localhost:1234/v1";
 
@@ -362,6 +362,7 @@ export function cleanPrefs(raw) {
     vibe: line(p.vibe, 200),
     open: p.open !== false, // the settings unfolded
     level: LEVELS.includes(p.level) ? p.level : LEVEL_DEFAULT, // how much it asks (planner.js LEVELS)
+    set: SET_LENGTHS.includes(p.set) ? p.set : 0, // the set's length in minutes, 0 open-ended
   };
 }
 

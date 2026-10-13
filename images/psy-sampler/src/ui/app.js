@@ -93,6 +93,7 @@ import {
   LEVELS,
   LEVEL_DEFAULT,
   PLAN_SECTIONS,
+  SET_LENGTHS,
   asksForm,
   formPrompt,
   formSchema,
@@ -254,6 +255,7 @@ export function mountApp(root, engine, opts = {}) {
     bare: 0, // bar lines in a row the autopilot's mix had no lead and no pad
     newParts: new Set(), // variants whose 🎲 New part waits for the next loop
     reseed: false, // a new seed the playing pilot takes on the next loop
+    setSeconds: 0, // played under the autopilot since ▶: where the set is
     leaving: new Set(), // sounds just banned that the autopilot takes out on the next bar line
     queued: new Map(), // variant -> editor actions (×2, the resets) waiting for the next bar line
     dj: resume?.dj ?? 0, // the DJ filter knob: a performance control, never stored
@@ -456,6 +458,13 @@ export function mountApp(root, engine, opts = {}) {
     }),
   );
   const levelBox = field("ai-level", tx.ai.level, levelInput, tx.ai.levelTitle);
+  // About how long the set lasts: the ✨ AI paces the night to it.
+  const setInput = el(
+    "select",
+    { id: "ai-set", "data-control": "ai-set" },
+    ...SET_LENGTHS.map((minutes) => el("option", { value: String(minutes), text: tx.ai.sets[minutes] })),
+  );
+  const setBox = field("ai-set", tx.ai.set, setInput, tx.ai.setTitle);
   const endpointInput = el("input", {
     type: "url",
     id: "ai-endpoint",
@@ -501,7 +510,7 @@ export function mountApp(root, engine, opts = {}) {
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, setBox, vibeBox),
     vibeNote,
   );
 
@@ -1263,6 +1272,7 @@ export function mountApp(root, engine, opts = {}) {
   /* ---- the bar hook: everything that must land on the grid ---- */
   engine.onBar((time, step, bar) => {
     const loopStart = step === 0 && bar > 0;
+    if (state.auto) state.setSeconds += BAR_STEPS * stepDuration(state.tempo);
     if (bar === 0 && state.drop?.phase !== "armed") state.drop = null; // a fresh run: no drop left halfway
     if (bar === 0 && state.openFx) {
       fire(state.openFx, time); // the opening's swell, on the track's first beat
@@ -2579,7 +2589,9 @@ export function mountApp(root, engine, opts = {}) {
   const asking = (engine, signal, track = {}) => ({ ...reach(engine), system: systemFor(track.style, track.bpm), signal });
   // What a prompt and its schema take from the settings.
   // An empty vibe is no message: the sounds go by id, with no words to match.
-  const asked = () => ({ level: state.aiPrefs.level, describe: Boolean(state.aiPrefs.vibe) });
+  // The set's length and how much of it has played, for the arc of the night.
+  const setNow = () => ({ minutes: state.aiPrefs.set, elapsed: state.setSeconds });
+  const asked = () => ({ level: state.aiPrefs.level, describe: Boolean(state.aiPrefs.vibe), set: setNow() });
   const knownOf = (engine) => (engine === "chrome" ? null : (ai?.[engine]?.known?.(isCloud(engine) ? keyOf(engine) : state.aiPrefs.endpoint) ?? null));
   // A share link's run, from silence: while it has an entry for the section
   // playing, that entry (or none) stands in for the model's answer.
@@ -2597,9 +2609,11 @@ export function mountApp(root, engine, opts = {}) {
     if (aiPanel.open !== state.aiPrefs.open) aiPanel.open = state.aiPrefs.open;
     const linked = cloud && !keyOf(engine) ? `${name} ${tx.ai.notLinked}` : model ? `${name} (${model})` : name;
     const [levelName, levelWhat] = tx.ai.levels[level];
-    const what = level === LEVEL_DEFAULT ? linked : `${linked} · ${tx.ai.level} ${levelName.toLowerCase()}`;
+    const leveled = level === LEVEL_DEFAULT ? linked : `${linked} · ${tx.ai.level} ${levelName.toLowerCase()}`;
+    const what = state.aiPrefs.set ? `${leveled} · ${tx.ai.setShort(tx.ai.sets[state.aiPrefs.set])}` : leveled;
     aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
     levelInput.value = level;
+    setInput.value = String(state.aiPrefs.set);
     levelBox.title = `${tx.ai.levelTitle}. ${levelName}: ${levelWhat}`;
     const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio", ...clouds];
     if (engineInput.options.length !== engines.length) {
@@ -2934,6 +2948,7 @@ export function mountApp(root, engine, opts = {}) {
       sections: state.run.sections,
       coming: comingNow(),
       vibe: state.aiPrefs.vibe,
+      set: setNow(),
     });
     ask(
       engine,
@@ -2995,6 +3010,12 @@ export function mountApp(root, engine, opts = {}) {
   levelInput.addEventListener("change", () => {
     setPrefs({ level: LEVELS.includes(levelInput.value) ? levelInput.value : state.aiPrefs.level });
     startAi();
+  });
+  // The next asks place themselves in the new length; nothing is asked again.
+  setInput.addEventListener("change", () => {
+    const minutes = Number(setInput.value);
+    setPrefs({ set: SET_LENGTHS.includes(minutes) ? minutes : 0 });
+    status(state.aiPrefs.set ? tx.ai.setSaved(tx.ai.sets[state.aiPrefs.set]) : tx.ai.setOpen);
   });
   vibeInput.addEventListener("input", noteVibe);
   keyInput.addEventListener("change", () => {
@@ -3180,6 +3201,7 @@ export function mountApp(root, engine, opts = {}) {
     state.queuedSnap = null;
     state.ramp = null;
     state.newParts.clear();
+    state.setSeconds = 0;
     open?.editor.showNewPart(false);
     for (const action of state.queued.get(open?.id) ?? []) open.editor.showQueued(action, false);
     state.queued.clear();
