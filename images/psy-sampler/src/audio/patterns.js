@@ -91,15 +91,20 @@ export const SOARING_LINE = [
 // Every note answered by its own echo a dotted 8th later, written in.
 export const GRID_LINE = [[0, A3], [6, E4], [12, C4], [16, A3], [22, G4], [28, E4]];
 export const GRID_ECHO = 3;
-// House organ bass: the offbeat answered by its octave a 16th later, climbing to C at the end.
+// House organ bass: one note per offbeat, the octave answering once a bar, climbing to C at the end.
 export const HOUSE_BASS = [
-  [2, A1], [3, A2], [6, A1], [10, A1], [11, A2], [14, G2],
-  [18, A1], [19, A2], [22, A1], [26, C2], [27, C3], [30, E2],
+  [2, A1], [6, A1], [10, A1], [11, A2], [14, G2],
+  [18, A1], [22, A1], [26, C2], [27, C3], [30, E2],
 ];
 // Tech house: short plucks around the offbeat, accented on it.
 export const TECH_BASS = [
   [2, A1, true], [3, A1], [7, A1], [10, A1, true], [11, A1], [14, E2],
   [18, A1, true], [19, A1], [23, A1], [26, A1, true], [28, G2], [30, A1],
+];
+// Deep house: long round notes off the beat with air between them, pumping under the kick.
+export const DEEP_BASS = [
+  [3, A1, 3], [7, A1], [10, C2, 2], [14, A1],
+  [19, A1, 3], [23, A1], [26, E2, 2], [30, G2],
 ];
 export const BONGO_LINE = [
   [3, E4], [6, A3], [7, A3], [11, E4], [14, A3],
@@ -169,6 +174,8 @@ function notes(synth, list, { low, high, len = 1, scale = "minor", insert }) {
 // A variant whose odd 16ths land late from the start (GROOVE swing).
 const swung = (def, swing) => ({ ...def, data: { ...def.data, swing } });
 // A notes variant that starts from another "Brillo" (the tom's: its decay).
+// A variant that starts pumping under the kick by `duck`.
+const ducked = (def, duck) => ({ ...def, data: { ...def.data, duck } });
 const bright = (def, value) => ({ ...def, data: { ...def.data, params: { ...def.data.params, bright: value } } });
 
 function fx(id) {
@@ -223,6 +230,7 @@ export const DEFAULTS = {
     { ...BASS, scale: "phrygian" },
   ),
   "bass.house": notes("organBass", HOUSE_BASS.map(([s, m]) => note(s, m)), BASS),
+  "bass.deep": ducked(notes("sub", DEEP_BASS.map(([s, m, len]) => note(s, m, len)), BASS), 0.35),
   "bass.techHouse": notes("bass", TECH_BASS.map(([s, m, accent]) => note(s, m, 1, Boolean(accent))), BASS),
 
   "perc.hat": drum("hat", steps((s) => (s % 4 === 2 ? HIT : OFF))),

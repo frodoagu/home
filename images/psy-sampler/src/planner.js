@@ -73,6 +73,7 @@ export const CHARACTER = {
   "bass.phrygian": "dark, driving, exotic",
   "bass.house": "funky, bouncy, warm",
   "bass.techHouse": "groovy, rolling, punchy",
+  "bass.deep": "deep, round, spacious",
   "perc.hat": "airy, sparse",
   "perc.chat": "tight, minimal",
   "perc.shaker": "busy, groovy",
