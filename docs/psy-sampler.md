@@ -1816,7 +1816,7 @@ share (30-100 %) and the raymarch steps, and it follows the frame time (down
 above 22 ms, up after 1.5 s below 18 ms), so a phone or a TV gets a softer
 picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
-Scenes: **Mandelbulb** (power drifting, an orbit the beat swings along),
+Scenes: **Mandelbulb** (a whole power from 6 to 10, each step tilting slowly, an orbit the beat swings along),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
 fold, rings of light per beat) and **mandala** (a flower: rings of lotus,
 daisy or cosmos petals opening forever out of a seed head of Fibonacci

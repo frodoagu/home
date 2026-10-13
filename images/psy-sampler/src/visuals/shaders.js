@@ -110,21 +110,27 @@ vec3 tone(vec3 c) {
 }
 `;
 
-// A Mandelbulb seen from an orbit that the beat swings along; its power
-// drifts, so it slowly morphs between bulbs. Colour from an orbit trap.
+// A Mandelbulb seen from an orbit that the beat swings along; each step
+// tilts as it goes, so it slowly morphs. Colour from an orbit trap. The power
+// is whole and the tilt a rotation: a fractional power, or an offset added
+// to th, tears the set along a seam (atan's cut, the z axis).
 const BULB = `
 float bulb(vec3 p, out float trap) {
   vec3 z = p;
   float dr = 1.0, r = 0.0;
-  float power = 8.0 + 2.0 * sin((uTime + 0.6 * uPush) * 0.07 + uVar.x * TAU);
+  float power = floor(6.0 + 4.99 * uVar.x);
+  float tilt = (0.3 + 0.4 * uVar.y) * sin((uTime + 0.6 * uPush) * 0.07 + uVar.y * TAU);
+  mat2 tr = rot(tilt);
   trap = 1e9;
   for (int i = 0; i < 6; i++) {
     r = length(z);
     if (r > 2.0) break;
-    float th = acos(clamp(z.z / r, -1.0, 1.0)) * power + uVar.y * 2.0;
+    float th = acos(clamp(z.z / r, -1.0, 1.0)) * power;
     float ph = atan(z.y, z.x) * power + uTime * 0.05;
     dr = pow(r, power - 1.0) * power * dr + 1.0;
-    z = pow(r, power) * vec3(sin(th) * cos(ph), sin(th) * sin(ph), cos(th)) + p;
+    z = pow(r, power) * vec3(sin(th) * cos(ph), sin(th) * sin(ph), cos(th));
+    z.yz = tr * z.yz;
+    z += p;
     trap = min(trap, dot(z, z));
   }
   return 0.5 * log(max(r, 1e-4)) * r / dr;
