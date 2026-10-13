@@ -1818,7 +1818,8 @@ picture instead of a slideshow. The canvas never goes past 1920×1080 pixels.
 
 Scenes: **Mandelbulb** (power drifting, an orbit the beat swings along),
 **fractal tunnel** (a bore through an Apollonian gasket or a kaleidoscopic
-fold, rings of light per beat) and **mandala** (a flower: rings of lotus,
+fold, rings of light per beat; the fold's branches cross the bore here and
+there, never nearer the camera's path than `CLEAR`) and **mandala** (a flower: rings of lotus,
 daisy or cosmos petals opening forever out of a seed head of Fibonacci
 spirals). The organic and 2D-fractal ones:
 
