@@ -1,0 +1,8 @@
+psy-sampler PR previews are set up.
+
+Every open PR of {{ .Values.github.owner }}/{{ .Values.github.repo }} labelled `{{ .Values.github.label }}`
+becomes the Application psy-sampler-pr-<n> in namespace {{ .Values.namespace }}, at
+https://pr-<n>-{{ .Values.hostSuffix }}.{{ .Values.domain }} (Google sign-in). GitHub is polled every
+{{ .Values.requeueAfterSeconds }}s; closing or merging the PR deletes the preview.
+
+  argocd appset get psy-sampler-previews

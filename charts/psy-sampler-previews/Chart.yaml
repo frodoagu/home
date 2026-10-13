@@ -1,0 +1,14 @@
+apiVersion: v2
+name: psy-sampler-previews
+description: One psy-sampler environment per open pull request (Argo CD ApplicationSet, pull-request generator) at pr-<n>-psy.agu.com.ar, behind Google sign-in
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - argocd
+  - applicationset
+  - preview-environments
+sources:
+  - https://github.com/frodoagu/home/tree/main/charts/psy-sampler
+maintainers:
+  - name: frodoagu

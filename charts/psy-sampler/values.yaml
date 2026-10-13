@@ -35,6 +35,22 @@ ingress:
   certResolver: letsencrypt
   # Public on purpose (like agu.com.ar): no google-auth.
   middlewares: []
+  # Optional `tls.domains` for the certResolver, e.g. [{main: "*.agu.com.ar"}]
+  # so every PR preview shares one wildcard certificate instead of issuing its
+  # own. Empty: Traefik issues a certificate for `host`.
+  tlsDomains: []
+# Google sign-in in front of the whole site (ForwardAuth → oauth2-proxy), off
+# for psy.agu.com.ar and on for the PR previews (charts/psy-sampler-previews).
+# The two Middlewares are named after the release, so several previews share a
+# namespace without clashing.
+googleAuth:
+  enabled: false
+  forwardAuthAddress: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth"
+  signInQuery: "/oauth2/sign_in?rd={url}"
+  oauth2ProxyService:
+    name: oauth2-proxy
+    namespace: oauth2-proxy
+    port: 80
 # nginx serving ~20 kB of static files. All audio runs in the browser.
 resources:
   requests:

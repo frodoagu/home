@@ -1,0 +1,29 @@
+# The previews render a chart from a PR branch, so they get their own project:
+# this repo only, the previews namespace only, no cluster-scoped resources, and
+# only the kinds charts/psy-sampler renders with cloud save off. A branch that
+# adds another kind fails its preview's sync until it is listed here.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ include "psy-sampler-previews.name" . }}
+  labels:
+    {{- include "psy-sampler-previews.labels" . | nindent 4 }}
+spec:
+  description: psy-sampler PR previews (charts/psy-sampler-previews)
+  sourceRepos:
+    - {{ .Values.repoURL }}
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: {{ .Values.namespace }}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: traefik.io
+      kind: IngressRoute
+    - group: traefik.io
+      kind: Middleware
