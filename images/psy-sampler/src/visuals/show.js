@@ -16,13 +16,27 @@ const SETTINGS_KEY = "psy-sampler:visuals";
 const HUD_MS = 2500; // the HUD and the cursor hide after this long without a move
 const STROBE_STEPS = [1, 0.5, 0];
 // How much of the last frame stays as a trail, per scene, before the energy.
-const TRAILS = { bulb: 0.55, kifs: 0.7, mandala: 0.78, tunnel: 0.5 };
+export const TRAILS = {
+  bulb: 0.55,
+  kifs: 0.7,
+  mandala: 0.78,
+  tunnel: 0.5,
+  flow: 0.4,
+  julia: 0.6,
+  gyroid: 0.55,
+  coral: 0.55,
+  cells: 0.5,
+  phyllo: 0.6,
+  hyper: 0.6,
+  turing: 0.3,
+  physarum: 0.5,
+};
 const SWIPE_PX = 60;
 const HAZE = 0.35; // smoke in the air at rest; the energy thickens it
 const GRAIN = 0.05; // film grain, at screen resolution
 const MUSIC_MS = 800; // how fast the beat's pulse fades in and out with the music
 
-// The key that does each thing; digits pick a scene.
+// The key that does each thing; digits pick a scene, 0 the tenth.
 export const KEYS = {
   " ": "next",
   ArrowRight: "next",
@@ -37,9 +51,12 @@ export const KEYS = {
   Escape: "close",
 };
 
-/** What `key` does, or null: an action name, or { pick: index } for a digit. */
-export function actionOf(key) {
-  if (/^[1-9]$/.test(key) && Number(key) <= SCENES.length) return { pick: Number(key) - 1 };
+/** What `key` does, or null: an action name, or { pick: index } for a digit, with `count` scenes. */
+export function actionOf(key, count = SCENES.length) {
+  if (/^[0-9]$/.test(key)) {
+    const index = (Number(key) + 9) % 10;
+    return index < count ? { pick: index } : null;
+  }
   return KEYS[key] ?? KEYS[key.toLowerCase?.()] ?? null;
 }
 
@@ -74,6 +91,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   root.append(node);
 
   const renderer = createRenderer(canvas, { sceneIds: SCENES.map((s) => s.id) });
+  const scenes = renderer ? SCENES.filter((sc) => renderer.supports(sc.id)) : SCENES;
   if (!renderer) {
     node.append(el("p", { class: "vis-fail", text: tx.noWebgl }));
   }
@@ -82,7 +100,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   let source = base;
   let micOn = false;
   const stage = createStage({ now: performance.now() });
-  const director = createDirector();
+  const director = createDirector({ scenes });
   let last = null; // the latest stage frame, for the keys
   let time = 0;
   let music = 0; // 1 while something plays, eased so a stop fades the beat out
@@ -236,7 +254,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   // Keys: only the ones the show uses, kept from the page under it.
   function onKey(e) {
     if (e.target === strobe || e.metaKey || e.ctrlKey || e.altKey) return;
-    const action = actionOf(e.key);
+    const action = actionOf(e.key, scenes.length);
     if (!action) return;
     if (action === "close" && document.fullscreenElement) return; // the browser leaves fullscreen first
     e.preventDefault();
@@ -286,7 +304,8 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
     const s = stage.frame(now);
     last = s;
     const d = director.frame(s);
-    time += (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
+    const seconds = (dt / 1000) * (0.5 + 0.9 * s.energy + 0.6 * s.build);
+    time += seconds;
     music += ((s.playing ? 1 : 0) - music) * (1 - Math.exp(-dt / MUSIC_MS));
     if (now - labelAt > 500) {
       labelAt = now;
@@ -317,7 +336,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
       },
       scene: d.scene,
       previous: d.previous,
-      lasers: d.lasers,
+      seconds,
       post: {
         uMix: d.mix,
         uStrobe: d.strobe * strobeLevel,
