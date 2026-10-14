@@ -2437,17 +2437,32 @@ describe("✨ AI", () => {
   // turn (a function gets the ask's opts, schema and prompt). Asks for the
   // opening (their schema has fx) go to `openings` and get `opening`; asks for
   // the form of the track (their schema has sections) go to `formAsks` and get
-  // `forms`, in turn (none by default).
-  function fakeAi({ chrome = "available", answers = [], opening = null, forms = [], fail = false, models = ["gemma-3-4b", "qwen"] } = {}) {
+  // `forms`, in turn (none by default). Asks to tune a vibe (their schema has
+  // genre) go to `tuneAsks` and get `tune` (nothing usable by default: the
+  // listener's words and the style's genre stay).
+  function fakeAi({
+    chrome = "available",
+    answers = [],
+    opening = null,
+    forms = [],
+    tune = { vibe: "", genre: "" },
+    fail = false,
+    models = ["gemma-3-4b", "qwen"],
+  } = {}) {
     const asks = [];
     const openings = [];
     const formAsks = [];
+    const tuneAsks = [];
     const engine = (name) => ({
       supported: () => true,
       known: vi.fn(() => (name === "lmstudio" || name === "openai" ? models : undefined)),
       availability: vi.fn(async () => chrome),
       start: vi.fn(async () => name),
       plan: vi.fn((prompt, schema, opts) => {
+        if (schema.properties.genre) {
+          tuneAsks.push({ name, prompt, schema, opts });
+          return fail ? Promise.reject(new Error("no")) : Promise.resolve(tune);
+        }
         if (schema.properties.sections) {
           formAsks.push({ name, prompt, schema, opts });
           if (fail) return Promise.reject(new Error("no"));
@@ -2464,7 +2479,7 @@ describe("✨ AI", () => {
         return typeof answer === "function" ? answer(opts, schema, prompt) : Promise.resolve(answer);
       }),
     });
-    const ai = { asks, openings, formAsks };
+    const ai = { asks, openings, formAsks, tuneAsks };
     for (const name of ["chrome", "lmstudio", "openai", "anthropic", "gemini"]) ai[name] = engine(name);
     return ai;
   }
@@ -2888,10 +2903,11 @@ describe("✨ AI", () => {
     answer(BREAK);
     await flushPromises();
     expect(queue()).not.toContain("breakdown");
-    apply("calm"); // the next section is decided: only the form is asked again
+    apply("calm"); // the next section is decided: only the tune and the form are asked again
     expect($(".status").textContent).toBe("✨ Onda «calm»: la IA vuelve a planear lo que viene…");
-    expect(ai.formAsks).toHaveLength(2);
+    expect(ai.tuneAsks).toHaveLength(1);
     await flushPromises();
+    expect(ai.formAsks).toHaveLength(2);
     expect(ai.asks).toHaveLength(1);
     advanceSeconds(2 * BAR);
     expect($(".section-badge").textContent).toBe("Groove"); // the pilot's own pick
@@ -2985,12 +3001,13 @@ describe("✨ AI", () => {
     expect($(".status").textContent).toBe("Onda «a full peak» guardada: la IA la usa en la próxima fase que planee.");
     apply();
     expect(queue()).toEqual(["breakdown"]);
-    expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…"); // the form, first
+    expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…"); // the tune, then the form
+    expect($(".section-queue .is-thinking").title).toBe("La IA está pasando tu onda al inglés y reescribiendo el género con ella");
     expect($(".status").textContent).toBe("✨ Onda «a full peak»: Break queda como estaba y la IA vuelve a planear lo que sigue…");
+    await flushPromises();
     expect(ai.formAsks[1].prompt).toContain("Shape the form to the listener's wish");
     expect(ai.formAsks[1].opts.system).toContain('The listener\'s wish for the track: "a full peak".');
     expect(ai.formAsks[1].prompt).toContain("Already coming after it, in order: breakdown.");
-    await flushPromises();
     expect(ai.asks[3].prompt).toContain('The listener just asked for: "a full peak".');
     expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- breakdown, 16 bars");
     expect(queue()).toEqual(["breakdown", "peak", "peak"]);
@@ -3002,7 +3019,7 @@ describe("✨ AI", () => {
     expect(ai.asks[5].prompt).toContain('The listener just asked for: "a full peak".');
     apply("dark"); // the ask on its way is dropped
     apply("darker");
-    expect(ai.formAsks.at(-2).opts.signal.aborted).toBe(true);
+    expect(ai.tuneAsks.at(-2).opts.signal.aborted).toBe(true); // "dark"'s tune
     await flushPromises();
     expect(ai.asks[7].prompt).toContain('The listener just asked for: "darker".');
     expect(queue()).toEqual(["breakdown", "breakdown", "breakdown"]);
@@ -3191,6 +3208,34 @@ describe("✨ AI", () => {
     await flushPromises();
     expect(ai.asks.at(-1).opts.system).toMatch(/oscuro/);
     expect(ai.asks.at(-1).prompt).toMatch(/squelchy|hypnotic, driving/);
+  });
+
+  it("a vibe is tuned first: in English, with the style's genre rewritten to it, once per style and vibe", async () => {
+    const genre = "a night-time full-on psytrance track: a punchy kick, a dark rolling bass and twisted acid";
+    const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)], tune: { vibe: "dark, at night", genre } }));
+    vibe("oscuro, de noche");
+    aiBtn().click();
+    await flushPromises();
+    expect(ai.tuneAsks).toHaveLength(1);
+    const [tuned] = ai.tuneAsks;
+    expect(tuned.prompt).toContain('The listener\'s wish: "oscuro, de noche".');
+    expect(tuned.prompt).toContain("full-on psytrance track");
+    expect(tuned.opts.system).toMatch(/^You prepare the brief/);
+    expect(ai.asks.length).toBeGreaterThan(0);
+    for (const ask of ai.asks) {
+      expect(ask.opts.system).toContain(`You arrange ${genre}.`);
+      expect(ask.opts.system).toContain('The listener\'s wish for the track: "dark, at night".');
+      expect(ask.opts.system).not.toMatch(/oscuro/);
+      expect(ask.prompt).not.toMatch(/oscuro/);
+    }
+    expect($(".ai-vibe-note").textContent).toBe(`La IA arregla tu onda como: «${genre}».`);
+    apply(); // the same words again: the tune holds
+    await flushPromises();
+    expect(ai.tuneAsks).toHaveLength(1);
+    apply("minimal");
+    await flushPromises();
+    expect(ai.tuneAsks).toHaveLength(2);
+    expect(ai.tuneAsks[1].prompt).toContain('"minimal"');
   });
 
   it("■ lets go of the armed autopilot", async () => {

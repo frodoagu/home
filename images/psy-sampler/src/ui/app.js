@@ -104,6 +104,7 @@ import {
   LEVEL_DEFAULT,
   PLAN_SECTIONS,
   SET_LENGTHS,
+  TUNE_SYSTEM,
   asksForm,
   closingPrompt,
   closingSchema,
@@ -122,6 +123,9 @@ import {
   planSchema,
   systemOf,
   themeAfter,
+  normalizeTune,
+  tunePrompt,
+  tuneSchema,
   whyOf,
 } from "../planner.js";
 import { BG_KICK_VARIANT, desiredLanes, isOn, laneKey, pressVariant } from "../selection.js";
@@ -545,7 +549,12 @@ export function mountApp(root, engine, opts = {}) {
   const vibeBox = field("ai-vibe", tx.ai.vibe, el("span", { class: "ai-model-pick" }, vibeInput, vibeBtn), tx.ai.vibeTitle);
   // What an empty vibe means, said under it as it's typed.
   const vibeNote = el("p", { class: "hint ai-vibe-note" });
-  const noteVibe = () => (vibeNote.textContent = vibeInput.value.trim() ? tx.ai.vibeSaid : tx.ai.vibeEmpty);
+  // Once the vibe is tuned (tunes), the note shows the genre the AI arranges.
+  const noteVibe = () => {
+    const typed = vibeInput.value.replace(/\s+/g, " ").trim();
+    const genre = typed && typed === state.aiPrefs.vibe ? tunes.get(tuneKey(ws.style))?.genre : "";
+    vibeNote.textContent = !typed ? tx.ai.vibeEmpty : genre ? tx.ai.vibeTuned(genre) : tx.ai.vibeSaid;
+  };
   // Its settings fold away (remembered), with what they say in the summary.
   const aiSummary = el("span", { class: "ai-summary" });
   const aiPanel = el(
@@ -1065,6 +1074,12 @@ export function mountApp(root, engine, opts = {}) {
   // showSection() shows it.
   let planning = null;
   let vibeFresh = false; // the vibe changed and no plan has followed it yet
+  // The vibe as the model gets it (planner.js tunePrompt): in English, and
+  // each style's genre rewritten to it. Asked once per style and vibe,
+  // before anything else; an answer with nothing usable leaves the
+  // listener's words and the style's own genre.
+  const tunes = new Map(); // `${style}\n${vibe}` -> normalizeTune()
+  const tuneKey = (style) => `${style}\n${state.aiPrefs.vibe}`;
   let cueWhenPlanned = false; // the armed autopilot plays once the ✨ AI stops asking
 
   // Now: the section and the bars it has left, then the queue (✕ drops one
@@ -1158,10 +1173,16 @@ export function mountApp(root, engine, opts = {}) {
       if (chip) chip.title = tx.pilot.styleOn(name);
     }
     if (p && planning) {
-      const slot = planning.form ? chips.length : planning.at - sectionNo() - 1;
+      const slot = planning.form || planning.tune ? chips.length : planning.at - sectionNo() - 1;
       const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
       chip.classList.add("is-thinking");
-      chip.title = planning.closing ? tx.ai.closingTitle : planning.form ? tx.ai.formingTitle : tx.ai.thinkingTitle;
+      chip.title = planning.tune
+        ? tx.ai.tuningTitle
+        : planning.closing
+          ? tx.ai.closingTitle
+          : planning.form
+            ? tx.ai.formingTitle
+            : tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
     queueList.replaceChildren(...chips);
@@ -2573,7 +2594,7 @@ export function mountApp(root, engine, opts = {}) {
       return;
     }
     dropAhead(1);
-    if (planning?.form) cancelPlanning();
+    if (planning?.form || planning?.tune) cancelPlanning();
     const p = state.pilot;
     const decided = p.left === 1 && p.next ? 1 : 0; // its last loop already announced it
     const kept = Math.max(state.run.ahead.length, decided) - p.queue.length;
@@ -2687,10 +2708,13 @@ export function mountApp(root, engine, opts = {}) {
   // What the engine needs to be asked: an endpoint, or a linked account's key.
   const reach = (engine) =>
     isCloud(engine) ? { key: keyOf(engine), model: modelOf(engine) } : { endpoint: state.aiPrefs.endpoint, model: modelOf(engine) };
+  const tuneOf = (style) => tunes.get(tuneKey(style)) ?? { vibe: "", genre: "" };
+  const vibeFor = (style = ws.style) => tuneOf(style).vibe || state.aiPrefs.vibe;
+  const untuned = (style) => Boolean(state.aiPrefs.vibe) && !tunes.has(tuneKey(style));
   // An ask goes with the instructions for the track it plans: the brief of
   // its style at its BPM and the listener's wish, then its level's rules.
   const systemFor = (style = ws.style, bpm = state.tempo) =>
-    systemOf({ level: state.aiPrefs.level, style, bpm, vibe: state.aiPrefs.vibe });
+    systemOf({ level: state.aiPrefs.level, style, bpm, vibe: vibeFor(style), genre: tuneOf(style).genre });
   const asking = (engine, signal, track = {}) => ({ ...reach(engine), system: systemFor(track.style, track.bpm), signal });
   // What a prompt and its schema take from the settings.
   // An empty vibe is no message: the sounds go by id, with no words to match.
@@ -2958,11 +2982,10 @@ export function mountApp(root, engine, opts = {}) {
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
     const ctx = { lists: pilotLists(), style: ws.style, section: p.section, ...asked() };
-    const { vibe } = state.aiPrefs;
     const prompt = openingPrompt({
       ...ctx,
       active: state.pending ?? state.active,
-      vibe,
+      vibe: vibeFor(ws.style),
       names: ws.names,
       synths: synthsNow(),
     });
@@ -2994,12 +3017,16 @@ export function mountApp(root, engine, opts = {}) {
   function planAhead() {
     const p = state.pilot;
     if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
+    const engine = engineNow();
+    if (isCloud(engine) && !keyOf(engine)) return;
+    if (untuned(ws.style)) {
+      planTune(engine, ws.style);
+      return;
+    }
     if (wantsOpening()) {
       planOpening();
       return;
     }
-    const engine = engineNow();
-    if (isCloud(engine) && !keyOf(engine)) return;
     // The low level skips the form: one ask less before the section comes.
     // Closing, the model lays out the closing in its place, while it may.
     if (p.closing && !closingOpen(p)) state.run.formed = true;
@@ -3016,6 +3043,11 @@ export function mountApp(root, engine, opts = {}) {
     if (next && !PLAN_SECTIONS.includes(next) && next !== OUTRO) return;
     const at = sectionNo() + 1 + slot;
     const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, ...asked() };
+    // A plan in the style a drop brings in carries that style's tune.
+    if (untuned(ctx.style)) {
+      planTune(engine, ctx.style);
+      return;
+    }
     const { vibe } = state.aiPrefs;
     const fresh = vibeFresh;
     const planned = state.run.ahead.map((e) => e.plan);
@@ -3033,7 +3065,7 @@ export function mountApp(root, engine, opts = {}) {
       dressed: Object.values(state.run.dress),
       synths: synthsNow(),
       bars: p.length * 2,
-      vibe,
+      vibe: vibeFor(ctx.style),
       fresh,
       names: ws.names,
       closing: p.closing ? { seconds: p.closing.left * loopSeconds(), route: coming } : null,
@@ -3062,6 +3094,24 @@ export function mountApp(root, engine, opts = {}) {
     );
     const opened = state.run.opening !== undefined ? 1 : 0;
     if (state.armed && !failing) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
+  }
+
+  // With a vibe, the first ask for a style: the vibe in English and the
+  // style's genre tuned to it, which every ask then carries (systemFor).
+  function planTune(engine, style) {
+    const key = tuneKey(style);
+    const { vibe } = state.aiPrefs;
+    ask(
+      engine,
+      { tune: true },
+      (signal) => ai[engine].plan(tunePrompt({ style, vibe }), tuneSchema(), { ...reach(engine), system: TUNE_SYSTEM, signal }),
+      (raw) => tunes.set(key, normalizeTune(raw)),
+      (ok) => {
+        if (ok) planAhead(); // failed, the retry asks again
+        settle();
+      },
+    );
+    if (state.armed) status(tx.ai.tuning(vibe));
   }
 
   // An armed autopilot plays once the ✨ AI stops asking, or says it is ready.
@@ -3153,7 +3203,7 @@ export function mountApp(root, engine, opts = {}) {
     const ahead = state.run.ahead;
     const head = ahead.shift();
     if (head && head.plan.section !== state.pilot.section) ahead.length = 0;
-    if (planning && !planning.form && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
+    if (planning && !planning.form && !planning.tune && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
     if (replaying()) {
       const raw = state.replay[sectionNo()];
       if (raw) attach(normalizePlan(raw, { lists: pilotLists(), style: ws.style }));
