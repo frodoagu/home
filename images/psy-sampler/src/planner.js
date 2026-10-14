@@ -128,6 +128,7 @@ export const CHARACTER = {
   "lead.grid": "melodic, hypnotic, deep",
   "lead.vowel": "trippy, dark, weird",
   "lead.rubber": "funky, playful, trippy",
+  "lead.chaos": "hypnotic, evolving, unpredictable",
   "lead.piano": "uplifting, classic, bright",
   "lead.organ": "punchy, retro, groovy",
   "pad.chord": "warm, melancholic",
@@ -140,6 +141,7 @@ export const CHARACTER = {
   "pad.supersaw": "euphoric, big, bright",
   "pad.fifths": "open, hollow, hypnotic",
   "pad.deep": "warm, deep, jazzy",
+  "pad.glass": "glassy, alien, shimmering",
   "glitch.stutter": "tense, busy",
   "glitch.blips": "playful, sparse",
   "glitch.zips": "energetic, punchy",
@@ -150,6 +152,7 @@ export const CHARACTER = {
   "glitch.rise": "rising, energetic",
   "glitch.tape": "dramatic, sparse",
   "glitch.lasers": "trippy, intense, busy",
+  "glitch.comb": "metallic, alien, twisted",
 };
 
 // What each style is, in the words that make a model arrange it: the genre

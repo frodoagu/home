@@ -257,7 +257,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(81);
+  expect(LOOP_VARIANTS).toHaveLength(84);
 });
 
 describe("copies", () => {
@@ -279,12 +279,16 @@ describe("copies", () => {
 });
 
 describe("insert and sample data", () => {
-  it("every variant starts with its insert bypassed (but lead.bits) and no sample", () => {
+  it("every variant starts with its insert bypassed (but the ones showing it off) and no sample", () => {
+    const shown = ["lead.bits", "lead.chaos", "pad.glass", "glitch.comb"];
     for (const [id, def] of Object.entries(DEFAULTS)) {
       expect(def.data.sample, id).toBeNull();
-      if (id !== "lead.bits") expect(def.data.insert, id).toEqual(INSERT_DEFAULT);
+      if (!shown.includes(id)) expect(def.data.insert, id).toEqual(INSERT_DEFAULT);
     }
     expect(DEFAULTS["lead.bits"].data.insert).toMatchObject({ filter: "lowpass", lfo: 0.45 });
+    expect(DEFAULTS["lead.chaos"].data.insert).toMatchObject({ filter: "lowpass", shape: "chaos" });
+    expect(DEFAULTS["pad.glass"].data.insert).toMatchObject({ shift: 0.5, shiftHz: 165 });
+    expect(DEFAULTS["glitch.comb"].data.insert).toMatchObject({ comb: 0.8, combMod: 0.4 });
   });
 
   it("a sample replaces the voice and keeps it as the fallback", () => {

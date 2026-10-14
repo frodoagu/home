@@ -233,7 +233,7 @@ distortion":
 |---|---|---|
 | Filter | off, lowpass, highpass, bandpass, vowel | cutoff (log slider, 40 Hz-16 kHz), resonance, LFO depth (±2 octaves on `detune`), LFO every 1/8 … 4 bars, LFO shape, envelope (±4 octaves) and its decay |
 | Distortion | off, saturation (tanh), hard clip, wavefold, bitcrush | drive |
-| Modulation | phaser, tremolo | mix / depth, each with its rate (phaser 1/8 … 4 bars, tremolo 1/16 … 1/2) |
+| Modulation | phaser, tremolo, comb, frequency shifter | phaser and tremolo: mix / depth, each with its rate (phaser 1/8 … 4 bars, tremolo 1/16 … 1/2); comb: mix, pitch (40-340 Hz), feedback, chaos depth and its rate; shifter: mix and shift (0.1 Hz-1 kHz, log) |
 | Tone | always there | High-pass and Low-pass (log sliders, 20 Hz-20 kHz), open at either end |
 
 - **Live**: knob moves glide (20 ms) on the playing lane. Switching a *type*
@@ -256,8 +256,12 @@ distortion":
 - **LFO shape**: sine, triangle, saw, square (an `OscillatorNode`), or
   random (sample & hold) and smooth random, which loop a table at the LFO's
   rate: 8 values a cycle, 16 cycles before it repeats, from a fixed seed, so
-  a WAV export wobbles the same way every time. A new shape builds a fresh
-  chain.
+  a WAV export wobbles the same way every time. **Chaos** loops the Lorenz
+  attractor's x the same way ([`chaos.js`](../images/psy-sampler/src/audio/chaos.js):
+  σ 10, ρ 28, β 8/3, RK4 from a fixed start, drawn once per page): one turn
+  around a lobe (~0.75 time units) per cycle, 64 cycles before it repeats. It
+  dwells on one side, then jumps to the other at irregular moments, so it never
+  wobbles the same way twice in a bar. A new shape builds a fresh chain.
 - **Envelope** (`lpenv` / `lpdecay`): every note (and FX shot, and preview)
   calls the chain's `trigger(t)`, which pushes the filter's `detune` to
   ±4 octaves × the envelope in 2 ms and lets it fall back over the decay, on
@@ -268,6 +272,27 @@ distortion":
   half a dB. **Tremolo**: a gain swinging between 1 and 1 − depth (so it does
   lower the average level, ~3.7 dB at full depth). Both exist only while on,
   so switching either on or off builds a fresh chain.
+- **Comb**: y[n] = x[n] + g·y[n − D], a `DelayNode` of 1 / pitch looped
+  through the feedback g (≤ 0.95). A delay inside a loop can't be shorter than
+  one render quantum (128 frames, 2.7 ms at 48 kHz), hence the 340 Hz top: the
+  resonance is low and metallic. The browser interpolates the delay linearly
+  (Catmull-Rom would need an AudioWorklet). The wet path is scaled by (1 − g) ×
+  2.8, so a partial right on a resonance comes out at most +9 dB whatever the
+  feedback. Note that the default pitch, 110 Hz, is A2, so an A-minor sound's
+  harmonics do land on it. A chaos LFO (the Lorenz table above, its own rate)
+  swings the delay by up to half itself: a resonance that keeps bending.
+- **Frequency shifter**: Olli Niemitalo's Hilbert pair, two cascades of 4
+  allpass sections (a² − z⁻²) / (1 − a²·z⁻²) as `IIRFilterNode`s, the I path a
+  sample later, keeps the two paths 90° ±1.5° apart from 20 Hz to 20 kHz.
+  I·cos + Q·sin, each product a `GainNode` at 0 whose gain an oscillator drives,
+  moves every partial up by the shift, so harmonics stop being harmonic.
+  Measured in Chrome, a 1 kHz sine comes out at 1 kHz + shift at 0 dB, with
+  the mirror image at -49 dB. Mixed half wet, a few Hz beat against the dry
+  sound as an endless phaser, and tens to hundreds of Hz turn a chord into
+  bells.
+- The comb's and the shifter's dry and wet cross at equal power (cos / sin of
+  the mix): what they add is mostly at other frequencies than the dry signal,
+  so the powers add. Both exist only while their mix is up.
 - FX shots and the editor's previews get an insert too, and WAV exports render it.
 
 - **Tone**: a highpass and a lowpass of the sound's own (`insert.hp` /
@@ -282,8 +307,10 @@ distortion":
   (`update(insert, now, ramp)`), which can't touch 0 Hz, so it runs from and
   to 20 Hz and the identity is set at its end.
 
-`lead.bits` ships with a resonant lowpass wobbling over 2 bars, to show it off;
-every other factory sound starts with the insert off.
+`lead.bits` ships with a resonant lowpass wobbling over 2 bars, `lead.chaos`
+with one wandering on the chaos LFO, `pad.glass` through the shifter and
+`glitch.comb` through the comb, to show them off. Every other factory sound
+starts with the insert off.
 
 The **DJ filter** (transport) is one bipolar knob on the master bus, before the
 compressor and after the effect returns: left closes a lowpass from Nyquist to
@@ -1067,6 +1094,11 @@ pool for a layer would leave it out entirely and **draw nothing from the PRNG**
 for it (`leftOut`), which is how a future layer can be added without shifting
 the seeds of the styles that skip it. Adding the glitch layer to every style did
 shift every seed: a seed shared before it plays a different track now.
+So does a new sound in a style's pool, and every new sound shifts "anything
+goes": Chaos, Glass and Comb joined the psytrance, psytech, hi-tech, Goa and
+darkpsy pools, and those styles' builds may now end on the chaos riser
+(`buildFx`, a style's own list of build FX), so their older seeds play
+different tracks.
 
 The classics layer is `manual` in the catalog: the autopilot and the ✨ AI
 never see it (not even "anything goes"), so it draws nothing and shifted no
@@ -2074,6 +2106,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Rubber | rubber, steps 3 and 6 of every half bar, A3 / C4 / G3 |
 | | House piano | piano, Am7 then Dm7 on x..x..x...x.x... (steps 0, 3, 6, 10, 12 of each bar) |
 | | Organ stab | organ, open Am7 (A3-E4-G4-C5) on steps 2, 6, 10 and 13 of each bar |
+| | Chaos | pluck, every 16th but the beat (A3 E4 C4 A4 E4 G4), through a lowpass (1.4 kHz, Q 6) that the chaos LFO swings ±1.2 octaves, one lobe every 4 bars |
 | Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
 | | Am → B♭ | i → ♭II, the Phrygian move |
 | | Drone | A2 + E3, resonant LP with a 0.12 Hz LFO, 2 bars |
@@ -2084,6 +2117,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Supersaw | A minor with A4 on top, 2 bars |
 | | Fifths | A2-E3-A3, no third |
 | | Deep | Am9 → Dm9 without their roots (G-B-C-E → F-A-C-E) |
+| | Glass | saw pad, A3-E4-A4 held 2 bars through the frequency shifter at 165 Hz, half wet: inharmonic bells |
 | Glitch (stack) | Stutter | 4 band-passed noise bursts squeezed into one step, on steps 7, 14 and 15 |
 | | Bleeps | a square on a random semitone up to 2 octaves above 1.2 kHz, every hit different |
 | | Zips | a sine diving 4 octaves onto 180 Hz in 30 ms, the 16th before every kick |
@@ -2094,6 +2128,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Bwip | a square rising 3 octaves in 80 ms, before each offbeat |
 | | Tape stop | a saw slowing to 4 % of its pitch, the filter closing with it, at the end of the loop |
 | | Lasers | a saw diving from 4 kHz to 60 Hz in 150 ms on every off-beat 8th, the last of the bar accented |
+| | Comb | FM metal on steps 3, 10, 14 (accented) and 19, 27, 30 through the comb at 110 Hz, feedback 0.9, its delay bent by the chaos LFO every 2 bars |
 | Classics (one at a time, by hand) | Sandstorm | supersaw, Darude's lead: the runs (5, 7, 7, 7 sixteenths, each ending long) on A-D-C-G, then A×5, A×7, D D twice. 4 bars |
 | | Axel F | saw lead, Harold Faltermeyer's hook (and Crazy Frog's), both phrases. 4 bars |
 | | Popcorn | pluck, Gershon Kingsley's staccato riff twice and its answer, twice, then all of it on the dominant. 16 bars |
@@ -2113,6 +2148,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Reverse cymbal | HP noise ("HP cutoff", 5 kHz) swelling over "Length" (2 bars) and cutting on the bar line |
 | | Stutter roll | noise bursts accelerating from eighths to 64ths over "Length", the band rising to "To" |
 | | Tape stop | saw + sub falling from "From" (600 Hz) to 3 % over "Decay" (0.8 s), LP closing |
+| | Chaos riser | the Lorenz attractor at audio rate (x left, y right, 400 lobes a second), read ×0.5 → ×4 through a wide band rising 400 Hz → "To" (8 kHz) over "Length" (2 bars), swelling like the riser |
 
 The classics ([`classics.js`](../images/psy-sampler/src/audio/classics.js)) are
 moved to A like every other sound, so they sit on top of any mix, and run whole:
@@ -2171,6 +2207,10 @@ like it went silent. Measured the same way (lane only, no layer level), Bit lead
 and Chirp read -9.6 and -7.0 dBFS RMS, inside the range of the other synths on
 that line (-5.3 to -13.7). Glide lead, Talking and Rubber, on an A-C-E-A 16th
 line where the other leads span -6.8 to -14.4, read -9.9, -11.9 and -12.3.
+With their inserts on (lane only, 2 passes), Chaos reads -10.7 against Acid,
+3/16 arpeggio and Arpeggio at -10.6 to -14.4, Glass -12.2 against the pads'
+-11.1 to -12.2, and Comb -27.1 against FM metal, Ring mod and Lasers at -24.3 to
+-28. The chaos riser reads -26.6 against the riser's -26.7.
 
 At their layer level, the glitch sounds sit at -30 to -39 dBFS RMS (peaks -6 to
 -10) against the percussion's -30 to -36: they are sparse by design. Stutter,

@@ -109,6 +109,10 @@ export class FakeAudioContext {
   createOscillator() {
     const n = withParams(new FakeSource(this, "oscillator"), { frequency: 440, detune: 0 });
     n.type = "sine";
+    n.setPeriodicWave = (wave) => {
+      n.type = "custom";
+      n.wave = wave;
+    };
     return n;
   }
   createBufferSource() {
@@ -134,8 +138,16 @@ export class FakeAudioContext {
   createStereoPanner() {
     return withParams(new FakeNode(this, "panner"), { pan: 0 });
   }
-  createDelay() {
-    return withParams(new FakeNode(this, "delay"), { delayTime: 0 });
+  createDelay(maxDelayTime = 1) {
+    const n = withParams(new FakeNode(this, "delay"), { delayTime: 0 });
+    n.maxDelayTime = maxDelayTime;
+    return n;
+  }
+  createIIRFilter(feedforward, feedback) {
+    const n = new FakeNode(this, "iir");
+    n.feedforward = [...feedforward];
+    n.feedback = [...feedback];
+    return n;
   }
   createWaveShaper() {
     const n = new FakeNode(this, "waveshaper");
@@ -147,6 +159,9 @@ export class FakeAudioContext {
     const n = new FakeNode(this, "convolver");
     n.buffer = null;
     return n;
+  }
+  createPeriodicWave(real, imag, constraints = {}) {
+    return { real: [...real], imag: [...imag], disableNormalization: Boolean(constraints.disableNormalization) };
   }
   createBuffer(channels, length, sampleRate) {
     const data = Array.from({ length: channels }, () => new Float32Array(length));
