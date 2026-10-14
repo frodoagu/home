@@ -105,8 +105,8 @@ export async function micSource({ media = navigator.mediaDevices, createContext 
   };
 }
 
-// Bar lines at IDLE_BPM and nothing else while nothing plays: the show keeps
-// drifting and changing scene, but no hit means nothing pulses on the beat.
+// Bar lines at IDLE_BPM and nothing else while nothing plays: the bulb keeps
+// drifting, but no hit means nothing pulses on the beat.
 // They are `rest` bars: the stage does not count them as music.
 export function idleSource({ bpm = IDLE_BPM, now = performance.now() } = {}) {
   const barMs = (4 * 60000) / bpm;

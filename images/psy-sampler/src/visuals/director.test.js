@@ -101,6 +101,27 @@ describe("director", () => {
     expect(play(createDirector(), 400, calm)).toContain(id);
   });
 
+  it("plays the bulb in silence, and lets the music move on from it", () => {
+    const d = createDirector();
+    const silent = (b) => at(b, { playing: false, layers: new Set(), variants: [] });
+    expect(play(d, 40, silent).every((id) => id === "bulb")).toBe(true);
+    const shown = play(d, 20, (b) => at(b));
+    expect(shown.slice(0, 16).every((id) => id === "bulb")).toBe(true);
+    expect(shown[16]).not.toBe("bulb");
+    d.frame(silent(20));
+    const back = d.frame(at(20, { playing: false, time: 20 * 4 * BEAT_MS + BEAT_MS }));
+    expect(back.scene.id).toBe("bulb");
+    expect(back.mix).toBe(1);
+  });
+
+  it("keeps a scene picked by hand in silence", () => {
+    const d = createDirector();
+    const silent = (b) => at(b, { playing: false, layers: new Set(), variants: [] });
+    d.frame(silent(0));
+    d.pick(silent(1), 2);
+    expect(new Set(play(d, 40, silent).slice(2))).toEqual(new Set([SCENES[2].id]));
+  });
+
   it("stays put while locked, and moves by hand", () => {
     const d = createDirector();
     d.frame(at(0));

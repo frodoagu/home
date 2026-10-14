@@ -1939,8 +1939,8 @@ source ──events──> stage ──frame──> director ──scene, strobe
   back. For `visuals.html` opened alone on a phone or a TV's browser.
 - **Idle**: with nothing playing (sampler stopped, no window, no mic) a clock
   at 140 BPM sends bar lines and no hits, marked `rest`: the show keeps
-  drifting and changing scene, calm, but nothing pulses on the beat. The
-  shaders' `uMusic` fades the beat-locked glows out with it.
+  drifting, but nothing pulses on the beat. The shaders' `uMusic` fades the
+  beat-locked glows out with it.
 
 The **stage** (`stage.js`) holds early events until their time and gives each
 frame the beat and bar phase, an envelope per layer, the energy (from the
@@ -1949,7 +1949,10 @@ last drop. The **director** (`director.js`) picks scenes by mood: calm without
 a kick, peak for 16 bars after a drop, high otherwise. It changes on a bar
 line: when the lanes changed and the scene has had 4 bars, or after 16 bars (8
 at the peak). A drop cuts, with no crossfade, to a peak scene; anything else
-crossfades over a beat. Every pick is a hash of the lanes and the bar, never
+crossfades over a beat. Silence is always the Mandelbulb: when the music stops
+the director crossfades to it (unless 🔒) and changes nothing until the music
+is back, which starts on it and counts its bars from there. A scene picked by
+hand in silence stays. Every pick is a hash of the lanes and the bar, never
 `Math.random`, so the same seed played the same way gives the same show. It
 also drives the **strobe**: 8ths through the drop's bar, 16ths rising over the
 build's second half, the kicks through the peak, and a set's frenzy (🌅, 16
@@ -2015,7 +2018,7 @@ spirals). The organic and 2D-fractal ones:
 - **Liquid** (`flow`): fbm warped by fbm warped by fbm (domain warping), lit
   in relief: marble with veins, an oil slick's thin film or a nebula with
   stars. Each kick sends the current rushing on, and friction brakes it.
-  It is a calm scene only: the director shows it in breakdowns and silence.
+  It is a calm scene only: the director shows it in breakdowns.
 - **Julia**: c walks the rim of the Mandelbrot set's main cardioid (or of the
   bulb left of it), so the set always sits on the edge between one shape and
   dust; each beat walks it on along that rim. Escape bands, a boundary glow from the
@@ -2046,7 +2049,7 @@ spirals). The organic and 2D-fractal ones:
   generation's mothers: it grows forever, with no seam. Voronoi membranes from
   the exact distance to each border, grains and an out-of-focus layer behind;
   a ripple per kick swells them. Dark field or stained. A calm scene only, like
-  the liquid: the director shows it in breakdowns and silence.
+  the liquid: the director shows it in breakdowns.
 - **Romanesco** (`phyllo`): buds on two families of Fibonacci log spirals (a
   lattice in log r and angle, so one `floor()` finds a pixel's bud), growing
   out forever, each bud optionally a smaller head of buds.
