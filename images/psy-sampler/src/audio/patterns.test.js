@@ -7,6 +7,8 @@ import {
   DEFAULTS,
   HIT,
   LOOP_VARIANTS,
+  MORPH_LOOPS,
+  euclid,
   auditionEvent,
   baseOf,
   defOf,
@@ -257,7 +259,7 @@ describe("sanitize", () => {
 it("unknown variants and FX play nothing in the loop", () => {
   expect(eventsAt("nope", 0)).toEqual([]);
   expect(eventsAt("fx.riser", 0)).toEqual([]);
-  expect(LOOP_VARIANTS).toHaveLength(84);
+  expect(LOOP_VARIANTS).toHaveLength(91);
 });
 
 describe("copies", () => {
@@ -518,5 +520,42 @@ describe("parts longer than a loop", () => {
     // Saved before parts could be longer: a 2-bar part, whatever the factory's.
     expect(sanitize("classic.popcorn", { notes: [] }).loops).toBe(1);
     expect(sanitize("classic.popcorn", null).loops).toBe(8);
+  });
+});
+
+describe("euclid", () => {
+  const show = (pattern) => pattern.map((x) => (x ? "x" : ".")).join("");
+
+  it("spreads k onsets over n steps as Björklund does", () => {
+    expect(show(euclid(5, 13))).toBe("x..x.x..x.x..");
+    expect(show(euclid(3, 8))).toBe("x..x..x.");
+    expect(show(euclid(5, 16))).toBe("x..x..x..x..x...");
+    expect(show(euclid(7, 16))).toBe("x..x.x.x..x.x.x.");
+    expect(show(euclid(0, 4))).toBe("....");
+    expect(show(euclid(4, 4))).toBe("xxxx");
+  });
+
+  it("a rotation moves the onsets later and keeps the gaps", () => {
+    expect(show(euclid(5, 16, 2))).toBe("..x..x..x..x..x.");
+    expect(show(euclid(3, 8, -1))).toBe("..x..x.x");
+  });
+
+  it("builds the Euclidean variants", () => {
+    const onsets = (id, bar) => DEFAULTS[id].data.steps.slice(bar * 16, bar * 16 + 16).map((v) => (v ? 1 : 0));
+    expect(onsets("perc.euclid5", 0)).toEqual(euclid(5, 16, 2));
+    expect(onsets("perc.euclid7", 1)).toEqual(euclid(7, 16, 2));
+    expect(DEFAULTS["lead.squelch"].data.notes).toHaveLength(22);
+    expect(DEFAULTS["lead.insect"].data.notes).toHaveLength(18);
+  });
+});
+
+describe("lead.morph", () => {
+  it("a 6-step phrase over 3 loops: back on the 1 only when the part restarts", () => {
+    const { data } = DEFAULTS["lead.morph"];
+    expect(data.loops).toBe(MORPH_LOOPS);
+    const starts = data.notes.filter((n) => n.accent).map((n) => n.step);
+    expect(starts).toEqual(Array.from({ length: 16 }, (_, i) => i * 6));
+    expect(starts.filter((s) => s % 32 === 0)).toEqual([0]); // no phrase lands on a loop start but the first
+    expect(Math.max(...data.notes.map((n) => n.step + n.len))).toBe(MORPH_LOOPS * 32);
   });
 });

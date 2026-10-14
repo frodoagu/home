@@ -385,7 +385,9 @@ describe("autopilot", () => {
   });
 
   it("never plays a banned sound; a layer with its whole pool banned sits out", () => {
-    const banned = ["lead.acid", "perc.hat", "bass.rolling", "bass.rollingOct", "bass.gallop", "bass.offbeat"];
+    const banned = [
+      "lead.acid", "perc.hat", "bass.rolling", "bass.rollingOct", "bass.gallop", "bass.offbeat", "bass.wavetable",
+    ];
     const free = unbanned(lists, banned);
     expect(unbanned(lists, [])).toBe(lists);
     expect(free.lead).not.toContain("lead.acid");

@@ -1095,10 +1095,11 @@ for it (`leftOut`), which is how a future layer can be added without shifting
 the seeds of the styles that skip it. Adding the glitch layer to every style did
 shift every seed: a seed shared before it plays a different track now.
 So does a new sound in a style's pool, and every new sound shifts "anything
-goes": Chaos, Glass and Comb joined the psytrance, psytech, hi-tech, Goa and
-darkpsy pools, and those styles' builds may now end on the chaos riser
-(`buildFx`, a style's own list of build FX), so their older seeds play
-different tracks.
+goes": the PM, wavetable, granular and Euclidean sounds, and Chaos, Glass and
+Comb, joined the psytrance, psytech, hi-tech, Goa, darkpsy and progressive
+pools, and the psy styles' builds may now end on the chaos riser (`buildFx`, a
+style's own list of build FX), so those styles' older seeds play different
+tracks.
 
 The classics layer is `manual` in the catalog: the autopilot and the ✨ AI
 never see it (not even "anything goes"), so it draws nothing and shifted no
@@ -2077,6 +2078,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Organ bass | organ bass, one note per offbeat, the octave answering a 16th later once a bar (on A, then on C), G, then E at the end |
 | | Tech house | saw pluck, short notes around the offbeat (accented), E and G at the end of the bars |
 | | Deep house | sub, long notes off the beat (3 steps on 3, 2 on 10) with gaps, C then E and G at the end of the bars, ducking 0.35 under the kick |
+| | Wavetable rolling | wavetable, rolling with the accent after the kick, E2 at the end of bar 1 and G2 at the end of bar 2 |
 | Percussion (stack) | Open hi-hat | offbeat, HP 7 kHz, 140 ms |
 | | Closed hi-hat | odd sixteenths, HP 9 kHz, 35 ms |
 | | Shaker | every step, accent on the eighths |
@@ -2088,6 +2090,8 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Rim | `rim` voice (1.7 kHz triangle + noise tick), syncopated |
 | | Shuffled hats | closed on every 16th but the beat, accent on the offbeat, swing 58 % |
 | | Bongos | `tom` synth at "Brightness" 0.6 (~170 ms), A3 / C4 / E4 in a Latin figure |
+| | Euclidean 5/16 | `rim` at 2.4 kHz / 30 ms on E(5,16) turned 2 steps (`..x..x..x..x..x.`), the first hit accented |
+| | Euclidean 7/16 | `shaker` on E(7,16), turned 2 steps in the second bar; hits on the offbeat accented |
 | | Keys | `keys` voice: a metal sheet's inharmonic clang + 3-5 random keys (sine pairs + tick) ~12 ms apart; accented on the offbeat of beats 2 and 4, plus steps 3 and 9 |
 | Lead (stack) | Acid | 303: a 16-step line in A minor with rests and accents; base cutoff drifting 300 Hz ↔ 1.5 kHz every 16 s (audio clock, not the loop) |
 | | Arpeggio | square, A-C-E-A in sixteenths |
@@ -2106,6 +2110,9 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Rubber | rubber, steps 3 and 6 of every half bar, A3 / C4 / G3 |
 | | House piano | piano, Am7 then Dm7 on x..x..x...x.x... (steps 0, 3, 6, 10, 12 of each bar) |
 | | Organ stab | organ, open Am7 (A3-E4-G4-C5) on steps 2, 6, 10 and 13 of each bar |
+| | Squelch | squelch on E(11,16) turned to rest on beats 1 and 4, an 11-note A3 line jumping to A4, C4, E4 and G3; offbeats accented |
+| | Insect | insect on E(9,16) turned 1 step, A3 with B♭3, F3 and E4 (Phrygian) |
+| | Morph | morph, a 6-step phrase (A3 for 3, E4 for 2, C4) against the 16-step bar: the part is 3 loops long, LCM(6, 32) = 96 steps, so the phrase lands back on the 1 only when the part restarts |
 | | Chaos | pluck, every 16th but the beat (A3 E4 C4 A4 E4 G4), through a lowpass (1.4 kHz, Q 6) that the chaos LFO swings ±1.2 octaves, one lobe every 4 bars |
 | Pad (stack) | A minor | A3-C4-E4, retriggered every 16 steps with an overlapping release |
 | | Am → B♭ | i → ♭II, the Phrygian move |
@@ -2117,6 +2124,7 @@ entry and there is no `Permissions-Policy` header to allow it in.
 | | Supersaw | A minor with A4 on top, 2 bars |
 | | Fifths | A2-E3-A3, no third |
 | | Deep | Am9 → Dm9 without their roots (G-B-C-E → F-A-C-E) |
+| | Grains | grains, A3-C4-E4 held 2 bars: a sung "a" stretched into a cloud |
 | | Glass | saw pad, A3-E4-A4 held 2 bars through the frequency shifter at 165 Hz, half wet: inharmonic bells |
 | Glitch (stack) | Stutter | 4 band-passed noise bursts squeezed into one step, on steps 7, 14 and 15 |
 | | Bleeps | a square on a random semitone up to 2 octaves above 1.2 kHz, every hit different |
@@ -2179,6 +2187,7 @@ cutoff, capped at 18 kHz):
 | | FM bass | 2 operators at ratio 1, index 5 → 0.3 over 120 ms (Operator style) |
 | | Reese | 2 saws ±12 cents + sub, LP 700 Hz |
 | | Organ bass | sines on harmonics 1, 2 and 3 (0.7, 0.3, 0.12), peaking where the saw bass does and falling to 40 % across the note, LP 1.5 kHz (the M1 organ bass) |
+| | Wavetable | phase-distortion tables (below), each note scanning from table 2 × "Brightness" (+1 on an accent) down to the round table 0 within 0.8 of a step, LP 3 kHz |
 | Leads | Acid 303 | saw + LP Q 14 with an envelope on the drifting cutoff |
 | | Supersaw | 5 saws at ±9/±18 cents (Wavetable style) |
 | | Analog | 2 squares ±6 cents, enveloped LP (Analog style) |
@@ -2195,8 +2204,45 @@ cutoff, capped at 18 kHz):
 | | Glide lead | 3 saws at ±12 cents scooping up 3 semitones in 70 ms, delayed vibrato |
 | | Talking | saw through 2 band-passes (Q 5) gliding from the formants of "o" (450/800 Hz) to "a" (800/1200 Hz) in 80 ms |
 | | Rubber | saw bending up an octave in 50 ms while an LP (Q 8) opens 400 Hz → 2.5 kHz: a "yoi" |
+| | Squelch | 2-operator phase modulation at ratio 2: carrier and modulator fall from an octave up onto the note (τ 12 ms), the index from 7 × "Brightness" to 0.8 (τ 35 ms) |
+| | Insect | the same at ratio 7:4, so the sidebands miss the harmonics: index 9 → 1.5 (τ 25 ms), pitch from 1.5× (τ 8 ms), gate 0.7 |
+| | Morph | the wavetable the other way: from the round table to table 3 × "Brightness" over 0.9 of the note, LP 7 kHz |
 | Pads | Saw pad / Drone / Wind | see the layers table |
+| | Grains | asynchronous granular synthesis over a 2 s sung "a" (below) |
 | Percussion | Tom | sine falling to 0.6× over 250 ms |
+
+#### Phase modulation, phase distortion and grains
+
+From a research report on psy sound design (two-operator PM, wavetables with
+phase distortion, granular synthesis, Euclidean rhythms), built with native
+Web Audio nodes:
+
+- **PM** (Squelch, Insect). Web Audio modulates frequency, so an index I is a
+  deviation of I × the modulator's Hz (a sine's PM is that FM, a quarter cycle
+  apart), capped at 12 kHz so the carrier never folds over Nyquist. Each note
+  starts its modulator on one of 8 phases (a `PeriodicWave` per phase, picked
+  from the note's time), so a run of 16ths never locks its sidebands to the same
+  transient.
+- **Phase distortion** (Wavetable, Morph). Four tables of sin(θ + α·sin 2θ), α =
+  0.3, 0.8, 1.4, 2.2: the wave skews and the overtones grow table to table. Their
+  first 48 harmonics become `PeriodicWave`s, which the browser band-limits per
+  octave (the mipmaps). A scan crossfades neighbouring tables, table i weighing
+  1 − |p − i| as the position p moves.
+- **Grains**. The source is rendered once per page (~13 ms, Chebyshev
+  recurrence for the harmonics) at 48 kHz and copied into each context: 2 s of
+  a sung "a" at A3, harmonics up to 5 kHz weighted by the vowel's formants
+  (800 / 1150 / 2900 Hz), each swelling at its own slow rate, with a 5.2 Hz
+  vibrato. Grains run on a
+  32nd-note clock (halved to 64ths while the 32nd is over 65 ms), each 2.5 gaps
+  long within 20-100 ms. Every grain has a Hann window (8 linear segments), so
+  each one starts and ends at gain 0. The read position walks through the buffer with the note, with a
+  Gaussian scatter of 50 ms, each grain detuned up to ±8 cents and panned up to
+  ±0.7. The read rate is the pitch. The scatter is seeded from the note
+  (mulberry32), so a replay sounds the same. The note's attack and release scale
+  the grains' peaks.
+- **Euclidean rhythms**. `euclid(k, n, rotate)` in `patterns.js` is Björklund's
+  algorithm (Toussaint): E(5,13) = `x..x.x..x.x..`. It writes Euclidean 5/16 and
+  7/16 and the onsets of Squelch and Insect.
 
 ### Mix
 
@@ -2207,6 +2253,11 @@ like it went silent. Measured the same way (lane only, no layer level), Bit lead
 and Chirp read -9.6 and -7.0 dBFS RMS, inside the range of the other synths on
 that line (-5.3 to -13.7). Glide lead, Talking and Rubber, on an A-C-E-A 16th
 line where the other leads span -6.8 to -14.4, read -9.9, -11.9 and -12.3.
+Each on its own part (lane only, 2 passes), Squelch, Insect and Morph read
+-9.8, -12.6 and -9.2 against Acid, Zapper, Chirp, Talking and Square at -9.2 to
+-16.5. Wavetable rolling reads -9.9 against the rolling basses' -7.8 to -12.4,
+Grains -15.2 against the pads' -11.1 to -15.5, and Euclidean 5/16 and 7/16
+-32.1 and -34.6 against Rim, Shaker and Closed hi-hat at -29.2 to -32.8.
 With their inserts on (lane only, 2 passes), Chaos reads -10.7 against Acid,
 3/16 arpeggio and Arpeggio at -10.6 to -14.4, Glass -12.2 against the pads'
 -11.1 to -12.2, and Comb -27.1 against FM metal, Ring mod and Lasers at -24.3 to

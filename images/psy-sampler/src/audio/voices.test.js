@@ -2,7 +2,20 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeAudioContext, FakeNode, FakeParam, FakeSource } from "../test/fakeAudio.js";
 import { DEFAULTS, KICK_LONG, KICK_PUNCHY, LOOP_VARIANTS, eventsAt } from "./patterns.js";
 import { PARAMS, SYNTH_IDS } from "./params.js";
-import { ACID_SWEEP_PERIOD, FX, GLITCH, INSTRUMENTS, SAMPLE_ROOT, VOICES, acidCutoff, kick, sample } from "./voices.js";
+import {
+  ACID_SWEEP_PERIOD,
+  FX,
+  GLITCH,
+  INSTRUMENTS,
+  PD_ALPHAS,
+  SAMPLE_ROOT,
+  VOICES,
+  acidCutoff,
+  choirBuffer,
+  kick,
+  pdSpectrum,
+  sample,
+} from "./voices.js";
 
 const T = 1;
 const STEP = 60 / 145 / 4;
@@ -222,6 +235,125 @@ describe("glitch voices", () => {
     const starts = ctx.sources().map((s) => s.startTime);
     expect(starts).toHaveLength(7);
     for (const t of starts) expect(t).toBeLessThan(T + STEP);
+  });
+});
+
+describe("phase modulation", () => {
+  const ev = { freq: 220, steps: 1, bright: 1, accent: false };
+
+  it("squelch: carrier and modulator fall an octave onto the note, the index from 7 to 0.8", () => {
+    INSTRUMENTS.squelch(ctx, out, T, ev, STEP);
+    const [carrier, mod] = ctx.sources();
+    expect(carrier.frequency.events).toEqual([["set", 440, T], ["target", 220, T, 0.012]]);
+    expect(mod.frequency.events).toEqual([["set", 880, T], ["target", 440, T, 0.012]]);
+    const depth = mod.outputs[0];
+    expect(depth.outputs[0]).toBe(carrier.frequency);
+    expect(depth.gain.events).toEqual([["set", 880 * 7, T], ["target", 440 * 0.8, T, 0.035]]);
+  });
+
+  it("insect runs its modulator at 7:4, off the harmonics", () => {
+    INSTRUMENTS.insect(ctx, out, T, ev, STEP);
+    const [, mod] = ctx.sources();
+    expect(mod.frequency.events.at(-1)[1]).toBeCloseTo(220 * 1.75, 9);
+  });
+
+  it("notes in a row start their modulator on different phases", () => {
+    for (let i = 0; i < 4; i++) INSTRUMENTS.squelch(ctx, out, T + i * STEP, ev, STEP);
+    const mods = ctx.sources().filter((_, i) => i % 2 === 1);
+    expect(mods.every((m) => m.type === "custom" && m.wave.disableNormalization)).toBe(true);
+    expect(new Set(mods.map((m) => m.wave)).size).toBeGreaterThan(1);
+    for (const { wave } of mods) expect(Math.hypot(wave.real[1], wave.imag[1])).toBeCloseTo(1, 6);
+  });
+
+  it("the deviation stays under 12 kHz however bright and high", () => {
+    INSTRUMENTS.squelch(ctx, out, T, { freq: 1760, steps: 1, bright: 4, accent: true }, STEP);
+    const depth = ctx.sources()[1].outputs[0];
+    expect(depth.gain.events[0][1]).toBeLessThanOrEqual(12000 + 1e-6);
+  });
+});
+
+describe("phase-distortion wavetable", () => {
+  const energy = ({ real, imag }, from) =>
+    real.slice(from).reduce((sum, r, i) => sum + r * r + imag[from + i] ** 2, 0);
+
+  it("α = 0 is a plain sine, and every table bites harder than the last", () => {
+    const sine = pdSpectrum(0);
+    expect(sine.imag[1]).toBeCloseTo(1, 6);
+    expect(energy(sine, 2)).toBeCloseTo(0, 9);
+    const upper = PD_ALPHAS.map((a) => energy(pdSpectrum(a), 2) / energy(pdSpectrum(a), 1));
+    for (let i = 1; i < upper.length; i++) expect(upper[i]).toBeGreaterThan(upper[i - 1]);
+  });
+
+  // The table weights along a scan: one gain per oscillator, by time.
+  const weights = () =>
+    ctx.sources().map((o) => ({ wave: o.wave, events: o.outputs[0].gain.events }));
+
+  it("wavetable scans down to the round table inside the step, weights summing to 1", () => {
+    INSTRUMENTS.wavetable(ctx, out, T, { freq: 55, steps: 1, bright: 1, accent: false }, STEP);
+    const ws = weights();
+    expect(ws).toHaveLength(3); // tables 2, 1, 0
+    const times = [...new Set(ws.flatMap((w) => w.events.map(([, , t]) => t)))];
+    for (const t of times) {
+      const at = ws.map((w) => w.events.find(([, , tt]) => tt === t)?.[1]).filter((v) => v !== undefined);
+      expect(at.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    }
+    const last = ws.map((w) => w.events.at(-1)[1]);
+    expect(last).toEqual([1, 0, 0]);
+  });
+
+  it("morph opens from the round table to the top one over the note", () => {
+    INSTRUMENTS.morph(ctx, out, T, { freq: 220, steps: 4, bright: 1, accent: false }, STEP);
+    const ws = weights();
+    expect(ws).toHaveLength(PD_ALPHAS.length);
+    expect(ws.map((w) => w.events[0][1])).toEqual([1, 0, 0, 0]);
+    expect(ws.map((w) => w.events.at(-1)[1])).toEqual([0, 0, 0, 1]);
+  });
+});
+
+describe("grains", () => {
+  const ev = { freq: 220, steps: 8, bright: 1, accent: false };
+
+  it("a sung buffer, made once per context and normalized", () => {
+    const buf = choirBuffer(ctx);
+    expect(choirBuffer(ctx)).toBe(buf);
+    expect(buf.duration).toBe(2);
+    expect(Math.max(...buf.getChannelData(0).map(Math.abs))).toBeCloseTo(0.9, 6);
+  });
+
+  it("Hann grains on a 32nd-note clock, scattered inside the buffer and the stereo field", () => {
+    INSTRUMENTS.grains(ctx, out, T, ev, STEP);
+    const grains = ctx.sources();
+    expect(grains.length).toBeGreaterThan(20);
+    const gap = grains[1].startTime - grains[0].startTime;
+    expect(gap).toBeCloseTo(STEP / 2, 9);
+    for (const g of grains) {
+      const win = g.outputs[0].gain.events;
+      expect(win).toHaveLength(9);
+      expect(win[0][1]).toBe(0);
+      expect(win.at(-1)[1]).toBe(0);
+      expect(g.offset).toBeGreaterThanOrEqual(0);
+      expect(g.offset + 0.1 * g.playbackRate.value).toBeLessThanOrEqual(2);
+      expect(Math.abs(g.outputs[0].outputs[0].pan.value)).toBeLessThanOrEqual(0.7);
+    }
+    expect(new Set(grains.map((g) => g.outputs[0].outputs[0].pan.value)).size).toBeGreaterThan(10);
+  });
+
+  it("at a slow BPM the clock halves to 64ths, and grains stay 20-100 ms", () => {
+    const slow = 60 / 60 / 4;
+    INSTRUMENTS.grains(ctx, out, T, ev, slow);
+    const [a, b] = ctx.sources();
+    expect(b.startTime - a.startTime).toBeCloseTo(slow / 4, 9);
+    const len = a.outputs[0].gain.events.at(-1)[2] - a.startTime;
+    expect(len).toBeGreaterThanOrEqual(0.02);
+    expect(len).toBeLessThanOrEqual(0.1 + 1e-9);
+  });
+
+  it("the same note scatters the same way: a replay sounds the same", () => {
+    INSTRUMENTS.grains(ctx, out, T, ev, STEP);
+    const first = ctx.sources().map((g) => [g.offset, g.playbackRate.value]);
+    const again = new FakeAudioContext();
+    INSTRUMENTS.grains(again, again.createGain(), T, ev, STEP);
+    expect(again.sources().map((g) => [g.offset, g.playbackRate.value])).toEqual(first);
   });
 });
 
