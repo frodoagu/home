@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHS } from "./audio/params.js";
 import { DEFAULTS, defaultData, paramSpecs } from "./audio/patterns.js";
-import { FILLS, coin, dress, fillOf, fits, moves, restyle, synthsFor } from "./dress.js";
+import { DOUBLE_ROLL, FILLS, coin, doubleRollOf, dress, fillOf, fits, moves, restyle, synthsFor } from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
 
@@ -39,6 +39,23 @@ describe("fillOf", () => {
     const seen = new Set();
     for (const seed of ["a", "b", "c", "d", "e", "f"]) for (const at of [4, 8, 12]) seen.add(fillOf(seed, "peak", at));
     expect([...seen].sort()).toEqual([...FILLS].sort());
+  });
+});
+
+describe("doubleRollOf", () => {
+  const share = (section, last) => {
+    const seeds = Array.from({ length: 400 }, (_, i) => `s${i}`);
+    return seeds.filter((seed) => doubleRollOf(seed, section, 4, last)).length / seeds.length;
+  };
+
+  it("rolls some of a peak's phrases and some sections' last loop, and nothing else", () => {
+    expect(doubleRollOf("goa", "peak", 8, false)).toBe(doubleRollOf("goa", "peak", 8, false));
+    for (const [section, last, odds] of [["peak", false, DOUBLE_ROLL.peak], ["groove", true, DOUBLE_ROLL.last]]) {
+      expect(share(section, last)).toBeGreaterThan(odds - 0.1);
+      expect(share(section, last)).toBeLessThan(odds + 0.1);
+    }
+    expect(share("groove", false)).toBe(0);
+    expect(share("breakdown", false)).toBe(0);
   });
 });
 

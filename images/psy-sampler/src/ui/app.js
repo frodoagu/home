@@ -80,7 +80,7 @@ import {
   withForm,
   withPlan,
 } from "../autopilot.js";
-import { coin, fillOf, restyle } from "../dress.js";
+import { coin, doubleRollOf, fillOf, restyle } from "../dress.js";
 import { cleanFolds } from "../folds.js";
 import {
   IMPROV_DEFAULT,
@@ -1566,7 +1566,7 @@ export function mountApp(root, engine, opts = {}) {
       }
     }
     if (state.auto && loopStart) engine.setPump(PUMP[state.pilot.section] ?? {}, time);
-    setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? fillKinds(step));
+    setBar(step, stepDrop(time, step, loopStart) ?? frenzyKinds() ?? doubleKinds() ?? fillKinds(step));
     if (state.tour) showSection();
     if (!changed) return undefined;
     if (state.auto) {
@@ -1632,14 +1632,29 @@ export function mountApp(root, engine, opts = {}) {
     return out;
   }
 
-  // The frenzy's last two loops roll every drum it plays, bar after bar;
-  // null elsewhere (its other phrases end in the usual fills).
-  function frenzyKinds() {
-    const p = state.pilot;
-    if (!state.auto || !frenzy(p) || p.left - p.ending.fade - p.ending.brake > 2) return null;
+  // Every drum playing rolls up the bar (the ⏫ Build-up), bar after bar.
+  function rollAll() {
     const out = {};
     for (const id of Object.values(laneMap())) if (defOf(id).kind === "drum") out[id] = "build";
     return out;
+  }
+
+  // The frenzy's last two loops roll every drum it plays; null elsewhere
+  // (its other phrases end in the usual fills).
+  function frenzyKinds() {
+    const p = state.pilot;
+    if (!state.auto || !frenzy(p) || p.left - p.ending.fade - p.ending.brake > 2) return null;
+    return rollAll();
+  }
+
+  // The same double roll over both bars of a phrase's last loop, in place
+  // of its fill, on some of a peak's phrases and some sections' last loop
+  // (dress.js doubleRollOf); null elsewhere. The outro has its own.
+  function doubleKinds() {
+    const p = state.pilot;
+    if (!state.auto || state.drop || !p || p.section === OUTRO) return null;
+    const at = phraseEnd(p);
+    return at && doubleRollOf(ws.seed, p.section, at, p.left === 1) ? rollAll() : null;
   }
 
   // This bar's overlays, from its bar line to the next: the last bar's come

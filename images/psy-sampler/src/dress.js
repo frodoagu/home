@@ -215,3 +215,15 @@ export function fillOf(seed, section, at) {
   let r = coin(seed, `fill/${section}/${at}`) * FILL_TOTAL;
   return FILLS.find((_, i) => (r -= FILL_WEIGHTS[i]) < 0) ?? null;
 }
+
+// The frenzy's double roll (every drum rolls up both bars of the loop) in
+// place of a phrase's fill: the odds on a peak's phrases, and on any
+// section's last loop, the way into the next one. Its own coin, so the
+// fills the other phrases play stay as they were.
+export const DOUBLE_ROLL = { peak: 0.35, last: 0.3 };
+
+/** Whether loop `at` of `section` under `seed`, a phrase end, rolls twice; `last` when it ends the section. */
+export function doubleRollOf(seed, section, at, last) {
+  const odds = Math.max(DOUBLE_ROLL[section] ?? 0, last ? DOUBLE_ROLL.last : 0);
+  return coin(seed, `roll2/${section}/${at}`) < odds;
+}
