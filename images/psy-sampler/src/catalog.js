@@ -33,7 +33,7 @@ export const LAYERS = [
     variants: [
       "lead.acid", "lead.arp", "lead.arp3", "lead.melodic", "lead.stabs",
       "lead.zap", "lead.bell", "lead.acidPhryg", "lead.techno", "lead.bits", "lead.chirp",
-      "lead.soaring", "lead.grid", "lead.vowel", "lead.rubber", "lead.piano", "lead.organ",
+      "lead.soaring", "lead.grid", "lead.vowel", "lead.rubber", "lead.piano", "lead.organ", "lead.chaos",
       "lead.squelch", "lead.insect", "lead.morph",
     ],
   },
@@ -41,14 +41,14 @@ export const LAYERS = [
     id: "pad",
     variants: [
       "pad.chord", "pad.prog", "pad.drone", "pad.air", "pad.sus",
-      "pad.dark", "pad.epic", "pad.supersaw", "pad.fifths", "pad.deep", "pad.grains",
+      "pad.dark", "pad.epic", "pad.supersaw", "pad.fifths", "pad.deep", "pad.glass", "pad.grains",
     ],
   },
   {
     id: "glitch",
     variants: [
       "glitch.stutter", "glitch.blips", "glitch.zips", "glitch.crush", "glitch.metal",
-      "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape", "glitch.lasers",
+      "glitch.ring", "glitch.crackle", "glitch.rise", "glitch.tape", "glitch.lasers", "glitch.comb",
     ],
   },
   // Famous melodies, whole (audio/classics.js), played by hand: the
@@ -68,7 +68,7 @@ export const LAYERS = [
     oneShot: true,
     variants: [
       "fx.riser", "fx.riserImpact", "fx.down", "fx.sweep", "fx.impact",
-      "fx.crash", "fx.siren", "fx.reverse", "fx.stutter", "fx.tapeStop",
+      "fx.crash", "fx.siren", "fx.reverse", "fx.stutter", "fx.tapeStop", "fx.chaos",
     ],
   },
 ];

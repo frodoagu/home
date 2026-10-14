@@ -138,8 +138,16 @@ export class FakeAudioContext {
   createStereoPanner() {
     return withParams(new FakeNode(this, "panner"), { pan: 0 });
   }
-  createDelay() {
-    return withParams(new FakeNode(this, "delay"), { delayTime: 0 });
+  createDelay(maxDelayTime = 1) {
+    const n = withParams(new FakeNode(this, "delay"), { delayTime: 0 });
+    n.maxDelayTime = maxDelayTime;
+    return n;
+  }
+  createIIRFilter(feedforward, feedback) {
+    const n = new FakeNode(this, "iir");
+    n.feedforward = [...feedforward];
+    n.feedback = [...feedback];
+    return n;
   }
   createWaveShaper() {
     const n = new FakeNode(this, "waveshaper");

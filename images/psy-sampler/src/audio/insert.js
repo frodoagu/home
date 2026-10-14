@@ -3,13 +3,14 @@
 // as data (`data.insert`); the engine builds a chain per lane, FX shot and
 // audition, and updates it live.
 //
-//   input ─> filter ─> pre ─> shaper ─> post ─> hp ─> lp ─> [phaser] ─> [tremolo] ─> [panner ─> √2] ─> output
-//              ▲ detune                                                                  ▲ pan
-//   lfo ─> depth  (+ a per-note envelope)                               panLfo ─> width
+//   input ─> filter ─> pre ─> shaper ─> post ─> hp ─> lp ─> [comb] ─> [shift] ─> [phaser] ─> [tremolo] ─> [panner ─> √2] ─> output
+//              ▲ detune                                     ▲ delay                                            ▲ pan
+//   lfo ─> depth  (+ a per-note envelope)                combLfo                                 panLfo ─> width
 //
 // The filter is one biquad, or three bandpasses in parallel for a vowel.
-// The filter LFO has a shape (sine … a random sample & hold); the phaser,
-// the tremolo and the panner only exist while they are on.
+// The filter LFO has a shape (sine … a random sample & hold, or the Lorenz
+// attractor's chaos); the comb, the frequency shifter, the phaser, the
+// tremolo and the panner only exist while they are on.
 //
 // hp and lp are the sound's tone: a highpass and a lowpass that are always
 // there, an identity while open (hp at its floor runs at 0 Hz, lp at its
@@ -22,8 +23,10 @@
 //
 // Also here: the DJ filter on the master bus, one bipolar knob.
 
+import { LOBE, lorenz } from "./chaos.js";
+
 export const FILTER_TYPES = ["off", "lowpass", "highpass", "bandpass", "vowel"];
-export const LFO_SHAPES = ["sine", "triangle", "sawtooth", "square", "random", "smooth"];
+export const LFO_SHAPES = ["sine", "triangle", "sawtooth", "square", "random", "smooth", "chaos"];
 export const TREM_RATES = [1, 2, 4, 8]; // steps per tremolo cycle
 // Formants (Hz, level) per vowel, Strudel's vowel(): a bandpass each. The
 // levels carry each vowel's own makeup, so A E I O U sit within ~1 dB of
@@ -61,6 +64,13 @@ export const INSERT_DEFAULT = {
   tremRate: 2,
   hp: 20, // the tone's highpass, Hz: HP_OPEN is off
   lp: 20000, // the tone's lowpass, Hz: LP_OPEN is off
+  comb: 0, // the comb resonator's mix
+  combHz: 110, // its pitch
+  combFb: 0.85, // its feedback
+  combMod: 0, // how far a chaos LFO swings its delay
+  combRate: 32, // steps per cycle of that LFO
+  shift: 0, // the frequency shifter's mix
+  shiftHz: 2, // how far it moves every partial up
 };
 
 // The tone filters' ends, where each one is open (an identity).
@@ -78,7 +88,10 @@ const RANGE = 4; // soft/hard/fold: the shaper's ±1 spans ±RANGE of the curve
 // builds a fresh chain, like a filter or distortion type.
 export const isPanned = (insert) => insert.pan !== 0 || insert.width > 0;
 export const kindOf = (insert) =>
-  [insert.filter, insert.drive, isPanned(insert), insert.width > 0, insert.shape, insert.phaser > 0, insert.trem > 0].join("|");
+  [
+    insert.filter, insert.drive, isPanned(insert), insert.width > 0, insert.shape, insert.phaser > 0, insert.trem > 0,
+    insert.comb > 0, insert.shift > 0,
+  ].join("|");
 export const isBypass = (insert) =>
   insert.filter === "off" &&
   insert.drive === "off" &&
@@ -86,6 +99,8 @@ export const isBypass = (insert) =>
   !insert.width &&
   !insert.phaser &&
   !insert.trem &&
+  !insert.comb &&
+  !insert.shift &&
   insert.hp <= HP_OPEN &&
   insert.lp >= LP_OPEN;
 
@@ -148,7 +163,7 @@ export const lfoHz = (rate, stepDur) => 1 / (rate * stepDur);
 const NOISE_RATE = 3000;
 const NOISE_POINTS = 8;
 const NOISE_CYCLES = 16;
-const noiseTables = new WeakMap(); // ctx -> { random, smooth }
+const noiseTables = new WeakMap(); // ctx -> { random, smooth, chaos }
 
 export function noiseValues(seed = 0x9e3779b9) {
   let a = seed >>> 0;
@@ -160,9 +175,20 @@ export function noiseValues(seed = 0x9e3779b9) {
   });
 }
 
+// The chaos LFO reads the Lorenz attractor's x, one lobe (LOBE time units) a
+// second of table, so like the random ones the playback rate is the LFO's
+// Hz; CHAOS_CYCLES lobes before it repeats. Drawn once per page.
+const CHAOS_CYCLES = 64;
+let chaosValues = null;
+
 function noiseTable(ctx, shape) {
   let tables = noiseTables.get(ctx);
   if (!tables) noiseTables.set(ctx, (tables = {}));
+  if (!tables[shape] && shape === "chaos") {
+    chaosValues ??= lorenz(NOISE_RATE * CHAOS_CYCLES, LOBE / NOISE_RATE).x;
+    tables.chaos = ctx.createBuffer(1, chaosValues.length, NOISE_RATE);
+    tables.chaos.getChannelData(0).set(chaosValues);
+  }
   if (!tables[shape]) {
     const points = noiseValues();
     const per = NOISE_RATE / NOISE_POINTS;
@@ -184,7 +210,7 @@ function noiseTable(ctx, shape) {
 
 // A tempo-synced LFO of any shape, started at `at`: { out, setHz, stop }.
 function tempoLfo(ctx, shape, hz, at) {
-  if (shape === "random" || shape === "smooth") {
+  if (shape === "random" || shape === "smooth" || shape === "chaos") {
     const src = ctx.createBufferSource();
     src.buffer = noiseTable(ctx, shape);
     src.loop = true;
@@ -272,6 +298,112 @@ function toneTo(param, hz, now, ramp) {
   if (hz < HP_OPEN) param.setValueAtTime(hz, now + ramp);
 }
 
+// Comb resonator: y[n] = x[n] + g·y[n − D], D = 1 / combHz. A DelayNode in a
+// loop can't go under one render quantum (128 frames, 2.7 ms at 48 kHz), so
+// it rings at COMB_MAX_HZ at most. The wet path is scaled by (1 − g) ×
+// COMB_MAKEUP: a partial right on a resonance comes out COMB_MAKEUP (+9 dB)
+// louder whatever the feedback, broadband input a few dB quieter. A chaos
+// LFO swings D by up to half itself.
+export const COMB_MIN_HZ = 40;
+export const COMB_MAX_HZ = 340;
+const COMB_MAKEUP = 2.8;
+// Dry and wet cross at equal power: what the comb or the shifter adds is
+// mostly at other frequencies than the dry signal, so the powers add.
+const dryOf = (mix) => Math.cos((mix * Math.PI) / 2);
+const wetOf = (mix) => Math.sin((mix * Math.PI) / 2);
+const combWet = (insert) => wetOf(insert.comb) * (1 - insert.combFb) * COMB_MAKEUP;
+const combSwing = (insert) => (insert.combMod * 0.5) / insert.combHz;
+
+function combStage(ctx, insert) {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const dry = gainOf(ctx, dryOf(insert.comb));
+  const sum = ctx.createGain();
+  const delay = ctx.createDelay(1.5 / COMB_MIN_HZ);
+  delay.delayTime.value = 1 / insert.combHz;
+  const fb = gainOf(ctx, insert.combFb);
+  const wet = gainOf(ctx, combWet(insert));
+  input.connect(dry).connect(output);
+  input.connect(sum).connect(delay).connect(fb).connect(sum);
+  sum.connect(wet).connect(output);
+  return {
+    input,
+    output,
+    delayTime: delay.delayTime,
+    update(next, now) {
+      dry.gain.setTargetAtTime(dryOf(next.comb), now, GLIDE);
+      wet.gain.setTargetAtTime(combWet(next), now, GLIDE);
+      fb.gain.setTargetAtTime(next.combFb, now, GLIDE);
+      delay.delayTime.setTargetAtTime(1 / next.combHz, now, GLIDE);
+    },
+  };
+}
+
+// Frequency shifter: two allpass chains 90° apart across the audio band
+// (Niemitalo's Hilbert pair: 4 sections of (a² − z⁻²) / (1 − a²·z⁻²) each,
+// the I path a sample later) give the signal's analytic pair, I a quarter
+// cycle behind Q, and I·cos + Q·sin moves every partial up by shiftHz, so
+// harmonics stop being harmonic. Mixed with the dry signal a few Hz is an endless phaser; tens to
+// hundreds turn a chord into bells. A GainNode at 0 driven by an oscillator
+// is the multiplier.
+export const HILBERT_I = [0.6923878, 0.9360654322959, 0.988229522686, 0.9987488452737];
+export const HILBERT_Q = [0.4021921162426, 0.856171088242, 0.9722909545651, 0.9952884791278];
+
+/** One path's sections as IIR filter coefficients: { feedforward, feedback }. */
+export const hilbertSections = (coefs, late) =>
+  coefs.map((a, i) => {
+    const c = a * a;
+    return { feedforward: late && i === 0 ? [0, c, 0, -1] : [c, 0, -1], feedback: [1, 0, -c] };
+  });
+
+function hilbertPath(ctx, coefs, late) {
+  const stages = hilbertSections(coefs, late).map((s) => ctx.createIIRFilter(s.feedforward, s.feedback));
+  stages.reduce((a, b) => a.connect(b));
+  return { input: stages[0], output: stages.at(-1) };
+}
+
+const cosines = new WeakMap();
+function cosine(ctx) {
+  let wave = cosines.get(ctx);
+  if (!wave) {
+    wave = ctx.createPeriodicWave(new Float32Array([0, 1]), new Float32Array([0, 0]), { disableNormalization: true });
+    cosines.set(ctx, wave);
+  }
+  return wave;
+}
+
+function shiftStage(ctx, insert, at) {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const dry = gainOf(ctx, dryOf(insert.shift));
+  input.connect(dry).connect(output);
+  const cos = ctx.createOscillator();
+  cos.setPeriodicWave(cosine(ctx));
+  const sin = ctx.createOscillator();
+  const carriers = [cos, sin];
+  const wets = [hilbertPath(ctx, HILBERT_I, true), hilbertPath(ctx, HILBERT_Q, false)].map((path, i) => {
+    const product = gainOf(ctx, 0);
+    carriers[i].frequency.value = insert.shiftHz;
+    carriers[i].connect(product.gain);
+    const wet = gainOf(ctx, wetOf(insert.shift));
+    input.connect(path.input);
+    path.output.connect(product).connect(wet).connect(output);
+    return wet;
+  });
+  for (const c of carriers) c.start(at);
+  return {
+    input,
+    output,
+    update(next, now) {
+      dry.gain.setTargetAtTime(dryOf(next.shift), now, GLIDE);
+      for (const w of wets) w.gain.setTargetAtTime(wetOf(next.shift), now, GLIDE);
+      // Both carriers move alike, so they stay a quarter cycle apart.
+      for (const c of carriers) c.frequency.setTargetAtTime(next.shiftHz, now, GLIDE);
+    },
+    stop: (when) => carriers.forEach((c) => c.stop(when)),
+  };
+}
+
 const PHASER_STAGES = 4;
 const PHASER_HZ = 900; // where the allpasses sit; the LFO sweeps them ±2 octaves
 const PHASER_CENTS = 2400;
@@ -321,14 +453,29 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
   const filtered = insert.filter !== "off";
   const sweep = filtered ? lfo(insert.shape, "rate", filter.detunes, insert.lfo * LFO_CENTS) : null;
 
+  let tail = lp;
+  let comb = null;
+  if (insert.comb > 0) {
+    comb = combStage(ctx, insert);
+    tail.connect(comb.input);
+    comb.lfo = lfo("chaos", "combRate", [comb.delayTime], combSwing(insert));
+    tail = comb.output;
+  }
+  let shift = null;
+  if (insert.shift > 0) {
+    shift = shiftStage(ctx, insert, at);
+    tail.connect(shift.input);
+    tail = shift.output;
+  }
+
   // Phaser: allpasses in series, mixed back with the dry signal. The notches
   // cancel about half the power, so the sum is scaled by 1/√(1 + mix).
-  let tail = lp;
   let phaser = null;
   if (insert.phaser > 0) {
     const sum = gainOf(ctx, phaserSum(insert.phaser));
     const wet = gainOf(ctx, insert.phaser);
-    let node = lp;
+    const dry = tail;
+    let node = dry;
     const stages = Array.from({ length: PHASER_STAGES }, () => {
       const ap = ctx.createBiquadFilter();
       ap.type = "allpass";
@@ -338,7 +485,7 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
       return ap;
     });
     node.connect(wet).connect(sum);
-    lp.connect(sum);
+    dry.connect(sum);
     phaser = { sum, wet, ...lfo("sine", "phaserRate", stages.map((ap) => ap.detune), PHASER_CENTS) };
     tail = sum;
   }
@@ -387,6 +534,11 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
         phaser.wet.gain.setTargetAtTime(next.phaser, now, GLIDE);
         phaser.sum.gain.setTargetAtTime(phaserSum(next.phaser), now, GLIDE);
       }
+      if (comb) {
+        comb.update(next, now);
+        comb.lfo.depth.gain.setTargetAtTime(combSwing(next), now, GLIDE);
+      }
+      shift?.update(next, now);
       if (trem) {
         trem.amp.gain.setTargetAtTime(1 - next.trem / 2, now, GLIDE);
         trem.depth.gain.setTargetAtTime(next.trem / 2, now, GLIDE);
@@ -417,6 +569,7 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
     },
     stop(when) {
       for (const [l] of lfos) l.stop(when);
+      shift?.stop(when);
     },
   };
 }

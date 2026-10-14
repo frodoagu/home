@@ -6,6 +6,7 @@
 //
 // Events carry the variant's editable params (params.js), so every value
 // below that has a default in the destructuring is a slider somewhere.
+import { LOBE, lorenz } from "./chaos.js";
 import { centsToRatio } from "./music.js";
 
 const noiseCache = new WeakMap();
@@ -1233,6 +1234,48 @@ export function tapeStop(ctx, out, t, stepDur, { f0 = 600, decay = 0.8 } = {}) {
   return end;
 }
 
+// The Lorenz attractor at audio rate, x left and y right: CHAOS_LOBES turns
+// around a lobe a second, a rough, fractured tone that never quite repeats.
+// Drawn once per page at CHAOS_RATE and copied into each context.
+const CHAOS_RATE = 48000;
+const CHAOS_LOBES = 400;
+let chaosOrbit = null;
+const chaosBuffers = new WeakMap();
+export function chaosBuffer(ctx) {
+  let buf = chaosBuffers.get(ctx);
+  if (!buf) {
+    chaosOrbit ??= lorenz(CHAOS_RATE * 2, (LOBE * CHAOS_LOBES) / CHAOS_RATE);
+    buf = ctx.createBuffer(2, chaosOrbit.x.length, CHAOS_RATE);
+    buf.getChannelData(0).set(chaosOrbit.x);
+    buf.getChannelData(1).set(chaosOrbit.y);
+    chaosBuffers.set(ctx, buf);
+  }
+  return buf;
+}
+
+// Chaos riser: that orbit read faster and faster (×0.5 → ×4) through a wide
+// band rising to `top`, swelling like the riser.
+export function chaosRiser(ctx, out, t, stepDur, { bars = 2, top = 8000 } = {}) {
+  const dur = barsDur(bars, stepDur);
+  const src = ctx.createBufferSource();
+  src.buffer = chaosBuffer(ctx);
+  src.loop = true;
+  src.playbackRate.setValueAtTime(0.5, t);
+  src.playbackRate.exponentialRampToValueAtTime(4, t + dur);
+  const bp = filter(ctx, "bandpass", 400, 1);
+  bp.frequency.setValueAtTime(400, t);
+  bp.frequency.exponentialRampToValueAtTime(top, t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.12, t + 0.05);
+  g.gain.exponentialRampToValueAtTime(2.2, t + dur);
+  g.gain.linearRampToValueAtTime(0, t + dur + 0.03);
+  src.connect(bp).connect(g).connect(out);
+  src.start(t);
+  src.stop(t + dur + 0.05);
+  return t + dur + 0.03;
+}
+
 export const FX = {
   "fx.riser": riser,
   "fx.riserImpact": riserImpact,
@@ -1244,6 +1287,7 @@ export const FX = {
   "fx.reverse": reverse,
   "fx.stutter": stutterRoll,
   "fx.tapeStop": tapeStop,
+  "fx.chaos": chaosRiser,
 };
 
 /* ------------------------------------------------------------- sample -- */

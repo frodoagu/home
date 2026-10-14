@@ -101,6 +101,7 @@ export const PARAMS = {
   "fx.siren": [length(1), { key: "rate", label: "vibrato", min: 2, max: 12, step: 0.5, def: 7, fmt: (v) => `${v} Hz` }],
   "fx.reverse": [length(2), tone(5000, 2000, 10000, "hpCut")],
   "fx.stutter": [length(1), { key: "top", label: "to", min: 1500, max: 12000, step: 100, def: 6000, fmt: hz }],
+  "fx.chaos": [length(2), { key: "top", label: "to", min: 2000, max: 12000, step: 100, def: 8000, fmt: hz }],
   "fx.tapeStop": [
     { key: "f0", label: "from", min: 100, max: 2000, step: 10, def: 600, fmt: hz },
     decay(0.8, 0.2, 2, 0.05, sec),
@@ -130,6 +131,16 @@ export const INSERT_PARAMS = [
   // The tone: open at either end (insert.js HP_OPEN / LP_OPEN).
   { key: "hp", label: "hp", min: 20, max: 20000, step: 1, def: 20, fmt: (v) => (v <= 20 ? "–" : hz(v)), log: true },
   { key: "lp", label: "lp", min: 20, max: 20000, step: 1, def: 20000, fmt: (v) => (v >= 20000 ? "–" : hz(v)), log: true },
+  // The comb resonator and the frequency shifter (insert.js): mixes, 0 is off.
+  { key: "comb", label: "comb", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  { key: "combHz", label: "combHz", min: 40, max: 340, step: 1, def: 110, fmt: hz, log: true },
+  { key: "combFb", label: "combFb", min: 0, max: 0.95, step: 0.01, def: 0.85, fmt: pct },
+  { key: "combMod", label: "combMod", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  { key: "shift", label: "shift", min: 0, max: 1, step: 0.05, def: 0, fmt: pct },
+  {
+    key: "shiftHz", label: "shiftHz", min: 0.1, max: 1000, step: 0.1, def: 2, log: true,
+    fmt: (v) => (v < 10 ? `${v.toFixed(1)} Hz` : hz(v)),
+  },
 ];
 
 // How a sound sits in time and under the kick (patterns.js GROOVE).

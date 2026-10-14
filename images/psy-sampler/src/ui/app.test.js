@@ -1021,6 +1021,26 @@ describe("insert extras", () => {
     slide("pad.chord", "phaser", 0.4);
     expect(saved().variants["pad.chord"].insert).toMatchObject({ trem: 0.5, tremRate: 1, phaser: 0.4 });
   });
+
+  it("the comb and the frequency shifter show their knobs once their mix is up", () => {
+    openEditor("pad.chord");
+    for (const sel of ['input[data-param="combHz"]', '[data-control="comb-rate"]', 'input[data-param="shiftHz"]']) {
+      expect(shown("pad.chord", sel)).toBe(false);
+    }
+    slide("pad.chord", "comb", 0.6);
+    expect(shown("pad.chord", 'input[data-param="combFb"]')).toBe(true);
+    expect(shown("pad.chord", '[data-control="comb-rate"]')).toBe(true);
+    slide("pad.chord", "combMod", 0.3);
+    pick("pad.chord", "comb-rate", 8);
+    slide("pad.chord", "shift", 0.5);
+    expect(shown("pad.chord", 'input[data-param="shiftHz"]')).toBe(true);
+    slide("pad.chord", "shiftHz", 260); // a log slider: 260 of 400 is ~40 Hz
+    expect(saved().variants["pad.chord"].insert).toMatchObject({ comb: 0.6, combMod: 0.3, combRate: 8, shift: 0.5, shiftHz: 39.8 });
+    slide("pad.chord", "shiftHz", 0);
+    expect(saved().variants["pad.chord"].insert.shiftHz).toBe(0.1); // its decimals survive the log mapping
+    slide("pad.chord", "comb", 0);
+    expect(shown("pad.chord", 'input[data-param="combFb"]')).toBe(false);
+  });
 });
 
 describe("editor focus", () => {
@@ -2129,7 +2149,7 @@ describe("autopilot", () => {
   const layers = () => pressed().map((v) => v.split(".")[0]);
 
   it("never leaves kick, bass and percussion alone for more than a bar", () => {
-    $("#seed").value = "goa"; // a seed whose bar 60 has a kick
+    $("#seed").value = "forest"; // a seed whose bar 60 has a kick
     $("#seed").dispatchEvent(new Event("change"));
     autoBtn().click();
     for (let i = 0; i < 60; i++) {

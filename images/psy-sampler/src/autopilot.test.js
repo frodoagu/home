@@ -186,7 +186,7 @@ describe("autopilot", () => {
   it("the loop before a peak fires a riser; a breakdown enters with a downlifter and no kick", () => {
     const log = run(11, 200);
     for (const m of log) {
-      if (m.pilot.left === 1 && m.pilot.next === "peak") expect(m.fx[0]).toMatch(/^fx\.(riser|reverse)/);
+      if (m.pilot.left === 1 && m.pilot.next === "peak") expect(m.fx[0]).toMatch(/^fx\.(riser|reverse|chaos)/);
       if (m.pilot.section === "breakdown" && m.pilot.left === m.pilot.length) {
         expect(m.fx).toEqual(["fx.down"]);
         expect(m.active.kick).toBeUndefined();
@@ -205,7 +205,7 @@ describe("autopilot", () => {
         if (pilot.section !== "build" || pilot.left !== 1) continue;
         builds++;
         expect(dropping(pilot)).toBe(true);
-        expect(fx[0]).toMatch(/^fx\.(riser|reverse)/);
+        expect(fx[0]).toMatch(/^fx\.(riser|reverse|chaos)/);
         if (pilot.next === "breakdown") teases++;
         else expect(pilot.next).toBe("peak");
         expect(log[i + 1]?.pilot.section ?? pilot.next).toBe(pilot.next);
@@ -659,7 +659,7 @@ describe("plans (✨ AI)", () => {
       const plan = pilot.section === "breakdown" ? { section: "groove", bars: 8, layers: { kick: ["kick.fullon"] } } : null;
       ({ pilot, active } = advance(withPlan(pilot, plan), active, lists, rng));
       if (pilot.left === pilot.length) walked.push(pilot.section);
-      if (pilot.section === "groove" && pilot.left === pilot.length) {
+      if (pilot.section === "groove" && pilot.left === pilot.length && walked.length === 2) {
         expect(pilot.length).toBe(4);
         expect(active.kick).toBe("kick.fullon");
       }

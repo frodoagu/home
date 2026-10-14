@@ -102,6 +102,11 @@ export const OUTRO = "outro";
 // The sections a listener or a plan may pick: the outro only closes a set.
 export const SECTION_IDS = Object.keys(SECTIONS).filter((id) => id !== OUTRO);
 
+// What a build ends on; the psy styles' may also be the Lorenz riser
+// (`buildFx`, a style's own list).
+const BUILD_FX = ["fx.riser", "fx.riserImpact", "fx.reverse"];
+const PSY_BUILD_FX = [...BUILD_FX, "fx.chaos"];
+
 export const STYLES = {
   house: {
     bpm: [120, 126],
@@ -159,10 +164,12 @@ export const STYLES = {
       perc: ["perc.hat", "perc.chat", "perc.clap", "perc.snare", "perc.ride", "perc.euclid7"],
       lead: [
         "lead.acid", "lead.arp", "lead.melodic", "lead.stabs", "lead.soaring", "lead.grid", "lead.vowel", "lead.squelch",
+        "lead.chaos",
       ],
       pad: ["pad.chord", "pad.prog", "pad.supersaw"],
       glitch: ["glitch.zips", "glitch.stutter", "glitch.rise", "glitch.metal"],
     },
+    buildFx: PSY_BUILD_FX,
   },
   psytech: {
     bpm: [138, 146],
@@ -171,10 +178,14 @@ export const STYLES = {
       kick: ["kick.psytech", "kick.punchy"],
       bass: ["bass.fm", "bass.rolling", "bass.gallop", "bass.wavetable"],
       perc: ["perc.chat", "perc.clap", "perc.rim", "perc.hat", "perc.euclid5"],
-      lead: ["lead.acidPhryg", "lead.arp", "lead.zap", "lead.bits", "lead.vowel", "lead.rubber", "lead.squelch", "lead.morph"],
-      pad: ["pad.dark", "pad.drone", "pad.prog"],
-      glitch: ["glitch.zips", "glitch.blips", "glitch.stutter", "glitch.ring", "glitch.lasers"],
+      lead: [
+        "lead.acidPhryg", "lead.arp", "lead.zap", "lead.bits", "lead.vowel", "lead.rubber", "lead.squelch", "lead.morph",
+        "lead.chaos",
+      ],
+      pad: ["pad.dark", "pad.drone", "pad.prog", "pad.glass"],
+      glitch: ["glitch.zips", "glitch.blips", "glitch.stutter", "glitch.ring", "glitch.lasers", "glitch.comb"],
     },
+    buildFx: PSY_BUILD_FX,
     entryFx: { groove: [null, null, "fx.stutter"] },
   },
   hitech: {
@@ -188,9 +199,10 @@ export const STYLES = {
       pad: ["pad.dark", "pad.air", "pad.drone"],
       glitch: [
         "glitch.zips", "glitch.blips", "glitch.stutter", "glitch.rise", "glitch.tape", "glitch.metal", "glitch.crush",
-        "glitch.lasers",
+        "glitch.lasers", "glitch.comb",
       ],
     },
+    buildFx: PSY_BUILD_FX,
     entryFx: { groove: [null, "fx.stutter", "fx.siren"], breakdown: ["fx.down", "fx.tapeStop"] },
   },
   goa: {
@@ -200,10 +212,11 @@ export const STYLES = {
       kick: ["kick.long", "kick.fullon"],
       bass: ["bass.rolling", "bass.rollingOct", "bass.gallop"],
       perc: ["perc.hat", "perc.shaker", "perc.toms", "perc.snare"],
-      lead: ["lead.acid", "lead.melodic", "lead.arp", "lead.squelch"],
-      pad: ["pad.prog", "pad.chord", "pad.fifths", "pad.grains"],
+      lead: ["lead.acid", "lead.melodic", "lead.arp", "lead.squelch", "lead.chaos"],
+      pad: ["pad.prog", "pad.chord", "pad.fifths", "pad.grains", "pad.glass"],
       glitch: ["glitch.zips", "glitch.ring", "glitch.rise", "glitch.blips", "glitch.lasers"],
     },
+    buildFx: PSY_BUILD_FX,
     entryFx: { groove: [null, "fx.siren", "fx.siren"] },
   },
   darkpsy: {
@@ -214,9 +227,10 @@ export const STYLES = {
       bass: ["bass.phrygian", "bass.fm", "bass.hitech"],
       perc: ["perc.chat", "perc.hat16", "perc.rim", "perc.toms", "perc.snare", "perc.euclid5"],
       lead: ["lead.acidPhryg", "lead.zap", "lead.bell", "lead.chirp", "lead.vowel", "lead.rubber", "lead.insect"],
-      pad: ["pad.dark", "pad.drone", "pad.air"],
-      glitch: ["glitch.crackle", "glitch.ring", "glitch.metal", "glitch.crush", "glitch.tape"],
+      pad: ["pad.dark", "pad.drone", "pad.air", "pad.glass"],
+      glitch: ["glitch.crackle", "glitch.ring", "glitch.metal", "glitch.crush", "glitch.tape", "glitch.comb"],
     },
+    buildFx: PSY_BUILD_FX,
     entryFx: { breakdown: ["fx.down", "fx.tapeStop"] },
   },
   all: { bpm: null, pool: null }, // every sound, at any BPM
@@ -240,7 +254,6 @@ const ENTRY_FX = {
   groove: [null, null, "fx.siren"],
   outro: ["fx.crash", "fx.impact"], // it drops in like a peak
 };
-const BUILD_FX = ["fx.riser", "fx.riserImpact", "fx.reverse"];
 const REWRITE = { build: ["lead", 0.5], breakdown: ["lead", 0.6], groove: ["bass", 0.25] };
 const KEEP = 0.75; // a playing variant survives a section change
 const MELODIC = ["lead", "pad"]; // every section plays at least one
@@ -815,7 +828,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     if (left === 1 && !(closing && pilot.section === OUTRO)) {
       upcoming = queue[0] ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
       if (closing) upcoming = closingPick(upcoming, closing.left - 1);
-      if (upcoming === "peak" || upcoming === OUTRO || pilot.section === "build" || pilot.opening) fx.push(pick(BUILD_FX, rng));
+      if (upcoming === "peak" || upcoming === OUTRO || pilot.section === "build" || pilot.opening) fx.push(pick(STYLES[style]?.buildFx ?? BUILD_FX, rng));
     }
     return {
       pilot: {
