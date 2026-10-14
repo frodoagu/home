@@ -2607,13 +2607,20 @@ describe("✨ AI", () => {
     playing();
     aiBtn().click();
     await flushPromises();
-    expect($("#ai-key").closest("label").hidden).toBe(true);
+    expect($(".ai-link").hidden).toBe(true);
     $("#ai-engine").value = "openai";
     $("#ai-engine").dispatchEvent(new Event("change"));
-    expect($("#ai-key").closest("label").hidden).toBe(false);
+    expect($(".ai-link").hidden).toBe(false);
+    expect($(".ai-link-mark svg")).not.toBeNull();
+    expect($(".ai-link-name").textContent).toBe("OpenAI");
+    expect($(".ai-link-state").textContent).toBe("Sin vincular");
+    expect($(".ai-link-steps").hidden).toBe(false);
     expect($("#ai-key").type).toBe("password");
+    expect($("#ai-key").placeholder).toBe("sk-proj-…");
     expect($("#ai-endpoint").closest("label").hidden).toBe(true);
     expect($(".ai-getkey").href).toBe("https://platform.openai.com/api-keys");
+    expect($(".ai-getkey").textContent).toBe("Creá una clave API en platform.openai.com ↗");
+    expect($(".ai-link-safe").textContent).toMatch(/solo en tu compu.*no se manda a ningún otro lado.*directo de tu compu a OpenAI/);
     expect($(".ai-unlink").hidden).toBe(true);
     expect(ai.openai.start).not.toHaveBeenCalled(); // nothing to ask without a key
     expect($(".status").textContent).toBe("Pegá tu clave API de OpenAI para vincular tu cuenta.");
@@ -2627,8 +2634,14 @@ describe("✨ AI", () => {
     $("#ai-key").value = "  sk-proj-abc12345 ";
     $("#ai-key").dispatchEvent(new Event("change"));
     expect(ai.openai.start).toHaveBeenLastCalledWith({ key: "sk-proj-abc12345", model: "" });
+    expect($(".ai-link-state").textContent).toBe("Revisando la clave…");
+    expect($(".ai-link-steps").hidden).toBe(true);
+    $(".ai-link-go").click(); // the same key, already on its way: not asked again
+    expect(ai.openai.start).toHaveBeenCalledTimes(1);
     await flushPromises();
     expect($(".status").textContent).toMatch(/OpenAI listo/);
+    expect($(".ai-link-state").textContent).toBe("✓ Vinculada · ••••2345");
+    expect($(".ai-link").dataset.check).toBe("ok");
     expect($(".ai-unlink").hidden).toBe(false);
     expect([...root.querySelectorAll("#ai-model option")].map((o) => o.textContent)).toEqual(["Automático (uno rápido)", "gemma-3-4b", "qwen"]);
     $("#ai-model").value = "qwen";
@@ -2641,10 +2654,18 @@ describe("✨ AI", () => {
     ai.anthropic.start.mockRejectedValueOnce(Object.assign(new Error("HTTP 401"), { status: 401 }));
     $("#ai-engine").value = "anthropic";
     $("#ai-engine").dispatchEvent(new Event("change"));
+    expect($(".ai-link-name").textContent).toBe("Anthropic (Claude)");
+    expect($(".ai-getkey").href).toBe("https://console.anthropic.com/settings/keys");
     $("#ai-key").value = "sk-ant-wrong123";
-    $("#ai-key").dispatchEvent(new Event("change"));
+    $("#ai-key").dispatchEvent(new InputEvent("input", { inputType: "insertFromPaste" })); // linked on paste
     await flushPromises();
+    expect(ai.anthropic.start).toHaveBeenLastCalledWith({ key: "sk-ant-wrong123", model: "" });
     expect($(".status").textContent).toBe("Anthropic (Claude) rechazó la clave: revisala o creá otra.");
+    expect($(".ai-link-state").textContent).toBe("✕ Clave rechazada");
+    expect($(".ai-link-steps").hidden).toBe(false); // to paste another
+    $(".ai-link-go").click(); // the same key again: a refused one is asked again
+    expect(ai.anthropic.start).toHaveBeenCalledTimes(2);
+    await flushPromises();
 
     $("#ai-engine").value = "openai";
     $("#ai-engine").dispatchEvent(new Event("change"));
@@ -2653,6 +2674,8 @@ describe("✨ AI", () => {
     expect(JSON.parse(localStorage.getItem("psy-sampler:ai")).keys).toEqual({ openai: "", anthropic: "sk-ant-wrong123", gemini: "" });
     expect($("#ai-key").value).toBe("");
     expect($(".ai-unlink").hidden).toBe(true);
+    expect($(".ai-link-state").textContent).toBe("Sin vincular");
+    expect($(".ai-link-steps").hidden).toBe(false);
   });
 
   it("a linked account plans the sections with its key", async () => {
