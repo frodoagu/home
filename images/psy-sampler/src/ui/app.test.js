@@ -2867,7 +2867,7 @@ describe("✨ AI", () => {
     expect($(".section-badge").textContent).toBe("Break");
     const lead = saved().variants["lead.acid"];
     expect(lead.synth).toBe("supersaw");
-    expect(lead.insert).toMatchObject({ drive: "hard", amount: 0.75 });
+    expect(lead.insert).toMatchObject({ drive: "hard", amount: 0.4 });
     expect(lead.notes.filter((n) => n.step < 8).map((n) => n.step)).toEqual([0, 2, 4]);
     const pad = saved().variants["pad.chord"];
     expect(pad.notes.filter((n) => n.step === 16)).toHaveLength(3);

@@ -42,7 +42,12 @@ export const STILL = ["kick", "bass"];
 const MACRO_STEP = 0.15; // of a slider's range per unit, in octaves where it has no 0
 const TONE_KEYS = ["tone", "f0", "click", "bright"];
 const LENGTH_KEYS = ["decay", "sweep"];
-const DRIVE_AT = [0, 0.4, 0.75]; // the least drive amount per unit up
+// How hard the AI drives, per distortion and drive unit (0 when it only
+// picks the type): gentle on purpose, since a driven sound reads louder to
+// the ear even level-matched (insert.js DRIVE_TRIM) and a fold or a crush
+// past these turns a part into noise. The kick and the bass get LOW_END of it.
+const AI_DRIVE = { soft: [0.25, 0.35, 0.5], hard: [0.2, 0.3, 0.4], fold: [0.1, 0.2, 0.3], crush: [0.2, 0.35, 0.5] };
+const LOW_END = 0.6;
 const PHASER_PER = 0.25;
 const LFO_PER = 0.3;
 
@@ -91,6 +96,9 @@ const ALLOWED = {
   bass: ["filter", "cutoff", "res", "env", "distortion"],
 };
 const BASS_FILTERS = ["off", "lowpass"];
+// The distortions a layer takes: folding or crushing the low end, or a pad,
+// is mush; a soft clip is all a kick's punch survives.
+const DRIVES = { kick: ["off", "soft"], bass: ["off", "soft", "hard"], pad: ["off", "soft", "hard", "crush"] };
 const RES_AT = { "-2": 0.5, "-1": 0.8, 1: 5, 2: 12 };
 const SWEEP_DEPTH = 0.4;
 const ENV_PER = 0.25; // of ENV_CENTS per unit: ±2 octaves at most
@@ -103,6 +111,7 @@ export function fits(id, key, value) {
   const allowed = ALLOWED[layerOf(id)];
   if (allowed && !allowed.includes(key)) return false;
   if (key === "filter" && layerOf(id) === "bass" && !BASS_FILTERS.includes(value)) return false;
+  if (key === "distortion" && DRIVES[layerOf(id)] && !DRIVES[layerOf(id)].includes(value)) return false;
   if (key === "echo" && defOf(id).kind !== "notes") return false;
   if (UNIT_TWEAKS.includes(key)) return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MACRO_MAX;
   return Object.hasOwn(CHOICES, key) && CHOICES[key].includes(value);
@@ -148,12 +157,14 @@ function insertOf(id, macros) {
   const base = isTweaked(macros) ? tweaked(id, macros) : defOf(id).data.insert;
   const keys = isTweaked(macros) ? [...MACRO_KEYS, ...TWEAK_KEYS] : MACRO_KEYS;
   const out = Object.fromEntries(keys.map((k) => [k, base[k]]));
+  const picked = isTweaked(macros) && macros.distortion && macros.distortion !== "off";
   if (drive < 0) {
     if (drive <= -MACRO_MAX || base.drive === "off") out.drive = "off";
     else out.amount = twentieth(base.amount / 2);
-  } else if (drive > 0) {
-    if (base.drive === "off") out.drive = drive >= MACRO_MAX ? "hard" : "soft";
-    out.amount = Math.max(base.amount, DRIVE_AT[drive]);
+  } else if (drive > 0 || picked) {
+    if (base.drive === "off") out.drive = drive >= MACRO_MAX && fits(id, "distortion", "hard") ? "hard" : "soft";
+    const low = STILL.includes(layerOf(id)) ? LOW_END : 1;
+    out.amount = twentieth(AI_DRIVE[out.drive][drive] * low);
   }
   if (!moves(id, "motion") || !motion) return out;
   if (motion < 0) {

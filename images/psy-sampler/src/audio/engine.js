@@ -55,6 +55,7 @@ import {
   TICK_MS,
 } from "./timing.js";
 import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
+import { trimOf } from "./loudness.js";
 import { auditionEvent, baseOf, defOf, eventsAt, partSteps, sampleDefaults } from "./patterns.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
@@ -316,9 +317,13 @@ export function createEngine({
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
   const volumeOf = (layer) => volumes.get(layer) ?? 1;
+  // The layer's level, the sound's own by ear (loudness.js), its layer fader and its volume.
   const laneLevel = (key, variant) =>
-    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) * volumeOf(layerOf(variant)) * dataOf(variant).level;
-  const shotLevel = (id) => LAYER_LEVEL[layerOf(id)] * volumeOf(layerOf(id)) * dataOf(id).level;
+    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) *
+    trimOf(variant, dataOf(variant)) *
+    volumeOf(layerOf(variant)) *
+    dataOf(variant).level;
+  const shotLevel = (id) => LAYER_LEVEL[layerOf(id)] * trimOf(id, dataOf(id)) * volumeOf(layerOf(id)) * dataOf(id).level;
   // What the speakers get: a solo silences everything else. Renders skip it.
   const heard = (id, level) => (solo === null || solo === id ? level : 0);
   const liveLane = (key, variant) => heard(variant, laneLevel(key, variant));

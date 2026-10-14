@@ -62,9 +62,24 @@ describe("driveCurve", () => {
 });
 
 describe("driveGains", () => {
-  it("is unity when off or crushing", () => {
+  it("is unity when off; a crush quantizes at full scale and only comes out quieter", () => {
     expect(driveGains("off", 1)).toEqual({ pre: 1, post: 1 });
-    expect(driveGains("crush", 1)).toEqual({ pre: 1, post: 1 });
+    expect(driveGains("crush", 0).pre).toBe(1);
+    expect(driveGains("crush", 1).post).toBeLessThan(driveGains("crush", 0).post);
+    expect(driveGains("crush", 0).post).toBeLessThan(1);
+  });
+
+  it("a driven sound plays at least 1 dB under its level-matched self", () => {
+    const db = (type, amount) => {
+      const { pre, post } = driveGains(type, amount);
+      // The small-signal match: a half-scale input through the curve.
+      const matched = type === "crush" ? 1 : (0.5 / Math.tanh(0.5 * pre * 4)) * (type === "fold" ? 10 ** ((-2.6 + 9.2 * amount) / 20) : 1);
+      return 20 * Math.log10(post / matched);
+    };
+    for (const type of ["soft", "hard", "fold", "crush"]) {
+      for (const amount of [0, 0.25, 0.5, 1]) expect(db(type, amount)).toBeLessThanOrEqual(-1 + 1e-9);
+      expect(db(type, 1)).toBeLessThan(db(type, 0.25));
+    }
   });
 
   it("more drive pushes harder into the curve and turns the output down", () => {

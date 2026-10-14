@@ -83,8 +83,8 @@ describe("restyle: the AI's macros over the seed's dress", () => {
 
   it("drive and motion set the insert from the factory's, and leave the rest of the live one", () => {
     const live = { ...insertOf("lead.acid"), lp: 3000, drive: "fold", amount: 0.9 };
-    expect(restyle("lead.acid", "s", { drive: 2 }, live).insert).toMatchObject({ drive: "hard", amount: 0.75, lp: 3000 });
-    expect(restyle("lead.acid", "s", { drive: 1 }, live).insert).toMatchObject({ drive: "soft", amount: 0.4 });
+    expect(restyle("lead.acid", "s", { drive: 2 }, live).insert).toMatchObject({ drive: "hard", amount: 0.4, lp: 3000 });
+    expect(restyle("lead.acid", "s", { drive: 1 }, live).insert).toMatchObject({ drive: "soft", amount: 0.35 });
     expect(restyle("lead.acid", "s", { tone: 1 }, live).insert).toMatchObject({ drive: "off", lp: 3000 }); // back to the factory's
     expect(restyle("lead.acid", "s", { motion: 2 }, live).insert.phaser).toBe(0.5);
     const bits = restyle("lead.bits", "s", { motion: 2 }, insertOf("lead.bits")).insert;
@@ -104,7 +104,7 @@ describe("restyle: the AI's macros over the seed's dress", () => {
     expect(bright.cutoff).toBeGreaterThan(insertOf("lead.acid").cutoff * 5);
     expect(bright.cutoff).toBeLessThanOrEqual(16000);
     const next = restyle("lead.acid", "s", { distortion: "crush", drive: 2 }, { ...live, ...t.insert });
-    expect(next.insert).toMatchObject({ filter: "off", lfo: 0, trem: 0, width: 0, drive: "crush", amount: 0.75, lp: 3000 });
+    expect(next.insert).toMatchObject({ filter: "off", lfo: 0, trem: 0, width: 0, drive: "crush", amount: 0.5, lp: 3000 });
     expect(next.echo).toBeNull(); // the factory's
     expect(restyle("lead.grid", "s", { trem: "off" }, insertOf("lead.grid")).echo).toEqual(defaultData("lead.grid").echo ?? null);
     expect(restyle("lead.acid", "s", { tone: 1 }, live)).not.toHaveProperty("echo"); // no tweaks, no echo: mid as it was
@@ -112,8 +112,23 @@ describe("restyle: the AI's macros over the seed's dress", () => {
     expect(restyle("perc.hat", "s", { filter: "highpass" }, insertOf("perc.hat"))).not.toHaveProperty("echo");
   });
 
-  it("the low end takes few tweaks: the kick grit, the bass a lowpass with an envelope", () => {
-    expect(fits("kick.long", "distortion", "fold")).toBe(true);
+  it("the AI drives gently: its own amounts, never the factory's 40 %, and less on the low end", () => {
+    const clean = insertOf("lead.acid");
+    expect(restyle("lead.acid", "s", { distortion: "fold" }, clean).insert).toMatchObject({ drive: "fold", amount: 0.1 });
+    expect(restyle("lead.acid", "s", { distortion: "fold", drive: 2 }, clean).insert).toMatchObject({ drive: "fold", amount: 0.3 });
+    expect(restyle("kick.long", "s", { drive: 2 }, insertOf("kick.long")).insert).toMatchObject({ drive: "soft", amount: 0.3 });
+    expect(restyle("bass.rolling", "s", { drive: 2 }, insertOf("bass.rolling")).insert).toMatchObject({ drive: "hard", amount: 0.25 });
+    expect(restyle("lead.acid", "s", { drive: -1 }, clean).insert.drive).toBe("off");
+  });
+
+  it("the low end takes few tweaks: the kick a soft grit, the bass a lowpass with an envelope", () => {
+    expect(fits("kick.long", "distortion", "soft")).toBe(true);
+    for (const d of ["hard", "fold", "crush"]) expect(fits("kick.long", "distortion", d)).toBe(false);
+    expect(fits("bass.rolling", "distortion", "hard")).toBe(true);
+    for (const d of ["fold", "crush"]) expect(fits("bass.rolling", "distortion", d)).toBe(false);
+    expect(fits("pad.chord", "distortion", "fold")).toBe(false);
+    expect(fits("pad.chord", "distortion", "crush")).toBe(true);
+    expect(fits("lead.acid", "distortion", "fold")).toBe(true);
     for (const [k, v] of [["filter", "lowpass"], ["sweep", "bar"], ["trem", "1/8"], ["echo", "1/8"]]) expect(fits("kick.long", k, v)).toBe(false);
     expect(fits("bass.rolling", "filter", "lowpass")).toBe(true);
     expect(fits("bass.rolling", "filter", "vowel a")).toBe(false);
