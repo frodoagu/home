@@ -43,6 +43,8 @@ import {
   rearrange,
   skip,
   startPilot,
+  jumpTo,
+  loopsAt,
   sequence,
   styleAt,
   styleOnDrop,
@@ -649,35 +651,55 @@ describe("plans (✨ AI)", () => {
     expect(Object.values(entry.active).filter((id) => layerOfVariant(id) === "lead")).toEqual(["lead.acid"]);
   });
 
-  it("a form is walked section by section after the queue, a plan filling in the one it names", () => {
+  it("a form is walked section by section after the queue, each as long as it says unless a plan says otherwise", () => {
     const rng = seeded(5);
     let { pilot, active } = startPilot(lists, rng);
-    pilot = withForm(enqueue(pilot, "breakdown"), ["groove", "build", "peak"]);
+    const form = [
+      { section: "groove", loops: 8 },
+      { section: "build", loops: 8 },
+      { section: "peak", loops: 20 },
+    ];
+    pilot = withForm(enqueue(pilot, "breakdown"), form);
     expect(sequence(pilot)).toEqual(["breakdown", "groove", "build", "peak"]);
+    expect([0, 1, 2, 3].map((slot) => loopsAt(pilot, slot))).toEqual([null, 8, 8, 20]);
     const walked = [];
     for (let i = 0; i < 80 && walked.length < 5; i++) {
       const plan = pilot.section === "breakdown" ? { section: "groove", bars: 8, layers: { kick: ["kick.fullon"] } } : null;
       ({ pilot, active } = advance(withPlan(pilot, plan), active, lists, rng));
-      if (pilot.left === pilot.length) walked.push(pilot.section);
-      if (pilot.section === "groove" && pilot.left === pilot.length && walked.length === 2) {
-        expect(pilot.length).toBe(4);
-        expect(active.kick).toBe("kick.fullon");
-      }
+      if (pilot.left === pilot.length) walked.push([pilot.section, pilot.length]);
+      if (pilot.section === "groove" && pilot.left === pilot.length && walked.length === 2) expect(active.kick).toBe("kick.fullon");
     }
-    expect(walked.slice(0, 4)).toEqual(["breakdown", "groove", "build", "peak"]);
+    // The groove's plan says 8 bars; the build and the peak last what the form says.
+    expect(walked.slice(1, 4)).toEqual([["groove", 4], ["build", 8], ["peak", 20]]);
+    expect(walked[0][0]).toBe("breakdown");
     expect(pilot.form).toBeUndefined(); // walked to its end: the pilot picks again
+  });
+
+  it("jumpTo: the section picked comes next, the ones before it go; after the one announced, if there is one", () => {
+    const form = ["groove", "build", "peak"].map((section) => ({ section, loops: 4 }));
+    const pilot = withForm({ section: "intro", left: 3, length: 4, queue: ["breakdown"] }, form);
+    const jumped = jumpTo(pilot, 2);
+    expect(sequence(jumped)).toEqual(["build", "peak"]);
+    expect(jumped.left).toBe(1); // this loop is the section's last
+    expect(jumped.next).toBeUndefined();
+    const announced = { ...pilot, left: 1, next: "breakdown" };
+    expect(sequence(jumpTo(announced, 3))).toEqual(["breakdown", "peak"]);
+    expect(jumpTo(announced, 3).next).toBe("breakdown");
+    expect(jumpTo(announced, 0)).toBe(announced); // already on its way
+    expect(jumpTo(pilot, 9)).toBe(pilot);
   });
 
   it("a form drops a section with ✕, keeps through a jump and stays put while a queued section plays", () => {
     const { pilot } = startPilot(lists, seeded(2));
-    const formed = withForm(pilot, ["groove", "build", "peak"]);
-    expect(unform(formed, 1).form).toEqual(["groove", "peak"]);
+    const form = ["groove", "build", "peak"].map((section) => ({ section, loops: 4 }));
+    const formed = withForm(pilot, form);
+    expect(sequence(unform(formed, 1))).toEqual(["groove", "peak"]);
     expect(withForm(formed, [])).not.toHaveProperty("form");
-    expect(moveTo(formed, "peak").form).toEqual(["groove", "build", "peak"]);
+    expect(moveTo(formed, "peak").form).toEqual(form);
     const rng = seeded(2);
     let p = { ...enqueue(formed, "breakdown"), left: 1 };
     p = advance(p, {}, lists, rng).pilot;
-    expect(p).toMatchObject({ section: "breakdown", queue: [], form: ["groove", "build", "peak"] });
+    expect(p).toMatchObject({ section: "breakdown", queue: [], form });
   });
 
   it("the same seed and the same plans make the same track", () => {
@@ -738,10 +760,14 @@ describe("a new style while it plays", () => {
   });
 
   it("goes after the section the last loop announced, and takes it off the form", () => {
-    const last = { section: "groove", left: 1, length: 4, queue: [], next: "build", form: ["build", "peak"] };
+    const form = [
+      { section: "build", loops: 4 },
+      { section: "peak", loops: 12 },
+    ];
+    const last = { section: "groove", left: 1, length: 4, queue: [], next: "build", form };
     expect(styleOnDrop(last, "goa", "psytrance")).toMatchObject({
       queue: ["build", "breakdown", "build", "peak"],
-      form: ["peak"],
+      form: [{ section: "peak", loops: 12 }],
     });
     const tease = { section: "build", left: 1, length: 4, queue: [], next: "breakdown" };
     expect(styleOnDrop(tease, "goa", "psytrance").queue).toEqual(["breakdown", "build", "peak"]);

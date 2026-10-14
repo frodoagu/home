@@ -554,9 +554,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   after ▶; 🔗 carries it as `&open=`; `pilot.opening` rides `OPENING_MIX` /
   `OPENING_TONE`, fading a filtered kick then bass in, and drops into the next
   section with kick and bass snapped open),
-  then lays out the form of the track once per run (`planForm`: the next
-  `FORM` (20) sections, walked as `pilot.form` after the hand queue, re-asked
-  by Aplicar), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
+  then picks the form of each track (`planForm`: one of `FORMS`, by the set's
+  length, with each section's bars, walked as `pilot.form` `{ section, loops }`
+  after the hand queue; the next one is asked as it runs out, Aplicar keeps
+  it; on the timeline a click makes a section the next one (`jumpTo`, like ⏭)
+  and − / + or dragging its edge change its bars: a plan just stretches, an
+  unplanned one is asked for at that length), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
   which, bars, per-layer ids, plus `dress` macros and
   melodic `parts` in scale degrees for the sounds it names — applied when that
   section starts, from factory/seed values so a replay lands the same, never on

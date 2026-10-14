@@ -1798,52 +1798,139 @@ html:has(dialog.help[open], dialog.intro[open]) {
   opacity: 0.6;
 }
 
-/* ---- step bar ---- */
-.stepbar {
+/* ---- timeline: now and the sections coming, as wide as their bars ---- */
+.timeline {
+  display: flex;
+  gap: 4px;
+  margin: 16px 0 20px;
+  overflow: hidden;
+}
+
+.timeline[hidden] {
+  display: none;
+}
+
+/* The chips are the timeline's own items: each one grows by its bars. */
+.timeline .section-queue {
+  display: contents;
+}
+
+.timeline-now,
+.timeline .queued {
+  flex: 1 0 0;
+  min-width: 5.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: baseline;
+  gap: 0 6px;
+  padding: 4px 8px;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  border-radius: 6px;
+  transition: flex-grow 0.4s ease;
+}
+
+/* The bars and their controls, on a line of their own under the name. */
+.chip-tools {
+  flex-basis: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0 20px;
+  gap: 2px;
+  font-size: 0.75rem;
 }
 
-.cells {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 4px;
+.chip-tools .unqueue {
+  margin-left: auto;
 }
 
-.cell {
-  height: 28px;
-  border-radius: 4px;
-  background: var(--cell);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 2px;
+/* A click on a section coming makes it the next one. */
+.chip-go {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
-/* Beats: taller marker on the left edge plus the beat number. */
-.cell.beat {
-  background: var(--cell-beat);
-  box-shadow: inset 3px 0 0 var(--muted);
+.timeline .queued:has(.chip-go) {
+  cursor: pointer;
 }
 
-.cell.is-current {
-  background: var(--current);
-  color: var(--on-current);
-  box-shadow: none;
+.timeline .queued:has(.chip-go):hover {
+  background: var(--surface-2);
 }
 
-.bar-label {
-  min-width: 8.5ch;
-  font-size: 0.8rem;
+/* The right edge: dragged, the section's bars. */
+.chip-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.chip-edge:hover,
+.chip-edge.is-dragging {
+  background: var(--current-tint);
+}
+
+.timeline-now .section-left {
+  flex-basis: 100%;
+}
+
+.timeline-now {
+  background: var(--current-tint);
+  border: 1px solid var(--current);
+}
+
+.timeline-now .section-badge {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.timeline .queued {
+  border-style: solid;
+  background: var(--surface);
+}
+
+.timeline .queued::before {
+  content: none;
+}
+
+.timeline .queued.is-guess {
+  border-style: dashed;
+}
+
+.chip-bars {
+  font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+}
+
+.resize {
+  padding: 0 4px;
+  font: inherit;
+  line-height: 1.2;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.resize:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.resize:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* ---- layers ---- */
@@ -3120,9 +3207,6 @@ html:has(dialog.help[open], dialog.intro[open]) {
   .sample-row .pick {
     grid-column: 2;
   }
-  .cell {
-    height: 22px;
-  }
   .step {
     height: 22px;
   }
@@ -3130,7 +3214,9 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 @media (prefers-reduced-motion: reduce) {
   .variant,
-  .edit {
+  .edit,
+  .timeline-now,
+  .timeline .queued {
     transition: none;
   }
   .variant.is-queued,
