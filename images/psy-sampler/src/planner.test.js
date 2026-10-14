@@ -4,7 +4,9 @@ import { DEFAULTS } from "./audio/patterns.js";
 import { CLOSE_MAX, OUTRO, SECTIONS, STYLES, STYLE_IDS, countRange, poolOf } from "./autopilot.js";
 import {
   CHARACTER,
-  FORM,
+  FORMS,
+  FORM_IDS,
+  FORM_OF_SET,
   GENRE,
   OPENING_FX,
   PLAN_MAX,
@@ -334,9 +336,11 @@ describe("normalizePlan", () => {
     }
   });
 
-  it("forgets a length the section cannot have: the pilot draws one", () => {
-    expect(normalizePlan({ ...plan, bars: 8 }, goa).bars).toBeNull(); // a peak is 16 or 24
+  it("forgets a length the section cannot have, nor the listener give it: the pilot draws one", () => {
+    expect(normalizePlan({ ...plan, bars: 12 }, goa).bars).toBeNull(); // not a whole phrase
+    expect(normalizePlan({ ...plan, bars: 72 }, goa).bars).toBeNull();
     expect(normalizePlan({ ...plan, bars: "24" }, goa).bars).toBeNull();
+    expect(normalizePlan({ ...plan, bars: 40 }, goa).bars).toBe(40); // stretched by hand (BARS_BY_HAND)
     expect(normalizePlan({ section: "groove", bars: 8 }, goa)).toEqual({ section: "groove", bars: 8, layers: {} });
   });
 
@@ -459,26 +463,37 @@ describe("🌅 the closing", () => {
 });
 
 describe("the form of the track", () => {
-  it("asks for the next FORM sections after the ones coming, following the vibe", () => {
+  it("asks which of the forms the next track takes, by the set's length, and its sections' bars", () => {
     const prompt = formPrompt({ sections: ["intro"], vibe: "dark, long breaks" });
     expect(prompt).toContain("Now playing: intro.");
-    expect(prompt).toContain("Shape the form to the listener's wish: which sections, how often.");
-    expect(prompt).toContain(`the next ${FORM} sections, in order, after the intro.`);
-    const after = formPrompt({ sections: ["intro", "groove"], coming: ["build", "peak"] });
+    expect(prompt).toContain("- short: build, groove, peak, breakdown");
+    expect(prompt).toContain("- mid: build, groove, peak, groove, peak, breakdown");
+    expect(prompt).toContain("- long: build, groove, peak, groove, peak, groove, breakdown");
+    expect(prompt).toContain("a set of about 1 hour plays short tracks, 2 hours mid, 3 hours long; an open-ended one, any.");
+    expect(prompt).toContain("Shape the form to the listener's wish too.");
+    expect(prompt).toContain("build 8; groove 8 or 16; peak 24 or 32; breakdown 8 or 16.");
+    const after = formPrompt({ sections: ["intro", "groove"], coming: ["build", "peak"], set: { minutes: 60, elapsed: 600 } });
     expect(after).toContain("Already coming after it, in order: build, peak.");
-    expect(after).toContain("after the peak already coming.");
+    expect(after).toContain("The set lasts about 1 hour; 10 minutes have played");
     expect(after).not.toContain("wish");
-    expect(SYSTEM).toContain("Asked for the form of the track");
+    expect(SYSTEM).toContain("Asked for the form of the next track");
   });
 
-  it("is a list of the sections a plan may pick, at most FORM", () => {
+  it("is one of FORMS, each section with its loops; the set's own form where the answer names none", () => {
     const schema = formSchema();
-    expect(Object.keys(schema.properties)).toEqual(["why", "sections"]);
-    expect(schema.properties.sections).toMatchObject({ items: { enum: PLAN_SECTIONS }, maxItems: FORM });
-    expect(normalizeForm({ sections: ["groove", "intro", "nope", 3, "peak"] })).toEqual(["groove", "peak"]);
-    expect(normalizeForm({ sections: Array(FORM + 5).fill("build") })).toHaveLength(FORM);
-    expect(normalizeForm(null)).toEqual([]);
-    expect(normalizeForm({ sections: "groove" })).toEqual([]);
+    expect(Object.keys(schema.properties)).toEqual(["why", "form", "bars"]);
+    expect(schema.properties.form.enum).toEqual(FORM_IDS);
+    expect(schema.properties.bars).toMatchObject({ items: { enum: [8, 16, 24, 32] }, maxItems: 7 });
+    expect(normalizeForm({ form: "short", bars: [8, 16, 32, 12] })).toEqual([
+      { section: "build", loops: 4 },
+      { section: "groove", loops: 8 },
+      { section: "peak", loops: 16 },
+      { section: "breakdown", loops: 4 }, // 12 is no breakdown's: the shortest
+    ]);
+    expect(normalizeForm(null, 60).map((f) => f.section)).toEqual(FORMS.short);
+    expect(normalizeForm({ form: "nope" }, 180).map((f) => f.section)).toEqual(FORMS.long);
+    expect(normalizeForm({ form: "nope" }, 180).map((f) => f.loops)).toEqual([4, 8, 16, 8, 16, 8, 8]); // a long night: the longest
+    expect(normalizeForm("mid").map((f) => f.section)).toEqual(FORMS[FORM_OF_SET[0]]);
   });
 
   it("tells a plan where the form goes on", () => {
@@ -486,6 +501,9 @@ describe("the form of the track", () => {
     expect(prompt).toContain("After it, the track goes on with: build, peak.");
     expect(prompt).toContain("Your form of the track has groove next: plan that section.");
     expect(prompt).not.toContain("The listener queued");
+    const pinned = planPrompt({ ...goa, active: {}, sections: ["intro"], bars: 8, next: "groove", nextBars: 24, formed: true });
+    expect(pinned).toContain("Your form of the track has groove, 24 bars next: plan that section.");
+    expect(planSchema({ ...goa, next: "groove", bars: 24 }).properties.bars.enum).toEqual([24]);
   });
 });
 

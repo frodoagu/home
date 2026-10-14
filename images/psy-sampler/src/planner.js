@@ -7,9 +7,10 @@
 // Schema the answer must follow, and normalizePlan() is the gate every plan
 // goes through (the model's, or one from a share link) before the pilot takes
 // it (autopilot.js withPlan). FX and the swaps inside a section still come
-// from the seed. Before those, a run asks once for the form of the whole
-// track (formPrompt): the order of its next FORM sections, which the pilot
-// walks (autopilot.js withForm) and each section's plan then fills in.
+// from the seed. Before those, a run asks for the form of the next track
+// (formPrompt): one of FORMS, picked by the length of the set, and how long
+// each of its sections lasts, which the pilot walks (autopilot.js withForm)
+// and each section's plan then fills in; the next form is asked as one runs out.
 // 🌅 asks for the closing in its place (closingPrompt): the last sections
 // before the outro, in the time the set has left, and then each plan,
 // the outro's last (outroSchema, normalizeOutro).
@@ -53,9 +54,20 @@ export const PLAN_SECTIONS = SECTION_IDS.filter((id) => id !== "intro");
 export const PLAN_MAX = 256;
 // Sections the ✨ AI keeps planned past the one playing.
 export const AHEAD = 3;
-// Sections the form of a track lays out: some 7 minutes at 145 BPM, a whole
-// track. Past it the ✨ AI picks each section as it plans it.
-export const FORM = 20;
+// The forms a track takes, from the build it opens on to the breakdown it
+// ends on; the next track opens on a build again. Which one is the ✨ AI's
+// call (formPrompt), by the length of the set: FORM_OF_SET, as a rule.
+export const FORMS = {
+  short: ["build", "groove", "peak", "breakdown"],
+  mid: ["build", "groove", "peak", "groove", "peak", "breakdown"],
+  long: ["build", "groove", "peak", "groove", "peak", "groove", "breakdown"],
+};
+export const FORM_IDS = Object.keys(FORMS);
+const FORM_MAX = Math.max(...Object.values(FORMS).map((f) => f.length));
+export const FORM_OF_SET = { 0: "mid", 60: "short", 120: "mid", 180: "long" };
+// The lengths a listener may give a section coming, in bars: whole 8-bar
+// phrases, so they still line up with it.
+export const BARS_BY_HAND = [8, 16, 24, 32, 40, 48, 56, 64];
 
 // How long the listener means the set to last, in minutes (0: open-ended).
 // Where the track is in it shapes each plan, the way a DJ paces a night.
@@ -421,7 +433,7 @@ export const SYSTEM = [
   `You may also dress the sounds you plan, in dress: four macros from -${MACRO_MAX} to ${MACRO_MAX}, 0 leaving the sound as it is: tone (dark to bright), length (short to long; drums and glitches), drive (clean to distorted), motion (still to a sweeping filter and phaser; never on kick or bass). A melodic sound may also switch synth within its group ("" keeps it). Dress only the sounds the wish or the section asks for; leave the others out of dress.`,
   `And you may write the melodic parts, in parts, in scale degrees of the key: "1" the root, "8" the octave up, up to "${DEGREES.at(-1)}"; "${REST}" a rest. lead: ${PART_LENGTHS.lead} sixteenths, an 8-step motif and its answer, played motif, motif, motif, answer over the 2 bars (a lead made of chords walks them onto the degrees). pad: the degree of each bar's chord, ${PART_LENGTHS.pad} of them ("1", "6": i to VI). bass: the ${PART_LENGTHS.bass} sixteenths of one beat, repeated under every beat; the first lands on the kick, so "${REST}", "1", "1", "1" rolls between the kicks. A part goes to the sound you plan in that layer; an empty list leaves it as it is, and the theme's always stays.`,
   "Start the answer with why: one short sentence on what you picked and the reason.",
-  "Asked for the form of the track instead, you lay out only the order of its sections, from the one after those already coming: a whole track that rises and falls.",
+  "Asked for the form of the next track instead, you pick one of the forms given and how long each of its sections lasts.",
 ].join("\n");
 
 // "kick.dark (Dark tok: 250→62 Hz…; dark, sharp, minimal)", with a copy's
@@ -511,7 +523,7 @@ function soundLines(lists, style, names, synths, { level, describe: told = true,
  * melodic sound's synth now; `descriptions`, the listener's words for
  * their sounds (level max). `closing` ({ seconds, route }, closingLine)
  * says 🌅 is closing the set, in place of the set's arc; a `next` outro
- * gets what the pilot does with it.
+ * gets what the pilot does with it. `nextBars`, the bars the form gives `next`.
  */
 export function planPrompt({
   style,
@@ -527,6 +539,7 @@ export function planPrompt({
   names = {},
   descriptions = {},
   next = null,
+  nextBars = null,
   formed = false,
   form = [],
   theme = [],
@@ -568,7 +581,10 @@ export function planPrompt({
   }
   if (form.length) lines.push(`After it, the track goes on with: ${form.join(", ")}.`);
   if (next && closing) lines.push(`The closing has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
-  else if (next && formed) lines.push(`Your form of the track has ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  else if (next && formed) {
+    const long = nextBars ? `, ${nextBars} bars` : "";
+    lines.push(`Your form of the track has ${next}${long} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
+  }
   else if (next) lines.push(`The listener queued ${next} ${planned.length ? `after the planned ${last}` : "next"}: plan that section.`);
   else if (planned.length) lines.push(`After the planned ${last}, the usual next is ${follows(last)}. Plan the section after it.`);
   else lines.push(`After the ${now}, the usual next is ${follows(now)}. Plan the next section.`);
@@ -628,38 +644,58 @@ export function openingPrompt({
 }
 
 /**
- * What to ask for the form of the track: the order of the FORM sections
- * after the one playing (`sections` so far, the last one playing) and
- * the ones `coming` already (queued by hand, or a form kept). With a `vibe`
- * (the brief holds it), the form follows it.
+ * What to ask for the form of the next track: one of FORMS and the bars of
+ * each of its sections, after the one playing (`sections` so far, the last
+ * one playing) and the ones `coming` already (queued by hand, or a form
+ * kept). The set's length picks the form, as a rule. With a `vibe` (the
+ * brief holds it), the form follows it.
  */
 export function formPrompt({ sections, coming = [], vibe = "", set = {} }) {
   const lines = [`Sections so far: ${sections.slice(-HISTORY).join(", ")}. Now playing: ${sections.at(-1)}.`];
   if (coming.length) lines.push(`Already coming after it, in order: ${coming.join(", ")}.`);
+  lines.push(
+    "Pick the form of the next track, one of these:",
+    ...FORM_IDS.map((id) => `- ${id}: ${FORMS[id].join(", ")}`),
+    `Pick it by the length of the set: a set of about 1 hour plays ${FORM_OF_SET[60]} tracks, 2 hours ${FORM_OF_SET[120]}, 3 hours ${FORM_OF_SET[180]}; an open-ended one, any.`,
+  );
   const arc = setLine(set);
   if (arc) lines.push(`${arc} Shape the form to that point of the set.`);
-  if (vibe) lines.push("Shape the form to the listener's wish: which sections, how often.");
-  lines.push(
-    `Lay out the form of the track: the next ${FORM} sections, in order, after ${coming.length ? `the ${coming.at(-1)} already coming` : `the ${sections.at(-1)}`}. Each one may be any of ${PLAN_SECTIONS.join(", ")}.`,
-  );
+  if (vibe) lines.push("Shape the form to the listener's wish too.");
+  const lengths = [...new Set(FORMS.long)].map((id) => `${id} ${barsOf(id).join(" or ")}`).join("; ");
+  lines.push(`Then give the length of each of its sections in bars, in order, each one of the lengths that section has: ${lengths}.`);
   return lines.join("\n");
 }
 
-/** The JSON Schema of a form: why, then the sections in order. */
+/** The JSON Schema of a form: why, then which form and the bars of each of its sections. */
 export const formSchema = () => ({
   type: "object",
   properties: {
     why: { type: "string", maxLength: WHY_MAX },
-    sections: { type: "array", items: { type: "string", enum: PLAN_SECTIONS }, maxItems: FORM },
+    form: { type: "string", enum: FORM_IDS },
+    bars: {
+      type: "array",
+      items: { type: "integer", enum: [...new Set(FORMS.long.flatMap(barsOf))].sort((a, b) => a - b) },
+      maxItems: FORM_MAX,
+    },
   },
-  required: ["why", "sections"],
+  required: ["why", "form", "bars"],
   additionalProperties: false,
 });
 
-/** Anyone's form -> the section ids it lays out that a plan may pick, at most FORM. */
-export function normalizeForm(raw) {
-  const given = raw && typeof raw === "object" && Array.isArray(raw.sections) ? raw.sections : [];
-  return given.filter((id) => PLAN_SECTIONS.includes(id)).slice(0, FORM);
+/**
+ * Anyone's form -> [{ section, loops }]: the form it picks, or the one a set
+ * of `minutes` takes when it picks none (FORM_OF_SET), and each section's
+ * loops from its bars, or the shortest it lasts (the longest, in a set of
+ * 2 hours or more) where those are not one of its lengths.
+ */
+export function normalizeForm(raw, minutes = 0) {
+  const id = isObject(raw) && FORM_IDS.includes(raw.form) ? raw.form : (FORM_OF_SET[minutes] ?? "mid");
+  const bars = isObject(raw) && Array.isArray(raw.bars) ? raw.bars : [];
+  return FORMS[id].map((section, i) => {
+    const lengths = barsOf(section);
+    const fallback = minutes >= 120 ? lengths.at(-1) : lengths[0];
+    return { section, loops: (lengths.includes(bars[i]) ? bars[i] : fallback) / 2 };
+  });
 }
 
 // The outro (autopilot.js OUTRO): what the pilot does with it, for the
@@ -709,21 +745,23 @@ export const closingSchema = () => ({
 
 /** Anyone's closing -> the section ids before the outro that a plan may pick, at most CLOSE_MAX. */
 export function normalizeClosing(raw) {
-  return normalizeForm(raw).slice(0, CLOSE_MAX);
+  const given = isObject(raw) && Array.isArray(raw.sections) ? raw.sections : [];
+  return given.filter((id) => PLAN_SECTIONS.includes(id)).slice(0, CLOSE_MAX);
 }
 
 /**
  * The JSON Schema of an answer: a sentence on why, then the section, its
  * bars, each layer's ids, how to dress them and the melodic parts, all as
  * enums, so a model that decodes against it cannot name what is not there
- * (`next`, queued by hand, is the only section it may name). Engines differ in how much of a schema they enforce:
+ * (`next`, queued by hand, is the only section it may name, and `bars`, the
+ * form's length for it, the only length). Engines differ in how much of a schema they enforce:
  * normalizePlan() checks it all again, and keeps no `why`. The low level
  * asks for no dress or parts; high, for the tweaks in every dress entry.
  */
-export function planSchema({ lists, style, next = null, level = LEVEL_DEFAULT }) {
+export function planSchema({ lists, style, next = null, bars: fixed = null, level = LEVEL_DEFAULT }) {
   if (next === OUTRO) return schemaOf({ lists, style, sections: [OUTRO], bars: OUTRO_BARS, range: countRange, most: [OUTRO], level });
   const sections = PLAN_SECTIONS.includes(next) ? [next] : PLAN_SECTIONS;
-  const bars = [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
+  const bars = fixed ? [fixed] : [...new Set(PLAN_SECTIONS.flatMap(barsOf))].sort((a, b) => a - b);
   return schemaOf({ lists, style, sections, bars, range: countRange, most: PLAN_SECTIONS, level });
 }
 
@@ -864,8 +902,9 @@ function cleanParts(raw, layers) {
 
 /**
  * Anyone's answer -> { section, bars, layers, dress?, parts? } or null. The section must be
- * one a plan may pick; `bars` that the section cannot last turn null (the
- * pilot draws a length); a layer keeps only ids in its pool, at most as many
+ * one a plan may pick; `bars` that the section cannot last, nor the
+ * listener set by hand (BARS_BY_HAND), turn null (the pilot draws a length,
+ * or takes the form's); a layer keeps only ids in its pool, at most as many
  * as the section plays. Fewer than the section usually plays is the plan's
  * call, down to none: that is how a vibe leaves a layer out (the pilot still
  * plays a lead or a pad). A layer named with nothing usable left (ids that
@@ -877,7 +916,7 @@ export function normalizePlan(raw, { lists, style }) {
   if (!isObject(raw)) return null;
   const section = PLAN_SECTIONS.find((id) => id === raw.section);
   if (!section) return null;
-  return cleanPlan(raw, { lists, style }, section, barsOf(section), countRange);
+  return cleanPlan(raw, { lists, style }, section, [...barsOf(section), ...BARS_BY_HAND], countRange);
 }
 
 /**

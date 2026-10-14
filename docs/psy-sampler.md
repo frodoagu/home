@@ -922,8 +922,8 @@ one device at a time, the way a browser runs one tab (*One tab at a time*):
 
 ### Samples
 
-A signed-in user uploads audio in the **🎵 Samples** panel (under the tools,
-collapsed): loose files, a folder (**📁**, or dropped on the panel) or archives.
+A signed-in user uploads audio in the **🎵 Samples** panel (at the bottom,
+under the layers, collapsed): loose files, a folder (**📁**, or dropped on the panel) or archives.
 They are kept **on the Pi**, in the user's profile: BLOBs in the same SQLite
 file, so deleting the account takes them along.
 
@@ -1452,8 +1452,9 @@ it takes the mix that plays first (as 🤖 over a mix).
 silence **the opening** the track starts with (see [The opening](#the-opening)) — for each,
 which one, how many bars, which sounds each layer plays, how those sounds are
 dressed and what their melodic parts play, following the listener's **Vibe**
-(free text). Before those, it lays out **the form of the whole track** once
-per run: the order of its next 20 sections (`FORM`). The FX and the swaps inside
+(free text). Before those, it picks **the form of the track**: one of three
+fixed orders (`FORMS`), by the length of the set, and each section's bars; the
+next track's as one runs out. The FX and the swaps inside
 a section still come from the seed, and the section forms still hold (a
 breakdown has no kick, every section plays a lead or a pad).
 
@@ -1467,36 +1468,46 @@ breakdown has no kick, every section plays a lead or a pad).
 
 ### The form of the track
 
-- The first ask of a run (`planForm` in `app.js`; from silence, right after
-  the opening, and before any `planAhead`) is for the **form**: `formPrompt()` gives the style, BPM, the sections so far,
-  those already coming (the queue, a form kept, the plans past them) and the
-  vibe, and asks for the next `FORM` (20) sections in order. 20 sections are
-  some 7 minutes at 145 BPM (about 13 bars each on average): a whole track,
-  not so long that the vibe can't change it. The answer follows `formSchema()`
-  (`why`, then `sections`: an enum list, `maxItems: FORM`) and
-  `normalizeForm()` is its gate: only sections a plan may pick (never `intro`),
-  at most `FORM`, any length down to none. An empty form, or a failed ask,
-  leaves the pilot picking as before; either way the run is `formed` and the
-  plans follow.
-- The pilot keeps it as `pilot.form` (`autopilot.js` `withForm`) and walks it
-  **after the hand queue** (`sequence()` = queue + form): in `advance()` it
-  stands between the queue and the plan, and each section it enters drops off
-  the front. A section queued by hand (or 💥's peak) plays first and the form
-  resumes after it; ⏭ and a snapshot jump keep it. Past its end the pilot and
-  the model pick each section as they always did.
+- A track takes one of three forms (`planner.js` `FORMS`), each opening on a
+  build and closing on a breakdown, so they chain (a breakdown leads into the
+  next build):
+
+  | Form | Sections |
+  | --- | --- |
+  | `short` | build, groove, peak, breakdown |
+  | `mid` | build, groove, peak, groove, peak, breakdown |
+  | `long` | build, groove, peak, groove, peak, groove, breakdown |
+
+- The model picks which (`planForm` in `app.js`; from silence right after the
+  opening, before any `planAhead`). `formPrompt()` lists the three, says which
+  one a set of each length usually plays (`FORM_OF_SET`: 1 h `short`, 2 h
+  `mid`, 3 h `long`, open-ended any) with the set line, and asks for each
+  section's bars too. The answer follows `formSchema()` (`why`, `form`: an enum,
+  `bars`: one per section) and `normalizeForm(raw, minutes)` is its gate: a
+  bad or missing `form` is the set's own, a bar count the section can't last
+  is its shortest (its longest in a set of 2 h or more). A failed ask lays the
+  set's own form too, and so does Baja, which asks for none (`asksForm`): the
+  order is always one of the three.
+- The pilot keeps it as `pilot.form`, a list of `{ section, loops }`
+  (`autopilot.js` `withForm`), and walks it **after the hand queue**
+  (`sequence()` = queue + the form's sections): in `advance()` it stands
+  between the queue and the plan, each section it enters drops off the front,
+  and lasts its plan's bars, else the form's loops (`loopsAt`), else a draw. A
+  section queued by hand (or 💥's peak) plays first and the form resumes after
+  it; ⏭ and a snapshot jump keep it. When fewer than `AHEAD` sections are left
+  in it, the next track's form is asked for and appended.
 - Each section of the form is planned like a queued one: the schema allows
-  only that section, and the prompt says it is the form's ("Your form of the
-  track has groove next") and what follows it ("After it, the track goes on
-  with: …"). The queue shows the form as ✨ chips, the first 8 and then `+n`
-  (its tooltip lists the rest); each chip's tooltip is the plan's `why` once it
-  has one, else the form's. ✕ drops a section of the form (`unform`), and the
-  plans ahead re-plan from there (`keptAhead` against the whole `sequence()`).
-  A section the model planned past the queue and the form has a ✕ too: it goes
-  with the plans after it (they followed from it) and the model plans that slot
-  again (`dropAhead`).
-- **Aplicar** lays out the form again with the new vibe: what stays planned (the
-  next section, playing) stays, the rest of the form goes and the model is
-  asked for a new one after it, then plans its sections.
+  only that section and only the form's bars for it, and the prompt says so
+  ("Your form of the track has groove, 16 bars next") and what follows it
+  ("After it, the track goes on with: …"); the answer's bars are set to the
+  form's whatever it says. A plan for another section than the one asked for
+  is no answer. ✕ drops a section of the form (`unform`), and the plans ahead
+  re-plan from there (`keptAhead` against the whole `sequence()`). A section
+  the model planned past the queue and the form has a ✕ too: it goes with the
+  plans after it (they followed from it) and the model plans that slot again
+  (`dropAhead`).
+- **Aplicar** keeps the form (its order is the set's): only the plans past the
+  next section go and are asked for again with the new vibe.
 - A share link doesn't carry the form: the plans it carries name each section,
   so a replay walks the same ones.
 
@@ -1618,10 +1629,21 @@ breakdown has no kick, every section plays a lead or a pad).
   asks to come. The status line says what happened: asking again (and which
   section stays), applied (from the section it picked), too late for this
   one, or just saved (autopilot off).
-- The queue shows the sections queued by hand, then a **✨** chip for each
-  planned one past them (its tooltip, the model's `why`). While an ask is on
-  its way, ✨ pulses and so does the queue: the section queued by hand the
-  model is arranging, or a **✨ thinking…** chip where its pick will show.
+- **The timeline** (`.timeline`, between the tools and the layers, the whole
+  width of the screen) shows the section playing and its bars left, then the
+  sections queued by hand, the form's (✨) and the planned ones past them (its
+  tooltip, the model's `why`), each as wide as the bars it lasts (`flex-grow`
+  = bars; the playing one, the bars it has left). What it can't know yet (a
+  section queued by hand with no plan, the outro) is a guess at its shortest,
+  dashed and marked `~`. Those that don't fit the screen are cut off. While an
+  ask is on its way, ✨ pulses and so does the timeline: the section the model
+  is arranging, or a **✨ thinking…** chip where its pick will show.
+- **− and +** on a section of the form, or one with a plan, change its bars
+  in whole phrases (`BARS_BY_HAND`: 8 to 64, `resize` in `app.js`). A planned
+  one just stretches (its plan's bars, and the pilot's copy of the next one's);
+  one not planned yet keeps them in the form, so its plan is asked for at that
+  length. `normalizePlan` accepts those lengths too, so a share link replays
+  them. Not while 🌅 closes the set.
 - Requests run off the main thread's critical path: the Prompt API answers
   from Chrome's own process, LM Studio and the providers over `fetch`. Only the prompt is built
   synchronously, and it is a few KB of text.
@@ -1739,14 +1761,15 @@ small model can keep ahead of the music:
 | | Baja (`low`) | Media (`mid`, default) | Alta (`high`) | Muy alta (`max`) |
 | --- | --- | --- | --- | --- |
 | Instructions (after the brief) | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) | Alta's + `ROLE_LINE` |
-| Asks | the opening and the sections | + the form of the track | same as Media | same as Media |
+| Asks | the opening and the sections (the set's own form) | + the form of each track | same as Media | same as Media |
 | Answer | `why` (80 chars), section, bars, layers | + `dress` (macros, synth) and `parts` | + the tweaks in every dress entry | same as Alta |
 | Prompt | the sounds by character only; no recall, no dress, no synths | as it was | as Media, plus how it dressed them with tweaks | as Alta, plus each sound's role and the listener's own description; sounds described even with no vibe |
 | Size (psytrance, a section) | ~820 tokens | ~2400 | ~2900 | ~3550 |
 
 Baja is for Chrome's Gemini Nano on a laptop: with Media the asks were taking
-longer than the sections, so some came in unplanned. It skips the form
-(`asksForm`), which is one ask less before the first section. Chrome keeps
+longer than the sections, so some came in unplanned. It asks for no form
+(`asksForm`), which is one ask less before the first section: it walks the
+set's own (`FORM_OF_SET`). Chrome keeps
 one base session, for the latest instructions: a new style, BPM, vibe or
 level makes a new one and drops the old (`ai.js`), and the engines take the
 instructions as `system` in `plan()`'s options. A new level
@@ -1912,7 +1935,7 @@ Portrait: one column. Landscape from 1000 px: layers in two columns (three from
 500 px): two columns and no subtitle. There's never horizontal page scroll: the
 32-step grids scroll inside their box.
 
-**Flashes** follow the audio clock, like the step bar: on each audible step the
+**Flashes** follow the audio clock: on each audible step the
 frame loop asks `eventsAt` (with the data the engine is playing, variations and
 build-ups included) which playing sounds hit, and flashes their tiles, brighter
 on an accent; the layer itself never flashes. FX tiles flash when they fire, the

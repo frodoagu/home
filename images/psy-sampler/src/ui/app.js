@@ -12,7 +12,8 @@
 // Switching language, importing a preset, opening a share link and resetting
 // everything rebuild the app through remount(), carrying what is playing.
 // The ✨ AI (planner.js, ai.js) first asks a model for the form of the track
-// (the order of its next FORM sections), then for the sections ahead, one after
+// (one of FORMS, by the set's length, and each section's bars; the next one
+// as it runs out), then for the sections ahead, one after
 // another until AHEAD of them are planned; the pilot takes the next one's plan
 // before the playing section's last loop. From silence it plans before ▶: the
 // opening first (the section the track starts with, laid over the seed's
@@ -70,6 +71,7 @@ import {
   styleAt,
   styleOnDrop,
   toneOf,
+  loopsAt,
   sequence,
   unbanned,
   uncloseSet,
@@ -103,6 +105,7 @@ import {
   LEVELS,
   LEVEL_DEFAULT,
   PLAN_SECTIONS,
+  BARS_BY_HAND,
   SET_LENGTHS,
   TUNE_SYSTEM,
   asksForm,
@@ -208,7 +211,6 @@ const stamp = (d = new Date()) => {
 // (planner.js normalizeOpening; null once asked for in vain) and its `why`.
 const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "", closeWhy: "" });
 // Form chips the queue shows before folding the rest into "+n".
-const FORM_SHOWN = 8;
 // An ask the model has not answered by then is cut off, and a failed one is
 // tried again after RETRY_MS: neither may hold the ✨ AI up until a reload.
 const ASK_TIMEOUT_MS = 120_000;
@@ -416,6 +418,9 @@ export function mountApp(root, engine, opts = {}) {
   const sectionBadge = el("span", { class: "section-badge", "aria-live": "polite" });
   const sectionLeft = el("span", { class: "section-left" });
   const queueList = el("ol", { class: "section-queue", "aria-label": tx.pilot.queue });
+  const timelineNow = el("div", { class: "timeline-now" }, sectionBadge, sectionLeft);
+  const timeline = el("div", { class: "timeline", role: "group", "aria-label": tx.pilot.timeline }, timelineNow, queueList);
+  timeline.hidden = true;
   const nextBtn = el("button", { type: "button", class: "ghost", "data-action": "next-section", text: tx.pilot.next });
   nextBtn.title = tx.pilot.nextTitle;
   const closeBtn = el("button", { type: "button", class: "ghost close-set", "data-action": "close-set", "aria-pressed": "false", text: tx.pilot.close });
@@ -581,12 +586,6 @@ export function mountApp(root, engine, opts = {}) {
   const status = (text) => {
     statusLine.textContent = text;
   };
-
-  /* ---- step bar: 16 cells, one 4/4 bar; the loop is 2 bars ---- */
-  const cells = Array.from({ length: BAR_STEPS }, (_, i) =>
-    el("div", { class: i % 4 === 0 ? "cell beat" : "cell" }, i % 4 === 0 ? String(i / 4 + 1) : ""),
-  );
-  const barLabel = el("span", { class: "bar-label", text: tx.transport.barIdle });
 
   /* ---- layer rows, in the user's order ---- */
   const tiles = new Map(); // variant -> { layer, node, tile, edit, labelEl }
@@ -983,7 +982,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, sectionBadge, sectionLeft, queueList, nextBtn, closeBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, nextBtn, closeBtn),
       aiPanel,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
@@ -995,9 +994,9 @@ export function mountApp(root, engine, opts = {}) {
       el("div", { class: "tools-row" }, wavBtn, exportBtn, importBtn, importFile, resetBtn, factoryCheck.node),
       statusLine,
     ),
-    ...(samplesPanel ? [samplesPanel.node] : []),
-    el("div", { class: "stepbar", "aria-hidden": "true" }, el("div", { class: "cells" }, ...cells), barLabel),
+    timeline,
     layersMain,
+    ...(samplesPanel ? [samplesPanel.node] : []),
     el(
       "footer",
       { class: "credits" },
@@ -1086,10 +1085,12 @@ export function mountApp(root, engine, opts = {}) {
   const tuneKey = (style) => `${style}\n${state.aiPrefs.vibe}`;
   let cueWhenPlanned = false; // the armed autopilot plays once the ✨ AI stops asking
 
-  // Now: the section and the bars it has left, then the queue (✕ drops one
-  // before it plays) and the sections the ✨ AI planned past it. In its last
-  // loop the section coming next pulses; while the ✨ AI thinks, so does the
-  // section it arranges, or a chip saying so.
+  // The timeline: now, the section and the bars it has left, then the queue
+  // (✕ drops one before it plays) and the sections the ✨ AI planned past
+  // it, each as wide as the bars it lasts (a guess, dashed, where nothing
+  // says yet). − and + change those bars where a plan or the form holds
+  // them. In its last loop the section coming next pulses; while the ✨ AI
+  // thinks, so does the section it arranges, or a chip saying so.
   function showSection() {
     const p = state.auto ? state.pilot : null;
     autoBtn.setAttribute("aria-pressed", String(state.auto));
@@ -1100,11 +1101,13 @@ export function mountApp(root, engine, opts = {}) {
       return;
     }
     for (const { node } of snapTiles.values()) node.classList.remove("is-next");
+    timeline.hidden = !p;
     sectionBadge.textContent = p ? tx.sections[p.section] : "";
     sectionBadge.hidden = !p;
     const opened = Boolean(p && state.run?.opening) && sectionNo() === 0; // the ✨ AI's opening plays
     sectionBadge.title = !opened ? "" : state.run.why ? `${tx.ai.planned}: ${state.run.why}` : tx.ai.planned;
     sectionLeft.textContent = !p ? "" : p.closing ? tx.pilot.closingLeft(p.left * 2, clock(p.closing.left * loopSeconds())) : tx.pilot.left(p.left * 2);
+    timelineNow.style.flexGrow = String(p ? p.left * 2 : 1);
     // ✕ on a section coming: none on the one the last loop already announced
     // (its riser is on its way), so every ✕ shown does what it says.
     // Nor on the outro: a closing is called off with 🌅.
@@ -1121,40 +1124,60 @@ export function mountApp(root, engine, opts = {}) {
     const ahead = p ? (state.run?.ahead ?? []) : [];
     const form = p?.form ?? [];
     const coming = p ? sequence(p) : [];
-    const why = (i, fallback) => {
+    const planOf = (i) => {
       const e = ahead[i];
-      const said = e && (i >= coming.length || e.plan.section === coming[i]) ? e.why : "";
+      return e && (i >= coming.length || e.plan.section === coming[i]) ? e.plan : null;
+    };
+    const why = (i, fallback) => {
+      const said = planOf(i) ? ahead[i].why : "";
       return said ? `${tx.ai.planned}: ${said}` : fallback;
+    };
+    // A chip of the timeline for the section at `slot` after this one: its
+    // name, its bars (with − and + where they can change) and its ✕.
+    const chip = (id, slot, cls, text, drop = []) => {
+      const known = planOf(slot)?.bars ?? (slot < coming.length && loopsAt(p, slot) ? loopsAt(p, slot) * 2 : null);
+      const bars = known ?? SECTIONS[id].loops[0] * 2;
+      const li = el("li", { class: known ? cls : `${cls} is-guess`, "data-queued": id, "data-bars": String(bars) }, el("span", { text }));
+      li.style.flexGrow = String(bars);
+      const resizable = known && !p.closing && (planOf(slot) || loopsAt(p, slot));
+      const say = el("span", { class: "chip-bars", text: known ? String(bars) : `~${bars}` });
+      say.title = tx.pilot.left(bars);
+      const at = BARS_BY_HAND.indexOf(bars);
+      const step = (by, label, text) => {
+        const to = BARS_BY_HAND[at + by];
+        const btn = el("button", { type: "button", class: "resize", "aria-label": label(tx.sections[id]), text });
+        btn.disabled = at < 0 || to === undefined;
+        btn.addEventListener("click", () => resize(slot, to));
+        return btn;
+      };
+      const tools = resizable ? [step(-1, tx.pilot.shorter, "−"), say, step(1, tx.pilot.longer, "+")] : [say];
+      li.append(el("span", { class: "chip-tools" }, ...tools, ...drop));
+      return li;
     };
     const chips = (p?.queue ?? []).map((id, i) => {
       const drop = unqueue(id, i, () => {
         state.pilot = dequeue(state.pilot, i);
         requeue();
       });
-      const li = el("li", { class: "queued", "data-queued": id }, el("span", { text: id === OUTRO ? `🌅 ${tx.sections[id]}` : tx.sections[id] }), ...drop);
+      const li = chip(id, i, "queued", id === OUTRO ? `🌅 ${tx.sections[id]}` : tx.sections[id], drop);
       if (p.closing) li.title = why(i, state.run?.closeWhy ? `${tx.ai.closed}: ${state.run.closeWhy}` : tx.pilot.closingChip);
       return li;
     });
     // What comes after the queue: the ✨ AI's form of the track (✕ drops a
     // section of it too), then the plans past it as soon as there are some,
     // else the pilot's pick in its last loop.
-    form.slice(0, FORM_SHOWN).forEach((id, i) => {
-      const drop = unqueue(id, p.queue.length + i, () => {
+    form.forEach(({ section: id }, i) => {
+      const slot = p.queue.length + i;
+      const drop = unqueue(id, slot, () => {
         state.pilot = unform(state.pilot, i);
         requeue();
       });
+      const li = chip(id, slot, "queued is-ai", `✨ ${tx.sections[id]}`, drop);
       const formWhy = state.run?.formWhy;
-      const li = el("li", { class: "queued is-ai", "data-queued": id }, el("span", { text: `✨ ${tx.sections[id]}` }), ...drop);
-      li.title = why(p.queue.length + i, formWhy ? `${tx.ai.formed}: ${formWhy}` : tx.ai.formed);
+      li.title = why(slot, formWhy ? `${tx.ai.formed}: ${formWhy}` : tx.ai.formed);
       chips.push(li);
     });
-    if (form.length > FORM_SHOWN) {
-      const rest = form.slice(FORM_SHOWN);
-      const li = el("li", { class: "queued is-auto is-ai" }, el("span", { text: `+${rest.length}` }));
-      li.title = rest.map((id) => tx.sections[id]).join(" → ");
-      chips.push(li);
-    }
-    const shown = (p?.queue.length ?? 0) + form.length;
+    const shown = coming.length;
     // A plan past them goes with the ones after it (they followed from it),
     // and the ✨ AI plans that section again.
     ahead.slice(shown).forEach(({ plan }, i) => {
@@ -1162,25 +1185,23 @@ export function mountApp(root, engine, opts = {}) {
         dropAhead(shown + i);
         planAhead();
       });
-      const li = el("li", { class: "queued is-auto is-ai", "data-queued": plan.section }, el("span", { text: `✨ ${tx.sections[plan.section]}` }), ...drop);
+      const li = chip(plan.section, shown + i, "queued is-auto is-ai", `✨ ${tx.sections[plan.section]}`, drop);
       li.title = why(shown + i, tx.ai.planned);
       chips.push(li);
     });
-    if (p && !chips.length && p.left === 1 && p.next) {
-      chips.push(el("li", { class: "queued is-auto", "data-queued": p.next }, el("span", { text: tx.sections[p.next] })));
-    }
+    if (p && !chips.length && p.left === 1 && p.next) chips.push(chip(p.next, 0, "queued is-auto", tx.sections[p.next]));
     // The section a new style comes in on.
     if (p?.handoff) {
-      const chip = chips[coming.findIndex((_, i) => styleAt(p, i, ws.style) !== ws.style)];
+      const restyled = chips[coming.findIndex((_, i) => styleAt(p, i, ws.style) !== ws.style)];
       const name = tx.styles[p.handoff.style];
-      chip?.firstChild.after(el("span", { class: "restyle", text: `→ ${name}` }));
-      if (chip) chip.title = tx.pilot.styleOn(name);
+      restyled?.firstChild.after(el("span", { class: "restyle", text: `→ ${name}` }));
+      if (restyled) restyled.title = tx.pilot.styleOn(name);
     }
     if (p && planning) {
       const slot = planning.form || planning.tune ? chips.length : planning.at - sectionNo() - 1;
-      const chip = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
-      chip.classList.add("is-thinking");
-      chip.title = planning.tune
+      const thinking = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
+      thinking.classList.add("is-thinking");
+      thinking.title = planning.tune
         ? tx.ai.tuningTitle
         : planning.closing
           ? tx.ai.closingTitle
@@ -1193,6 +1214,27 @@ export function mountApp(root, engine, opts = {}) {
     queueList.hidden = !chips.length;
     nextBtn.disabled = !p || p.left === 1;
     showDrop();
+  }
+
+  // − and + on the timeline: the section at `slot` lasts `bars`. A plan made
+  // for it just stretches; the form keeps them, so the plan asked for it
+  // later is made for that length.
+  function resize(slot, bars) {
+    const p = state.pilot;
+    if (!p || bars === undefined) return;
+    const coming = sequence(p);
+    const e = state.run?.ahead[slot];
+    if (e && (slot >= coming.length || e.plan.section === coming[slot])) {
+      const was = e.plan;
+      e.plan = { ...was, bars };
+      if (slot === 0 && state.pilot.plan === was) {
+        state.pilot = { ...state.pilot, plan: e.plan };
+        state.run.plans[sectionNo()] = e.plan;
+      }
+    }
+    const i = slot - p.queue.length;
+    if (i >= 0 && p.form?.[i]) state.pilot = withForm(state.pilot, p.form.map((f, k) => (k === i ? { ...f, loops: bars / 2 } : f)));
+    showSection();
   }
 
   // 💥 is lit while a drop is on its way: armed, rolling, in its gap, or the
@@ -1215,6 +1257,8 @@ export function mountApp(root, engine, opts = {}) {
     const now = snapById(tour.id);
     const left = tourLeft(tour, ws.changeBars);
     const next = nextSnapshot(ws.snapshots, tour);
+    timeline.hidden = false;
+    timelineNow.style.flexGrow = String(left);
     sectionBadge.textContent = now?.name ?? "";
     sectionBadge.hidden = !now;
     sectionLeft.textContent = tx.pilot.left(left);
@@ -1235,14 +1279,8 @@ export function mountApp(root, engine, opts = {}) {
     return Math.floor(positionAt(step, engine.visibleLoop() ?? 0, data, engine.fromOf(id)));
   }
 
-  let shownStep = null;
   function paintStep(step) {
     if (open) open.editor.paint(rollStep(open.id, step));
-    if (step === shownStep) return;
-    if (shownStep !== null) cells[shownStep % BAR_STEPS].classList.remove("is-current");
-    if (step !== null) cells[step % BAR_STEPS].classList.add("is-current");
-    barLabel.textContent = step === null ? tx.transport.barIdle : tx.transport.bar(step < BAR_STEPS ? 1 : 2);
-    shownStep = step;
   }
 
   // A short flash, replayed on every call: alternating between two identical
@@ -2600,9 +2638,9 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // A vibe applied: the plans made with the old words go and the ✨ AI plans
-  // again with the new ones, the form of the track first. Playing, the next
-  // section's plan stays (and its place in the form), so the model has a
-  // section's time to answer and none plays unplanned. Armed, the track
+  // again with the new ones; the form stays, its order is the set's. Playing,
+  // the next section's plan stays, so the model has a section's time to
+  // answer and none plays unplanned. Armed, the track
   // starts over from the seed, so the opening follows them too.
   function revibe() {
     if (!state.pilot || !state.run || !state.aiPrefs.on || replaying()) return;
@@ -2612,11 +2650,6 @@ export function mountApp(root, engine, opts = {}) {
     }
     dropAhead(1);
     if (planning?.form || planning?.tune) cancelPlanning();
-    const p = state.pilot;
-    const decided = p.left === 1 && p.next ? 1 : 0; // its last loop already announced it
-    const kept = Math.max(state.run.ahead.length, decided) - p.queue.length;
-    state.pilot = withForm(p, (p.form ?? []).slice(0, Math.max(0, kept)));
-    state.run.formed = false;
     planAhead();
   }
 
@@ -3050,13 +3083,21 @@ export function mountApp(root, engine, opts = {}) {
       planOpening();
       return;
     }
-    // The low level skips the form: one ask less before the section comes.
-    // Closing, the model lays out the closing in its place, while it may.
+    // The form of the next track, as this one's runs out. The low level
+    // takes the set's own (FORM_OF_SET): one ask less before the section
+    // comes. Closing, the model lays out the closing in its place, while it may.
     if (p.closing && !closingOpen(p)) state.run.formed = true;
-    if (!state.run.formed && asksForm(state.aiPrefs.level)) {
-      if (p.closing) planClosing(engine);
-      else planForm(engine);
-      return;
+    if (p.closing) {
+      if (!state.run.formed && asksForm(state.aiPrefs.level)) {
+        planClosing(engine);
+        return;
+      }
+    } else if (!state.run.formed || (p.form?.length ?? 0) < AHEAD) {
+      if (asksForm(state.aiPrefs.level)) {
+        planForm(engine);
+        return;
+      }
+      layForm(null);
     }
     const slot = state.run.ahead.length;
     if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
@@ -3065,7 +3106,8 @@ export function mountApp(root, engine, opts = {}) {
     if (p.closing && !next) return; // nothing plays after the outro
     if (next && !PLAN_SECTIONS.includes(next) && next !== OUTRO) return;
     const at = sectionNo() + 1 + slot;
-    const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, ...asked() };
+    const loops = loopsAt(p, slot);
+    const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, bars: loops && loops * 2, ...asked() };
     // A plan in the style a drop brings in carries that style's tune.
     if (untuned(ctx.style)) {
       planTune(engine, ctx.style);
@@ -3079,6 +3121,7 @@ export function mountApp(root, engine, opts = {}) {
     const prompt = planPrompt({
       ...ctx,
       formed: slot >= p.queue.length,
+      nextBars: ctx.bars,
       form: coming.slice(slot + 1),
       planned,
       theme: themeAfter(p, mix, planned),
@@ -3100,10 +3143,15 @@ export function mountApp(root, engine, opts = {}) {
       { at },
       (signal) => ai[engine].plan(prompt, planSchema(ctx), asking(engine, signal, { style: ctx.style, bpm })),
       (raw) => {
-        const plan = (next === OUTRO ? normalizeOutro : normalizePlan)(raw, { lists: pilotLists(), style: ctx.style });
-        // The section it plans may be the next one by now.
         const ahead = state.run.ahead;
-        if (!plan || at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
+        // Its length is the form's, even one the listener changed meanwhile.
+        const loopsNow = loopsAt(state.pilot, ahead.length);
+        const normal = (next === OUTRO ? normalizeOutro : normalizePlan)(raw, { lists: pilotLists(), style: ctx.style });
+        const plan = normal && loopsNow ? { ...normal, bars: loopsNow * 2 } : normal;
+        // The section it plans may be the next one by now; one it was not
+        // asked for (a queue or a form names it) is no answer.
+        if (!plan || (next && plan.section !== next)) return;
+        if (at !== sectionNo() + 1 + ahead.length || (!ahead.length && !attach(plan))) return;
         ahead.push({ plan, why: whyOf(raw), queued: Boolean(next), style: ctx.style });
         more = true;
         if (fresh) {
@@ -3146,9 +3194,23 @@ export function mountApp(root, engine, opts = {}) {
     else status(length ? tx.ai.armed(length) : tx.ai.failed);
   }
 
-  // Asks the model once per run for the form of the track: the order of the
-  // sections after the queue (and the form kept, after a vibe), which the
-  // pilot walks and each plan then fills in. Answered or not, the plans follow.
+  // The form of the next track (planner.js normalizeForm: the model's
+  // answer, or the set's own for none) after the form left and the plans
+  // past it, which the pilot walks and each plan then fills in.
+  function layForm(raw) {
+    const p = state.pilot;
+    const past = state.run.ahead.slice(sequence(p).length).map(({ plan }) => ({
+      section: plan.section,
+      loops: plan.bars ? plan.bars / 2 : SECTIONS[plan.section].loops[0],
+    }));
+    const form = normalizeForm(raw, state.aiPrefs.set);
+    state.pilot = withForm(p, [...(p.form ?? []), ...past, ...form]);
+    state.run.formed = true;
+    return form;
+  }
+
+  // Asks the model for the form of the next track, as the one walked runs
+  // out. Answered or not, the plans follow; failed, the set's own form.
   function planForm(engine) {
     // The sections coming already: the queue, the form kept, the plans past them.
     const comingNow = () => {
@@ -3167,15 +3229,13 @@ export function mountApp(root, engine, opts = {}) {
       { form: true },
       (signal) => ai[engine].plan(prompt, formSchema(), asking(engine, signal)),
       (raw) => {
-        const form = normalizeForm(raw);
-        if (!form.length) return;
-        state.pilot = withForm(state.pilot, [...comingNow().slice(state.pilot.queue.length), ...form]);
+        const form = layForm(raw);
         state.run.formWhy = whyOf(raw);
         if (!state.armed) status(tx.ai.formReady(form.length));
       },
       (ok) => {
         if (!state.run) return;
-        state.run.formed = true;
+        if (!ok) layForm(null);
         if (ok) planAhead(); // failed, the retry asks for the sections
         settle();
       },

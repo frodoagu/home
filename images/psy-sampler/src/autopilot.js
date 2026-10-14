@@ -48,7 +48,8 @@
 // The pilot takes it before the section's last loop (`withPlan`), where it
 // stands in for the pick of the next section; the queue still goes first.
 // The ✨ AI may also lay out the form of the whole track (`withForm`): the
-// sections to walk, in order, after whatever is queued by hand.
+// sections to walk, in order, after whatever is queued by hand, each with
+// the loops it lasts (`{ section, loops }`) unless its plan says otherwise.
 //
 // 🌅 closes the set (`closeSet`): the sections up to a last peak are queued,
 // then the outro, which drops into a frenzy (`frenzy`: everything at full,
@@ -556,14 +557,17 @@ export const moveTo = (pilot, section) => {
  */
 export const withPlan = (pilot, plan) => (pilot && plan && pilot.left > 1 ? { ...pilot, plan } : pilot);
 
-/** The pilot walks `form` (section ids) after the queue, in place of its own picks. */
+/** The pilot walks `form` ({ section, loops }) after the queue, in place of its own picks. */
 export function withForm(pilot, form) {
   const { form: _old, ...rest } = pilot;
   return form.length ? { ...rest, form } : rest;
 }
 
 /** The sections coming after this one, as far as the queue and the form say. */
-export const sequence = (pilot) => [...pilot.queue, ...(pilot.form ?? [])];
+export const sequence = (pilot) => [...pilot.queue, ...(pilot.form ?? []).map((f) => f.section)];
+
+/** The loops the section `slot` places after this one (in sequence()) lasts, where the form says; else null. */
+export const loopsAt = (pilot, slot) => (pilot.form ?? [])[slot - pilot.queue.length]?.loops ?? null;
 
 /* ---- by hand: the queue, "next", a new style ---- */
 
@@ -608,7 +612,7 @@ export function styleOnDrop(pilot, style, playing) {
   else if (queue.length) queue = [queue[0], ...route, ...queue.slice(1)];
   else {
     // The announced section moves to the queue, which goes before it.
-    if (form[0] === ahead[0]) form = form.slice(1);
+    if (form[0]?.section === ahead[0]) form = form.slice(1);
     queue = [ahead[0], ...route];
   }
   return { ...withForm({ ...pilot, queue }, form), handoff: { style, broke: pilot.section === "breakdown" } };
@@ -826,7 +830,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
     }
     let upcoming;
     if (left === 1 && !(closing && pilot.section === OUTRO)) {
-      upcoming = queue[0] ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
+      upcoming = queue[0] ?? form[0]?.section ?? plan?.section ?? nextOf(pilot.section, rng);
       if (closing) upcoming = closingPick(upcoming, closing.left - 1);
       if (upcoming === "peak" || upcoming === OUTRO || pilot.section === "build" || pilot.opening) fx.push(pick(STYLES[style]?.buildFx ?? BUILD_FX, rng));
     }
@@ -850,7 +854,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       rewrite: newLeads(active, next),
     };
   }
-  const picked = queue[0] ?? pilot.next ?? form[0] ?? plan?.section ?? nextOf(pilot.section, rng);
+  const picked = queue[0] ?? pilot.next ?? form[0]?.section ?? plan?.section ?? nextOf(pilot.section, rng);
   const section = closing ? closingPick(picked, closing.left) : picked;
   const own = plan?.section === section ? plan : null; // a queued section beats the plan's
   // A new style lands with its own lead: the theme was the old style's.
@@ -868,7 +872,8 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
       .filter((id) => !theme.includes(id))
       .forEach((id) => rewrite.add(id));
   }
-  const length = own?.bars ? own.bars / 2 : lengthOf(section, rng);
+  const formed = !queue[0] && form[0]?.section === section ? form[0] : null;
+  const length = own?.bars ? own.bars / 2 : (formed?.loops ?? lengthOf(section, rng));
   // The outro is the last: what was queued after it, or skipped for it, goes.
   const ends = closing && section === OUTRO;
   const fitted = closing ? fitLength(section, length, closing.left) : length;
@@ -879,7 +884,7 @@ export function advance(pilot, active, lists, rng, { style = STYLE_DEFAULT, chan
         section,
         fitted,
         ends ? [] : queue[0] ? queue.slice(1) : queue,
-        ends ? [] : !queue[0] && form[0] === section ? form.slice(1) : form,
+        ends ? [] : formed ? form.slice(1) : form,
       ),
       ...(theme.length ? { theme } : {}),
       ...(landed ? {} : handedOn(pilot.handoff, section)),
