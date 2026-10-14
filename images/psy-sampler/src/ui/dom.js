@@ -29,7 +29,9 @@ export function slider(spec, value, onInput) {
   const id = nextId(spec.key);
   const span = Math.log(spec.max / spec.min);
   const toPos = (v) => (spec.log ? Math.round((Math.log(v / spec.min) / span) * LOG_STEPS) : v);
-  const fromPos = (p) => (spec.log ? Math.round(spec.min * Math.exp((p / LOG_STEPS) * span)) : p);
+  // A log position lands on the spec's step, so a sub-Hz range keeps its decimals.
+  const snap = (v) => Number((Math.round(v / spec.step) * spec.step).toPrecision(12));
+  const fromPos = (p) => (spec.log ? snap(spec.min * Math.exp((p / LOG_STEPS) * span)) : p);
   const input = el("input", {
     type: "range",
     id,

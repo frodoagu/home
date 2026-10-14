@@ -510,10 +510,41 @@ export function createEditor({
       rate.hidden = !current.insert[key];
       return el("div", { class: "mod-pair" }, amount, rate);
     };
+    // A mix and the knobs it opens: they only show while the mix is up.
+    const group = (key, rest) => {
+      const knob = (k, after = () => {}) => {
+        const spec = INSERT_PARAMS.find((p) => p.key === k);
+        return slider(localized(spec), current.insert[k], (v) => {
+          setInsert({ [k]: v });
+          after(v);
+        });
+      };
+      const opened = rest.map((k) =>
+        k === "combRate"
+          ? select(
+              tx.every,
+              LFO_RATES.map((n) => ({ value: n, label: tx.lfoRates[n] })),
+              current.insert.combRate,
+              (v) => setInsert({ combRate: Number(v) }),
+              "comb-rate",
+            )
+          : knob(k),
+      );
+      const show = (v) => opened.forEach((n) => (n.hidden = !v));
+      show(current.insert[key]);
+      return el("div", { class: "mod-pair" }, knob(key, show), ...opened);
+    };
     return fold(
       "modulation",
       tx.modulation,
-      el("div", { class: "knobs" }, pair("phaser", "phaserRate", LFO_RATES, tx.lfoRates), pair("trem", "tremRate", TREM_RATES, tx.tremRates)),
+      el(
+        "div",
+        { class: "knobs" },
+        pair("phaser", "phaserRate", LFO_RATES, tx.lfoRates),
+        pair("trem", "tremRate", TREM_RATES, tx.tremRates),
+        group("comb", ["combHz", "combFb", "combMod", "combRate"]),
+        group("shift", ["shiftHz"]),
+      ),
       legend(tx.modulationLegend),
     );
   }

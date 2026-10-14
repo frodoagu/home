@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FakeAudioContext } from "../test/fakeAudio.js";
+import { lorenz, LOBE } from "./chaos.js";
 import {
+  COMB_MAX_HZ,
+  HILBERT_I,
+  HILBERT_Q,
   INSERT_DEFAULT,
+  hilbertSections,
   LFO_CENTS,
   bitsFor,
   buildInsert,
@@ -256,5 +261,126 @@ describe("buildInsert: shapes, vowel, envelope, phaser, tremolo", () => {
     ins.setStepDur(STEP / 2, 1);
     expect(phaserLfo.frequency.events.at(-1)).toEqual(["target", lfoHz(16, STEP / 2), 1, 0.05]);
     expect(kindOf({ ...INSERT_DEFAULT, phaser: 0.6 })).not.toBe(kindOf(INSERT_DEFAULT));
+  });
+});
+
+describe("buildInsert: chaos, comb and frequency shifter", () => {
+  it("the chaos LFO loops the Lorenz attractor's x, a lobe a second of table, at the LFO's Hz", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, { ...INSERT_DEFAULT, filter: "lowpass", lfo: 0.5, shape: "chaos", rate: 32 }, { stepDur: STEP, at: 2 });
+    const [table] = ctx.sources();
+    expect([table.kind, table.loop, table.startTime]).toEqual(["buffer", true, 2]);
+    expect(table.playbackRate.value).toBeCloseTo(lfoHz(32, STEP), 9);
+    const data = table.buffer.getChannelData(0);
+    expect(data).toEqual(lorenz(data.length, LOBE / table.buffer.sampleRate).x);
+    expect(data.length / table.buffer.sampleRate).toBe(64); // lobes before it repeats
+    buildInsert(ctx, { ...INSERT_DEFAULT, filter: "lowpass", lfo: 0.5, shape: "chaos" }, { stepDur: STEP });
+    expect(ctx.sources()[1].buffer).toBe(table.buffer); // one table per context
+  });
+
+  const combed = { ...INSERT_DEFAULT, comb: 0.8, combHz: 110, combFb: 0.9, combMod: 0.4, combRate: 16 };
+
+  it("the comb only exists while on: a feedback delay of 1/combHz, its wet path held under unity", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
+    expect(ctx.nodes.filter((n) => n.kind === "delay")).toHaveLength(0);
+    buildInsert(ctx, combed, { stepDur: STEP });
+    const [delay] = ctx.nodes.filter((n) => n.kind === "delay");
+    expect(delay.delayTime.value).toBeCloseTo(1 / 110, 9);
+    const fb = delay.outputs[0];
+    expect(fb.gain.value).toBe(0.9);
+    const sum = fb.outputs[0];
+    expect(sum.outputs).toContain(delay); // the loop
+    const wet = sum.outputs.find((n) => n !== delay);
+    expect(wet.gain.value).toBeCloseTo(Math.sin(0.4 * Math.PI) * (1 - 0.9) * 2.8, 9);
+    const dry = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.length && n.gain.value === Math.cos(0.4 * Math.PI));
+    expect(dry).toBeDefined(); // equal power: cos and sin of the mix
+    expect(delay.maxDelayTime).toBeGreaterThanOrEqual(1.5 / 40);
+    expect(COMB_MAX_HZ).toBeLessThanOrEqual(48000 / 128); // a loop's delay is a render quantum at least
+    expect(kindOf(combed)).not.toBe(kindOf(INSERT_DEFAULT));
+    expect(isBypass(combed)).toBe(false);
+  });
+
+  it("a chaos LFO swings the comb's delay by combMod of half of it, at combRate", () => {
+    const ctx = new FakeAudioContext();
+    const ins = buildInsert(ctx, combed, { stepDur: STEP });
+    const [delay] = ctx.nodes.filter((n) => n.kind === "delay");
+    const [lfo] = ctx.sources();
+    expect(lfo.playbackRate.value).toBeCloseTo(lfoHz(16, STEP), 9);
+    const depth = lfo.outputs[0];
+    expect(depth.outputs).toEqual([delay.delayTime]);
+    expect(depth.gain.value).toBeCloseTo((0.4 * 0.5) / 110, 9);
+    ins.update({ ...combed, combHz: 220 }, 1);
+    expect(delay.delayTime.events.at(-1)).toEqual(["target", 1 / 220, 1, 0.02]);
+  });
+
+  // The shifter, sample by sample: each path's sections as difference
+  // equations, then I·cos + Q·sin. Returns the output's level at `hz`.
+  function shifted(inHz, shiftHz, sr = 48000) {
+    const n = 16384;
+    const x = Array.from({ length: n }, (_, i) => Math.sin((2 * Math.PI * inHz * i) / sr));
+    const run = (sections) =>
+      sections.reduce((sig, { feedforward: b, feedback: a }) => {
+        const y = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) {
+          let v = 0;
+          b.forEach((bk, k) => (v += bk * (sig[i - k] ?? 0)));
+          a.forEach((ak, k) => k && (v -= ak * (y[i - k] ?? 0)));
+          y[i] = v / a[0];
+        }
+        return y;
+      }, x);
+    const i = run(hilbertSections(HILBERT_I, true));
+    const q = run(hilbertSections(HILBERT_Q, false));
+    const w = (2 * Math.PI * shiftHz) / sr;
+    const y = i.map((v, k) => v * Math.cos(w * k) + q[k] * Math.sin(w * k));
+    return (hz) => {
+      let re = 0;
+      let im = 0;
+      for (let k = n / 2; k < n; k++) {
+        re += y[k] * Math.cos((2 * Math.PI * hz * k) / sr);
+        im += y[k] * Math.sin((2 * Math.PI * hz * k) / sr);
+      }
+      return Math.hypot(re, im) / (n / 4);
+    };
+  }
+
+  it("Niemitalo's pair moves a partial up by shiftHz, keeping its level and dropping the mirror image", () => {
+    for (const [inHz, by] of [[100, 30], [1000, 100], [5000, 165], [15000, 400]]) {
+      const level = shifted(inHz, by);
+      expect(level(inHz + by), `${inHz} Hz up`).toBeCloseTo(1, 1);
+      expect(level(inHz - by), `${inHz} Hz mirror`).toBeLessThan(0.03); // under -30 dB
+    }
+  });
+
+  it("the shifter only exists while on: two IIR cascades times a cosine and a sine at shiftHz", () => {
+    const ctx = new FakeAudioContext();
+    buildInsert(ctx, INSERT_DEFAULT, { stepDur: STEP });
+    expect(ctx.nodes.filter((n) => n.kind === "iir")).toHaveLength(0);
+    const shifted = { ...INSERT_DEFAULT, shift: 0.5, shiftHz: 165 };
+    const ins = buildInsert(ctx, shifted, { stepDur: STEP, at: 3 });
+    const iirs = ctx.nodes.filter((n) => n.kind === "iir");
+    expect(iirs).toHaveLength(8);
+    expect(iirs.slice(0, 4).map(({ feedforward, feedback }) => ({ feedforward, feedback }))).toEqual(
+      hilbertSections(HILBERT_I, true),
+    );
+    expect(iirs[0].feedforward).toEqual([0, HILBERT_I[0] ** 2, 0, -1]); // a sample late
+    expect(iirs[4].feedforward).toEqual([HILBERT_Q[0] ** 2, 0, -1]);
+    const [cos, sin] = ctx.sources();
+    expect(cos.type).toBe("custom");
+    expect(cos.wave).toMatchObject({ real: [0, 1], imag: [0, 0] });
+    expect(sin.type).toBe("sine");
+    for (const c of [cos, sin]) {
+      expect([c.frequency.value, c.startTime]).toEqual([165, 3]);
+      expect(c.outputs[0].constructor.name).toBe("FakeParam");
+    }
+    const wets = [iirs[3], iirs[7]].map((iir) => iir.outputs[0].outputs[0].gain.value);
+    expect(wets.map((w) => w.toFixed(6))).toEqual([Math.SQRT1_2, Math.SQRT1_2].map((w) => w.toFixed(6))); // I·cos + Q·sin, equal power
+    ins.update({ ...shifted, shiftHz: 20 }, 1);
+    for (const c of [cos, sin]) expect(c.frequency.events.at(-1)).toEqual(["target", 20, 1, 0.02]);
+    ins.stop(5);
+    expect([cos.stopTime, sin.stopTime]).toEqual([5, 5]);
+    expect(kindOf(shifted)).not.toBe(kindOf(INSERT_DEFAULT));
+    expect(isBypass(shifted)).toBe(false);
   });
 });

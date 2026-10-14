@@ -176,6 +176,8 @@ const swung = (def, swing) => ({ ...def, data: { ...def.data, swing } });
 // A notes variant that starts from another "Brillo" (the tom's: its decay).
 // A variant that starts pumping under the kick by `duck`.
 const ducked = (def, duck) => ({ ...def, data: { ...def.data, duck } });
+// A variant that starts through another insert.
+const inserted = (def, insert) => ({ ...def, data: { ...def.data, insert: { ...def.data.insert, ...insert } } });
 const bright = (def, value) => ({ ...def, data: { ...def.data, params: { ...def.data.params, bright: value } } });
 
 function fx(id) {
@@ -201,6 +203,9 @@ function classic({ synth, notes: list, speed = 1 }) {
   def.data.loops = PART_LOOPS.find((n) => n * LOOP_STEPS >= end);
   return def;
 }
+
+export const CHAOS_LINE = [A3, E4, C4, A4, E4, G4];
+export const COMB_STEPS = [3, 10, 14, 19, 27, 30];
 
 export const DEFAULTS = {
   "kick.punchy": drum("kick", BEATS, KICK_PUNCHY),
@@ -300,6 +305,16 @@ export const DEFAULTS = {
     LEAD,
   ),
 
+  // An arpeggio whose resonant lowpass wanders on the Lorenz attractor: no two bars alike.
+  "lead.chaos": notes(
+    "pluck",
+    (() => {
+      let i = 0;
+      return every((s) => s % 4 !== 0 && note(s, CHAOS_LINE[i++ % CHAOS_LINE.length], 1, s % 8 === 2));
+    })(),
+    { ...LEAD, insert: { filter: "lowpass", cutoff: 1400, res: 6, lfo: 0.6, rate: 64, shape: "chaos" } },
+  ),
+
   "lead.piano": notes(
     "piano",
     [0, 1].flatMap((bar) => PIANO_HITS.flatMap((s) => PIANO_CHORDS[bar].map((m) => note(bar * 16 + s, m, 2)))),
@@ -334,6 +349,8 @@ export const DEFAULTS = {
   ),
   "pad.supersaw": notes("supersaw", [A3, C4, E4, A4].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
   "pad.fifths": notes("pad", [A2, E3, A3].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
+  // A fifth and its octave through the frequency shifter, half wet: every partial 165 Hz up, bells.
+  "pad.glass": notes("pad", [A3, E4, A4].map((m) => note(0, m, 32)), { ...PAD, len: 32, insert: { shift: 0.5, shiftHz: 165 } }),
   "pad.deep": notes(
     "pad",
     DEEP_CHORDS.flatMap((chord, i) => chord.map((m) => note(i * 16, m, 16))),
@@ -350,6 +367,11 @@ export const DEFAULTS = {
   "glitch.crackle": drum("crackle", steps(() => HIT)),
   "glitch.rise": drum("rise", steps((s) => (s % 8 === 7 ? HIT : OFF))),
   "glitch.tape": drum("tape", steps((s) => (s === 28 ? ACCENT : s === 12 ? HIT : OFF))),
+  // FM metal through a comb at 110 Hz whose delay a chaos LFO keeps bending.
+  "glitch.comb": inserted(
+    drum("metal", steps((s) => (COMB_STEPS.includes(s) ? (s % 16 === 14 ? ACCENT : HIT) : OFF))),
+    { comb: 0.8, combHz: 110, combFb: 0.9, combMod: 0.4, combRate: 32 },
+  ),
   "glitch.lasers": drum("laser", steps((s) => (s % 4 === 2 ? (s % 16 === 14 ? ACCENT : HIT) : OFF))),
 
   ...Object.fromEntries(Object.entries(CLASSICS).map(([id, tune]) => [`classic.${id}`, classic(tune)])),
@@ -364,6 +386,7 @@ export const DEFAULTS = {
   "fx.reverse": fx("fx.reverse"),
   "fx.stutter": fx("fx.stutter"),
   "fx.tapeStop": fx("fx.tapeStop"),
+  "fx.chaos": fx("fx.chaos"),
 };
 
 export const LOOP_VARIANTS = Object.keys(DEFAULTS).filter((id) => DEFAULTS[id].kind !== "fx");
@@ -578,6 +601,7 @@ export function cleanInsert(saved, base = INSERT_DEFAULT) {
   if (LFO_RATES.includes(saved.rate)) out.rate = saved.rate;
   if (LFO_RATES.includes(saved.panRate)) out.panRate = saved.panRate;
   if (LFO_RATES.includes(saved.phaserRate)) out.phaserRate = saved.phaserRate;
+  if (LFO_RATES.includes(saved.combRate)) out.combRate = saved.combRate;
   if (TREM_RATES.includes(saved.tremRate)) out.tremRate = saved.tremRate;
   if (LFO_SHAPES.includes(saved.shape)) out.shape = saved.shape;
   if (Object.hasOwn(VOWELS, saved.vowel)) out.vowel = saved.vowel;
