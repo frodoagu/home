@@ -10,6 +10,8 @@ import {
   PLAN_MAX,
   LEVELS,
   PLAN_SECTIONS,
+  ROLE,
+  ROLE_LINE,
   SET_LENGTHS,
   SYSTEM,
   TUNE_SYSTEM,
@@ -576,8 +578,8 @@ describe("levels", () => {
   };
   const dressed = [{ id: "lead.acid", tone: -1 }];
 
-  it("are low, mid and high; mid is the full prompt it always was", () => {
-    expect(LEVELS).toEqual(["low", "mid", "high"]);
+  it("are low, mid, high and max; mid is the full prompt it always was", () => {
+    expect(LEVELS).toEqual(["low", "mid", "high", "max"]);
     const track = { style: "goa", bpm: 145 };
     const brief = briefOf(track);
     expect(systemOf({ ...track, level: "mid" })).toBe(`${brief}\n${SYSTEM}`);
@@ -585,6 +587,29 @@ describe("levels", () => {
     expect(systemOf({ ...track, level: "high" }).startsWith(`${brief}\n${SYSTEM}`)).toBe(true);
     expect(systemOf({ ...track, level: "high" })).toMatch(/filter \(off, lowpass, highpass, bandpass, vowel a/);
     expect(planPrompt({ ...ask, dressed })).toBe(planPrompt({ ...ask, dressed, level: "mid", describe: true }));
+    expect(systemOf({ ...track, level: "max" })).toBe(`${systemOf({ ...track, level: "high" })}\n${ROLE_LINE}`);
+    expect(asksForm("max")).toBe(true);
+    expect(planSchema({ ...goa, level: "max" })).toEqual(planSchema({ ...goa, level: "high" }));
+  });
+
+  it("max alone tells each sound's role and the listener's own words for it", () => {
+    const descriptions = { "lead.acid": 'my vocal chop, "dark"', "kick.long": "soft" };
+    const max = planPrompt({ ...ask, level: "max", descriptions });
+    expect(max).toContain(
+      `lead.acid (Acid: 303: resonant filter, A minor; squelchy, hypnotic, driving; ${ROLE["lead.acid"]}; the listener says: "my vocal chop, \\"dark\\"")`,
+    );
+    expect(max).toContain(ROLE["pad.chord"]);
+    expect(openingPrompt({ ...goa, section: "intro", level: "max", descriptions })).toContain('the listener says: "my vocal chop');
+    for (const level of ["low", "mid", "high"]) {
+      const prompt = planPrompt({ ...ask, level, descriptions });
+      expect(prompt).toBe(planPrompt({ ...ask, level }));
+      expect(prompt).not.toContain(ROLE["lead.acid"]);
+    }
+    expect(planPrompt({ ...ask, level: "max", descriptions, describe: false })).not.toContain("the listener says");
+  });
+
+  it("knows the role of every looping sound, and of nothing else", () => {
+    expect(Object.keys(ROLE).sort()).toEqual(Object.keys(CHARACTER).sort());
   });
 
   it("low asks for the sections and their sounds in far fewer words: no form, dress or parts", () => {

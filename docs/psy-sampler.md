@@ -1517,7 +1517,8 @@ breakdown has no kick, every section plays a lead or a pad).
   style allows per layer with its English name and a few words of character
   (`CHARACTER`: "dark, tense, ominous"; the i18n names say how a sound is made,
   which doesn't map a vibe like "darker" to anything). A test keeps
-  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words.
+  `CHARACTER` in step with `DEFAULTS`, so a new voice needs its words, and its
+  `ROLE` too (the sentence Muy alta adds, see *Complexity*).
 - The system prompt is built per ask from the settings (`systemOf`): a
   **brief** of the track (`briefOf`) — the style's genre in a sentence
   (`GENRE`: what it is and its signature sounds, so the model arranges house
@@ -1735,13 +1736,13 @@ theme.
 **Complexity** (`planner.js` `LEVELS`) sets how much each ask carries, so a
 small model can keep ahead of the music:
 
-| | Baja (`low`) | Media (`mid`, default) | Alta (`high`) |
-| --- | --- | --- | --- |
-| Instructions (after the brief) | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) |
-| Asks | the opening and the sections | + the form of the track | same as Media |
-| Answer | `why` (80 chars), section, bars, layers | + `dress` (macros, synth) and `parts` | + the tweaks in every dress entry |
-| Prompt | the sounds by character only; no recall, no dress, no synths | as it was | as Media, plus how it dressed them with tweaks |
-| Size (psytrance, a section) | ~820 tokens | ~2400 | ~2900 |
+| | Baja (`low`) | Media (`mid`, default) | Alta (`high`) | Muy alta (`max`) |
+| --- | --- | --- | --- | --- |
+| Instructions (after the brief) | `LOW_SYSTEM`: the forms and the rules in a few lines | `SYSTEM` | `SYSTEM` + the tweaks (`systemOf`) | Alta's + `ROLE_LINE` |
+| Asks | the opening and the sections | + the form of the track | same as Media | same as Media |
+| Answer | `why` (80 chars), section, bars, layers | + `dress` (macros, synth) and `parts` | + the tweaks in every dress entry | same as Alta |
+| Prompt | the sounds by character only; no recall, no dress, no synths | as it was | as Media, plus how it dressed them with tweaks | as Alta, plus each sound's role and the listener's own description; sounds described even with no vibe |
+| Size (psytrance, a section) | ~820 tokens | ~2400 | ~2900 | ~3550 |
 
 Baja is for Chrome's Gemini Nano on a laptop: with Media the asks were taking
 longer than the sections, so some came in unplanned. It skips the form
@@ -1757,7 +1758,23 @@ words in it, the prompt gives each sound its name, how it is made and its
 character (Baja: the character only), so the model can match them to the
 vibe; empty, there is no message for the model, and it gets the ids alone,
 and the synths and swells by id. That saves about 2,600 characters a section
-at Media and Alta. A note under the field says which it is as it is typed.
+at Media and Alta. Muy alta always describes them: the listener picked it to
+tell the model more. A note under the field says which it is as it is typed.
+
+**Muy alta** is the only level that adds what a sound is *for*. Each
+description gets the sound's **role** (`planner.js` `ROLE`: a sentence on its
+energy, the sections it fits and what it sits well with, beside `CHARACTER`'s
+few words on how it sounds) and, where the listener wrote one, **their own
+description** of it: the *Para la IA* field under the name in a loop sound's
+editor (not FX or the classics, which the model never picks). It is meant for
+a sound the factory words no longer fit, such as one edited out of shape or
+playing the user's sample. The description lives in the workspace
+(`descriptions`, `{ variant: text }`, one line, `DESCRIPTION_MAX` = 200 chars,
+`cleanDescription`). It travels with 🔗's `&s=`, presets and the snapshot files
+(only copies' descriptions, like their names), and it is quoted with
+`JSON.stringify` in the prompt (`the listener says: "…"`): it is a link's
+untrusted text like the names. `ROLE_LINE` tells the model those words outrank
+the sound's name. The other levels send exactly what they did before.
 
 ### Seeds, share links and replay
 

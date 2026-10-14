@@ -1429,6 +1429,23 @@ describe("duplicating and renaming", () => {
     expect(again.querySelector('[data-editor="kick.punchy~1"] [data-param="f0"]').value).toBe("200");
   });
 
+  it("a sound's description for the AI is saved, cleaned and gone with the sound; FX and classics have none", () => {
+    openEditor("lead.arp");
+    const about = editor("lead.arp").querySelector('[data-action="description"]');
+    about.value = "  oscuro,\n para breakdowns ";
+    about.dispatchEvent(new Event("input"));
+    expect(saved().descriptions["lead.arp"]).toBe("oscuro, para breakdowns");
+    about.dispatchEvent(new Event("blur"));
+    expect(about.value).toBe("oscuro, para breakdowns");
+    about.value = "";
+    about.dispatchEvent(new Event("input"));
+    expect(saved().descriptions["lead.arp"]).toBeUndefined();
+    openEditor("fx.riser");
+    expect(editor("fx.riser").querySelector('[data-action="description"]')).toBeNull();
+    openEditor("classic.tetris");
+    expect(editor("classic.tetris").querySelector('[data-action="description"]')).toBeNull();
+  });
+
   it("renaming a factory sound works too; an empty name brings the default back", () => {
     openEditor("perc.hat");
     const name = editor("perc.hat").querySelector('[data-action="name"]');
@@ -3165,7 +3182,7 @@ describe("✨ AI", () => {
     const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
     aiBtn().click();
     expect($("#ai-level").value).toBe("mid");
-    expect([...root.querySelectorAll("#ai-level option")].map((o) => o.textContent)).toEqual(["Baja", "Media", "Alta"]);
+    expect([...root.querySelectorAll("#ai-level option")].map((o) => o.textContent)).toEqual(["Baja", "Media", "Alta", "Muy alta"]);
     $("#ai-level").value = "low";
     $("#ai-level").dispatchEvent(new Event("change"));
     const low = systemOf({ level: "low", style: "psytrance", bpm: 145 });
@@ -3191,6 +3208,21 @@ describe("✨ AI", () => {
     expect(high.formAsks).toHaveLength(1);
     expect(high.asks.at(-1).opts.system).toBe(systemOf({ level: "high", style: "psytrance", bpm: 145 }));
     expect(high.asks.at(-1).schema.properties.dress.items.required).toContain("filter");
+  });
+
+  it("Muy alta always describes the sounds, with each one's role and the user's own words for it", async () => {
+    localStorage.setItem("psy-sampler:v2", JSON.stringify({ descriptions: { "lead.acid": "mi sample de voz, oscuro" } }));
+    localStorage.setItem("psy-sampler:ai", JSON.stringify({ level: "max" }));
+    const ai = await remountWith(fakeAi({ answers: [queuedOr(BREAK)] }));
+    aiBtn().click();
+    await flushPromises();
+    expect($(".ai-vibe-note").textContent).toMatch(/en Muy alta igual sabe cómo es cada sonido/);
+    expect(ai.asks.length).toBeGreaterThan(0);
+    for (const ask of [...ai.openings, ...ai.asks]) {
+      expect(ask.opts.system).toBe(systemOf({ level: "max", style: "psytrance", bpm: 145 }));
+      expect(ask.prompt).toContain('the listener says: "mi sample de voz, oscuro"');
+      expect(ask.prompt).toMatch(/squelchy, hypnotic, driving; the 303 line/);
+    }
   });
 
   it("an empty vibe is no message: the AI sees the sounds by id, and the note under it says so", async () => {

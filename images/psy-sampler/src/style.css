@@ -2562,6 +2562,20 @@ html:has(dialog.help[open], dialog.intro[open]) {
   font-weight: 600;
 }
 
+.description-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.description-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+}
+
 .editor-tools {
   display: flex;
   flex-wrap: wrap;

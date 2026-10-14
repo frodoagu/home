@@ -160,6 +160,7 @@ import { browserStorage, loadFolds, loadState, loadVolume, saveFolds, saveState,
 import { RAMP_BARS, addTap, clampBpm, rampAt, tapBeat } from "../tempo.js";
 import {
   SNAP_PANEL,
+  cleanDescription,
   cleanSeed,
   copyId,
   importSnapshots,
@@ -554,7 +555,8 @@ export function mountApp(root, engine, opts = {}) {
   const noteVibe = () => {
     const typed = vibeInput.value.replace(/\s+/g, " ").trim();
     const genre = typed && typed === state.aiPrefs.vibe ? tunes.get(tuneKey(ws.style))?.genre : "";
-    vibeNote.textContent = !typed ? tx.ai.vibeEmpty : genre ? tx.ai.vibeTuned(genre) : tx.ai.vibeSaid;
+    const empty = state.aiPrefs.level === "max" ? tx.ai.vibeEmptyMax : tx.ai.vibeEmpty;
+    vibeNote.textContent = !typed ? empty : genre ? tx.ai.vibeTuned(genre) : tx.ai.vibeSaid;
   };
   // Its settings fold away (remembered), with what they say in the summary.
   const aiSummary = el("span", { class: "ai-summary" });
@@ -2157,6 +2159,8 @@ export function mountApp(root, engine, opts = {}) {
       onClose: closeEditor,
       onTrigger: () => fire(id),
       onRename: (name) => rename(id, name),
+      description: ws.descriptions[id] ?? "",
+      onDescribe: layer.oneShot || layer.manual ? null : (text) => describe(id, text),
       onDuplicate: () => duplicate(layer, id),
       onRemove: () => remove(layer, id),
       onWav: () => exportWav({ layer, id }),
@@ -2201,6 +2205,15 @@ export function mountApp(root, engine, opts = {}) {
     tile.levelBar?.setAttribute("aria-label", tx.tile.levelBar(label));
     persist();
     return label;
+  }
+
+  // The user's words for how `id` sounds, for the ✨ AI; returns them clean.
+  function describe(id, text) {
+    const clean = cleanDescription(text);
+    if (clean) ws.descriptions[id] = clean;
+    else delete ws.descriptions[id];
+    persist();
+    return clean;
   }
 
   // A new copy of `id` with `data`, at `at` in its layer, opened with its name selected.
@@ -2288,6 +2301,7 @@ export function mountApp(root, engine, opts = {}) {
     ws.lists[layer.id] = ws.lists[layer.id].filter((x) => x !== id);
     delete ws.variants[id];
     delete ws.names[id];
+    delete ws.descriptions[id];
     delete ws.improv[id];
     ws.auto = ws.auto.filter((x) => x !== id);
     ws.banned = ws.banned.filter((x) => x !== id);
@@ -2720,10 +2734,15 @@ export function mountApp(root, engine, opts = {}) {
     systemOf({ level: state.aiPrefs.level, style, bpm, vibe: vibeFor(style), genre: tuneOf(style).genre });
   const asking = (engine, signal, track = {}) => ({ ...reach(engine), system: systemFor(track.style, track.bpm), signal });
   // What a prompt and its schema take from the settings.
-  // An empty vibe is no message: the sounds go by id, with no words to match.
+  // An empty vibe is no message: the sounds go by id, with no words to match,
+  // except at level max, which always tells what each sound is.
   // The set's length and how much of it has played, for the arc of the night.
   const setNow = () => ({ minutes: state.aiPrefs.set, elapsed: state.setSeconds });
-  const asked = () => ({ level: state.aiPrefs.level, describe: Boolean(state.aiPrefs.vibe), set: setNow() });
+  const asked = () => ({
+    level: state.aiPrefs.level,
+    describe: Boolean(state.aiPrefs.vibe) || state.aiPrefs.level === "max",
+    set: setNow(),
+  });
   const knownOf = (engine) => (engine === "chrome" ? null : (ai?.[engine]?.known?.(isCloud(engine) ? keyOf(engine) : state.aiPrefs.endpoint) ?? null));
   // A share link's run, from silence: while it has an entry for the section
   // playing, that entry (or none) stands in for the model's answer.
@@ -2990,6 +3009,7 @@ export function mountApp(root, engine, opts = {}) {
       active: state.pending ?? state.active,
       vibe: vibeFor(ws.style),
       names: ws.names,
+      descriptions: ws.descriptions,
       synths: synthsNow(),
     });
     ask(
@@ -3071,6 +3091,7 @@ export function mountApp(root, engine, opts = {}) {
       vibe: vibeFor(ctx.style),
       fresh,
       names: ws.names,
+      descriptions: ws.descriptions,
       closing: p.closing ? { seconds: p.closing.left * loopSeconds(), route: coming } : null,
     });
     let more = false;

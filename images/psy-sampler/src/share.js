@@ -77,18 +77,21 @@ const pack = async (value) =>
 const unpack = async (text, max) => new TextDecoder().decode(await inflate(fromBase64Url(text), max));
 
 export async function packSounds(ws) {
-  const { lists, names, banned } = ws;
-  return pack(toPreset({ lists, names, variants: ownVariants(ws), auto: [], banned }));
+  const { lists, names, descriptions, banned } = ws;
+  return pack(toPreset({ lists, names, descriptions, variants: ownVariants(ws), auto: [], banned }));
 }
 
 export async function unpackSounds(text, max = SOUNDS_MAX) {
-  const { lists, names, variants, auto, banned } = parsePreset(await unpack(text, max));
-  return { lists, names, variants, auto, banned };
+  const { lists, names, descriptions, variants, auto, banned } = parsePreset(await unpack(text, max));
+  return { lists, names, descriptions, variants, auto, banned };
 }
 
 // The sounds are worth sending only when they are not the factory ones.
 export const hasCustomSounds = (ws) =>
-  Object.keys(ownVariants(ws)).length > 0 || Object.keys(ws.names).length > 0 || ws.banned.length > 0;
+  Object.keys(ownVariants(ws)).length > 0 ||
+  Object.keys(ws.names).length > 0 ||
+  Object.keys(ws.descriptions).length > 0 ||
+  ws.banned.length > 0;
 
 /**
  * "#seed=…&style=…&bpm=…[&s=…][&ai=…][&open=…]" for `ws` (async:
@@ -119,7 +122,8 @@ export async function unpackOpening(text, max = SOUNDS_MAX) {
 
 /** "#snap=…": `snap` alone, as a snapshots file with the names of the copies it plays. */
 export async function snapFragment(ws, snap) {
-  return `#${new URLSearchParams({ snap: await pack(toSnapshotFile({ names: ws.names, snapshots: [snap] })) })}`;
+  const { names, descriptions } = ws;
+  return `#${new URLSearchParams({ snap: await pack(toSnapshotFile({ names, descriptions, snapshots: [snap] })) })}`;
 }
 
 /** The fragment of a snapshot link -> its packed file, or null. */
