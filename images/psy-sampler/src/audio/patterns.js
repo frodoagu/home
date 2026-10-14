@@ -176,6 +176,8 @@ const swung = (def, swing) => ({ ...def, data: { ...def.data, swing } });
 // A notes variant that starts from another "Brillo" (the tom's: its decay).
 // A variant that starts pumping under the kick by `duck`.
 const ducked = (def, duck) => ({ ...def, data: { ...def.data, duck } });
+// A notes variant whose part runs `loops` 2-bar loops (PART_LOOPS).
+const looped = (def, loops) => ({ ...def, data: { ...def.data, loops } });
 const bright = (def, value) => ({ ...def, data: { ...def.data, params: { ...def.data.params, bright: value } } });
 
 function fx(id) {
@@ -201,6 +203,47 @@ function classic({ synth, notes: list, speed = 1 }) {
   def.data.loops = PART_LOOPS.find((n) => n * LOOP_STEPS >= end);
   return def;
 }
+
+/**
+ * Björklund's Euclidean rhythm (Toussaint): `k` onsets spread as evenly as
+ * they go over `n` steps, as 0/1, turned `rotate` steps later. Pulses and
+ * rests start as single groups; the remainder is appended onto the front
+ * groups until one group or none is left over, like Euclid's GCD.
+ */
+export function euclid(k, n, rotate = 0) {
+  if (k <= 0) return Array(n).fill(0);
+  if (k >= n) return Array(n).fill(1);
+  let front = Array.from({ length: k }, () => [1]);
+  let rest = Array.from({ length: n - k }, () => [0]);
+  while (rest.length > 1) {
+    const m = Math.min(front.length, rest.length);
+    const paired = front.slice(0, m).map((group, i) => [...group, ...rest[i]]);
+    rest = front.length > m ? front.slice(m) : rest.slice(m);
+    front = paired;
+  }
+  const flat = [...front, ...rest].flat();
+  return flat.map((_, i) => flat[(((i - rotate) % n) + n) % n]);
+}
+
+// E(k, 16) on each bar, turned `rotations[bar]` steps: the accents move,
+// the groove stays.
+const euclidBars = (k, rotations, accent = () => false) => {
+  const bars = rotations.map((r) => euclid(k, 16, r));
+  return steps((s) => (bars[Math.floor(s / 16)][s % 16] ? (accent(s) ? ACCENT : HIT) : OFF));
+};
+
+// A note per onset of E(k, 16), walking `line` hit by hit.
+const euclidLine = (k, rotate, line, accent) => {
+  const bar = euclid(k, 16, rotate);
+  let i = 0;
+  return every((s) => bar[s % 16] && note(s, line[i++ % line.length], 1, accent(s)));
+};
+
+export const SQUELCH_LINE = [A3, A3, A4, A3, C4, A3, A3, E4, A3, G3, A3];
+export const INSECT_LINE = [A3, A3, Bb3, A3, E4, A3, F3, A3, Bb3];
+// 6 steps against the loop's 32: the phrase comes back to the 1 every 3 loops.
+export const MORPH_PHRASE = [[0, A3, 3], [3, E4, 2], [5, C4, 1]];
+export const MORPH_LOOPS = 3;
 
 export const DEFAULTS = {
   "kick.punchy": drum("kick", BEATS, KICK_PUNCHY),
@@ -232,6 +275,11 @@ export const DEFAULTS = {
   "bass.house": notes("organBass", HOUSE_BASS.map(([s, m]) => note(s, m)), BASS),
   "bass.deep": ducked(notes("sub", DEEP_BASS.map(([s, m, len]) => note(s, m, len)), BASS), 0.35),
   "bass.techHouse": notes("bass", TECH_BASS.map(([s, m, accent]) => note(s, m, 1, Boolean(accent))), BASS),
+  "bass.wavetable": notes(
+    "wavetable",
+    every((s) => s % 4 !== 0 && note(s, s === 31 ? G2 : s % 16 === 15 ? E2 : A1, 1, s % 4 === 1)),
+    BASS,
+  ),
 
   "perc.hat": drum("hat", steps((s) => (s % 4 === 2 ? HIT : OFF))),
   "perc.chat": drum("chat", steps((s) => (s % 2 === 1 ? HIT : OFF))),
@@ -245,6 +293,8 @@ export const DEFAULTS = {
   "perc.keys": drum("keys", steps((s) => (s % 8 === 6 ? ACCENT : [3, 9].includes(s % 16) ? HIT : OFF))),
   "perc.shuffle": swung(drum("chat", steps((s) => (s % 4 === 2 ? ACCENT : s % 2 ? HIT : OFF))), 0.16),
   "perc.bongos": bright(notes("tom", BONGO_LINE.map(([s, m]) => note(s, m)), { low: A2, high: A4 }), 0.6),
+  "perc.euclid5": drum("rim", euclidBars(5, [2, 2], (s) => s % 16 === 2), { tone: 2400, decay: 0.03 }),
+  "perc.euclid7": drum("shaker", euclidBars(7, [0, 2], (s) => s % 4 === 2)),
 
   "lead.acid": notes(
     "acid",
@@ -300,6 +350,19 @@ export const DEFAULTS = {
     LEAD,
   ),
 
+  "lead.squelch": notes("squelch", euclidLine(11, 15, SQUELCH_LINE, (s) => s % 4 === 2), LEAD),
+  "lead.insect": notes("insect", euclidLine(9, 1, INSECT_LINE, (s) => s % 8 === 3), { ...LEAD, scale: "phrygian" }),
+  "lead.morph": looped(
+    notes(
+      "morph",
+      Array.from({ length: (MORPH_LOOPS * LOOP_STEPS) / 6 }, (_, r) =>
+        MORPH_PHRASE.map(([s, m, len]) => note(r * 6 + s, m, len, s === 0)),
+      ).flat(),
+      { ...LEAD, len: 2 },
+    ),
+    MORPH_LOOPS,
+  ),
+
   "lead.piano": notes(
     "piano",
     [0, 1].flatMap((bar) => PIANO_HITS.flatMap((s) => PIANO_CHORDS[bar].map((m) => note(bar * 16 + s, m, 2)))),
@@ -334,6 +397,7 @@ export const DEFAULTS = {
   ),
   "pad.supersaw": notes("supersaw", [A3, C4, E4, A4].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
   "pad.fifths": notes("pad", [A2, E3, A3].map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
+  "pad.grains": notes("grains", PAD_CHORD.map((m) => note(0, m, 32)), { ...PAD, len: 32 }),
   "pad.deep": notes(
     "pad",
     DEEP_CHORDS.flatMap((chord, i) => chord.map((m) => note(i * 16, m, 16))),

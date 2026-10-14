@@ -715,6 +715,160 @@ export function rubber(ctx, out, t, ev, stepDur) {
   play([saw], t, end);
 }
 
+// The modulator's sine at PM_PHASES starting phases, one per context: notes
+// take them in turn, so a run of 16ths never locks its sidebands to the same
+// transient.
+const PM_PHASES = 8;
+const phasedSines = new WeakMap();
+function phasedSine(ctx, k) {
+  let waves = phasedSines.get(ctx);
+  if (!waves) {
+    waves = Array.from({ length: PM_PHASES }, (_, i) => {
+      const phi = (2 * Math.PI * i) / PM_PHASES;
+      // sin(θ + φ) = cos φ · sin θ + sin φ · cos θ
+      const real = new Float32Array([0, Math.sin(phi)]);
+      const imag = new Float32Array([0, Math.cos(phi)]);
+      return ctx.createPeriodicWave(real, imag, { disableNormalization: true });
+    });
+    phasedSines.set(ctx, waves);
+  }
+  return waves[k % PM_PHASES];
+}
+
+// Deviation the FM may reach, Hz: past it the carrier folds over Nyquist.
+const PM_MAX_DEVIATION = 12000;
+
+// Two-operator phase modulation with the psy squelch's two exponential falls:
+// carrier and modulator drop from `rise` × their pitch in `tauPitch`, and the
+// index from `index` to `floor` in `tauMod`, so a wideband splash collapses
+// onto the note. Web Audio modulates frequency, so an index I is a deviation
+// of I × the modulator's Hz (a sine's PM is that FM, a quarter cycle apart).
+function pm(ctx, out, t, ev, stepDur, { ratio, index, floor, rise, tauPitch, tauMod, gate, peak }) {
+  const dur = noteLen(ev, stepDur, gate);
+  const fm = ev.freq * ratio;
+  const carrier = osc(ctx, "sine", ev.freq);
+  const mod = osc(ctx, "sine", fm);
+  mod.setPeriodicWave(phasedSine(ctx, Math.round(t * 1000)));
+  for (const [o, hz] of [[carrier, ev.freq], [mod, fm]]) {
+    o.frequency.setValueAtTime(hz * rise, t);
+    o.frequency.setTargetAtTime(hz, t, tauPitch);
+  }
+  const depth = ctx.createGain();
+  const top = Math.min(index * (ev.bright ?? 1) * vel(ev), PM_MAX_DEVIATION / (fm * rise));
+  depth.gain.setValueAtTime(fm * rise * top, t);
+  depth.gain.setTargetAtTime(fm * Math.min(floor, top), t, tauMod);
+  mod.connect(depth).connect(carrier.frequency);
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, peak * vel(ev), 0.001, dur - 0.012, 0.012);
+  carrier.connect(filter(ctx, "lowpass", cut(9000, ev))).connect(amp).connect(out);
+  play([carrier, mod], t, end);
+}
+
+// Squelch: ratio 2, index 7 → 0.8 in ~35 ms, an octave's drop in 12 ms.
+export function squelch(ctx, out, t, ev, stepDur) {
+  pm(ctx, out, t, ev, stepDur, {
+    ratio: 2, index: 7, floor: 0.8, rise: 2, tauPitch: 0.012, tauMod: 0.035, gate: 0.85, peak: 0.6,
+  });
+}
+
+// Insect: ratio 7:4, so the sidebands miss the harmonics; faster, dirtier,
+// and it never quite settles (index floor 1.5).
+export function insect(ctx, out, t, ev, stepDur) {
+  pm(ctx, out, t, ev, stepDur, {
+    ratio: 1.75, index: 9, floor: 1.5, rise: 1.5, tauPitch: 0.008, tauMod: 0.025, gate: 0.7, peak: 0.55,
+  });
+}
+
+// Phase-distortion tables: one sine cycle read through θ + α·sin 2θ, α
+// growing table to table, so the wave skews and its overtones bite harder.
+// The browser band-limits a PeriodicWave per octave itself: the mipmaps.
+export const PD_ALPHAS = [0.3, 0.8, 1.4, 2.2];
+const PD_SIZE = 1024;
+const PD_HARMONICS = 48;
+let pdSpectra = null;
+
+/** Fourier series of sin(θ + α·sin 2θ), as a PeriodicWave's { real, imag }. */
+export function pdSpectrum(alpha) {
+  const real = new Float32Array(PD_HARMONICS + 1);
+  const imag = new Float32Array(PD_HARMONICS + 1);
+  for (let n = 0; n < PD_SIZE; n++) {
+    const th = (2 * Math.PI * n) / PD_SIZE;
+    const x = Math.sin(th + alpha * Math.sin(2 * th));
+    for (let k = 1; k <= PD_HARMONICS; k++) {
+      real[k] += (2 / PD_SIZE) * x * Math.cos(k * th);
+      imag[k] += (2 / PD_SIZE) * x * Math.sin(k * th);
+    }
+  }
+  return { real, imag };
+}
+
+const pdWaves = new WeakMap();
+function pdWave(ctx, i) {
+  pdSpectra ??= PD_ALPHAS.map(pdSpectrum);
+  let waves = pdWaves.get(ctx);
+  if (!waves) {
+    waves = pdSpectra.map(({ real, imag }) => ctx.createPeriodicWave(real, imag));
+    pdWaves.set(ctx, waves);
+  }
+  return waves[i];
+}
+
+/**
+ * Wavetable scan: the tables between positions p0 and p1, crossfaded as p
+ * moves linearly over [t, t1] and holds after. Table i weighs 1 − |p − i|,
+ * so each weight is a line between the moments p crosses a whole table.
+ * Returns the oscillators, for the caller to start and stop.
+ */
+function scan(ctx, out, freq, t, t1, p0, p1) {
+  const crossings = [];
+  for (let i = Math.ceil(Math.min(p0, p1)); i <= Math.floor(Math.max(p0, p1)); i++) crossings.push(i);
+  if (p1 < p0) crossings.reverse();
+  const points = [...crossings.filter((p) => p !== p0 && p !== p1), p1];
+  const at = (p) => (p1 === p0 ? t1 : t + ((t1 - t) * (p - p0)) / (p1 - p0));
+  const weight = (i, p) => Math.max(0, 1 - Math.abs(p - i));
+  const oscs = [];
+  for (let i = Math.floor(Math.min(p0, p1)); i <= Math.ceil(Math.max(p0, p1)); i++) {
+    const o = ctx.createOscillator();
+    o.setPeriodicWave(pdWave(ctx, i));
+    o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(weight(i, p0), t);
+    for (const p of points) g.gain.linearRampToValueAtTime(weight(i, p), at(p));
+    o.connect(g).connect(out);
+    oscs.push(o);
+  }
+  return oscs;
+}
+
+const PD_TOP = PD_ALPHAS.length - 1;
+
+// Wavetable bass: every note starts on a biting table and scans down to the
+// round one inside the step, a pluck with no filter sweep.
+export function wavetable(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.85);
+  const p0 = Math.min(PD_TOP, 2 * (ev.bright ?? 1) + (ev.accent ? 1 : 0));
+  const amp = ctx.createGain();
+  amp.gain.setValueAtTime(0, t);
+  amp.gain.linearRampToValueAtTime(0.75, t + 0.003);
+  amp.gain.linearRampToValueAtTime(0.5, t + dur * 0.6);
+  amp.gain.linearRampToValueAtTime(0, t + dur);
+  const lp = filter(ctx, "lowpass", cut(3000, ev));
+  lp.connect(amp).connect(out);
+  play(scan(ctx, lp, ev.freq, t, t + Math.min(dur, stepDur * 0.8), p0, 0), t, t + dur);
+}
+
+// Morph lead: the other way round, the note opens from the round table to
+// the biting one over most of its length: a formant sweep.
+export function morph(ctx, out, t, ev, stepDur) {
+  const dur = noteLen(ev, stepDur, 0.9);
+  const p1 = Math.min(PD_TOP, PD_TOP * (ev.bright ?? 1));
+  const amp = ctx.createGain();
+  const end = holdEnv(amp.gain, t, 0.4 * vel(ev), 0.004, dur - 0.015, 0.015);
+  const lp = filter(ctx, "lowpass", cut(7000, ev));
+  lp.connect(amp).connect(out);
+  play(scan(ctx, lp, ev.freq, t, t + dur * 0.9, 0, p1), t, end);
+}
+
 export function pad(ctx, out, t, ev, stepDur) {
   const dur = (ev.steps ?? 1) * stepDur;
   const lp = filter(ctx, "lowpass", cut(1400, ev), 0.5);
@@ -754,6 +908,125 @@ export function air(ctx, out, t, ev, stepDur) {
   play([lfo], t, end);
 }
 
+// The grains' source: 2 s of one sung "a" at SAMPLE_ROOT, its harmonics
+// weighted by the vowel's formants, each swelling at its own slow rate, with
+// a light vibrato, so every read position sounds a little different. Rendered
+// once per page at CHOIR_RATE (the browser resamples it for any context):
+// harmonic k comes from the Chebyshev recurrence sin kθ = 2 cos θ · sin (k−1)θ
+// − sin (k−2)θ, and the swells move every CHOIR_BLOCK samples.
+const CHOIR_FORMANTS = [[800, 80, 1], [1150, 90, 0.5], [2900, 120, 0.25]];
+const CHOIR_RATE = 48000;
+const CHOIR_BLOCK = 64;
+let choirData = null;
+function choirSamples() {
+  const f0 = SAMPLE_ROOT;
+  const harmonics = Array.from({ length: Math.floor(5000 / f0) }, (_, i) => {
+    const k = i + 1;
+    const formant = CHOIR_FORMANTS.reduce((sum, [f, bw, a]) => sum + a / (1 + ((k * f0 - f) / bw) ** 2), 0);
+    return { level: (0.06 + formant) / Math.sqrt(k), rate: 0.3 + ((k * 0.618) % 1.2), phase: k * 2.4 };
+  });
+  const data = new Float32Array(CHOIR_RATE * 2);
+  const gains = new Float64Array(harmonics.length);
+  let theta = 0;
+  let peak = 0;
+  for (let n = 0; n < data.length; n++) {
+    const time = n / CHOIR_RATE;
+    if (n % CHOIR_BLOCK === 0) {
+      harmonics.forEach((h, i) => (gains[i] = h.level * (1 + 0.5 * Math.sin(2 * Math.PI * h.rate * time + h.phase))));
+    }
+    theta += (2 * Math.PI * f0 * (1 + 0.004 * Math.sin(2 * Math.PI * 5.2 * time))) / CHOIR_RATE;
+    const c2 = 2 * Math.cos(theta);
+    let prev = 0;
+    let cur = Math.sin(theta);
+    let x = 0;
+    for (let i = 0; i < gains.length; i++) {
+      x += gains[i] * cur;
+      const next = c2 * cur - prev;
+      prev = cur;
+      cur = next;
+    }
+    data[n] = x;
+    peak = Math.max(peak, Math.abs(x));
+  }
+  for (let n = 0; n < data.length; n++) data[n] *= 0.9 / peak;
+  return data;
+}
+
+const choirCache = new WeakMap();
+export function choirBuffer(ctx) {
+  let buf = choirCache.get(ctx);
+  if (!buf) {
+    choirData ??= choirSamples();
+    buf = ctx.createBuffer(1, choirData.length, CHOIR_RATE);
+    buf.getChannelData(0).set(choirData);
+    choirCache.set(ctx, buf);
+  }
+  return buf;
+}
+
+// mulberry32: the grains' scatter, seeded per note so a replay sounds the same.
+function prng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// A Hann window as 8 lines: a grain fades in and out with no edge to click.
+const HANN = Array.from({ length: 9 }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / 8));
+function hann(param, t, len, peak) {
+  param.setValueAtTime(0, t);
+  for (let i = 1; i < HANN.length; i++) param.linearRampToValueAtTime(peak * HANN[i], t + (len * i) / 8);
+}
+
+const GRAIN_MAX_GAP = 0.065; // s: the grain clock halves the step until it is this dense
+const GRAIN_SCATTER = 0.05; // s: the read position's standard deviation
+
+// Asynchronous granular pad: Hann grains of choirBuffer on a 32nd-note clock
+// (64ths at a slow BPM), each 2.5 gaps long (20-100 ms), read around a point
+// that walks through the buffer with the note (Gaussian scatter), detuned a
+// few cents and panned at random. The note's attack and release scale the
+// grains' peaks; the read rate is the pitch.
+export function grains(ctx, out, t, ev, stepDur) {
+  const dur = (ev.steps ?? 1) * stepDur;
+  const attack = Math.min(0.6, dur * 0.4);
+  const release = 0.5;
+  let gap = stepDur / 2;
+  while (gap > GRAIN_MAX_GAP) gap /= 2;
+  const len = Math.min(0.1, Math.max(0.02, gap * 2.5));
+  const rate = ev.freq / SAMPLE_ROOT;
+  const buf = choirBuffer(ctx);
+  const span = Math.max(0, buf.duration - len * rate * 1.01);
+  const rand = prng(Math.round(ev.freq * 100) ^ Math.round(t * 1000));
+  const lp = filter(ctx, "lowpass", cut(5000, ev));
+  lp.connect(out);
+  const peak = 0.6 * vel(ev);
+  const level = (at) => {
+    if (at < t + attack) return (at - t) / attack;
+    if (at > t + dur) return Math.max(0, 1 - (at - t - dur) / release);
+    return 1;
+  };
+  for (let at = t; at + len <= t + dur + release; at += gap) {
+    const mid = at + len / 2;
+    const gauss = Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
+    const center = span * (0.15 + (0.7 * (mid - t)) / (dur + release));
+    const offset = Math.min(span, Math.max(0, center + gauss * GRAIN_SCATTER));
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate * centsToRatio((rand() - 0.5) * 16);
+    const win = ctx.createGain();
+    hann(win.gain, at, len, peak * level(mid));
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = (rand() * 2 - 1) * 0.7;
+    src.connect(win).connect(pan).connect(lp);
+    src.start(at, offset);
+    src.stop(at + len + 0.005);
+  }
+}
+
 export function tom(ctx, out, t, ev) {
   const body = osc(ctx, "sine", ev.freq);
   body.frequency.setValueAtTime(ev.freq, t);
@@ -787,9 +1060,14 @@ export const INSTRUMENTS = {
   glide,
   vowel,
   rubber,
+  squelch,
+  insect,
+  wavetable,
+  morph,
   pad,
   drone,
   air,
+  grains,
   tom,
 };
 

@@ -17,7 +17,7 @@ export const LAYERS = [
     variants: [
       "bass.offbeat", "bass.rolling", "bass.rollingOct", "bass.gallop", "bass.fm",
       "bass.prog", "bass.techno", "bass.hitech", "bass.phrygian", "bass.house", "bass.techHouse",
-      "bass.deep",
+      "bass.deep", "bass.wavetable",
     ],
   },
   {
@@ -25,6 +25,7 @@ export const LAYERS = [
     variants: [
       "perc.hat", "perc.chat", "perc.shaker", "perc.clap", "perc.snare",
       "perc.ride", "perc.toms", "perc.hat16", "perc.rim", "perc.keys", "perc.shuffle", "perc.bongos",
+      "perc.euclid5", "perc.euclid7",
     ],
   },
   {
@@ -33,13 +34,14 @@ export const LAYERS = [
       "lead.acid", "lead.arp", "lead.arp3", "lead.melodic", "lead.stabs",
       "lead.zap", "lead.bell", "lead.acidPhryg", "lead.techno", "lead.bits", "lead.chirp",
       "lead.soaring", "lead.grid", "lead.vowel", "lead.rubber", "lead.piano", "lead.organ",
+      "lead.squelch", "lead.insect", "lead.morph",
     ],
   },
   {
     id: "pad",
     variants: [
       "pad.chord", "pad.prog", "pad.drone", "pad.air", "pad.sus",
-      "pad.dark", "pad.epic", "pad.supersaw", "pad.fifths", "pad.deep",
+      "pad.dark", "pad.epic", "pad.supersaw", "pad.fifths", "pad.deep", "pad.grains",
     ],
   },
   {

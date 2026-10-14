@@ -154,6 +154,7 @@ export const SYNTHS = [
   { id: "fmBass", group: "bass" },
   { id: "reese", group: "bass" },
   { id: "organBass", group: "bass" },
+  { id: "wavetable", group: "bass" },
   { id: "acid", group: "lead" },
   { id: "supersaw", group: "lead" },
   { id: "analog", group: "lead" },
@@ -170,9 +171,13 @@ export const SYNTHS = [
   { id: "glide", group: "lead" },
   { id: "vowel", group: "lead" },
   { id: "rubber", group: "lead" },
+  { id: "squelch", group: "lead" },
+  { id: "insect", group: "lead" },
+  { id: "morph", group: "lead" },
   { id: "pad", group: "pad" },
   { id: "drone", group: "pad" },
   { id: "air", group: "pad" },
+  { id: "grains", group: "pad" },
   { id: "tom", group: "perc" },
 ];
 
