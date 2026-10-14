@@ -142,6 +142,8 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
     const braked = brake && t >= brake.time && t < brake.end ? (t - brake.time) / Math.max(1, brake.end - brake.time) : 0;
     // How far into the frenzy, 0..1 while it lasts (just past 0 as it starts), else 0.
     const wild = frenzy && t >= frenzy.time && t < frenzy.end ? Math.max(1e-3, (t - frenzy.time) / Math.max(1, frenzy.end - frenzy.time)) : 0;
+    // A set's last stretch: its fade and its brake, from the frenzy's end to the stop.
+    const ending = Boolean(frenzy && t >= frenzy.end) || braked > 0;
 
     return {
       time: t,
@@ -162,6 +164,7 @@ export function createStage({ now = 0, bpm = IDLE_BPM } = {}) {
       build: building,
       frenzy: wild,
       brake: braked,
+      ending,
       sinceDrop,
       drops: drop.count,
     };

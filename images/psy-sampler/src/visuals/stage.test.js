@@ -65,6 +65,16 @@ describe("stage", () => {
     expect(stage.frame(5000).frenzy).toBe(0);
   });
 
+  it("ends a set from the frenzy's end until the loop stops", () => {
+    const stage = createStage({ now: 0 });
+    stage.push({ kind: "frenzy", time: 1000, end: 3000 });
+    stage.push({ kind: "stop", time: 6000 });
+    expect(stage.frame(2000).ending).toBe(false);
+    expect(stage.frame(3000).ending).toBe(true);
+    expect(stage.frame(5000).ending).toBe(true);
+    expect(stage.frame(6000).ending).toBe(false);
+  });
+
   it("slows with a vinyl brake, through the loop's stop, until the brake ends", () => {
     const stage = createStage({ now: 0 });
     stage.push({ kind: "brake", time: 1000, end: 2000 });

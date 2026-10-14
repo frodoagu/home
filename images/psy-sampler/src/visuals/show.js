@@ -155,11 +155,12 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
   node.append(hud);
 
   let hudTimer = 0;
-  let hudPinned = false;
+  let hudHidden = false; // hidden with H: nothing but H brings it back
   function showHud() {
+    if (hudHidden) return;
     node.classList.remove("vis-idle");
     clearTimeout(hudTimer);
-    if (!hudPinned) hudTimer = setTimeout(() => node.classList.add("vis-idle"), HUD_MS);
+    hudTimer = setTimeout(() => node.classList.add("vis-idle"), HUD_MS);
   }
   node.addEventListener("pointermove", showHud);
   showHud();
@@ -244,8 +245,10 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
       case "mic":
         return toggleMic();
       case "hud":
-        hudPinned = !hudPinned;
-        return node.classList.toggle("vis-idle", !hudPinned);
+        hudHidden = !hudHidden;
+        if (!hudHidden) return showHud();
+        clearTimeout(hudTimer);
+        return node.classList.add("vis-idle");
       case "fullscreen":
         return fullscreen();
       case "popout":
@@ -285,7 +288,7 @@ export function mountShow({ root, source: initial, tx, storage, onClose, popOut 
       return fullscreen();
     }
     lastTap = now;
-    if (node.classList.contains("vis-idle")) showHud();
+    if (node.classList.contains("vis-idle") && !hudHidden) showHud();
     else act("flash");
   });
 
