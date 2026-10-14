@@ -5,7 +5,8 @@
 // same way gives the same show.
 
 // mood: where a scene fits. "calm" plays breakdowns, "peak" the bars after a
-// drop; "high" is everything with a kick in between. Silence is the bulb's.
+// drop; "high" is everything with a kick in between. Silence is the bulb's,
+// and so is a set's ending, so it fades and stops on it.
 export const SCENES = [
   { id: "bulb", moods: ["calm", "high", "peak"] },
   { id: "kifs", moods: ["high", "peak"] },
@@ -75,7 +76,7 @@ export function createDirector({ scenes = SCENES } = {}) {
   let fade = { start: -Infinity, ms: 1 };
   let locked = false;
   let since = 0; // bar the current scene came in on
-  let seen = { bar: null, sig: null, drops: 0, beat: null, playing: null };
+  let seen = { bar: null, sig: null, drops: 0, beat: null, playing: null, ending: false };
   let changedSig = false; // the lanes changed since the scene came in
   let flashAt = -Infinity;
   let manual = 0; // presses, so a manual pick hashes differently each time
@@ -112,6 +113,10 @@ export function createDirector({ scenes = SCENES } = {}) {
       if (seen.playing !== false && !locked && bulb >= 0 && current.index !== bulb) {
         show(look(bulb, current.palette, "silence"), s, FADE_BEATS);
       }
+    } else if (s.ending) {
+      if (!seen.ending && !locked && bulb >= 0 && current.index !== bulb) {
+        show(look(bulb, current.palette, "ending"), s, FADE_BEATS);
+      }
     } else if (s.frenzy > 0 && beat !== seen.beat && !locked) {
       // A set going wild cuts to a new scene and palette on every beat.
       show(choose("peak", `frenzy:${sig}:${beat}`), s, 0);
@@ -124,7 +129,7 @@ export function createDirector({ scenes = SCENES } = {}) {
         show(choose(mood, `${sig}:${s.bar}`), s, FADE_BEATS);
       }
     }
-    seen = { bar: s.bar, sig, drops: s.drops, beat, playing: s.playing };
+    seen = { bar: s.bar, sig, drops: s.drops, beat, playing: s.playing, ending: Boolean(s.ending) };
 
     const mix = clamp01((s.time - fade.start) / fade.ms);
     const strobe = strobeOf(s, flashAt);

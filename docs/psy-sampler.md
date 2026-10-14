@@ -1968,8 +1968,10 @@ line: when the lanes changed and the scene has had 4 bars, or after 16 bars (8
 at the peak). A drop cuts, with no crossfade, to a peak scene; anything else
 crossfades over a beat. Silence is always the Mandelbulb: when the music stops
 the director crossfades to it (unless 🔒) and changes nothing until the music
-is back, which starts on it and counts its bars from there. A scene picked by
-hand in silence stays. Every pick is a hash of the lanes and the bar, never
+is back, which starts on it and counts its bars from there. So is a set's
+ending: when the 🌅 outro's frenzy ends, the director crossfades to the bulb
+(unless 🔒) and holds it through the fade and the vinyl brake, so the set stops
+on it. A scene picked by hand in silence or in that ending stays. Every pick is a hash of the lanes and the bar, never
 `Math.random`, so the same seed played the same way gives the same show. It
 also drives the **strobe**: 8ths through the drop's bar, 16ths rising over the
 build's second half, the kicks through the peak, and a set's frenzy (🌅, 16
@@ -2093,7 +2095,8 @@ state and grows on screen. They need `EXT_color_buffer_float`: without it
 `renderer.supports()` says no and the show leaves them out.
 
 Keys: ← → / space change scene, 1-9 and 0 pick one, L holds it, P palette, F flash,
-S strobe (100/50/0 %), M microphone, H hides the HUD, Enter fullscreen, Esc
+S strobe (100/50/0 %), M microphone, H hides the HUD (it stays hidden, mouse or tap aside,
+until H again), Enter fullscreen, Esc
 closes. Touch: swipe sideways to change scene, tap to flash, double tap for
 fullscreen. A Screen Wake Lock keeps the display on while it plays.
 

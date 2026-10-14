@@ -114,6 +114,17 @@ describe("director", () => {
     expect(back.mix).toBe(1);
   });
 
+  it("ends a set on the bulb, and keeps a scene picked by hand there", () => {
+    const d = createDirector();
+    const shown = play(d, 40, (b) => at(b, { variants: [`kick.${Math.floor(b / 5)}`] }));
+    expect(shown.at(-1)).not.toBe("bulb");
+    const ending = (b) => at(b, { ending: true, variants: [`kick.${Math.floor(b / 5)}`] });
+    expect(d.frame(ending(40)).scene.id).toBe("bulb");
+    expect(play(d, 40, (b) => ending(41 + b)).every((id) => id === "bulb")).toBe(true);
+    d.pick(ending(81), 2);
+    expect(new Set(play(d, 20, (b) => ending(82 + b)))).toEqual(new Set([SCENES[2].id]));
+  });
+
   it("keeps a scene picked by hand in silence", () => {
     const d = createDirector();
     const silent = (b) => at(b, { playing: false, layers: new Set(), variants: [] });
