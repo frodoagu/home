@@ -551,7 +551,7 @@ describe("lead.morph", () => {
     expect(data.loops).toBe(MORPH_LOOPS);
     const starts = data.notes.filter((n) => n.accent).map((n) => n.step);
     expect(starts).toEqual(Array.from({ length: 16 }, (_, i) => i * 6));
-    expect(starts.filter((s) => s % 32 === 0)).toEqual([0, 96].filter((s) => s < 96));
+    expect(starts.filter((s) => s % 32 === 0)).toEqual([0]); // no phrase lands on a loop start but the first
     expect(Math.max(...data.notes.map((n) => n.step + n.len))).toBe(MORPH_LOOPS * 32);
   });
 });
