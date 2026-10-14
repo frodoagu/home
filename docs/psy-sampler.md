@@ -2313,10 +2313,10 @@ With their inserts on (lane only, 2 passes), Chaos reads -10.7 against Acid,
 -11.1 to -12.2, and Comb -27.1 against FM metal, Ring mod and Lasers at -24.3 to
 -28. The chaos riser reads -26.6 against the riser's -26.7.
 
-At their layer level, the glitch sounds sit at -30 to -39 dBFS RMS (peaks -6 to
--10) against the percussion's -30 to -36: they are sparse by design. Stutter,
-Crackle, Bwip, Bleeps, Bitcrush and Tape stop were raised 5-10 dB to get there,
-and the stutter roll FX 8 dB.
+At their layer level (glitch 0.3, percussion 0.85), the glitch sounds sit at
+-33.5 to -42.5 dBFS RMS (peaks -9.5 to -13.5) against the percussion's -27 to
+-33: they are sparse by design. Stutter, Crackle, Bwip, Bleeps, Bitcrush and
+Tape stop were raised 5-10 dB to get there, and the stutter roll FX 8 dB.
 
 At the real output (every node, taken from the destination):
 
@@ -2398,6 +2398,11 @@ exports alike:
   sounds, so nothing quiet was raised), and FX only where a one-shot passes
   80 phon (tape stop). No boost takes a sound past -1 dBFS (it held the
   organ-bass House and the sub basses a few phon short).
+- Over both, by ear: the percussion layer level went from 0.6 to 0.85
+  (+3 dB) and the glitch one from 0.45 to 0.3 (-3.5 dB), since the measured
+  balance still left the percussion buried and the glitches on top of it. The
+  table below predates that move: add about 3 phon to perc and take 3.5 off
+  glitch.
 
 A user's sample replaces the voice that was measured, so it skips both.
 
