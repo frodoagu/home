@@ -1523,6 +1523,20 @@ breakdown has no kick, every section plays a lead or a pad).
   asked in the old style while a new one waits for its drop gets the old
   style's brief. A test keeps `GENRE` in step with `STYLES`, so a new style
   needs its sentence.
+- With a vibe, one ask comes **before any other**: the **tune**
+  (`tunePrompt`, its own short `TUNE_SYSTEM`). It hands the model the style's
+  `GENRE` sentence and the vibe as typed, in whatever language, and gets back
+  (`tuneSchema`) the vibe in English and the genre **rewritten to it**, in the
+  same "You arrange …" shape. From then on the brief carries both in place of
+  the originals (`briefOf`'s `genre`), and so do the prompts that quote the vibe:
+  every ask speaks one language, and the genre itself already leans where the
+  listener asked. `app.js` keeps one tune per style and vibe (`tunes`), so it
+  is asked once per vibe applied, again for the style a drop brings in, and
+  not again for the same words re-applied. `normalizeTune()` is its gate (one
+  line, no quotes or "You arrange"; a genre under 12 characters is none): what
+  it can't use falls back to the listener's words and the style's own `GENRE`.
+  A tune that fails is retried like any ask, and the plans wait for it. The UI
+  still shows the vibe as typed; the note under the field shows the tuned genre.
 - The theme line appears only where the pilot holds it (`THEME_PATH`: the
   build after a breakdown, the peak after a build), and says so plainly: the
   pilot keeps that lead whatever the plan picks for the layer. Past planned

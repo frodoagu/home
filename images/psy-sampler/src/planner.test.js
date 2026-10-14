@@ -12,6 +12,7 @@ import {
   PLAN_SECTIONS,
   SET_LENGTHS,
   SYSTEM,
+  TUNE_SYSTEM,
   setLine,
   asksForm,
   briefOf,
@@ -26,6 +27,7 @@ import {
   normalizeOpening,
   normalizeOutro,
   normalizePlan,
+  normalizeTune,
   openWith,
   openingPrompt,
   openingSchema,
@@ -34,6 +36,8 @@ import {
   readPlans,
   systemOf,
   themeAfter,
+  tunePrompt,
+  tuneSchema,
   whyOf,
 } from "./planner.js";
 import { normalize } from "./workspace.js";
@@ -62,6 +66,32 @@ describe("the prompt", () => {
     expect(briefOf({ style: "all", bpm: 140 })).toMatch(/^You arrange an electronic dance track of no one style.*\nTempo: 140 BPM\. Key:/);
     expect(systemOf({ style: "house", bpm: 124 })).toBe(`${briefOf({ style: "house", bpm: 124 })}\n${SYSTEM}`);
     expect(systemOf({ style: "techno", bpm: 130 })).not.toBe(systemOf({ style: "house", bpm: 130 }));
+  });
+
+  it("tunes a vibe first: in English, with the style's genre rewritten to it, which the brief then carries", () => {
+    const prompt = tunePrompt({ style: "techno", vibe: "oscuro, de noche" });
+    expect(prompt).toContain(`The genre: ${JSON.stringify(GENRE.techno)}.`);
+    expect(prompt).toContain('The listener\'s wish: "oscuro, de noche".');
+    expect(TUNE_SYSTEM).toMatch(/vibe: their wish in English/);
+    expect(TUNE_SYSTEM).toMatch(/completes "You arrange \.\.\."/);
+    expect(tuneSchema().required).toEqual(["vibe", "genre"]);
+    const genre = "a night-time techno track: a booming kick, a rumbling bass and dark drones";
+    const brief = briefOf({ style: "techno", bpm: 130, vibe: "dark, at night", genre });
+    expect(brief).toContain(`You arrange ${genre}.`);
+    expect(brief).not.toContain(GENRE.techno);
+    expect(brief).toContain('The listener\'s wish for the track: "dark, at night".');
+    expect(systemOf({ style: "techno", bpm: 130, genre })).toContain(`You arrange ${genre}.`);
+  });
+
+  it("takes a tune's words as one clean line, and nothing it cannot use", () => {
+    expect(normalizeTune({ vibe: " dark,\n at night. ", genre: '"You arrange a dark techno track: a booming kick, hypnotic."' })).toEqual({
+      vibe: "dark, at night",
+      genre: "a dark techno track: a booming kick, hypnotic",
+    });
+    expect(normalizeTune({ vibe: "dark", genre: "techno" })).toEqual({ vibe: "dark", genre: "" });
+    expect(normalizeTune({ vibe: 3, genre: ["x"] })).toEqual({ vibe: "", genre: "" });
+    expect(normalizeTune(null)).toEqual({ vibe: "", genre: "" });
+    expect(normalizeTune({ genre: `a ${"very ".repeat(200)}long track` }).genre).toHaveLength(400);
   });
 
   it("knows the character of every looping sound, and of nothing else", () => {

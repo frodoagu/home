@@ -17,7 +17,9 @@
 // Every ask's instructions open on a brief of the track (briefOf): the
 // style's genre, tempo and key, the BPM and the listener's wish, read off the
 // settings, so the model arranges the genre picked and not another. The
-// rules of the listener's LEVEL follow it (systemOf).
+// rules of the listener's LEVEL follow it (systemOf). With a wish, one ask
+// comes before any other (tunePrompt): the wish in English and the style's
+// genre rewritten to it, which the brief then carries in their place.
 //
 // How much it asks is the listener's LEVEL: low is the short prompt a small
 // model on a laptop (Gemini Nano) answers in time, the sections and their
@@ -239,14 +241,15 @@ const keyOf = (style) => {
 };
 
 /**
- * What the track is, from the settings: `style`'s genre (GENRE), its key and
- * BPM range, the `bpm` it plays at and the listener's `vibe`, their standing
- * wish (planPrompt says when it is fresh).
+ * What the track is, from the settings: `style`'s genre (GENRE, or `genre`,
+ * that genre tuned to the wish by tunePrompt), its key and BPM range, the
+ * `bpm` it plays at and the listener's `vibe`, their standing wish
+ * (planPrompt says when it is fresh).
  */
-export function briefOf({ style, bpm, vibe = "" }) {
+export function briefOf({ style, bpm, vibe = "", genre = "" }) {
   const range = STYLES[style]?.bpm;
   const lines = [
-    `You arrange ${GENRE[style] ?? GENRE.all}. It plays live, made of 2-bar loops grouped in sections.`,
+    `You arrange ${genre || (GENRE[style] ?? GENRE.all)}. It plays live, made of 2-bar loops grouped in sections.`,
     `Tempo: ${Math.round(bpm)} BPM${range ? ` (the style runs ${range[0]}-${range[1]})` : ""}. Key: ${keyOf(style)}.`,
   ];
   if (vibe) lines.push(`The listener's wish for the track: ${JSON.stringify(vibe)}.`);
@@ -261,6 +264,52 @@ export function systemOf({ level, ...track }) {
   const at = levelOf(level);
   const rules = at === "low" ? LOW_SYSTEM : at === "high" ? `${SYSTEM}\n${tweakLine()}` : SYSTEM;
   return `${briefOf(track)}\n${rules}`;
+}
+
+// The listener's wish, first: in English like every prompt, whatever the
+// page's language, and the style's genre rewritten to it, which the brief
+// carries in place of GENRE (briefOf). Asked once per style and wish.
+const TUNED_MAX = 400;
+export const TUNE_SYSTEM = [
+  "You prepare the brief an AI follows to arrange an electronic dance track live, out of kick, bass, percussion, leads, pads and glitches.",
+  "You get the genre the listener picked, as a phrase that completes \"You arrange ...\", and their wish for the track in their own words, in any language.",
+  "vibe: their wish in English, faithful and short: translate it, keep every idea and add none.",
+  `genre: the genre rewritten to the wish, in English, in the same shape: what kind of track, a colon, then how it goes (its kick and bass, its percussion, leads and pads, its mood and energy, how it grooves and builds). The wish shapes it boldly, but it stays that genre at its tempo. Name no tempo, key or artist; ${TUNED_MAX} characters at most.`,
+].join("\n");
+
+/** What to ask before anything else when there is a `vibe`: it in English, and `style`'s genre tuned to it. */
+export function tunePrompt({ style, vibe }) {
+  return [`The genre: ${JSON.stringify(GENRE[style] ?? GENRE.all)}.`, `The listener's wish: ${JSON.stringify(vibe)}.`].join("\n");
+}
+
+/** The JSON Schema of the tune: the wish in English, then the genre. */
+export const tuneSchema = () => ({
+  type: "object",
+  properties: {
+    vibe: { type: "string", maxLength: 200 },
+    genre: { type: "string", maxLength: TUNED_MAX },
+  },
+  required: ["vibe", "genre"],
+  additionalProperties: false,
+});
+
+const tuned = (value, max) =>
+  typeof value === "string"
+    ? value
+        .replace(/\p{Cc}+/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^["'«“]+|["'»”]+$/g, "")
+        .replace(/^you arrange\s+/i, "")
+        .replace(/[.\s]+$/, "")
+        .slice(0, max)
+    : "";
+
+/** The model's tune -> { vibe, genre }, each "" where it gave nothing usable (the listener's words, GENRE). */
+export function normalizeTune(raw) {
+  const vibe = tuned(raw?.vibe, 200);
+  const genre = tuned(raw?.genre, TUNED_MAX);
+  return { vibe, genre: genre.length >= 12 ? genre : "" };
 }
 
 // The rules, read off SECTIONS, so the model learns the same forms the pilot keeps.
