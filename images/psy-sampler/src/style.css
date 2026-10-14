@@ -1802,9 +1802,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 .timeline {
   display: flex;
   gap: 4px;
-  width: 100vw;
-  margin: 16px 0 20px calc(50% - 50vw);
-  padding: 0 16px;
+  margin: 16px 0 20px;
   overflow: hidden;
 }
 
@@ -1827,6 +1825,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
   align-items: baseline;
   gap: 0 6px;
   padding: 4px 8px;
+  position: relative;
   overflow: hidden;
   white-space: nowrap;
   border-radius: 6px;
@@ -1844,6 +1843,40 @@ html:has(dialog.help[open], dialog.intro[open]) {
 
 .chip-tools .unqueue {
   margin-left: auto;
+}
+
+/* A click on a section coming makes it the next one. */
+.chip-go {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.timeline .queued:has(.chip-go) {
+  cursor: pointer;
+}
+
+.timeline .queued:has(.chip-go):hover {
+  background: var(--surface-2);
+}
+
+/* The right edge: dragged, the section's bars. */
+.chip-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.chip-edge:hover,
+.chip-edge.is-dragging {
+  background: var(--current-tint);
 }
 
 .timeline-now .section-left {

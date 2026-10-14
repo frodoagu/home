@@ -51,7 +51,7 @@ export default {
         title: "Piloto automático e semente",
         items: [
           ["🤖 Piloto automático", "Monta a faixa sozinho: liga e desliga camadas a cada frase, dispara FX, escreve melodias e vai passando pelas fases."],
-          ["Fases", "Intro, Groove, Subida, Pico e Break. Um clique enfileira uma: entra quando acaba a que está tocando. A linha de baixo mostra a que toca e as que vêm, cada uma tão larga quanto os compassos que dura (tracejada enquanto ainda é uma estimativa). − e + mudam a duração: uma que a IA já planejou só se estica, e uma que ainda não, ela planeja sabendo quanto vai durar. ✕ tira da fila."],
+          ["Fases", "Intro, Groove, Subida, Pico e Break. Um clique enfileira uma: entra quando acaba a que está tocando. A linha de baixo mostra a que toca e as que vêm, cada uma tão larga quanto os compassos que dura (tracejada enquanto ainda é uma estimativa). Um clique numa a faz a próxima, o quanto antes, como ⏭ (as de antes saem). − e +, ou arrastar a borda direita, mudam a duração: uma que a IA já planejou só se estica, e uma que ainda não, ela planeja sabendo quanto vai durar. ✕ tira da fila."],
           ["⏭ Próxima", "Termina a fase que está tocando no próximo loop."],
           ["🌅 Encerrar", "Termina o set em 5 minutos no máximo: o piloto põe na fila as últimas fases (um pico de despedida) e um Outro que entra com um drop e enlouquece por 16 compassos ou mais: tudo no máximo, com mais glitches, percussão, viradas e FX, e as visuais piscando feito loucas. Depois afrouxa e some aos poucos durante 8 a 16 compassos e, nos últimos 4 ou 8, a mixagem freia devagar, como um vinil. Aí tudo para. Com ✨ IA, a IA planeja essas fases. Outro clique cancela enquanto o Outro não começou."],
           ["Estilo", "Quais sons o piloto usa. Mudar leva o BPM ao do estilo, aos poucos."],
@@ -65,7 +65,7 @@ export default {
           ["Semente", "A mesma semente monta a mesma faixa em qualquer navegador. Escreva a sua ou jogue 🎲 por uma nova; com o piloto rodando, mudar reinicia ele no próximo loop (o 🎲 pisca enquanto espera)."],
           ["🔗 Compartilhar", "Copia um link com a semente, o estilo, o BPM e seus sons editados: quem abrir e tocar 🤖 ouve o mesmo."],
           ["Suas edições mandam", "O piloto não sobrescreve o que você editou à mão, exceto o volume e os filtros highpass e lowpass."],
-          ["✨ IA", "Ao começar, um modelo de linguagem escolhe a forma de cada faixa pela «Duração» do set: curta (Subida, Groove, Pico, Break), média (Subida, Groove, Pico, Groove, Pico, Break) ou longa (Subida, Groove, Pico, Groove, Pico, Groove, Break), e quanto dura cada fase. Ficam na fila com ✨ e ✕ tira uma; quando uma forma acaba, escolhe a da faixa seguinte. Antes de tudo, a IA passa a sua vibe para o inglês e reescreve o gênero do estilo segundo ela: é esse gênero que ela arranja. Depois planeja cada fase: qual, quanto dura, quais sons entram, como soam (mais escuros ou brilhantes, curtos ou longos, sujos ou limpos, parados ou em movimento, e até outro synth) e suas melodias: um motivo para o lead, os acordes do pad e a célula do baixo, que o piloto desenvolve na escala do estilo. Usa o do Chrome (Gemini Nano: roda no seu computador e aparece se o seu Chrome tiver) ou o seu LM Studio (ligue o servidor com CORS). O tema que um Break deixa se mantém; os FX e as trocas dentro de cada fase continuam saindo da semente, e se a IA demora, o piloto decide sozinho. Passe o mouse pela fase ✨ para ver por que ela a escolheu. 🔗 Compartilhar guarda o que ela escolheu: o link soa igual em qualquer navegador, com IA ou sem."],
+          ["✨ IA", "Ao começar, um modelo de linguagem escolhe a forma de cada faixa pela «Duração» do set: curta (Groove, Subida, Pico, Break), média (Groove, Subida, Pico, Subida, Pico, Break) ou longa (Groove, Subida, Pico, Subida, Pico, Subida, Break), e quanto dura cada fase. Ficam na fila com ✨ e ✕ tira uma; quando uma forma acaba, escolhe a da faixa seguinte. Antes de tudo, a IA passa a sua vibe para o inglês e reescreve o gênero do estilo segundo ela: é esse gênero que ela arranja. Depois planeja cada fase: qual, quanto dura, quais sons entram, como soam (mais escuros ou brilhantes, curtos ou longos, sujos ou limpos, parados ou em movimento, e até outro synth) e suas melodias: um motivo para o lead, os acordes do pad e a célula do baixo, que o piloto desenvolve na escala do estilo. Usa o do Chrome (Gemini Nano: roda no seu computador e aparece se o seu Chrome tiver) ou o seu LM Studio (ligue o servidor com CORS). O tema que um Break deixa se mantém; os FX e as trocas dentro de cada fase continuam saindo da semente, e se a IA demora, o piloto decide sozinho. Passe o mouse pela fase ✨ para ver por que ela a escolheu. 🔗 Compartilhar guarda o que ela escolheu: o link soa igual em qualquer navegador, com IA ou sem."],
         ],
       },
       {
@@ -323,6 +323,8 @@ export default {
     timeline: "A fase que toca e as que vêm",
     shorter: (name) => `Encurtar ${name}`,
     longer: (name) => `Alongar ${name}`,
+    jump: (name) => `${name} em seguida`,
+    dragBars: "Arraste a borda para mudar quantos compassos dura",
     then: "depois",
     unqueue: (name) => `Tirar ${name} da fila`,
     close: "🌅 Encerrar",

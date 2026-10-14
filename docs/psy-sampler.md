@@ -1469,14 +1469,14 @@ breakdown has no kick, every section plays a lead or a pad).
 ### The form of the track
 
 - A track takes one of three forms (`planner.js` `FORMS`), each opening on a
-  build and closing on a breakdown, so they chain (a breakdown leads into the
-  next build):
+  groove and closing on a breakdown, so they chain (a breakdown leads into the
+  next groove); every peak comes out of a build:
 
   | Form | Sections |
   | --- | --- |
-  | `short` | build, groove, peak, breakdown |
-  | `mid` | build, groove, peak, groove, peak, breakdown |
-  | `long` | build, groove, peak, groove, peak, groove, breakdown |
+  | `short` | groove, build, peak, breakdown |
+  | `mid` | groove, build, peak, build, peak, breakdown |
+  | `long` | groove, build, peak, build, peak, build, breakdown |
 
 - The model picks which (`planForm` in `app.js`; from silence right after the
   opening, before any `planAhead`). `formPrompt()` lists the three, says which
@@ -1629,17 +1629,25 @@ breakdown has no kick, every section plays a lead or a pad).
   asks to come. The status line says what happened: asking again (and which
   section stays), applied (from the section it picked), too late for this
   one, or just saved (autopilot off).
-- **The timeline** (`.timeline`, between the tools and the layers, the whole
-  width of the screen) shows the section playing and its bars left, then the
+- **The timeline** (`.timeline`, between the tools and the layers, as wide as
+  the column) shows the section playing and its bars left, then the
   sections queued by hand, the form's (✨) and the planned ones past them (its
   tooltip, the model's `why`), each as wide as the bars it lasts (`flex-grow`
   = bars; the playing one, the bars it has left). What it can't know yet (a
   section queued by hand with no plan, the outro) is a guess at its shortest,
-  dashed and marked `~`. Those that don't fit the screen are cut off. While an
+  dashed and marked `~`. Those that don't fit the column are cut off. While an
   ask is on its way, ✨ pulses and so does the timeline: the section the model
   is arranging, or a **✨ thinking…** chip where its pick will show.
-- **− and +** on a section of the form, or one with a plan, change its bars
-  in whole phrases (`BARS_BY_HAND`: 8 to 64, `resize` in `app.js`). A planned
+- **A click** on a section of the queue or the form makes it the next one, as
+  soon as it can, the way ⏭ does (`jump` in `app.js`, `autopilot.js`
+  `jumpTo`): the sections before it go and this loop is the section's last;
+  when this loop already announced the next one, it comes right after that
+  one. The plans for the sections it skips go, its own goes to the pilot.
+  Not while 🌅 closes the set.
+- **− and +**, or **dragging the right edge**, on a section of the form or one
+  with a plan change its bars in whole phrases (`BARS_BY_HAND`: 8 to 64,
+  `resize` in `app.js`); a drag snaps to the nearest at the width a bar had
+  as it began, and lands on release. A planned
   one just stretches (its plan's bars, and the pilot's copy of the next one's);
   one not planned yet keeps them in the form, so its plan is asked for at that
   length. `normalizePlan` accepts those lengths too, so a share link replays

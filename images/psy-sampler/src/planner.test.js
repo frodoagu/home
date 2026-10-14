@@ -466,12 +466,12 @@ describe("the form of the track", () => {
   it("asks which of the forms the next track takes, by the set's length, and its sections' bars", () => {
     const prompt = formPrompt({ sections: ["intro"], vibe: "dark, long breaks" });
     expect(prompt).toContain("Now playing: intro.");
-    expect(prompt).toContain("- short: build, groove, peak, breakdown");
-    expect(prompt).toContain("- mid: build, groove, peak, groove, peak, breakdown");
-    expect(prompt).toContain("- long: build, groove, peak, groove, peak, groove, breakdown");
+    expect(prompt).toContain("- short: groove, build, peak, breakdown");
+    expect(prompt).toContain("- mid: groove, build, peak, build, peak, breakdown");
+    expect(prompt).toContain("- long: groove, build, peak, build, peak, build, breakdown");
     expect(prompt).toContain("a set of about 1 hour plays short tracks, 2 hours mid, 3 hours long; an open-ended one, any.");
     expect(prompt).toContain("Shape the form to the listener's wish too.");
-    expect(prompt).toContain("build 8; groove 8 or 16; peak 24 or 32; breakdown 8 or 16.");
+    expect(prompt).toContain("groove 8 or 16; build 8; peak 24 or 32; breakdown 8 or 16.");
     const after = formPrompt({ sections: ["intro", "groove"], coming: ["build", "peak"], set: { minutes: 60, elapsed: 600 } });
     expect(after).toContain("Already coming after it, in order: build, peak.");
     expect(after).toContain("The set lasts about 1 hour; 10 minutes have played");
@@ -484,15 +484,15 @@ describe("the form of the track", () => {
     expect(Object.keys(schema.properties)).toEqual(["why", "form", "bars"]);
     expect(schema.properties.form.enum).toEqual(FORM_IDS);
     expect(schema.properties.bars).toMatchObject({ items: { enum: [8, 16, 24, 32] }, maxItems: 7 });
-    expect(normalizeForm({ form: "short", bars: [8, 16, 32, 12] })).toEqual([
-      { section: "build", loops: 4 },
+    expect(normalizeForm({ form: "short", bars: [16, 16, 32, 12] })).toEqual([
       { section: "groove", loops: 8 },
+      { section: "build", loops: 4 }, // 16 is no build's: the shortest
       { section: "peak", loops: 16 },
-      { section: "breakdown", loops: 4 }, // 12 is no breakdown's: the shortest
+      { section: "breakdown", loops: 4 },
     ]);
     expect(normalizeForm(null, 60).map((f) => f.section)).toEqual(FORMS.short);
     expect(normalizeForm({ form: "nope" }, 180).map((f) => f.section)).toEqual(FORMS.long);
-    expect(normalizeForm({ form: "nope" }, 180).map((f) => f.loops)).toEqual([4, 8, 16, 8, 16, 8, 8]); // a long night: the longest
+    expect(normalizeForm({ form: "nope" }, 180).map((f) => f.loops)).toEqual([8, 4, 16, 4, 16, 4, 8]); // a long night: the longest
     expect(normalizeForm("mid").map((f) => f.section)).toEqual(FORMS[FORM_OF_SET[0]]);
   });
 

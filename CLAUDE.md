@@ -557,8 +557,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   then picks the form of each track (`planForm`: one of `FORMS`, by the set's
   length, with each section's bars, walked as `pilot.form` `{ section, loops }`
   after the hand queue; the next one is asked as it runs out, Aplicar keeps
-  it, and − / + on the timeline change a section's bars: a plan just
-  stretches, an unplanned one is asked for at that length), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
+  it; on the timeline a click makes a section the next one (`jumpTo`, like ⏭)
+  and − / + or dragging its edge change its bars: a plan just stretches, an
+  unplanned one is asked for at that length), then plans sections ahead, one ask each, until `AHEAD` (3) are planned (`run.ahead`;
   which, bars, per-layer ids, plus `dress` macros and
   melodic `parts` in scale degrees for the sounds it names — applied when that
   section starts, from factory/seed values so a replay lands the same, never on

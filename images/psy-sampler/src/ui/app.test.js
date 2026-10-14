@@ -2514,7 +2514,7 @@ describe("✨ AI", () => {
   const BUILD = { why: "rising", section: "build", bars: 8, layers: {} };
   const PEAK = { section: "peak", bars: 24, layers: {} };
   const GROOVE = { section: "groove", bars: 16, layers: {} };
-  const RISE = { why: "rising", section: "build", bars: 8, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
+  const OPEN = { why: "rolling in", section: "groove", bars: 8, layers: { lead: ["lead.acid"], pad: ["pad.chord"] } };
   // The form an open-ended set takes when the model names none (planner.js FORM_OF_SET).
   const MID = FORMS.mid;
   // `plan`, for the section and the bars the ask pins (the form's) where it pins them.
@@ -2781,16 +2781,16 @@ describe("✨ AI", () => {
     aiBtn().click();
     await flushPromises();
     expect(queue()).toEqual(MID);
-    expect(ai.asks.map((a) => a.schema.properties.section.enum.join())).toEqual(["build", "groove", "peak"]);
+    expect(ai.asks.map((a) => a.schema.properties.section.enum.join())).toEqual(["groove", "build", "peak"]);
     const unqueue = () => [...root.querySelectorAll(".section-queue .unqueue")];
     expect(unqueue()).toHaveLength(6);
-    unqueue()[1].click(); // the groove: the peak's plan followed from it
+    unqueue()[1].click(); // the build: the peak's plan followed from it
     await flushPromises();
-    expect(queue()).toEqual(["build", "peak", "groove", "peak", "breakdown"]);
-    expect(ai.asks.slice(3).map((a) => a.schema.properties.section.enum.join())).toEqual(["peak", "groove"]);
+    expect(queue()).toEqual(["groove", "peak", "build", "peak", "breakdown"]);
+    expect(ai.asks.slice(3).map((a) => a.schema.properties.section.enum.join())).toEqual(["peak", "build"]);
     cue().click();
-    advanceSeconds(7 * BAR); // the intro's last loop: the build is announced
-    expect($(".section-queue .is-next").dataset.queued).toBe("build");
+    advanceSeconds(7 * BAR); // the intro's last loop: the groove is announced
+    expect($(".section-queue .is-next").dataset.queued).toBe("groove");
     expect($(".section-queue .is-next .unqueue")).toBeNull();
     expect(unqueue()).toHaveLength(4);
   });
@@ -2840,7 +2840,7 @@ describe("✨ AI", () => {
   });
 
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {
-    const ai = await remountWith(fakeAi({ answers: [RISE, GROOVE, PEAK, GROOVE] }));
+    const ai = await remountWith(fakeAi({ answers: [OPEN, BUILD, PEAK, BUILD] }));
     aiBtn().click();
     vibe("  oscuro  y largo ");
     $("button.auto").click();
@@ -2857,27 +2857,27 @@ describe("✨ AI", () => {
     expect(ask.opts.system).toBe(systemOf({ style: "psytrance", bpm: 145, vibe: "oscuro y largo" }));
     expect(ask.opts.system.startsWith(`You arrange ${GENRE.psytrance}.`)).toBe(true);
     expect(ask.prompt).not.toContain("Already planned");
-    expect(ask.prompt).toContain("Your form of the track has build, 8 bars next: plan that section.");
-    expect(ask.schema.properties.section.enum).toEqual(["build"]);
+    expect(ask.prompt).toContain("Your form of the track has groove, 8 bars next: plan that section.");
+    expect(ask.schema.properties.section.enum).toEqual(["groove"]);
     expect(ask.schema.properties.bars.enum).toEqual([8]);
-    expect(second.prompt).toContain("Already planned to follow it, in order:\n- build, 8 bars: lead.acid, pad.chord\n");
-    expect(second.prompt).toContain("Your form of the track has groove, 8 bars after the planned build: plan that section.");
+    expect(second.prompt).toContain("Already planned to follow it, in order:\n- groove, 8 bars: lead.acid, pad.chord\n");
+    expect(second.prompt).toContain("Your form of the track has build, 8 bars after the planned groove: plan that section.");
     expect(second.prompt).toContain("The listener's wish comes first: keep the track true to it"); // a plan followed it
     expect(second.opts.system).toContain('The listener\'s wish for the track: "oscuro y largo".');
-    expect(third.prompt).toContain("- build, 8 bars: lead.acid, pad.chord\n- groove, 8 bars\n"); // the form's 8, not its 16
+    expect(third.prompt).toContain("- groove, 8 bars: lead.acid, pad.chord\n- build, 8 bars\n");
     expect(queue()).toEqual(MID);
     expect([...root.querySelectorAll(".section-queue .is-ai")].map((li) => li.firstChild.textContent)).toEqual(
-      ["✨ Subida", "✨ Groove", "✨ Pico", "✨ Groove", "✨ Pico", "✨ Break"],
+      ["✨ Groove", "✨ Subida", "✨ Pico", "✨ Subida", "✨ Pico", "✨ Break"],
     );
-    expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: rising");
+    expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: rolling in");
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect($(".section-left").textContent).toBe("8 compases");
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
     expect(ai.asks).toHaveLength(4); // one in, one more asked for
-    expect(ai.asks[3].prompt).toContain("Sections so far: intro, build.");
+    expect(ai.asks[3].prompt).toContain("Sections so far: intro, groove.");
     expect(ai.asks[3].prompt).toMatch(/What the sections before it opened with:\n- intro: kick\./);
-    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- groove, 8 bars\n- peak, 24 bars\n");
+    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- build, 8 bars\n- peak, 24 bars\n");
     await flushPromises();
     expect(queue()).toEqual(MID.slice(1));
     expect(ai.asks).toHaveLength(4);
@@ -2885,7 +2885,7 @@ describe("✨ AI", () => {
 
   it("dresses the sounds and writes the parts its plan says, when the section comes", async () => {
     const plan = {
-      ...RISE,
+      ...OPEN,
       dress: [{ id: "lead.acid", tone: 0, length: 0, drive: 2, motion: 0, synth: "supersaw" }],
       parts: { lead: ["1", "-", "3", "-", "5", "-", "-", "-"], pad: ["1", "6"], bass: [] },
     };
@@ -2895,7 +2895,7 @@ describe("✨ AI", () => {
     await flushPromises();
     expect(saved().variants["lead.acid"]?.synth).not.toBe("supersaw"); // not before its section
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     const lead = saved().variants["lead.acid"];
     expect(lead.synth).toBe("supersaw");
     expect(lead.insert).toMatchObject({ drive: "hard", amount: 0.4 });
@@ -2909,13 +2909,13 @@ describe("✨ AI", () => {
   it("a plan at Alta builds the sound: its filter, sweep and echo land with the section", async () => {
     localStorage.setItem("psy-sampler:ai", JSON.stringify({ level: "high" }));
     const empty = { tone: 0, length: 0, drive: 0, motion: 0, synth: "", cutoff: 0, res: 0, shape: "", env: 0, distortion: "", trem: "", autopan: "" };
-    const plan = { ...RISE, dress: [{ id: "lead.acid", ...empty, filter: "vowel o", sweep: "2 bars", echo: "dotted 1/8" }] };
+    const plan = { ...OPEN, dress: [{ id: "lead.acid", ...empty, filter: "vowel o", sweep: "2 bars", echo: "dotted 1/8" }] };
     const ai = await remountWith(fakeAi({ answers: [fits(plan)] }));
     aiBtn().click();
     $("button.auto").click();
     await flushPromises();
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     const lead = saved().variants["lead.acid"];
     expect(lead.insert).toMatchObject({ filter: "vowel", vowel: "o", lfo: 0.4, rate: 32 });
     expect(lead.echo).toEqual({ steps: 3, semis: 0 });
@@ -2931,7 +2931,7 @@ describe("✨ AI", () => {
     await flushPromises(); // the form is in: the first section's plan is on its way
     advanceSeconds(6 * BAR + 0.05); // into the intro's last loop
     expect(ai.asks[0].opts.signal.aborted).toBe(true);
-    answer(RISE);
+    answer(OPEN);
     await flushPromises();
     expect($(".section-queue .is-ai").title).toBe("Secuencia de la IA"); // the form's, no plan
     apply("calm"); // the next section is decided: only the tune is asked again, the form stays
@@ -2941,29 +2941,29 @@ describe("✨ AI", () => {
     expect(ai.formAsks).toHaveLength(1);
     expect(ai.asks).toHaveLength(1);
     advanceSeconds(2 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida"); // the form's, unplanned
+    expect($(".section-badge").textContent).toBe("Groove"); // the form's, unplanned
     expect(ai.asks).toHaveLength(2);
     expect(ai.asks[1].prompt).toContain('The listener just asked for: "calm".');
   });
 
   it("an answer still on its way when its section becomes the next one goes to the pilot", async () => {
     let answer;
-    const ai = await remountWith(fakeAi({ answers: [RISE, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
+    const ai = await remountWith(fakeAi({ answers: [OPEN, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
     aiBtn().click();
     $("button.auto").click();
     $("button.auto").click(); // armed, 🤖 again starts it with the plans it has
     expect(engine.isRunning()).toBe(true);
     await flushPromises();
-    expect(ai.asks).toHaveLength(2); // the groove after the build, on its way
+    expect(ai.asks).toHaveLength(2); // the build after the groove, on its way
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect(ai.asks[1].opts.signal.aborted).toBe(false);
-    answer({ ...GROOVE, why: "late", layers: { bass: ["bass.gallop"] } });
+    answer({ ...BUILD, why: "late", layers: { bass: ["bass.gallop"] } });
     await flushPromises();
     expect(queue()).toEqual(MID.slice(1));
     expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: late");
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Groove");
+    expect($(".section-badge").textContent).toBe("Subida");
     expect($(".section-left").textContent).toBe("8 compases"); // the form's length, not the answer's
     expect(pressed()).toContain("bass.gallop");
   });
@@ -2983,11 +2983,11 @@ describe("✨ AI", () => {
     await flushPromises();
     expect($(".section-queue .is-thinking")).toBeNull();
     expect(queue()).toEqual(["peak", ...MID]);
-    expect(asked(3)).toEqual(["peak", "build", "groove"]);
+    expect(asked(3)).toEqual(["peak", "groove", "build"]);
     root.querySelector('.section-queue [data-queued="peak"] .unqueue').click();
     await flushPromises();
     expect(queue()).toEqual(MID);
-    expect(asked(6)).toEqual(["build", "groove", "peak"]);
+    expect(asked(6)).toEqual(["groove", "build", "peak"]);
   });
 
   it("a new style while it plays: the plans up to its drop stay in the old style, the drop's is asked in the new one", async () => {
@@ -3027,13 +3027,13 @@ describe("✨ AI", () => {
     expect(queue()).toEqual(MID); // the form stays: its order is the set's
     expect($(".section-queue .is-thinking").textContent).toBe("✨ pensando…"); // the tune
     expect($(".section-queue .is-thinking").title).toBe("La IA está pasando tu onda al inglés y reescribiendo el género con ella");
-    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Subida queda como estaba y la IA vuelve a planear lo que sigue…");
+    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Groove queda como estaba y la IA vuelve a planear lo que sigue…");
     await flushPromises();
     expect(ai.formAsks).toHaveLength(1);
     expect(ai.asks[3].prompt).toContain('The listener just asked for: "a full peak".');
-    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- build, 8 bars: pad.chord");
-    expect(ai.asks[3].schema.properties.section.enum).toEqual(["groove"]);
-    expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada desde Groove.");
+    expect(ai.asks[3].prompt).toContain("Already planned to follow it, in order:\n- groove, 8 bars: pad.chord");
+    expect(ai.asks[3].schema.properties.section.enum).toEqual(["build"]);
+    expect($(".status").textContent).toBe("✨ Onda «a full peak» aplicada desde Subida.");
     expect(ai.asks[4].prompt).toContain("The listener's wish comes first: keep the track true to it");
     apply(" a full  peak "); // the same words: asked again all the same
     await flushPromises();
@@ -3047,16 +3047,16 @@ describe("✨ AI", () => {
     advanceSeconds(6 * BAR + 0.05); // the last loop: what comes next is decided
     $("#ai-vibe").value = "a full peak";
     $("#ai-vibe").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); // Enter applies too
-    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Subida queda como estaba y la IA vuelve a planear lo que sigue…");
+    expect($(".status").textContent).toBe("✨ Onda «a full peak»: Groove queda como estaba y la IA vuelve a planear lo que sigue…");
     await flushPromises();
     expect(queue()).toEqual(MID);
     advanceSeconds(2 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect(pressed()).toContain("pad.chord"); // the plan made before the vibe
   });
 
   it("✨ in silence arms the autopilot and plans the first sections before ▶", async () => {
-    const ai = await remountWith(fakeAi({ answers: [RISE, GROOVE, PEAK] }));
+    const ai = await remountWith(fakeAi({ answers: [OPEN, BUILD, PEAK] }));
     aiBtn().click();
     await flushPromises();
     expect(ai.asks).toHaveLength(3);
@@ -3072,7 +3072,7 @@ describe("✨ AI", () => {
     cue().click();
     expect(engine.isRunning()).toBe(true);
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"]));
   });
 
@@ -3131,7 +3131,7 @@ describe("✨ AI", () => {
     expect($('[data-action="drop"]').getAttribute("aria-pressed")).toBe("true");
     expect(fx).toHaveBeenCalledTimes(2);
     advanceSeconds(2 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect(fx).toHaveBeenCalledWith("fx.impact", expect.any(Number)); // the explosion
     expect(bass().insert).toMatchObject({ hp: 20, lp: 20000 }); // wide open
     expect(kick().insert).toMatchObject({ hp: 20, lp: 20000 });
@@ -3154,7 +3154,7 @@ describe("✨ AI", () => {
 
   it("✨ picks the form of each track by the set's length: the plans fill it in at its lengths, the pilot walks it, ✕ drops a section", async () => {
     localStorage.setItem("psy-sampler:ai", JSON.stringify({ set: 180 }));
-    const long = { why: "a long journey", form: "long", bars: [8, 16, 32, 16, 24, 8, 16] };
+    const long = { why: "a long journey", form: "long", bars: [16, 8, 32, 8, 24, 8, 16] };
     const short = { why: "", form: "short", bars: [8, 8, 24, 8] };
     const ai = await remountWith(fakeAi({ forms: [long, short], answers: [fits(BREAK)] }));
     const asked = (from = 0) => ai.asks.slice(from).map((a) => `${a.schema.properties.section.enum.join()} ${a.schema.properties.bars.enum.join()}`);
@@ -3164,27 +3164,27 @@ describe("✨ AI", () => {
     expect(ai.formAsks).toHaveLength(1);
     const [ask] = ai.formAsks;
     expect(ask.prompt).toContain("Now playing: intro.");
-    expect(ask.prompt).toContain("- long: build, groove, peak, groove, peak, groove, breakdown");
+    expect(ask.prompt).toContain("- long: groove, build, peak, build, peak, build, breakdown");
     expect(ask.prompt).toContain("a set of about 1 hour plays short tracks, 2 hours mid, 3 hours long");
     expect(ask.prompt).toMatch(/The set lasts about 3 hours/);
     expect(ask.schema.properties.form.enum).toEqual(["short", "mid", "long"]);
     expect(queue()).toEqual(FORMS.long);
     expect(bars()).toEqual(long.bars);
-    expect($(".section-queue [data-queued]").style.flexGrow).toBe("8"); // as wide as its bars
-    expect(asked()).toEqual(["build 8", "groove 16", "peak 32"]);
-    expect(ai.asks[0].prompt).toContain("After it, the track goes on with: groove, peak, groove");
-    expect(ai.asks[1].prompt).toContain("Your form of the track has groove, 16 bars after the planned build: plan that section.");
+    expect($(".section-queue [data-queued]").style.flexGrow).toBe("16"); // as wide as its bars
+    expect(asked()).toEqual(["groove 16", "build 8", "peak 32"]);
+    expect(ai.asks[0].prompt).toContain("After it, the track goes on with: build, peak, build");
+    expect(ai.asks[1].prompt).toContain("Your form of the track has build, 8 bars after the planned groove: plan that section.");
     expect($(".section-queue .is-ai").title).toBe("Lo eligió la IA: a dark break");
     expect(root.querySelectorAll(".section-queue .is-ai")[3].title).toBe("Secuencia de la IA: a long journey");
     cue().click();
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect(queue()).toEqual(FORMS.long.slice(1));
     root.querySelector('.section-queue [data-queued="peak"] .unqueue').click(); // the first peak
-    expect(queue()).toEqual(["groove", "groove", "peak", "groove", "breakdown"]);
+    expect(queue()).toEqual(["build", "build", "peak", "build", "breakdown"]);
     await flushPromises();
     $('[data-section="peak"]').click(); // by hand: before the form
-    expect(queue().slice(0, 3)).toEqual(["peak", "groove", "groove"]);
+    expect(queue().slice(0, 3)).toEqual(["peak", "build", "build"]);
     expect(ai.formAsks).toHaveLength(1);
     for (let i = 0; i < 200 && ai.formAsks.length < 2; i++) {
       advanceSeconds(2 * BAR);
@@ -3196,30 +3196,58 @@ describe("✨ AI", () => {
     expect(bars().slice(-4)).toEqual(short.bars);
   });
 
+  it("a click on a section coming plays it next, as soon as it can; dragging its right edge changes its bars", async () => {
+    await remountWith(fakeAi({ answers: [fits(BUILD)] }));
+    aiBtn().click();
+    await flushPromises();
+    cue().click();
+    advanceSeconds(2 * BAR); // into the intro
+    const chip = (i) => root.querySelectorAll(".section-queue [data-queued]")[i];
+    expect(chip(2).querySelector(".chip-go").getAttribute("aria-label")).toBe("Pico a continuación");
+    chip(2).querySelector(".chip-go").click(); // the first peak: the groove and the build go
+    expect(queue()).toEqual(["peak", "build", "peak", "breakdown"]);
+    expect($('[data-action="next-section"]').disabled).toBe(true); // this loop is the intro's last
+    advanceSeconds(2 * BAR);
+    expect($(".section-badge").textContent).toBe("Pico");
+    expect($(".section-left").textContent).toBe("24 compases"); // its plan's
+    await flushPromises();
+    const edge = chip(0).querySelector(".chip-edge");
+    chip(0).getBoundingClientRect = () => ({ width: 80 }); // 8 bars: 10 px each
+    const drag = (type, clientX) => edge.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true }));
+    drag("pointerdown", 100);
+    drag("pointermove", 182);
+    expect(chip(0).querySelector(".chip-bars").textContent).toBe("16");
+    expect(chip(0).dataset.bars).toBe("8"); // it lands on release
+    drag("pointerup", 182);
+    edge.click(); // the click a release makes is no jump
+    expect(chip(0).dataset.bars).toBe("16");
+    expect(queue()).toEqual(["build", "peak", "breakdown"]);
+  });
+
   it("− and + on the timeline: a planned section just stretches; one not planned yet is planned at its new length", async () => {
-    const ai = await remountWith(fakeAi({ answers: [fits(RISE)] }));
+    const ai = await remountWith(fakeAi({ answers: [fits(OPEN)] }));
     aiBtn().click();
     await flushPromises();
     const chip = (i) => root.querySelectorAll(".section-queue [data-queued]")[i];
     const bars = (i) => Number(chip(i).dataset.bars);
     expect(ai.asks).toHaveLength(3);
     expect([bars(0), bars(3)]).toEqual([8, 8]);
-    expect(chip(0).querySelector('[aria-label="Acortar Subida"]').disabled).toBe(true); // a phrase at least
-    chip(0).querySelector('[aria-label="Alargar Subida"]').click();
+    expect(chip(0).querySelector('[aria-label="Acortar Groove"]').disabled).toBe(true); // a phrase at least
+    chip(0).querySelector('[aria-label="Alargar Groove"]').click();
     expect(bars(0)).toBe(16);
     expect(chip(0).style.flexGrow).toBe("16");
     expect(ai.asks).toHaveLength(3); // planned: nothing asked again
-    chip(3).querySelector('[aria-label="Alargar Groove"]').click();
-    chip(3).querySelector('[aria-label="Alargar Groove"]').click();
+    chip(3).querySelector('[aria-label="Alargar Subida"]').click();
+    chip(3).querySelector('[aria-label="Alargar Subida"]').click();
     expect(bars(3)).toBe(24);
     cue().click();
     advanceSeconds(8 * BAR);
-    expect($(".section-badge").textContent).toBe("Subida");
+    expect($(".section-badge").textContent).toBe("Groove");
     expect($(".section-left").textContent).toBe("16 compases");
     expect(pressed()).toEqual(expect.arrayContaining(["lead.acid", "pad.chord"])); // its plan, stretched
     await flushPromises();
     expect(ai.asks[3].schema.properties.bars.enum).toEqual([24]);
-    expect(ai.asks[3].prompt).toContain("Your form of the track has groove, 24 bars");
+    expect(ai.asks[3].prompt).toContain("Your form of the track has build, 24 bars");
     expect(bars(2)).toBe(24);
   });
 
@@ -3329,14 +3357,14 @@ describe("✨ AI", () => {
   it("🤖 with ✨ on waits for the first sections' plans, then plays", async () => {
     localStorage.setItem("psy-sampler:ai", JSON.stringify({ on: true }));
     let answer;
-    const ai = await remountWith(fakeAi({ answers: [RISE, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
+    const ai = await remountWith(fakeAi({ answers: [OPEN, () => new Promise((resolve) => (answer = resolve)), PEAK] }));
     $("button.auto").click();
     expect(engine.isRunning()).toBe(false);
     expect($(".status").textContent).toBe("✨ Planeando la fase 1 de 4 antes de arrancar… ▶ para arrancar ya.");
     await flushPromises();
     expect($(".status").textContent).toBe("✨ Planeando la fase 3 de 4 antes de arrancar… ▶ para arrancar ya.");
     expect(engine.isRunning()).toBe(false);
-    answer(GROOVE);
+    answer(BUILD);
     await flushPromises();
     expect(ai.asks).toHaveLength(3);
     expect(engine.isRunning()).toBe(true);

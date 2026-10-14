@@ -66,6 +66,7 @@ import {
   phraseEnd,
   rearrange,
   routeRoom,
+  jumpTo,
   skip,
   startPilot,
   styleAt,
@@ -421,6 +422,8 @@ export function mountApp(root, engine, opts = {}) {
   const timelineNow = el("div", { class: "timeline-now" }, sectionBadge, sectionLeft);
   const timeline = el("div", { class: "timeline", role: "group", "aria-label": tx.pilot.timeline }, timelineNow, queueList);
   timeline.hidden = true;
+  let dragging = false; // a timeline edge on its way: the timeline waits to redraw
+  let dragged = false; // the click that ends a drag is no jump
   const nextBtn = el("button", { type: "button", class: "ghost", "data-action": "next-section", text: tx.pilot.next });
   nextBtn.title = tx.pilot.nextTitle;
   const closeBtn = el("button", { type: "button", class: "ghost close-set", "data-action": "close-set", "aria-pressed": "false", text: tx.pilot.close });
@@ -1088,7 +1091,8 @@ export function mountApp(root, engine, opts = {}) {
   // The timeline: now, the section and the bars it has left, then the queue
   // (✕ drops one before it plays) and the sections the ✨ AI planned past
   // it, each as wide as the bars it lasts (a guess, dashed, where nothing
-  // says yet). − and + change those bars where a plan or the form holds
+  // says yet). A click on one makes it the next (jump); − and +, or
+  // dragging its right edge, change its bars where a plan or the form holds
   // them. In its last loop the section coming next pulses; while the ✨ AI
   // thinks, so does the section it arranges, or a chip saying so.
   function showSection() {
@@ -1137,8 +1141,17 @@ export function mountApp(root, engine, opts = {}) {
     const chip = (id, slot, cls, text, drop = []) => {
       const known = planOf(slot)?.bars ?? (slot < coming.length && loopsAt(p, slot) ? loopsAt(p, slot) * 2 : null);
       const bars = known ?? SECTIONS[id].loops[0] * 2;
-      const li = el("li", { class: known ? cls : `${cls} is-guess`, "data-queued": id, "data-bars": String(bars) }, el("span", { text }));
+      const jumps = !p.closing && slot < coming.length && !settled(slot);
+      const name = jumps ? el("button", { type: "button", class: "chip-go", text }) : el("span", { text });
+      if (jumps) name.setAttribute("aria-label", tx.pilot.jump(tx.sections[id]));
+      const li = el("li", { class: known ? cls : `${cls} is-guess`, "data-queued": id, "data-bars": String(bars) }, name);
       li.style.flexGrow = String(bars);
+      if (jumps) {
+        li.addEventListener("click", (e) => {
+          if (dragged || e.target.closest(".resize, .unqueue")) return;
+          jump(slot);
+        });
+      }
       const resizable = known && !p.closing && (planOf(slot) || loopsAt(p, slot));
       const say = el("span", { class: "chip-bars", text: known ? String(bars) : `~${bars}` });
       say.title = tx.pilot.left(bars);
@@ -1152,6 +1165,7 @@ export function mountApp(root, engine, opts = {}) {
       };
       const tools = resizable ? [step(-1, tx.pilot.shorter, "−"), say, step(1, tx.pilot.longer, "+")] : [say];
       li.append(el("span", { class: "chip-tools" }, ...tools, ...drop));
+      if (resizable) li.append(edgeOf(li, slot, bars, say));
       return li;
     };
     const chips = (p?.queue ?? []).map((id, i) => {
@@ -1210,10 +1224,72 @@ export function mountApp(root, engine, opts = {}) {
             : tx.ai.thinkingTitle;
     }
     if (p?.left === 1) chips[0]?.classList.add("is-next");
-    queueList.replaceChildren(...chips);
+    if (!dragging) queueList.replaceChildren(...chips);
     queueList.hidden = !chips.length;
     nextBtn.disabled = !p || p.left === 1;
     showDrop();
+  }
+
+  // A section's right edge: dragged, its bars, a whole phrase at a time, at
+  // the width a bar had as the drag began; they land on release.
+  function edgeOf(li, slot, bars, say) {
+    const edge = el("span", { class: "chip-edge", "aria-hidden": "true" });
+    edge.title = tx.pilot.dragBars;
+    edge.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const perBar = Math.max(2, li.getBoundingClientRect().width / bars);
+      const x0 = e.clientX;
+      let to = bars;
+      dragging = true;
+      edge.classList.add("is-dragging");
+      edge.setPointerCapture?.(e.pointerId);
+      const move = (m) => {
+        const want = bars + (m.clientX - x0) / perBar;
+        to = BARS_BY_HAND.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a));
+        li.style.flexGrow = String(to);
+        say.textContent = String(to);
+      };
+      const end = () => {
+        edge.removeEventListener("pointermove", move);
+        edge.removeEventListener("pointerup", end);
+        edge.removeEventListener("pointercancel", end);
+        dragging = false;
+        dragged = true; // the click this release makes
+        setTimeout(() => (dragged = false));
+        if (to !== bars) resize(slot, to);
+        else showSection();
+      };
+      edge.addEventListener("pointermove", move);
+      edge.addEventListener("pointerup", end);
+      edge.addEventListener("pointercancel", end);
+    });
+    return edge;
+  }
+
+  // A click on a section coming: it plays next, as soon as it can (autopilot.js
+  // jumpTo), like ⏭ does with the one after this. The plans made for the
+  // sections it skips go; its own, if it has one, goes to the pilot.
+  function jump(slot) {
+    const p = state.pilot;
+    if (!p || p.closing) return;
+    const keep = p.left === 1 && p.next !== undefined && sequence(p)[0] === p.next ? 1 : 0;
+    state.pilot = jumpTo(p, slot);
+    if (state.pilot === p) return;
+    if (state.run) {
+      const ahead = state.run.ahead;
+      ahead.splice(keep, slot - keep);
+      if (!keep) {
+        const { plan: _old, ...rest } = state.pilot;
+        const head = ahead[0]?.plan.section === sequence(state.pilot)[0] ? ahead[0].plan : null;
+        state.pilot = head ? { ...rest, plan: head } : rest;
+        if (head) state.run.plans[sectionNo()] = head;
+        else delete state.run.plans[sectionNo()];
+      }
+      if (planning && !planning.form && !planning.tune) cancelPlanning();
+      requeue();
+    }
+    showSection();
   }
 
   // − and + on the timeline: the section at `slot` lasts `bars`. A plan made

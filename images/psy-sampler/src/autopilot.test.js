@@ -43,6 +43,7 @@ import {
   rearrange,
   skip,
   startPilot,
+  jumpTo,
   loopsAt,
   sequence,
   styleAt,
@@ -672,6 +673,20 @@ describe("plans (✨ AI)", () => {
     expect(walked.slice(1, 4)).toEqual([["groove", 4], ["build", 8], ["peak", 20]]);
     expect(walked[0][0]).toBe("breakdown");
     expect(pilot.form).toBeUndefined(); // walked to its end: the pilot picks again
+  });
+
+  it("jumpTo: the section picked comes next, the ones before it go; after the one announced, if there is one", () => {
+    const form = ["groove", "build", "peak"].map((section) => ({ section, loops: 4 }));
+    const pilot = withForm({ section: "intro", left: 3, length: 4, queue: ["breakdown"] }, form);
+    const jumped = jumpTo(pilot, 2);
+    expect(sequence(jumped)).toEqual(["build", "peak"]);
+    expect(jumped.left).toBe(1); // this loop is the section's last
+    expect(jumped.next).toBeUndefined();
+    const announced = { ...pilot, left: 1, next: "breakdown" };
+    expect(sequence(jumpTo(announced, 3))).toEqual(["breakdown", "peak"]);
+    expect(jumpTo(announced, 3).next).toBe("breakdown");
+    expect(jumpTo(announced, 0)).toBe(announced); // already on its way
+    expect(jumpTo(pilot, 9)).toBe(pilot);
   });
 
   it("a form drops a section with ✕, keeps through a jump and stays put while a queued section plays", () => {

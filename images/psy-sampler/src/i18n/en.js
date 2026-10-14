@@ -51,7 +51,7 @@ export default {
         title: "Autopilot and seed",
         items: [
           ["🤖 Autopilot", "Builds the track by itself: switches layers on and off each phrase, fires FX, writes melodies and moves through the sections."],
-          ["Sections", "Intro, Groove, Build-up, Peak and Breakdown. A click queues one: it comes in when the current one ends. The line below shows the one playing and the ones coming, each as wide as the bars it lasts (dashed while that is still a guess). − and + change its length: one the AI already planned just stretches, and one it has not yet is planned knowing how long it will last. ✕ takes it off the queue."],
+          ["Sections", "Intro, Groove, Build-up, Peak and Breakdown. A click queues one: it comes in when the current one ends. The line below shows the one playing and the ones coming, each as wide as the bars it lasts (dashed while that is still a guess). A click on one makes it the next, as soon as it can, like ⏭ (the ones before it go). − and +, or dragging its right edge, change its length: one the AI already planned just stretches, and one it has not yet is planned knowing how long it will last. ✕ takes it off the queue."],
           ["⏭ Next", "Ends the current section on the next loop."],
           ["🌅 Close", "Ends the set within 5 minutes: the autopilot queues the last sections (a farewell peak) and an Outro that drops in and goes wild for 16 bars or more: everything at full, with more glitches, percussion, rolls and FX, and the visuals flashing like crazy. Then it eases off and fades out bit by bit over 8 to 16 bars, and over the last 4 or 8 the mix slowly comes to a stop, like a vinyl. Then everything stops. With ✨ AI, the AI plans those sections. Another click calls it off until the Outro starts."],
           ["Style", "Which sounds the autopilot uses. Changing it takes the BPM to the style's, gradually."],
@@ -65,7 +65,7 @@ export default {
           ["Seed", "The same seed builds the same track in any browser. Type your own or roll 🎲 for a new one; with the autopilot running, changing it restarts it on the next loop (🎲 pulses while it waits)."],
           ["🔗 Share", "Copies a link with the seed, style, BPM and your edited sounds: whoever opens it and hits 🤖 hears the same."],
           ["Your edits win", "The autopilot never overwrites what you edited by hand, except the volume and the high-pass and low-pass filters."],
-          ["✨ AI", "On start, a language model picks the form of each track from the set's «Length»: short (Build-up, Groove, Peak, Breakdown), mid (Build-up, Groove, Peak, Groove, Peak, Breakdown) or long (Build-up, Groove, Peak, Groove, Peak, Groove, Breakdown), and how long each section lasts. They wait in the queue with ✨ and ✕ drops one; when a form runs out, it picks the next track's. First of all, the AI puts your vibe in English and rewrites the style's genre to it: that genre is the one it arranges. Then it plans each section: which one, how long, which sounds come in, how they sound (darker or brighter, shorter or longer, dirty or clean, still or moving, even another synth) and their melodies: a motif for the lead, the pad's chords and the bass's cell, which the autopilot develops in the style's scale. It uses Chrome's (Gemini Nano: runs on your computer and shows up if your Chrome has it) or your LM Studio (start its server with CORS on). The theme a Breakdown leaves stays; FX and the swaps inside each section still come from the seed, and if the AI is late, the autopilot decides by itself. Hover the ✨ section to see why it picked it. 🔗 Share keeps what it picked: the link sounds the same in any browser, with AI or without."],
+          ["✨ AI", "On start, a language model picks the form of each track from the set's «Length»: short (Groove, Build-up, Peak, Breakdown), mid (Groove, Build-up, Peak, Build-up, Peak, Breakdown) or long (Groove, Build-up, Peak, Build-up, Peak, Build-up, Breakdown), and how long each section lasts. They wait in the queue with ✨ and ✕ drops one; when a form runs out, it picks the next track's. First of all, the AI puts your vibe in English and rewrites the style's genre to it: that genre is the one it arranges. Then it plans each section: which one, how long, which sounds come in, how they sound (darker or brighter, shorter or longer, dirty or clean, still or moving, even another synth) and their melodies: a motif for the lead, the pad's chords and the bass's cell, which the autopilot develops in the style's scale. It uses Chrome's (Gemini Nano: runs on your computer and shows up if your Chrome has it) or your LM Studio (start its server with CORS on). The theme a Breakdown leaves stays; FX and the swaps inside each section still come from the seed, and if the AI is late, the autopilot decides by itself. Hover the ✨ section to see why it picked it. 🔗 Share keeps what it picked: the link sounds the same in any browser, with AI or without."],
         ],
       },
       {
@@ -323,6 +323,8 @@ export default {
     timeline: "The section playing and the ones coming",
     shorter: (name) => `Shorten ${name}`,
     longer: (name) => `Lengthen ${name}`,
+    jump: (name) => `${name} next`,
+    dragBars: "Drag the edge to change how many bars it lasts",
     then: "then",
     unqueue: (name) => `Remove ${name} from the queue`,
     close: "🌅 Close",

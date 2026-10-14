@@ -576,6 +576,25 @@ export const dequeue = (pilot, index) => ({ ...pilot, queue: pilot.queue.filter(
 export const unform = (pilot, index) => withForm(pilot, (pilot.form ?? []).filter((_, i) => i !== index));
 // The current loop is the section's last: the next one moves on.
 export const skip = (pilot) => ({ ...pilot, left: 1, next: undefined });
+
+/**
+ * By hand: the section `slot` places after this one (in sequence()) comes
+ * next, as soon as it can: the ones before it go and this loop is the
+ * section's last (skip), or, when this loop already announced the next one,
+ * right after that one.
+ */
+export function jumpTo(pilot, slot) {
+  const coming = sequence(pilot);
+  const keep = pilot.left === 1 && pilot.next !== undefined && coming[0] === pilot.next ? 1 : 0;
+  if (slot < keep || slot >= coming.length) return pilot;
+  const goes = (i) => i >= keep && i < slot;
+  const queued = pilot.queue.length;
+  const out = withForm(
+    { ...pilot, queue: pilot.queue.filter((_, i) => !goes(i)) },
+    (pilot.form ?? []).filter((_, i) => !goes(queued + i)),
+  );
+  return keep ? out : skip(out);
+}
 // The next loop rearranges the section with the new style's sounds.
 export const rearrange = (pilot) => ({ ...pilot, rearrange: true });
 

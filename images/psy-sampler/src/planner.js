@@ -54,13 +54,13 @@ export const PLAN_SECTIONS = SECTION_IDS.filter((id) => id !== "intro");
 export const PLAN_MAX = 256;
 // Sections the ✨ AI keeps planned past the one playing.
 export const AHEAD = 3;
-// The forms a track takes, from the build it opens on to the breakdown it
-// ends on; the next track opens on a build again. Which one is the ✨ AI's
+// The forms a track takes, from the groove it opens on to the breakdown it
+// ends on; the next track opens on a groove again. Which one is the ✨ AI's
 // call (formPrompt), by the length of the set: FORM_OF_SET, as a rule.
 export const FORMS = {
-  short: ["build", "groove", "peak", "breakdown"],
-  mid: ["build", "groove", "peak", "groove", "peak", "breakdown"],
-  long: ["build", "groove", "peak", "groove", "peak", "groove", "breakdown"],
+  short: ["groove", "build", "peak", "breakdown"],
+  mid: ["groove", "build", "peak", "build", "peak", "breakdown"],
+  long: ["groove", "build", "peak", "build", "peak", "build", "breakdown"],
 };
 export const FORM_IDS = Object.keys(FORMS);
 const FORM_MAX = Math.max(...Object.values(FORMS).map((f) => f.length));
