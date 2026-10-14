@@ -65,7 +65,7 @@ const MASTER_GAIN = 0.7;
 const OUTPUT_TRIM = 0.8;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
-const LAYER_LEVEL = { kick: 0.9, bass: 0.45, perc: 0.9, lead: 0.3, pad: 0.35, glitch: 0.3, classic: 0.4, fx: 0.6 };
+const LAYER_LEVEL = { kick: 0.9, bass: 0.45, perc: 0.85, lead: 0.3, pad: 0.35, glitch: 0.3, classic: 0.4, fx: 0.6 };
 const BG_KICK_LEVEL = 0.6;
 // Sends per layer, after the lane gain (so they follow its fades). Kick and
 // bass stay dry: tails under them only muddy the low end.
