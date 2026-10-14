@@ -495,6 +495,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   thing that moves the grid itself (`engine.restart()` on the first tap of a count,
   `engine.align()` after), timed by the event's `timeStamp` and mapped through
   `getOutputTimestamp()` — `Date.now()` in the handler jitters by main-thread load.
+  Starting volumes are set BY EAR, not by peak or RMS: `audio/loudness.js`
+  (`SYNTH_DB` matches the synths of a group, `DB` each factory sound against the
+  kick; ISO 226 + Stevens Mark VI, N5) scales the lane under the layer level and
+  over `level`, which the autopilot rides, so never fold it into `level`. A new
+  sound or synth needs a measured row, and a driven sound plays quieter on
+  purpose (`insert.js` `DRIVE_TRIM`); the ✨ AI's drive amounts are its own
+  (`dress.js` `AI_DRIVE`, `DRIVES`). See docs/psy-sampler.md#loudness.
   Sounds banned with ⊘ (`ws.banned`) leave the pilot's and the ✨ AI's lists
   via `unbanned()`, so they shorten pools and travel in 🔗's `&s=`; banned FX
   are drawn and then dropped, so they don't shift seeds.

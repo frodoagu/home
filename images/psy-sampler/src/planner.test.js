@@ -651,7 +651,7 @@ describe("levels", () => {
         ...plan,
         dress: [
           { id: "lead.acid", tone: 0, ...empty, filter: "lowpass", res: 2, sweep: "2 bars", shape: "triangle", echo: "dotted 1/8" },
-          { id: "kick.long", ...empty, distortion: "fold", filter: "highpass", trem: "1/8" }, // a kick only takes grit
+          { id: "kick.long", ...empty, distortion: "soft", filter: "highpass", trem: "1/8" }, // a kick only takes a soft grit
           { id: "bass.rolling", ...empty, filter: "bandpass", env: 2, sweep: "bar", echo: "1/4" }, // a lowpass at most, no sweep, no echo
         ],
       },
@@ -659,7 +659,7 @@ describe("levels", () => {
     );
     expect(out.dress).toEqual([
       { id: "bass.rolling", env: 2 },
-      { id: "kick.long", distortion: "fold" },
+      { id: "kick.long", distortion: "soft" },
       { id: "lead.acid", filter: "lowpass", res: 2, sweep: "2 bars", shape: "triangle", echo: "dotted 1/8" },
     ]);
     expect(normalizePlan(out, goa)).toEqual(out);

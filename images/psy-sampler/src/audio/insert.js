@@ -115,18 +115,33 @@ export const bitsFor = (amount) => Math.round(8 - amount * 6);
 // Small-signal gain of soft/hard/fold: 1 (0 dB) to ~32 (+30 dB).
 const driveOf = (amount) => 10 ** (amount * 1.5);
 
+// What a distortion adds to the ear, in dB below the clean sound, at amount
+// 0 and per unit of it: [at, per]. Matching the peak is not enough: the new
+// harmonics land where hearing is most sensitive (1-5 kHz, ISO 226), so a
+// sound driven to the same peak reads louder, up to +14 phon on a sub bass
+// at 100 % soft. These lines were fitted on ten factory sounds (Stevens Mark
+// VI loudness, docs/psy-sampler.md#loudness) to bring the median one 1-2
+// phon under its clean self, about 4 at 100 %: a driven sound plays quieter.
+const DRIVE_TRIM = { soft: [-1.4, 9.6], hard: [0.7, 7.8], fold: [1.7, 9.5], crush: [1, 3] };
+const trimFor = (type, amount) => {
+  const [at, per] = DRIVE_TRIM[type];
+  return 10 ** (-Math.max(1, at + per * amount) / 20);
+};
+
 /**
  * Gains around the shaper. `pre` scales the input onto the curve; `post`
- * roughly matches a half-scale input's level, so turning the drive up adds
- * grit rather than volume. Crush quantizes at full scale: no gain.
+ * roughly matches a half-scale input's level and then takes the drive's
+ * trim, so turning the drive up adds grit and loses a little volume. Crush
+ * quantizes at full scale: no gain in.
  */
 export function driveGains(type, amount) {
-  if (type === "off" || type === "crush") return { pre: 1, post: 1 };
+  if (type === "off") return { pre: 1, post: 1 };
+  if (type === "crush") return { pre: 1, post: trimFor(type, amount) };
   const g = driveOf(amount);
   // Folding spreads energy into folds that partly cancel: measured in Chrome,
   // it reads 2.6 dB hot at 0 % and 6.6 dB quiet at 100 % without this.
   const fold = type === "fold" ? 10 ** ((-2.6 + 9.2 * amount) / 20) : 1;
-  return { pre: g / RANGE, post: (0.5 / Math.tanh(0.5 * g)) * fold };
+  return { pre: g / RANGE, post: (0.5 / Math.tanh(0.5 * g)) * fold * trimFor(type, amount) };
 }
 
 const SHAPES = {
@@ -544,9 +559,10 @@ export function buildInsert(ctx, insert, { stepDur, at = ctx.currentTime }) {
         trem.depth.gain.setTargetAtTime(next.trem / 2, now, GLIDE);
       }
       for (const [l, key] of lfos) if (next[key] !== current[key]) l.setHz(lfoHz(next[key], stepDur), now, GLIDE);
-      if (next.drive === "crush") {
-        if (bitsFor(next.amount) !== bitsFor(current.amount)) shaper.curve = driveCurve("crush", next.amount);
-      } else if (next.drive !== "off") {
+      if (next.drive === "crush" && bitsFor(next.amount) !== bitsFor(current.amount)) {
+        shaper.curve = driveCurve("crush", next.amount);
+      }
+      if (next.drive !== "off") {
         const g = driveGains(next.drive, next.amount);
         pre.gain.setTargetAtTime(g.pre, now, GLIDE);
         post.gain.setTargetAtTime(g.post, now, GLIDE);

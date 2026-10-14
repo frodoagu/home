@@ -245,10 +245,14 @@ distortion":
 - **Off is an identity**: a lowpass at Nyquist and a `WaveShaperNode` without a
   curve (both pass-through by spec), so a sound with nothing on sounds as before.
 - **Level**: drive pushes harder into the curve and turns the output down
-  (`driveGains`). Measured in Chrome on the acid lead, saturation, clip and
-  wavefold stay within ±2 dB of the bypass from 0 to 100 % (wavefold needed its
-  own correction: it read 2.6 dB hot at 0 % and 6.6 dB quiet at 100 %). Bitcrush
-  goes from 8 bits (0 %) to 2 (100 %) at full scale and doesn't change the level.
+  (`driveGains`): first back to the clean peak (measured in Chrome on the acid
+  lead, saturation, clip and wavefold stay within ±2 dB of the bypass from 0 to
+  100 %; wavefold needed its own correction: it read 2.6 dB hot at 0 % and
+  6.6 dB quiet at 100 %), then **under it** (`DRIVE_TRIM`): matching the peak
+  is not matching the ear, since the new harmonics land where hearing is most
+  sensitive, so a driven sound now plays 1-5 phon quieter than clean. Bitcrush
+  goes from 8 bits (0 %) to 2 (100 %) at full scale and only takes that trim.
+  See [Loudness](#loudness).
 - **Vowel** (Strudel's `vowel`): three bandpasses in parallel at A, E, I, O
   or U's formants, Q 4 + resonance, the LFO moving all three. Each vowel's
   levels carry its own makeup: measured in Chrome on the melodic lead, all five
@@ -1682,7 +1686,11 @@ theme.
   `click`, a synth's `bright`) and **length** the `decay`/`sweep` ones, 15 % of
   the slider's range per unit (in octaves where the range has no 0); **drive**
   and **motion** set the insert's distortion and its phaser/filter LFO (motion
-  never on a kick or a bass: it muddies the low end). A melodic sound may switch
+  never on a kick or a bass: it muddies the low end). The AI drives gently,
+  from its own amounts (`AI_DRIVE`, per distortion and drive unit: soft 25-50 %,
+  hard 20-40 %, fold 10-30 %, crush 20-50 %), never from the factory's 40 %,
+  and the kick and the bass get 60 % of them; +1 on a clean sound is a soft
+  clip, +2 a hard one where the layer takes it. A melodic sound may switch
   to a synth of its own group. Everything is computed from the **seed's dress
   and the factory insert**, never from the live values, so a plan gives the
   same sound whatever came before it, which is what lets a link replay it; only
@@ -1709,9 +1717,10 @@ theme.
   answered a 1/8, a dotted 1/8 or a 1/4 later; melodic sounds only). `""` or 0
   leaves the factory's. They are named choices for the same reason the macros
   are, and `restyle()` maps them onto values (`RES_AT`, `SWEEP_DEPTH`,
-  `ENV_PER`, …). The low end takes few: the kick only `distortion`, the bass a
-  lowpass with `cutoff`, `res`, `env` and `distortion` (no sweep, swing or
-  echo: they muddy it), checked by `fits()`. A dress with any tweak rebuilds
+  `ENV_PER`, …). The low end takes few: the kick only a soft `distortion`, the bass a
+  lowpass with `cutoff`, `res`, `env` and a soft or hard `distortion` (no
+  sweep, swing, echo, fold or crush: they muddy it), and a pad no fold
+  (`DRIVES`), all checked by `fits()`. A dress with any tweak rebuilds
   every key the tweaks reach from the factory insert (and the factory echo), so
   a new dress replaces the last one whole; a dress with none (Media) touches
   only the macros' keys, exactly as before.
@@ -2305,6 +2314,133 @@ Without the limiter, everything stacked went to +1.5 dBFS. The compressor is
 gentle on purpose (-10 dB, 4:1, knee 6, 3 ms / 150 ms: Web Audio's defaults,
 -24 dB 12:1, would flatten the dynamics a single layer has to let through);
 after it comes a limiter (-1.5 dB, 20:1, knee 0, 1 ms / 80 ms) and a 0.8 trim.
+
+These figures are the voices' own levels. The balance a sound starts at sits
+on top of them, set by ear: see [Loudness](#loudness).
+
+### Loudness
+
+Every sound's starting volume is set **by ear**, not by its peak or its RMS
+(`audio/loudness.js`): the leads and pads used to bury the kick, some of them
+reading twice as loud, and a synth swap could jump 10 dB.
+
+**How it is measured.** Every factory sound was rendered in Chrome
+(`OfflineAudioContext`, 48 kHz, 145 BPM, voice → insert → lane gain at its layer
+level, 3 passes of its part with the first one dropped so tails wrap) and run
+through a loudness model built from these standards and studies:
+
+1. **Equal loudness.** The ear does not hear every frequency alike: Fletcher
+   and Munson's curves (1933), re-measured by Robinson and Dadson (1956) and
+   standardised as **ISO 226:2003** (Suzuki and Takeshima, 2004), show it is
+   most sensitive around 3-4 kHz and far deafer in the lows, and that the
+   difference shrinks as the level rises. Each third-octave band (20 Hz to
+   12.5 kHz, the ISO 226 frequencies; above 14 kHz rolled off 18 dB/octave) of
+   each 171 ms window (Hann, hop 85 ms) gets its own loudness level in phon
+   from ISO 226's formula **at that band's own SPL** (0 dBFS taken as 95 dB
+   SPL: loud listening), so a quiet bass is weighed as the deaf lows it is and
+   a loud one gains on the mids, as it does in the ear.
+2. **Summing the bands.** Phons become sones (Stevens' scale, 1936: twice as
+   loud every 10 phon above 40) and the bands are summed by **Stevens' Mark VI**
+   (1961; ISO 532:1975 method A): the loudest band plus 0.3 of the rest, the
+   third-octave masking factor. A broad sound (a supersaw) therefore reads
+   louder than a pure tone of the same power, as it sounds.
+3. **Over time.** A loop counts by its **N5**, the loudness it exceeds 5 % of
+   the time, the percentile ISO 532-1:2017 (Zwicker's method; Zwicker and
+   Fastl, *Psychoacoustics*) uses for sounds that change: a kick's pulses weigh
+   by how they hit, a pad's drone by how it holds, and both compare. One-shot
+   FX use the gated mean instead (BS.1770-style gating, -10 relative), since
+   most of their render is silence.
+
+ITU-R BS.1770 (LUFS, K-weighting) was measured alongside and disagreed where it
+matters: its K-weighting is a fixed high shelf, blind to the 3 kHz peak and
+to level, so it read a driven sub bass 1.4 LU *quieter* while the ear model,
+and the ear, heard it 14 phon louder. Skovenborg and Nielsen (AES 117th
+Convention, 2004) found simple models like these track listeners about as well
+as heavier ones (Moore, Glasberg and Baer, 1997; ISO 532-2) on music; the
+numbers here are for balancing sounds against each other, not absolute.
+Calibration: a 1 kHz sine at -15 dBFS RMS reads 80 phon, a 50 Hz one at the
+same level 44, as ISO 226 says.
+
+**What it sets.** Two tables of dB, in `loudness.js`, applied to the lane
+gain between the layer's level and the sound's own volume (which the autopilot
+rides, so it could not hold them), in lanes, FX shots, auditions and WAV
+exports alike:
+
+- `SYNTH_DB` matches the instruments of a group to each other, fitted on every
+  part of that group played by every synth of it: a swap (the seed's dress, the
+  ✨ AI's, the editor's select) now moves the level by under 1 phon, where the
+  basses spanned 19 phon (Organ bass to Reese) and the leads 9 (Piano to
+  Squelch). The lows grow ~1.3 phon per dB, so the bass group took two passes.
+- `DB` sets each factory sound against the kicks, the reference, which keep
+  0 dB: the bass 1 phon under them, classics 2, leads 3, pads 6. Percussion and
+  glitches are only pulled down where they pass 4 and 5 under (snare, clap,
+  keys, zips, metal, ring: a short hit already reads quieter here than it
+  sounds, so nothing quiet was raised), and FX only where a one-shot passes
+  80 phon (tape stop). No boost takes a sound past -1 dBFS (it held the
+  organ-bass House and the sub basses a few phon short).
+
+A user's sample replaces the voice that was measured, so it skips both.
+
+N5 in phon, factory sounds at their layer level, before and after:
+
+| layer | before: median (range) | after |
+|---|---|---|
+| kick | 86.5 (82.8-88.6) | unchanged: the reference |
+| bass | 84.0 (70.7-86.5) | 85.6 (80.7-85.7) |
+| lead | 88.2 (81.3-97.3) | 83.6 (83.5-83.7) |
+| pad | 86.7 (85.2-96.7) | 80.6 (80.5-80.8) |
+| classic | 90.3 (87.0-100.5) | 84.6 (84.5-84.7) |
+| perc | 75.6 (64.8-85.6) | 75.8 (64.5-82.7) |
+| glitch | 81.1 (66.1-85.5) | 81.1 (66.8-81.7) |
+| fx (gated mean) | 76.5 (71.0-86.6) | 76.6 (71.1-79.9) |
+
+The loudest before: Am7 stabs on the analog (`lead.techno`) 97.3, the
+supersaw pad 96.7, the Toccata 100.5 (peaking +7 dBFS into the master) and
+Squelch 93.2, against kicks at 86.5. 10 phon is twice as loud.
+
+**Distortion.** `driveGains` matched a driven sound's peak to its clean one,
+but the harmonics it adds fall in the ear's most sensitive band, so the ear
+heard it louder anyway: on ten factory sounds, soft and hard clipping added up
+to +6 phon at 100 %, wavefold +9, and a sub bass (`bass.prog`) +14 at soft
+100 % and +20 folded, while BS.1770 read it 1.4 LU quieter. `DRIVE_TRIM`
+(dB under the clean sound: `at + per × amount`, at least 1) was fitted so the
+median of those ten plays a little under its clean self, as a saturated sound
+should:
+
+| N5 change vs clean, median of 10 sounds | 20 % | 40 % | 60 % | 75 % | 100 % |
+|---|---|---|---|---|---|
+| soft | -1.4 | -1.9 | -2.1 | -2.1 | -3.7 |
+| hard | -1.1 | -1.9 | -1.8 | -2.4 | -3.7 |
+| fold | -1.6 | -1.4 | -2.1 | -1.8 | -3.6 |
+| crush | -1.6 | -2.2 | -2.1 | -2.5 | -1.8 |
+
+The spread around that median is the source's, not the curve's: an
+already-bright saw loses up to 9 phon (it gains few new harmonics), a hi-hat or
+a sine sub still gains 4-10 at the top amounts. That is why the ✨ AI keeps to
+low amounts and never folds or crushes the low end (see
+[Dress and parts](#dress-and-parts)).
+
+**A new sound** needs a measurement before it gets a row: render it and its
+layer's neighbours the same way, and set its `DB` so its N5 lands on its
+layer's target. No CI does this; the harness lived in a scratch directory
+(`playwright-core` driving Chrome, the model above in the page).
+
+**Sources.** H. Fletcher and W. A. Munson, "Loudness, its definition,
+measurement and calculation", *JASA* 5 (1933) 82-108. D. W. Robinson and R. S.
+Dadson, "A re-determination of the equal-loudness relations for pure tones",
+*Br. J. Appl. Phys.* 7 (1956) 166-181. ISO 226:2003, *Normal equal-loudness-level
+contours*; Y. Suzuki and H. Takeshima, "Equal-loudness-level contours for pure
+tones", *JASA* 116 (2004) 918-933. S. S. Stevens, "A scale for the measurement
+of a psychological magnitude: loudness", *Psychological Review* 43 (1936)
+405-416. S. S. Stevens, "Procedure for calculating loudness: Mark VI", *JASA*
+33 (1961) 1577-1585; ISO 532:1975 method A. ISO 532-1:2017 (Zwicker's method);
+E. Zwicker and H. Fastl, *Psychoacoustics: Facts and Models*. B. C. J. Moore,
+B. R. Glasberg and T. Baer, "A model for the prediction of thresholds,
+loudness, and partial loudness", *J. Audio Eng. Soc.* 45 (1997) 224-240;
+ISO 532-2:2017. ITU-R BS.1770, *Algorithms to measure audio programme loudness
+and true-peak audio level*. E. Skovenborg and S. H. Nielsen, "Evaluation of
+different loudness models with music and speech material", AES 117th
+Convention (2004).
 
 ## Deploy
 
