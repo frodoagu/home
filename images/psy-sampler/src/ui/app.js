@@ -176,6 +176,7 @@ import { BRUSH, EUCLID, createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
+import { masonry } from "./masonry.js";
 import { sortable } from "./sortable.js";
 import { visualsButton } from "../visuals/launch.js";
 
@@ -898,6 +899,7 @@ export function mountApp(root, engine, opts = {}) {
       },
     }),
   );
+  const bricks = masonry(layersMain);
 
   // Cloud save: a newer copy from the server replaces the workspace like an
   // imported preset does, keeping what plays.
@@ -2391,6 +2393,7 @@ export function mountApp(root, engine, opts = {}) {
     frame = 0;
     engine.onBar(null);
     sorters.forEach((s) => s.destroy());
+    bricks.destroy();
     account?.destroy();
     samplesPanel?.destroy();
     sampleOffs.forEach((off) => off?.());

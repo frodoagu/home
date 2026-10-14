@@ -3024,6 +3024,18 @@ html:has(dialog.help[open], dialog.intro[open]) {
   }
 }
 
+/* In columns, the layers stack like bricks (masonry.js sets --span). */
+@media (orientation: landscape) and (min-width: 1000px), (orientation: landscape) and (max-height: 500px) {
+  .layers {
+    grid-auto-rows: 1px;
+    grid-auto-flow: row dense;
+    row-gap: 0;
+  }
+  .layer {
+    grid-row-end: span var(--span);
+  }
+}
+
 @media (orientation: landscape) and (min-width: 1800px) {
   .app {
     max-width: 2100px;
