@@ -166,6 +166,7 @@ import {
 } from "../workspace.js";
 import { HP_OPEN, LP_OPEN, djCutoffs } from "../audio/insert.js";
 import { amountSlider, checkbox, download, el, select, slider, slug } from "./dom.js";
+import { brandMark } from "./brands.js";
 import { mountAccount } from "./account.js";
 import { BRUSH, EUCLID, createEditor } from "./editor.js";
 import { createHelp } from "./help.js";
@@ -494,18 +495,39 @@ export function mountApp(root, engine, opts = {}) {
     placeholder: LMSTUDIO_URL,
   });
   const endpointBox = field("ai-endpoint", tx.ai.endpoint, endpointInput, tx.ai.endpointTitle);
-  // A linked account: its API key, kept in this browser only (ai.js prefs).
+  // A linked account: a card with the provider's mark, its key page and the
+  // key, which stays in this browser only (ai.js prefs).
   const keyInput = el("input", {
     type: "password",
     id: "ai-key",
     class: "ai-input",
     spellcheck: "false",
     autocomplete: "off",
-    placeholder: tx.ai.keyPlaceholder,
   });
+  const linkBtn = el("button", { type: "button", class: "ai-link-go", text: tx.ai.link });
   const unlinkBtn = el("button", { type: "button", class: "ghost ai-unlink", text: tx.ai.unlink });
-  const keyLink = el("a", { class: "ai-getkey", target: "_blank", rel: "noopener noreferrer", text: tx.ai.getKey });
-  const keyBox = field("ai-key", tx.ai.key, el("span", { class: "ai-model-pick" }, keyInput, unlinkBtn, keyLink), "");
+  const keyMark = el("span", { class: "ai-link-mark" });
+  const keyName = el("strong", { class: "ai-link-name" });
+  const keyState = el("span", { class: "ai-link-state" });
+  const keyLink = el("a", { class: "ai-getkey", target: "_blank", rel: "noopener noreferrer" });
+  const keySteps = el(
+    "ol",
+    { class: "ai-link-steps" },
+    el("li", {}, keyLink),
+    el("li", {}, el("label", { class: "ai-link-paste", for: "ai-key" }, el("span", { text: tx.ai.key }), keyInput, linkBtn)),
+  );
+  const keySafe = el("p", { class: "ai-link-safe" });
+  const keyBox = el(
+    "div",
+    { class: "ai-link" },
+    el(
+      "div",
+      { class: "ai-link-card" },
+      el("div", { class: "ai-link-head" }, keyMark, keyName, keyState, unlinkBtn),
+      keySteps,
+      keySafe,
+    ),
+  );
   // The models LM Studio or the account lists (ai.js known), read again on every start or ↻.
   const modelInput = el("select", { id: "ai-model", "data-control": "ai-model" });
   const modelsBtn = el("button", { type: "button", class: "ghost ai-models", text: "↻" });
@@ -530,7 +552,7 @@ export function mountApp(root, engine, opts = {}) {
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, endpointBox, keyBox, modelBox, levelBox, setBox, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, keyBox, endpointBox, modelBox, levelBox, setBox, vibeBox),
     vibeNote,
   );
 
@@ -2659,6 +2681,9 @@ export function mountApp(root, engine, opts = {}) {
   };
   const modelOf = (engine) => (isCloud(engine) ? state.aiPrefs.models[engine] : state.aiPrefs.model);
   const keyOf = (engine) => (isCloud(engine) ? state.aiPrefs.keys[engine] : "");
+  // What the provider said of each key when it last started: engine -> { key, state }.
+  const checks = {};
+  const checkOf = (engine) => (checks[engine]?.key === keyOf(engine) ? checks[engine].state : null);
   // What the engine needs to be asked: an endpoint, or a linked account's key.
   const reach = (engine) =>
     isCloud(engine) ? { key: keyOf(engine), model: modelOf(engine) } : { endpoint: state.aiPrefs.endpoint, model: modelOf(engine) };
@@ -2704,13 +2729,7 @@ export function mountApp(root, engine, opts = {}) {
     keyBox.hidden = !cloud;
     modelBox.hidden = engine === "chrome";
     if (document.activeElement !== endpointInput) endpointInput.value = endpoint;
-    if (cloud) {
-      keyBox.title = tx.ai.keyTitle(name);
-      keyLink.href = CLOUDS[engine].keys;
-      unlinkBtn.hidden = !keyOf(engine);
-      unlinkBtn.title = tx.ai.unlinkTitle(name);
-      if (document.activeElement !== keyInput) keyInput.value = keyOf(engine);
-    }
+    if (cloud) showKey(engine, name);
     modelBox.title = cloud ? tx.ai.modelTitleCloud(name) : tx.ai.modelTitle;
     modelsBtn.title = tx.ai.modelsRefresh(name);
     modelsBtn.setAttribute("aria-label", modelsBtn.title);
@@ -2718,6 +2737,29 @@ export function mountApp(root, engine, opts = {}) {
     if (document.activeElement !== vibeInput) vibeInput.value = vibe;
     noteVibe();
     showSection();
+  }
+
+  // The key card: its mark and where to get a key; once linked, the key's
+  // last four and what the provider said of it, the steps again if it refused.
+  function showKey(engine, name) {
+    const key = keyOf(engine);
+    const check = key ? (checkOf(engine) ?? "ok") : "none";
+    if (keyBox.dataset.cloud !== engine) {
+      keyBox.dataset.cloud = engine;
+      keyMark.replaceChildren(brandMark(engine) ?? "");
+      keyName.textContent = name;
+      const site = CLOUDS[engine].keys.split("/")[2]; // the host
+      keyLink.replaceChildren(brandMark(engine, 16) ?? "", el("span", { text: tx.ai.getKey(site) }));
+      keyLink.href = CLOUDS[engine].keys;
+      keyInput.placeholder = CLOUDS[engine].looks;
+      keySafe.textContent = tx.ai.keySafe(name);
+      unlinkBtn.title = tx.ai.unlinkTitle(name);
+    }
+    keyBox.dataset.check = check;
+    keyState.textContent = check === "ok" ? `${tx.ai.checks.ok} · ••••${key.slice(-4)}` : tx.ai.checks[check];
+    keySteps.hidden = Boolean(key) && check !== "rejected";
+    unlinkBtn.hidden = !key;
+    if (document.activeElement !== keyInput) keyInput.value = key;
   }
 
   // Automatic, then what LM Studio or the account has; a saved model it no
@@ -2819,6 +2861,13 @@ export function mountApp(root, engine, opts = {}) {
       status(tx.ai.needKey(name));
       return;
     }
+    const key = keyOf(engine);
+    // An answer for a key replaced since is not this key's.
+    const checked = (check) => {
+      if (cloud && (check === "checking" || checks[engine]?.key === key)) checks[engine] = { key, state: check };
+    };
+    checked("checking");
+    if (cloud) showAi();
     const started =
       engine === "chrome"
         ? ai.chrome.start((done) => alive && status(tx.ai.downloading(Math.round(done * 100))), systemFor())
@@ -2826,6 +2875,8 @@ export function mountApp(root, engine, opts = {}) {
     started.then(
       () => {
         if (engine === "chrome") state.chrome = "available"; // downloaded now
+        checked("ok");
+        if (alive) showAi();
         if (!alive || !state.aiPrefs.on) return;
         showModels();
         const known = knownOf(engine);
@@ -2835,10 +2886,12 @@ export function mountApp(root, engine, opts = {}) {
         else planAhead();
       },
       (err) => {
-        if (!alive || !state.aiPrefs.on) return;
-        showModels();
         // A provider answers a bad key with 400 (Gemini), 401 or 403.
         const rejected = [400, 401, 403].includes(err?.status);
+        checked(rejected ? "rejected" : "failed");
+        if (alive) showAi();
+        if (!alive || !state.aiPrefs.on) return;
+        showModels();
         status(
           engine === "chrome"
             ? tx.ai.chromeFailed
@@ -3137,7 +3190,9 @@ export function mountApp(root, engine, opts = {}) {
     status(state.aiPrefs.set ? tx.ai.setSaved(tx.ai.sets[state.aiPrefs.set]) : tx.ai.setOpen);
   });
   vibeInput.addEventListener("input", noteVibe);
-  keyInput.addEventListener("change", () => {
+  // Pasted, typed then Enter or Vincular: the same key twice is checked once,
+  // unless the provider refused it or didn't answer.
+  function linkKey() {
     const engine = engineNow();
     if (!isCloud(engine)) return;
     const key = cleanKey(keyInput.value);
@@ -3146,8 +3201,17 @@ export function mountApp(root, engine, opts = {}) {
       keyInput.value = keyOf(engine);
       return;
     }
+    if (key === keyOf(engine) && ["checking", "ok"].includes(checkOf(engine))) return;
     setPrefs({ keys: { ...state.aiPrefs.keys, [engine]: key } });
     startAi();
+  }
+  keyInput.addEventListener("change", linkKey);
+  keyInput.addEventListener("input", (e) => {
+    if (e.inputType === "insertFromPaste") linkKey();
+  });
+  linkBtn.addEventListener("click", (e) => {
+    e.preventDefault(); // inside the paste step's label
+    linkKey();
   });
   unlinkBtn.addEventListener("click", (e) => {
     e.preventDefault(); // inside the field's label

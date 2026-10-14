@@ -944,6 +944,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
 .ai[hidden],
 .ai-panel[hidden],
 .ai-field[hidden],
+.ai-link[hidden],
+.ai-link-steps[hidden],
 .ai-unlink[hidden] {
   display: none;
 }
@@ -1043,20 +1045,143 @@ html:has(dialog.help[open], dialog.intro[open]) {
   padding: 2px 8px;
 }
 
-#ai-key {
-  width: 22ch;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .ai-unlink,
 .ai-apply {
   padding: 2px 8px;
 }
 
+/* A linked account: a card on its own line, tinted by the provider; the
+   steps to link fold away once the key took. */
+.ai-link {
+  --brand: var(--text);
+  flex: 1 1 100%;
+}
+
+.ai-link-card {
+  display: grid;
+  gap: 10px;
+  max-width: 68ch;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  background: color-mix(in srgb, var(--brand) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--border));
+  border-radius: 10px;
+}
+
+.ai-link[data-cloud="anthropic"] {
+  --brand: #d97757;
+}
+
+.ai-link[data-cloud="gemini"] {
+  --brand: #7b6fd0;
+}
+
+.ai-link-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.ai-link-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ai-link-name {
+  font-size: 0.95rem;
+}
+
+.ai-link-state {
+  padding: 1px 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.ai-link[data-check="ok"] .ai-link-state {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+}
+
+.ai-link[data-check="rejected"] .ai-link-state {
+  color: var(--stop);
+  border-color: color-mix(in srgb, var(--stop) 45%, var(--border));
+}
+
+.ai-link[data-check="failed"] .ai-link-state {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+
+.ai-link .ai-unlink {
+  margin-left: auto;
+}
+
+.ai-link-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.ai-link-steps li::marker {
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .ai-getkey {
-  align-self: center;
-  white-space: nowrap;
-  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--surface);
+  border: 1.5px solid color-mix(in srgb, var(--brand) 55%, var(--border));
+  border-radius: 8px;
+}
+
+.ai-getkey:hover {
+  border-color: var(--brand);
+}
+
+.ai-link-paste {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--muted);
+}
+
+#ai-key {
+  flex: 1 1 18ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.ai-link-go {
+  padding: 4px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--on-current);
+  background: var(--current);
+  border: 1.5px solid var(--current);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.ai-link-safe {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 #ai-model {

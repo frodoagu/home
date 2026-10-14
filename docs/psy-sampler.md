@@ -1785,13 +1785,20 @@ status line says to download it or pick another. Two gates sit in front of it:
   psy.agu.com.ar to localhost asks the listener's permission.
 
 **A linked account** (OpenAI, Anthropic, Google Gemini): pick it under
-**Engine** and paste an API key in **API key** (a password field; *Get one*
-opens the provider's key page). "Linking" is just that: none of the three
-offers a sign-in that lets a third-party page call its models on the user's
-bill, so the key is the account. It is checked right away by listing the
-key's models (`start()`), and the status line says whether it took: a 400
-(Gemini's answer to a bad key), 401 or 403 reads as a rejected key, anything
-else as a provider that didn't answer. **Unlink** deletes it from the browser.
+**Engine** and a card shows up under it with the provider's mark
+(`src/ui/brands.js`, Simple Icons paths, CC0) and two steps: a button to the
+provider's key page, then a password field to paste the key in. Pasting links
+it at once (so do Enter and **Vincular**); a line under the steps says where
+the key lives and where it goes. "Linking" is just that: Anthropic forbids
+its subscription sign-in outside its own apps, Sign in with ChatGPT needs a
+registered OAuth client, and Gemini's needs a GCP project, so the key is the
+account. It is checked right away by listing the key's models (`start()`),
+and the card's badge says what the provider answered for THAT key (`checks`,
+per engine and key, not saved): checking, linked (with its last four), a
+rejected key (a 400 — Gemini's answer to a bad key —, 401 or 403; the steps
+come back to paste another) or no answer. The same key is not checked twice
+unless it was refused or got no answer. **Unlink** deletes it from the
+browser.
 
 - The key lives only in `psy-sampler:ai` (`cleanKey`: printable ASCII, no
   spaces, 8-300 chars), one per provider, and goes only to that provider's API

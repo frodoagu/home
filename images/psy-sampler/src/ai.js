@@ -21,11 +21,11 @@ import { LEVELS, LEVEL_DEFAULT, SET_LENGTHS, SYSTEM } from "./planner.js";
 
 export const LMSTUDIO_URL = "http://localhost:1234/v1";
 
-// Where to get a key, and which models Automatic prefers (fast and cheap).
+// Where to get a key, how its keys start, and which models Automatic prefers (fast and cheap).
 export const CLOUDS = {
-  openai: { keys: "https://platform.openai.com/api-keys", fast: /mini/ },
-  anthropic: { keys: "https://console.anthropic.com/settings/keys", fast: /haiku/ },
-  gemini: { keys: "https://aistudio.google.com/apikey", fast: /flash/ },
+  openai: { keys: "https://platform.openai.com/api-keys", looks: "sk-proj-…", fast: /mini/ },
+  anthropic: { keys: "https://console.anthropic.com/settings/keys", looks: "sk-ant-…", fast: /haiku/ },
+  gemini: { keys: "https://aistudio.google.com/apikey", looks: "AIza…", fast: /flash/ },
 };
 export const CLOUD_IDS = Object.keys(CLOUDS);
 export const ENGINES = ["chrome", "lmstudio", ...CLOUD_IDS];
