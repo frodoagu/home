@@ -25,7 +25,9 @@
 // model on a laptop (Gemini Nano) answers in time, the sections and their
 // sounds only: no form, no dress, no parts. mid adds those; high also has
 // the model build each sound's filter, sweep, distortion, tremolo, autopan
-// and echo (dress.js TWEAKS). `describe` off lists the sounds by id alone.
+// and echo (dress.js TWEAKS); max also tells it each sound's role (ROLE)
+// and the listener's own words for it, where they wrote some
+// (`descriptions`). `describe` off lists the sounds by id alone.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { CLOSE_MAX, OUTRO, SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { SYNTHS } from "./audio/params.js";
@@ -35,13 +37,14 @@ import { DEGREES, PART_LENGTHS, REST } from "./editing.js";
 import { laneKey } from "./selection.js";
 import en from "./i18n/en.js";
 
-export const LEVELS = ["low", "mid", "high"];
+export const LEVELS = ["low", "mid", "high", "max"];
 export const LEVEL_DEFAULT = "mid";
 const levelOf = (level) => (LEVELS.includes(level) ? level : LEVEL_DEFAULT);
 // What a level asks the model to answer besides the sounds.
 export const asksForm = (level) => levelOf(level) !== "low";
 const dresses = (level) => levelOf(level) !== "low";
-const tweaks = (level) => levelOf(level) === "high";
+const tweaks = (level) => ["high", "max"].includes(levelOf(level));
+const tells = (level) => levelOf(level) === "max";
 
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
 // An intro opens a track; a plan always picks what follows one.
@@ -164,6 +167,94 @@ export const CHARACTER = {
   "glitch.comb": "metallic, alien, twisted",
 };
 
+// Level max: what each sound does in a track, a sentence a model can arrange
+// by: its energy, the sections it fits and what it sits well with.
+// CHARACTER says how it sounds; this, where it goes.
+export const ROLE = {
+  "kick.punchy": "the full-on workhorse: mid-high energy, carries grooves and peaks under a rolling bass",
+  "kick.long": "a warm, roomy kick for slower, deeper grooves; leaves little space for a busy bass",
+  "kick.tok": "a hi-tech click that drives fast, busy tracks; pairs with a jumping FM bass",
+  "kick.fullon": "big and round: peak-time energy, under rolling basses and euphoric leads",
+  "kick.techno": "a hard 909 for dark, hypnotic grooves; peaks without needing a melody",
+  "kick.rumble": "a heavy, rumbling low end for dark, driving techno; best with sparse, dubby parts above",
+  "kick.prog": "soft and patient: intros, long grooves and the progressive lift",
+  "kick.psytech": "dry and tight, for minimal, hypnotic grooves that build slowly",
+  "kick.dark": "a short, sharp tok for dark, fast night tracks; makes room for a busy bass",
+  "kick.house": "a round four-on-the-floor for warm, groovy house; relaxed energy",
+  "kick.techHouse": "a dry, punchy kick for groovy tech house, under plucked bass and shuffled hats",
+  "bass.offbeat": "the lightest bass: one note per beat, for intros, grooves and air",
+  "bass.rolling": "the classic psy roll: fills every gap, the engine of grooves and peaks",
+  "bass.rollingOct": "a brighter roll that lifts the energy: builds and peaks",
+  "bass.gallop": "a bouncing gallop: mid energy, a lighter alternative to the full roll",
+  "bass.fm": "a gritty, driving roll for full-on grooves and peaks",
+  "bass.prog": "a deep sub on the offbeats, spacious: intros, progressive grooves and breakdowns with a beat",
+  "bass.techno": "a dark, syncopated reese that hypnotizes; long grooves and dark peaks",
+  "bass.hitech": "fast and twisted: high-energy hi-tech peaks, very busy",
+  "bass.phrygian": "a dark, exotic roll that turns on its B-flat: dark grooves and peaks",
+  "bass.house": "a funky organ bass that bounces: warm house grooves",
+  "bass.techHouse": "short, groovy plucks around the offbeat: tech house grooves and peaks",
+  "bass.deep": "round and airy, long notes: deep, laid-back grooves",
+  "bass.wavetable": "a biting roll that opens on every note: driving grooves and peaks with edge",
+  "perc.hat": "the offbeat open hat: light lift in any section, the first percussion in",
+  "perc.chat": "a tight, quiet tick: minimal grooves, intros and breakdowns",
+  "perc.shaker": "continuous 16ths that keep things moving: grooves and peaks",
+  "perc.clap": "a backbeat on 2 and 4: adds punch to grooves and peaks",
+  "perc.snare": "a backbeat with a roll: tension in builds, punch in peaks",
+  "perc.ride": "a metallic, driving ride: raises the energy in peaks",
+  "perc.toms": "tuned tribal toms with a fill: goa grooves and peaks, busy",
+  "perc.hat16": "relentless 16th hats: high energy, builds and peaks",
+  "perc.rim": "a dry syncopated rim: groove without weight, minimal or house",
+  "perc.keys": "an odd metallic jingle: quirky colour, sparse, any groove",
+  "perc.shuffle": "swung hats with a human groove: house and tech house",
+  "perc.bongos": "latin bongos: warm, organic groove for house and progressive",
+  "perc.euclid5": "an off-grid rim pattern: hypnotic, tribal, minimal grooves",
+  "perc.euclid7": "a busier off-grid shaker: hypnotic momentum in grooves and peaks",
+  "lead.acid": "the 303 line: hypnotic and driving, grooves and peaks, rises with filter motion",
+  "lead.arp": "a bright repeating arpeggio: energy and movement in builds and peaks",
+  "lead.arp3": "a light 3-against-4 pluck that drifts: progressive grooves, intros and breakdowns",
+  "lead.melodic": "a slow, emotional saw melody: breakdowns and the theme of a track",
+  "lead.stabs": "euphoric supersaw chord stabs: peaks and big moments",
+  "lead.zap": "falling zaps: trippy, high-energy peaks and hi-tech",
+  "lead.bell": "a clear FM bell figure: melodic and light, breakdowns, intros and progressive grooves",
+  "lead.acidPhryg": "a darker, twisted 303: dark grooves and night peaks",
+  "lead.techno": "a dub techno chord stab with space: minimal, dark grooves",
+  "lead.bits": "a lo-fi chiptune line: quirky colour in hi-tech or playful grooves",
+  "lead.chirp": "a playful falling chirp on the offbeats: trippy hi-tech grooves",
+  "lead.soaring": "a sliding, uplifting melody: the euphoric lift in builds, peaks and breakdowns",
+  "lead.grid": "a deep pluck with written-in echo: hypnotic progressive grooves",
+  "lead.vowel": "a weird talking lead: trippy, dark grooves and peaks",
+  "lead.rubber": "a bendy, funky lead: playful grooves, tech house to hi-tech",
+  "lead.squelch": "a squelchy full-on line: driving peaks",
+  "lead.insect": "an alien, metallic chatter: dark and hi-tech peaks, twisted",
+  "lead.morph": "an evolving polymetric phrase: long hypnotic grooves that never repeat the same way",
+  "lead.chaos": "a wandering, unpredictable pluck: hypnotic grooves and strange breakdowns",
+  "lead.piano": "classic house piano chords: uplifting, the house peak",
+  "lead.organ": "a retro organ stab on the offbeats: groovy house and tech house",
+  "pad.chord": "a warm minor chord bed: any section, gentle, breakdowns and intros",
+  "pad.prog": "a tense Phrygian move: dark builds and breakdowns",
+  "pad.drone": "a low breathing drone: dark intros and breakdowns, or under a minimal groove",
+  "pad.air": "tuned wind, barely a pad: airy intros, minimal grooves, space",
+  "pad.sus": "a hopeful suspended chord resolving: uplifting builds and breakdowns",
+  "pad.dark": "an ominous semitone cluster: dark tension in builds and breakdowns",
+  "pad.epic": "the epic i-VI-VII progression: euphoric breakdowns and peaks",
+  "pad.supersaw": "a huge trance chord: euphoric peaks and the big breakdown",
+  "pad.fifths": "open hollow fifths, no major or minor: hypnotic, fits any mood",
+  "pad.deep": "jazzy, warm ninth chords: deep house and laid-back grooves",
+  "pad.grains": "an ethereal vocal cloud: intros, breakdowns, dreamy moments",
+  "pad.glass": "inharmonic glass bells: alien shimmer for intros, breakdowns and dark grooves",
+  "glitch.stutter": "bursts before the kick: tension, builds and busy peaks",
+  "glitch.blips": "sparse computer bleeps: playful colour in grooves",
+  "glitch.zips": "a zap before every kick: energy in peaks",
+  "glitch.crush": "a lo-fi falling crunch: dark grooves",
+  "glitch.metal": "harsh metallic hits: dark, industrial peaks",
+  "glitch.ring": "a robotic ring-mod voice: weird, dark grooves",
+  "glitch.crackle": "quiet digital dust: texture for intros, breakdowns and minimal grooves",
+  "glitch.rise": "a rising bwip: lifts builds and peaks",
+  "glitch.tape": "a tape stop at the loop's end: drama in builds, sparse",
+  "glitch.lasers": "lasers on every offbeat: intense, trippy peaks",
+  "glitch.comb": "a bending metallic comb: alien, twisted texture in dark grooves and breakdowns",
+};
+
 // What each style is, in the words that make a model arrange it: the genre
 // and its signature sounds. en.styles names a style, this says how it goes.
 export const GENRE = {
@@ -256,13 +347,18 @@ export function briefOf({ style, bpm, vibe = "", genre = "" }) {
   return lines.join("\n");
 }
 
+// Level max: what the longer description of each sound holds.
+export const ROLE_LINE =
+  "Each sound also says where it goes: its energy, the sections it fits and what it sits well with. Where the listener described a sound in their own words, those come first: they may have changed it or put their own sample in it, so trust them over its name.";
+
 /**
  * The instructions of an ask: the brief of the track (briefOf), then the
- * rules of `level`: low, mid (the full ones) or high (mid's, plus the tweaks).
+ * rules of `level`: low, mid (the full ones), high (mid's, plus the tweaks)
+ * or max (high's, plus each sound's role).
  */
 export function systemOf({ level, ...track }) {
   const at = levelOf(level);
-  const rules = at === "low" ? LOW_SYSTEM : at === "high" ? `${SYSTEM}\n${tweakLine()}` : SYSTEM;
+  const rules = at === "low" ? LOW_SYSTEM : [SYSTEM, ...(tweaks(at) ? [tweakLine()] : []), ...(tells(at) ? [ROLE_LINE] : [])].join("\n");
   return `${briefOf(track)}\n${rules}`;
 }
 
@@ -329,13 +425,16 @@ export const SYSTEM = [
 ].join("\n");
 
 // "kick.dark (Dark tok: 250→62 Hz…; dark, sharp, minimal)", with a copy's
-// own name when it has one.
-function describe(id, names, synths) {
+// own name when it has one. With `descriptions` (level max), its role and
+// the listener's words for it follow.
+function describe(id, names, synths, descriptions) {
   const [name, detail] = en.variants[baseOf(id)] ?? [id, ""];
   const what = isCopy(id) ? `${names[id] ? `${JSON.stringify(names[id])}, ` : ""}a copy of ${name}` : name;
   const character = CHARACTER[baseOf(id)];
   const synth = synths[id] ? `; synth ${synths[id]}` : "";
-  return `${id} (${what}${detail ? `: ${detail}` : ""}${character ? `; ${character}` : ""}${synth})`;
+  const role = descriptions && ROLE[baseOf(id)] ? `; ${ROLE[baseOf(id)]}` : "";
+  const own = descriptions?.[id] ? `; the listener says: ${JSON.stringify(descriptions[id])}` : "";
+  return `${id} (${what}${detail ? `: ${detail}` : ""}${character ? `; ${character}` : ""}${role}${synth}${own})`;
 }
 
 // "kick.dark (dark, sharp, minimal)": the low level's, the character alone.
@@ -379,11 +478,13 @@ function synthGroups(lists, style) {
 }
 
 // Every sound the style lets the model use, by layer, and (where it dresses
-// them) the synths the melodic ones can switch to. Described in full, by
+// them) the synths the melodic ones can switch to. Described in full (at
+// level max with each one's role and the listener's `descriptions`), by
 // character alone at the low level, or by id alone.
-function soundLines(lists, style, names, synths, { level, describe: told = true }) {
+function soundLines(lists, style, names, synths, { level, describe: told = true, descriptions = {} }) {
   const lines = ["Sounds you can use, by layer:"];
-  const say = !told ? (id) => id : levelOf(level) === "low" ? (id) => brief(id, names) : (id) => describe(id, names, synths);
+  const own = tells(level) ? descriptions : null;
+  const say = !told ? (id) => id : levelOf(level) === "low" ? (id) => brief(id, names) : (id) => describe(id, names, synths, own);
   for (const layer of LOOP_LAYERS) {
     if (leftOut(style, layer.id)) continue;
     lines.push(`${layer.id}: ${poolOf(lists, layer.id, style).map(say).join(told ? "; " : ", ")}`);
@@ -407,7 +508,8 @@ function soundLines(lists, style, names, synths, { level, describe: told = true 
  * one to plan; `theme`, the lead the pilot will hold if what comes is the
  * step after the last section (themeAfter). `dressed` are the plans'
  * dress entries in force (the playing ones are recalled) and `synths` each
- * melodic sound's synth now. `closing` ({ seconds, route }, closingLine)
+ * melodic sound's synth now; `descriptions`, the listener's words for
+ * their sounds (level max). `closing` ({ seconds, route }, closingLine)
  * says 🌅 is closing the set, in place of the set's arc; a `next` outro
  * gets what the pilot does with it.
  */
@@ -423,6 +525,7 @@ export function planPrompt({
   vibe = "",
   fresh = false,
   names = {},
+  descriptions = {},
   next = null,
   formed = false,
   form = [],
@@ -454,7 +557,7 @@ export function planPrompt({
   if (theme.length && into && (!next || next === into)) {
     lines.push(`If you plan a ${into}, its lead is the theme, ${theme.join(", ")}: the pilot keeps it there whatever you pick.`);
   }
-  lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
+  lines.push(...soundLines(lists, style, names, synths, { level, describe: told, descriptions }));
   const arc = closing ? closingLine(closing) : setLine(set);
   if (arc) lines.push(arc);
   if (next === OUTRO) lines.push(OUTRO_LINE);
@@ -478,7 +581,8 @@ export function planPrompt({
  * impression, so it gets more room and time than the pilot's intro
  * (OPENING) and maybe a swell on the 1; the UI lays it over the seed's draw
  * (openWith). `active` is
- * that draw, `vibe` the listener's words; `synths` and `names` as in
+ * that draw, `vibe` the listener's words; `synths`, `names` and
+ * `descriptions` as in
  * planPrompt().
  */
 export function openingPrompt({
@@ -488,6 +592,7 @@ export function openingPrompt({
   active = {},
   vibe = "",
   names = {},
+  descriptions = {},
   synths = {},
   level = LEVEL_DEFAULT,
   describe: told = true,
@@ -507,7 +612,7 @@ export function openingPrompt({
     );
   }
   lines.push(`The seed drew: ${drawn.length ? drawn.join(", ") : "nothing"}. Keep what serves the opening, change the rest.`);
-  lines.push(...soundLines(lists, style, names, synths, { level, describe: told }));
+  lines.push(...soundLines(lists, style, names, synths, { level, describe: told, descriptions }));
   const swells = told ? OPENING_FX.map((id) => `${id} (${en.variants[id].join(": ")})`).join("; ") : OPENING_FX.join(", ");
   lines.push(`fx: a soft swell on the very first beat, or "" for none (usually none): ${swells}.`);
   if (!low) {

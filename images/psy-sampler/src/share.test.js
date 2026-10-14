@@ -85,6 +85,12 @@ describe("share links", () => {
     expect(Object.keys((await unpackSounds(await packSounds(mine))).variants)).toEqual(["perc.hat"]);
   });
 
+  it("carry the user's descriptions of the sounds, which the ✨ AI picks by", async () => {
+    const ws = { ...normalize({ descriptions: { "pad.air": "wind" } }), seed: "s" };
+    const { sounds } = readFragment(await shareFragment(ws));
+    expect((await unpackSounds(sounds)).descriptions).toEqual({ "pad.air": "wind" });
+  });
+
   it("carry the sounds banned from the autopilot, since they change what a seed plays", async () => {
     const ws = { ...normalize({ banned: ["lead.acid"] }), seed: "s" };
     const { sounds } = readFragment(await shareFragment(ws));
@@ -96,6 +102,7 @@ describe("share links", () => {
       ...normalize({
         lists: { lead: ["lead.acid~1"] },
         names: { "lead.acid~1": "Mío ✓" },
+        descriptions: { "lead.acid~1": "oscuro" },
         variants: { "perc.hat": { level: 0.5 } },
       }),
       seed: "s",
@@ -105,6 +112,7 @@ describe("share links", () => {
     expect(sounds).toMatch(/^[\w-]+$/);
     const back = await unpackSounds(sounds);
     expect(back.names).toEqual({ "lead.acid~1": "Mío ✓" });
+    expect(back.descriptions).toEqual({ "lead.acid~1": "oscuro" });
     expect(back.variants["perc.hat"].level).toBe(0.5);
     expect(back.lists.lead).toContain("lead.acid~1");
     expect(await unpackSounds(await packSounds(ws))).toEqual(back);

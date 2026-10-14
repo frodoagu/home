@@ -10,7 +10,8 @@
 // Every change goes out through onChange(next) as fresh data; the editor
 // never talks to the engine itself. The header names the variant (editable)
 // and carries the per-sound actions: duplicate, WAV, reset (the part alone,
-// or the whole sound), delete (copies).
+// or the whole sound), delete (copies). Under it, for the sounds the ✨ AI
+// may pick, the user's words for how it sounds (its level max reads them).
 import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "../audio/insert.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
 import {
@@ -47,6 +48,7 @@ import {
   rotatePart,
 } from "../editing.js";
 import { foldActive } from "../folds.js";
+import { DESCRIPTION_MAX } from "../workspace.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
 
@@ -80,6 +82,8 @@ export function createEditor({
   onClose,
   onTrigger,
   onRename,
+  description = "",
+  onDescribe = null, // the user's words for the sound changed: returns them clean; null: no field
   onDuplicate,
   onRemove,
   onWav,
@@ -386,6 +390,26 @@ export function createEditor({
     el("label", { class: "name-field" }, el("span", { text: tx.name }), name),
     el("div", { class: "editor-tools" }, ...actions.map(([b]) => b)),
   );
+  const about = [];
+  if (onDescribe) {
+    const input = el("input", {
+      type: "text",
+      class: "description-input",
+      "data-action": "description",
+      maxlength: String(DESCRIPTION_MAX),
+      placeholder: tx.descriptionHint,
+    });
+    input.value = description;
+    input.title = tx.descriptionTitle;
+    input.addEventListener("input", () => onDescribe(input.value));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+    });
+    input.addEventListener("blur", () => {
+      input.value = onDescribe(input.value);
+    });
+    about.push(el("label", { class: "description-field" }, el("span", { text: tx.description }), input));
+  }
 
   /* ---- sliders: the voice's params (or the sample's) + volume ---- */
   const voiceKnobs = el("div", { class: "knob-group" });
@@ -586,7 +610,7 @@ export function createEditor({
     );
   }
 
-  const node = el("div", { class: "editor", role: "region", "aria-label": tx.region(label), "data-editor": id }, head);
+  const node = el("div", { class: "editor", role: "region", "aria-label": tx.region(label), "data-editor": id }, head, ...about);
   const source = el("div", { class: "pickers source" }, ...sourcePicker());
 
   if (def.kind === "fx") {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LAYERS } from "./catalog.js";
 import { defaultData } from "./audio/patterns.js";
 import { SNAP_MAX } from "./snapshots.js";
-import { copyId, importSnapshots, moveItem, normalize, parsePreset, toPreset, toSnapshotFile } from "./workspace.js";
+import { DESCRIPTION_MAX, copyId, importSnapshots, moveItem, normalize, parsePreset, toPreset, toSnapshotFile } from "./workspace.js";
 
 describe("normalize", () => {
   it("fills a factory workspace from nothing", () => {
@@ -73,6 +73,15 @@ describe("normalize", () => {
     expect(ws.active).toEqual({ "lead.acid~1": "lead.acid~1", kick: "kick.long" });
   });
 
+  it("keeps the user's description of each known sound, on one line and capped", () => {
+    const ws = normalize({
+      lists: { lead: ["lead.acid~1"] },
+      descriptions: { "lead.acid~1": " dark\n\tand  wet ", "lead.acid~9": "ghost", "pad.air": "  ", "kick.long": 3, "bass.fm": "x".repeat(300) },
+    });
+    expect(ws.descriptions).toEqual({ "lead.acid~1": "dark and wet", "bass.fm": "x".repeat(DESCRIPTION_MAX) });
+    expect(normalize({}).descriptions).toEqual({});
+  });
+
   it("keeps snapshots that still play something, with sanitized data", () => {
     const ws = normalize({
       lists: { lead: ["lead.acid~1"] },
@@ -139,6 +148,7 @@ describe("snapshot files", () => {
   const source = normalize({
     lists: { lead: ["lead.arp~1"] },
     names: { "lead.arp~1": "Arp 2", "lead.acid": "Ácido" },
+    descriptions: { "lead.arp~1": "bright and busy", "pad.air": "wind" },
     variants: { "lead.arp~1": level("lead.arp", 0.3) },
     snapshots: [
       snap("snap-1", "Pico", { kick: "kick.long", "lead.arp~1": "lead.arp~1" }),
@@ -150,6 +160,7 @@ describe("snapshot files", () => {
   it("carries the snapshots and the names of the copies they play", () => {
     const out = JSON.parse(file);
     expect(out).toMatchObject({ app: "psy-sampler", kind: "snapshots", names: { "lead.arp~1": "Arp 2" } });
+    expect(out.descriptions).toEqual({ "lead.arp~1": "bright and busy" });
     expect(out.snapshots).toEqual(source.snapshots);
     expect(out.bpm).toBeUndefined();
   });
@@ -167,6 +178,7 @@ describe("snapshot files", () => {
     expect(out.lists.lead).toContain("lead.arp~1");
     expect(out.names["lead.arp~1"]).toBe("Arp 2");
     expect(out.names["lead.acid"]).toBeUndefined(); // only copies' names come along
+    expect(out.descriptions).toEqual({ "lead.arp~1": "bright and busy" });
     expect(out.variants["lead.arp~1"].level).toBe(0.5);
   });
 

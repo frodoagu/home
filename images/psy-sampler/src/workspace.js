@@ -14,11 +14,15 @@ import { RAMP_BARS, RAMP_DEFAULT } from "./tempo.js";
 export const PRESET_APP = "psy-sampler";
 export const PRESET_VERSION = 1;
 const NAME_MAX = 40;
+export const DESCRIPTION_MAX = 200;
 export const SEED_MAX = 32;
 export const SNAP_PANEL = "snap"; // the snapshots panel, sorted among the layers
 const PANELS = [...LAYER_IDS, SNAP_PANEL];
 
 export const cleanSeed = (s) => (typeof s === "string" ? s.trim().slice(0, SEED_MAX) : "");
+// One line of the user's words for a sound, as the ✨ AI reads it.
+export const cleanDescription = (s) =>
+  typeof s === "string" ? s.replace(/[\p{Cc}\s]+/gu, " ").trim().slice(0, DESCRIPTION_MAX) : "";
 
 export { layerOfVariant };
 
@@ -33,6 +37,7 @@ export { layerOfVariant };
  *   order:    layer ids and SNAP_PANEL, top to bottom
  *   lists:    { layer: variant ids in tile order, factory + copies }
  *   names:    { variant: the name the user gave it }
+ *   descriptions: { variant: how the user says it sounds, for the ✨ AI }
  *   variants: { variant: edited data } (copies always have an entry)
  *   auto:     variants the autopilot wrote or dressed (it may rewrite them)
  *   improv:   { variant: how much improvise varies it, 0-1 } (0.5 is left out)
@@ -61,6 +66,11 @@ export function normalize(raw) {
   for (const [id, name] of Object.entries(src.names ?? {})) {
     const clean = typeof name === "string" ? name.trim().slice(0, NAME_MAX) : "";
     if (known.has(id) && clean) names[id] = clean;
+  }
+  const descriptions = {};
+  for (const [id, text] of Object.entries(src.descriptions ?? {})) {
+    const clean = cleanDescription(text);
+    if (known.has(id) && clean) descriptions[id] = clean;
   }
   const variants = {};
   for (const [id, data] of Object.entries(src.variants ?? {})) {
@@ -110,6 +120,7 @@ export function normalize(raw) {
     order,
     lists,
     names,
+    descriptions,
     variants,
     auto,
     improv,
@@ -141,14 +152,19 @@ export function parsePreset(text) {
 
 export const SNAPS_KIND = "snapshots";
 
-// The snapshots alone, as a file. The names of the copies they play travel
-// along, so each copy arrives under the name it had.
+// The snapshots alone, as a file. The names and descriptions of the copies
+// they play travel along, so each copy arrives as it was.
 export function toSnapshotFile(ws) {
   const names = {};
+  const descriptions = {};
   for (const snap of ws.snapshots) {
-    for (const id of Object.values(snap.active)) if (isCopy(id) && ws.names[id]) names[id] = ws.names[id];
+    for (const id of Object.values(snap.active)) {
+      if (!isCopy(id)) continue;
+      if (ws.names[id]) names[id] = ws.names[id];
+      if (ws.descriptions?.[id]) descriptions[id] = ws.descriptions[id];
+    }
   }
-  return { app: PRESET_APP, kind: SNAPS_KIND, version: PRESET_VERSION, names, snapshots: ws.snapshots };
+  return { app: PRESET_APP, kind: SNAPS_KIND, version: PRESET_VERSION, names, descriptions, snapshots: ws.snapshots };
 }
 
 /**
@@ -167,9 +183,15 @@ export function importSnapshots(ws, text) {
       if (typeof id === "string" && isCopy(id) && isVariant(id)) (lists[layerOfVariant(id)] ??= []).push(id);
     }
   }
-  const from = normalize({ lists, names: raw.names, snapshots: raw.snapshots });
+  const from = normalize({ lists, names: raw.names, descriptions: raw.descriptions, snapshots: raw.snapshots });
 
-  const next = { ...ws, lists: structuredClone(ws.lists), names: { ...ws.names }, variants: { ...ws.variants } };
+  const next = {
+    ...ws,
+    lists: structuredClone(ws.lists),
+    names: { ...ws.names },
+    descriptions: { ...ws.descriptions },
+    variants: { ...ws.variants },
+  };
   const taken = [...Object.values(ws.lists).flat(), ...Object.values(from.lists).flat()];
   const renamed = new Map();
   const target = (id) => {
@@ -188,6 +210,7 @@ export function importSnapshots(ws, text) {
     list.push(to);
     next.variants[to] = data;
     if (from.names[id]) next.names[to] = from.names[id];
+    if (from.descriptions[id]) next.descriptions[to] = from.descriptions[id];
   };
 
   const sound = ({ section, active, data }) => JSON.stringify([section, active, data]);
