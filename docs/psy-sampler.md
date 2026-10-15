@@ -1260,13 +1260,17 @@ of the phrases, so a section runs on between them. Like a sound's dress it hashe
 section's fills come back with it.
 
 **Double rolls.** Some phrase ends play the outro's frenzy roll instead of a
-fill: every drum playing (kick included) rolls up both bars of the loop, the
-⏫ Build-up bar twice (`doubleKinds` in `app.js`). `doubleRollOf(seed,
-section, loop, last)` in `dress.js` decides it on its own coin, so the other
-phrases keep the fill they had: 35 % of a Peak's phrases and 30 % of any
-section's last loop, the way into the next one (`DOUBLE_ROLL`). A drop's
-loop never gets one (it has its own roll), and neither does the outro (its
-frenzy rolls its last two loops anyway).
+fill: every drum playing (kick included) rolls up the phrase's last two
+loops, the ⏫ Build-up bar four times over (`doubleKinds` in `app.js`).
+`doubleRollOf(seed, section, loop, last)` in `dress.js` decides it on its own
+coin, so the other phrases keep the fill they had: 35 % of a Peak's phrases
+and 30 % of any section's last phrase, the way into the next one
+(`DOUBLE_ROLL`). Both loops ask it about the phrase-end loop (`rollEnd` in
+`autopilot.js`), so they agree. A phrase that ends in a drop never gets one
+(the drop has its own roll): the loop before it can't read `next` yet, so
+`rollEnd` foresees it from the queue, the form, the plan and a closing (a
+build's pick is the only one drawn, and a build always drops). Neither does
+the outro (its frenzy rolls its last two loops anyway).
 
 The roll bar, the gap, the fills and the double rolls are **bar overlays**: `feed()` lays them on
 a sound's data for one bar (`state.bar`, `silenced` / `withBreak` / `withRoll`

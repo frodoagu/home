@@ -804,6 +804,25 @@ export function phraseEnd(pilot) {
   return at % PHRASE_LOOPS === 0 ? at : 0;
 }
 
+// Whether the loop after this one drops, as advance() will announce it: a
+// build drops whatever it picks (the only pick on the PRNG), anything else
+// when the queue, the form, the plan or a closing leads to a peak or the outro.
+function dropsNext(pilot) {
+  if (pilot.left !== 2) return false;
+  if (pilot.section === "build" || pilot.opening) return true;
+  let up = pilot.queue?.[0] ?? pilot.form?.[0]?.section ?? pilot.plan?.section;
+  if (pilot.closing && pilot.section !== OUTRO) up = closingPick(up, pilot.closing.left - 2);
+  return up === "peak" || up === OUTRO;
+}
+
+/** The phrase end (as phraseEnd) this loop is or comes right before, when no drop; else 0: the double roll's two loops. */
+export function rollEnd(pilot) {
+  if (!pilot) return 0;
+  const at = pilot.length - pilot.left + 1;
+  if (at % PHRASE_LOOPS === PHRASE_LOOPS - 1 && pilot.left > 1) return dropsNext(pilot) ? 0 : at + 1;
+  return phraseEnd(pilot);
+}
+
 /** Kick, bass or percussion with no lead and no pad. */
 export function isBare(active) {
   const layers = Object.values(active).map(layerOfVariant);

@@ -65,6 +65,7 @@ import {
   moveTo,
   phraseEnd,
   rearrange,
+  rollEnd,
   routeRoom,
   jumpTo,
   skip,
@@ -1647,14 +1648,14 @@ export function mountApp(root, engine, opts = {}) {
     return rollAll();
   }
 
-  // The same double roll over both bars of a phrase's last loop, in place
-  // of its fill, on some of a peak's phrases and some sections' last loop
-  // (dress.js doubleRollOf); null elsewhere. The outro has its own.
+  // The same double roll over a phrase's last two loops, in place of its
+  // fill, on some of a peak's phrases and some sections' last ones (dress.js
+  // doubleRollOf); null elsewhere. The outro has its own.
   function doubleKinds() {
     const p = state.pilot;
     if (!state.auto || state.drop || !p || p.section === OUTRO) return null;
-    const at = phraseEnd(p);
-    return at && doubleRollOf(ws.seed, p.section, at, p.left === 1) ? rollAll() : null;
+    const at = rollEnd(p);
+    return at && doubleRollOf(ws.seed, p.section, at, at === p.length) ? rollAll() : null;
   }
 
   // This bar's overlays, from its bar line to the next: the last bar's come
