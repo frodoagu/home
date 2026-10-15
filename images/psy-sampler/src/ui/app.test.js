@@ -2815,7 +2815,7 @@ describe("✨ AI", () => {
 
   it("🌅 asks the model for the sections that close the set, then plans each one, the outro last", async () => {
     const closing = { why: "a last peak", sections: ["breakdown", "build", "peak"] };
-    const ai = await remountWith(fakeAi({ forms: [{ why: "", sections: [] }, closing], answers: queuedOr(GROOVE) }));
+    const ai = await remountWith(fakeAi({ forms: [{ why: "", sections: [] }, closing], answers: [queuedOr(GROOVE)] }));
     $("button.auto").click();
     aiBtn().click();
     await flushPromises();
@@ -2828,6 +2828,9 @@ describe("✨ AI", () => {
     expect(ask.schema.properties.sections.maxItems).toBe(4);
     expect(queue()).toEqual(["breakdown", "build", "peak", "outro"]);
     expect($('.section-queue [data-queued="build"]').title).toBe("Cierre de la IA: a last peak");
+    const chipText = (id) => $(`.section-queue [data-queued="${id}"]`).firstChild.textContent;
+    expect(chipText("build")).toBe("✨ Subida");
+    expect(chipText("outro")).toBe("🌅 Outro"); // not planned yet
     expect($(".status").textContent).toMatch(/^🌅 La IA planeó el cierre: Break → Subida → Pico → Outro\.$|^✨/);
     const outro = () => ai.asks.find((a) => a.schema.properties.section.enum.join() === "outro");
     for (let i = 0; i < 200 && !outro(); i++) {
@@ -2837,6 +2840,14 @@ describe("✨ AI", () => {
     expect(outro().prompt).toContain("The outro is the last thing the audience hears");
     expect(outro().prompt).toContain("The listener is closing the set: it ends in");
     expect(outro().schema.properties.bars.enum).toEqual([40, 48, 56]);
+    await flushPromises();
+    expect(chipText("outro")).toBe("✨ 🌅 Outro");
+    for (let i = 0; i < 200 && $(".section-badge").textContent !== "Outro"; i++) {
+      advanceSeconds(2 * BAR);
+      await flushPromises();
+    }
+    expect($(".section-badge").textContent).toBe("Outro");
+    expect($(".section-badge").classList.contains("is-ai")).toBe(true);
   });
 
   it("plans three sections ahead, one ask after another, and the pilot plays them", async () => {

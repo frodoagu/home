@@ -1215,6 +1215,10 @@ html:has(dialog.help[open], dialog.intro[open]) {
   display: none;
 }
 
+.section-badge.is-ai::before {
+  content: "✨ ";
+}
+
 /* Autopilot: now, what is left, the queue, next; the phases; changes. */
 .pilot-row {
   min-height: 2em;

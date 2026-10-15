@@ -61,7 +61,7 @@ export default {
           ["Volúmenes", "El piloto mezcla: cada fase tiene su balance, la subida crece hacia el pico, los sonidos apilados se reparten el lugar y el pad se corre bajo el lead. Mueve los rellenos de todo lo que suena de a poco, en curvas suaves, también lo tuyo."],
           ["Drops", "Toda subida termina en un drop: el último loop redobla el kick, saca kick y bajo en su segundo compás y barre un highpass sobre la mezcla; en el 1 del Pico vuelve todo. Una de cada diez es un amague y cae en un Break."],
           ["El tema", "El lead que suena en un Break es el tema: sigue en la subida y en el pico que vienen, sin melodía nueva."],
-          ["Rellenos", "El último compás de cada frase de 8 tiene un relleno: el kick se corta dos tiempos, la percusión redobla, o las dos cosas."],
+          ["Rellenos", "El último compás de cada frase de 8 tiene un relleno: el kick se corta dos tiempos, la percusión redobla, o las dos cosas. En los picos, y a veces al cambiar de fase, toda la batería redobla los últimos cuatro compases, como en el Outro."],
           ["Filtros", "El piloto mueve el highpass y el lowpass de cada sonido (no el kick ni el bajo): el lead se abre en la subida, el pad le deja lugar al bajo, el Break apaga el brillo. En el pico, pads y leads respiran con el kick."],
           ["Improvisar", "En cada fase el piloto decide qué sonidos improvisan, según la semilla: nada en la intro, más en la subida. Lo que prendas o apagues a mano dura hasta la próxima fase."],
           ["Semilla", "La misma semilla arma el mismo tema en cualquier browser. Escribí la tuya o tirá 🎲 por una nueva; con el piloto andando, cambiarla lo reinicia en el próximo loop (el 🎲 titila mientras espera)."],

@@ -1259,7 +1259,20 @@ both, at odds of 2 : 1 : 2 : 1 (`FILL_WEIGHTS`): the kick breaks on a third
 of the phrases, so a section runs on between them. Like a sound's dress it hashes the seed and not the track's PRNG, so a
 section's fills come back with it.
 
-The roll bar, the gap and the fills are **bar overlays**: `feed()` lays them on
+**Double rolls.** Some phrase ends play the outro's frenzy roll instead of a
+fill: every drum playing (kick included) rolls up the phrase's last two
+loops, the ⏫ Build-up bar four times over (`doubleKinds` in `app.js`).
+`doubleRollOf(seed, section, loop, last)` in `dress.js` decides it on its own
+coin, so the other phrases keep the fill they had: 35 % of a Peak's phrases
+and 30 % of any section's last phrase, the way into the next one
+(`DOUBLE_ROLL`). Both loops ask it about the phrase-end loop (`rollEnd` in
+`autopilot.js`), so they agree. A phrase that ends in a drop never gets one
+(the drop has its own roll): the loop before it can't read `next` yet, so
+`rollEnd` foresees it from the queue, the form, the plan and a closing (a
+build's pick is the only one drawn, and a build always drops). Neither does
+the outro (its frenzy rolls its last two loops anyway).
+
+The roll bar, the gap, the fills and the double rolls are **bar overlays**: `feed()` lays them on
 a sound's data for one bar (`state.bar`, `silenced` / `withBreak` / `withRoll`
 in `editing.js`, read in place like the build-up) and the next bar line takes
 them off. They never reach storage, snapshots or exports, and the tiles flash

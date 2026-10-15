@@ -59,7 +59,7 @@ export default {
           ["Volumes", "The autopilot mixes: each section has its own balance, the build-up swells into the peak, stacked sounds share their room and the pad steps back under the lead. It moves the fill of everything playing gradually, in smooth curves, yours too."],
           ["Drops", "Every build-up ends in a drop: its last loop rolls the kick, takes kick and bass out on its second bar and sweeps a high-pass up the mix; on the 1 of the Peak everything is back. One in ten is a tease that lands in a Breakdown."],
           ["The theme", "The lead playing in a Breakdown is the theme: it stays through the build-up and the peak after it, with no new melody."],
-          ["Fills", "The last bar of every 8-bar phrase gets a fill: the kick breaks for two beats, the percussion rolls, or both."],
+          ["Fills", "The last bar of every 8-bar phrase gets a fill: the kick breaks for two beats, the percussion rolls, or both. In peaks, and now and then on the way into the next section, every drum rolls over the last four bars, like in the Outro."],
           ["Filters", "The autopilot rides every sound's high-pass and low-pass (not the kick or the bass): the lead opens up across a build-up, the pad makes room for the bass, the Breakdown dims the brightness. In the peak, pads and leads breathe with the kick."],
           ["Improvise", "In every section the autopilot decides which sounds improvise, from the seed: none in the intro, the most in the build-up. What you switch on or off by hand holds until the next section."],
           ["Seed", "The same seed builds the same track in any browser. Type your own or roll 🎲 for a new one; with the autopilot running, changing it restarts it on the next loop (🎲 pulses while it waits)."],

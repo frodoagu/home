@@ -41,6 +41,7 @@ import {
   phraseEnd,
   poolOf,
   rearrange,
+  rollEnd,
   skip,
   startPilot,
   jumpTo,
@@ -268,6 +269,19 @@ describe("autopilot", () => {
     expect(phraseEnd({ ...peak, left: 1, next: "peak" })).toBe(0); // a drop instead
     expect(phraseEnd({ section: "build", left: 1, length: 4, queue: [], next: "peak" })).toBe(0);
     expect(phraseEnd(null)).toBe(0);
+  });
+
+  it("a double roll takes a phrase's last two loops, never a drop's", () => {
+    const peak = { section: "peak", left: 8, length: 8, queue: [] };
+    const ends = [8, 7, 6, 5, 4, 3, 2, 1].map((left) => rollEnd({ ...peak, left }));
+    expect(ends).toEqual([0, 0, 4, 4, 0, 0, 8, 8]);
+    expect(rollEnd({ ...peak, left: 2, queue: ["peak"] })).toBe(0); // the next one drops
+    expect(rollEnd({ ...peak, left: 2, form: [{ section: "breakdown", loops: 4 }] })).toBe(8);
+    expect(rollEnd({ ...peak, left: 2, form: [{ section: "peak", loops: 12 }] })).toBe(0);
+    expect(rollEnd({ section: "build", left: 2, length: 4, queue: [] })).toBe(0);
+    expect(rollEnd({ ...peak, left: 2, closing: { left: 3 } })).toBe(0); // into the outro
+    expect(rollEnd({ ...peak, left: 1, next: "peak" })).toBe(0);
+    expect(rollEnd(null)).toBe(0);
   });
 
   it("the peak pumps its pads and leads", () => {

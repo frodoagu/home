@@ -59,7 +59,7 @@ export default {
           ["Volumes", "O piloto mixa: cada fase tem seu equilíbrio, a subida cresce até o pico, os sons empilhados dividem o espaço e o pad recua sob o lead. Mexe no preenchimento de tudo o que toca aos poucos, em curvas suaves, o seu também."],
           ["Drops", "Toda subida termina num drop: o último loop faz a virada do kick, tira kick e baixo no segundo compasso e varre um highpass sobre a mixagem; no 1 do Pico tudo volta. Um em cada dez é uma finta e cai num Break."],
           ["O tema", "O lead que toca num Break é o tema: segue na subida e no pico que vêm depois, sem melodia nova."],
-          ["Viradas", "O último compasso de cada frase de 8 tem uma virada: o kick para dois tempos, a percussão rufa, ou as duas coisas."],
+          ["Viradas", "O último compasso de cada frase de 8 tem uma virada: o kick para dois tempos, a percussão rufa, ou as duas coisas. Nos picos, e às vezes ao mudar de fase, toda a bateria rufa os últimos quatro compassos, como no Outro."],
           ["Filtros", "O piloto mexe no highpass e no lowpass de cada som (não no kick nem no baixo): o lead abre na subida, o pad dá espaço ao baixo, o Break apaga o brilho. No pico, pads e leads respiram com o kick."],
           ["Improvisar", "Em cada fase o piloto decide quais sons improvisam, pela semente: nada na intro, mais na subida. O que você liga ou desliga à mão vale até a próxima fase."],
           ["Semente", "A mesma semente monta a mesma faixa em qualquer navegador. Escreva a sua ou jogue 🎲 por uma nova; com o piloto rodando, mudar reinicia ele no próximo loop (o 🎲 pisca enquanto espera)."],
