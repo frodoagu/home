@@ -210,8 +210,9 @@ const stamp = (d = new Date()) => {
 // one took for the next (🔗 carries them), each sound's last dress, and the
 // ✨ AI's plans for the sections ahead ({ plan, why, queued }, in order; the
 // first is the one the pilot holds). From silence it also gets `opening`
-// (planner.js normalizeOpening; null once asked for in vain) and its `why`.
-const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "", closeWhy: "" });
+// (planner.js normalizeOpening; null once asked for in vain) and its `why`,
+// and `nowWhy`, the why of the plan the section playing took.
+const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "", closeWhy: "", nowWhy: "" });
 // Form chips the queue shows before folding the rest into "+n".
 // An ask the model has not answered by then is cut off, and a failed one is
 // tried again after RETRY_MS: neither may hold the ✨ AI up until a reload.
@@ -1110,7 +1111,11 @@ export function mountApp(root, engine, opts = {}) {
     sectionBadge.textContent = p ? tx.sections[p.section] : "";
     sectionBadge.hidden = !p;
     const opened = Boolean(p && state.run?.opening) && sectionNo() === 0; // the ✨ AI's opening plays
-    sectionBadge.title = !opened ? "" : state.run.why ? `${tx.ai.planned}: ${state.run.why}` : tx.ai.planned;
+    // A plan the pilot took is kept under the section before the one it plays.
+    const planned = Boolean(p && state.run?.plans[sectionNo() - 1]);
+    sectionBadge.classList.toggle("is-ai", opened || planned);
+    const nowWhy = opened ? state.run.why : planned ? state.run.nowWhy : "";
+    sectionBadge.title = !opened && !planned ? "" : nowWhy ? `${tx.ai.planned}: ${nowWhy}` : tx.ai.planned;
     sectionLeft.textContent = !p ? "" : p.closing ? tx.pilot.closingLeft(p.left * 2, clock(p.closing.left * loopSeconds())) : tx.pilot.left(p.left * 2);
     timelineNow.style.flexGrow = String(p ? p.left * 2 : 1);
     // ✕ on a section coming: none on the one the last loop already announced
@@ -1174,7 +1179,10 @@ export function mountApp(root, engine, opts = {}) {
         state.pilot = dequeue(state.pilot, i);
         requeue();
       });
-      const li = chip(id, i, "queued", id === OUTRO ? `🌅 ${tx.sections[id]}` : tx.sections[id], drop);
+      // Closing, the ✨ AI picks the route to the outro and plans each section of it.
+      const byAi = p.closing && (planOf(i) || (id !== OUTRO && state.run?.closeWhy));
+      const name = id === OUTRO ? `🌅 ${tx.sections[id]}` : tx.sections[id];
+      const li = chip(id, i, byAi ? "queued is-ai" : "queued", byAi ? `✨ ${name}` : name, drop);
       if (p.closing) li.title = why(i, state.run?.closeWhy ? `${tx.ai.closed}: ${state.run.closeWhy}` : tx.pilot.closingChip);
       return li;
     });
@@ -1337,6 +1345,7 @@ export function mountApp(root, engine, opts = {}) {
     timeline.hidden = false;
     timelineNow.style.flexGrow = String(left);
     sectionBadge.textContent = now?.name ?? "";
+    sectionBadge.classList.remove("is-ai");
     sectionBadge.hidden = !now;
     sectionLeft.textContent = tx.pilot.left(left);
     const chip = next && el("li", { class: "queued is-auto", "data-queued": next.id }, el("span", { text: next.name }));
@@ -3379,6 +3388,7 @@ export function mountApp(root, engine, opts = {}) {
     const ahead = state.run.ahead;
     const head = ahead.shift();
     if (head && head.plan.section !== state.pilot.section) ahead.length = 0;
+    state.run.nowWhy = head && head.plan === state.run.plans[sectionNo() - 1] ? head.why : "";
     if (planning && !planning.form && !planning.tune && planning.at !== sectionNo() + 1 + ahead.length) cancelPlanning();
     if (replaying()) {
       const raw = state.replay[sectionNo()];
