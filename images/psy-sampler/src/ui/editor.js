@@ -48,6 +48,8 @@ import {
   rotatePart,
 } from "../editing.js";
 import { foldActive } from "../folds.js";
+import { readBlob } from "../import/bytes.js";
+import { MAX_MIDI_BYTES, importMidi } from "../import/midi.js";
 import { DESCRIPTION_MAX } from "../workspace.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
@@ -104,6 +106,7 @@ export function createEditor({
   let paintGrid = () => {};
   let refreshGrid = () => {};
   let refreshPages = () => {}; // the piano roll's page tabs, after a length change
+  let showPickers = () => {}; // the octave and length pickers, after an import
   let paintRoll = null; // the piano roll's playhead, which pages
   let showBrush = () => {};
   let buildUpBtn = null;
@@ -753,6 +756,10 @@ export function createEditor({
       },
       "loops",
     );
+    showPickers = () => {
+      octave.querySelector("select").value = String(current.transpose);
+      loops.querySelector("select").value = String(current.loops ?? 1);
+    };
     synthOnly.push(synth, synthDetail);
     return [el("div", { class: "pickers" }, ...sourcePicker(), synth, scale, octave, len, loops), synthDetail];
   }
@@ -903,6 +910,34 @@ export function createEditor({
       set({ notes: [] });
       refreshGrid();
     });
+    // A .mid replaces the part, at the pitch it was written in (octave 0).
+    const midiFile = el("input", { type: "file", accept: ".mid,.midi,audio/midi", hidden: "", "data-input": "midi" });
+    const midiBtn = el("button", { type: "button", class: "ghost", "data-action": "midi", text: tx.midi });
+    midiBtn.title = tx.midiTitle;
+    const midiNote = el("p", { class: "legend", role: "status" });
+    midiBtn.addEventListener("click", () => midiFile.click());
+    midiFile.addEventListener("change", async () => {
+      const file = midiFile.files?.[0];
+      midiFile.value = "";
+      if (!file) return;
+      const part = file.size <= MAX_MIDI_BYTES ? importMidi(await readBlob(file)) : null;
+      if (!part?.notes.length) {
+        midiNote.textContent = part ? tx.midiEmpty : tx.midiBad;
+        return;
+      }
+      set({ notes: part.notes, loops: part.loops, transpose: 0 });
+      showPickers();
+      page = 0;
+      refreshPages();
+      refreshGrid();
+      midiNote.textContent = [
+        tx.midiDone(part.notes.length, part.loops * 2),
+        part.dropped && tx.midiDropped(part.dropped),
+        part.offGrid && tx.midiOffGrid(part.offGrid),
+      ]
+        .filter(Boolean)
+        .join(" ");
+    });
     refreshPages();
     refreshGrid();
     // The playhead: `step` is the part step playing, on whichever page it is.
@@ -915,7 +950,8 @@ export function createEditor({
       ),
       pages,
       wrap(grid),
-      el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, clear),
+      el("div", { class: "editor-actions" }, varyToggle(), newPartBtn, midiBtn, midiFile, clear),
+      midiNote,
       patternControls(),
     ];
   }

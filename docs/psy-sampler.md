@@ -580,6 +580,37 @@ fit. 🎲 New part writes a 2-bar part, and *Reset notes* puts the factory lengt
 back. A loop WAV export (⤓) spans the longest part playing. Data saved before
 this (no `loops`) loads as a 2-bar part.
 
+### MIDI import
+
+**⬆ MIDI** in a notes editor (leads, pads, basses, any piano roll) replaces
+the part with the notes of a Standard MIDI File. From Ableton, drag the clip
+onto the desktop or right-click it and pick **Export MIDI Clip**; any DAW's
+`.mid` works the same way. Ableton's `.alc`/`.als` aren't read for notes: the
+samples importer reads those only for the samples they use.
+
+[`src/import/midi.js`](../images/psy-sampler/src/import/midi.js) reads it in
+the page, with no dependency:
+
+- **Time in beats** (ticks / PPQ). Tempo, programs, controllers and sysex are
+  dropped, so the file's tempo never moves a note; bars are taken as 4/4.
+  SMPTE-timed files are refused.
+- **The busiest track.** A clip export has one; from a whole song this takes
+  the track with the most notes.
+- **On the 16th grid**: `step = round(beat × 4)`, `len ≥ 1`. A note further
+  than a quarter of a 16th from the grid (triplets, swing) is counted and the
+  editor says how many moved.
+- **Whole empty bars before the first note go**, keeping where that note falls
+  in its bar. The part takes the shortest *Length* that holds the notes (up to
+  16 bars); what runs past that is cut and counted.
+- **Accent** = a velocity at least 16 over the clip's mean, so a clip at one
+  velocity has none. Pitches outside MIDI 12-108 move by octaves; on one pitch
+  a note ends where the next one starts; chords stay.
+
+The import sets *Octave* to 0, so the part plays at the pitch it was written
+in, and leaves the scale alone: notes outside it show as rows marked out of
+scale. It goes through `onChange` like any edit, so it saves, travels in 🔗 and
+counts as a part the user owns (the autopilot doesn't rewrite it).
+
 ### Groove and space: swing, nudge, duck, pan
 
 The editor's **Groove and space** box (FX get only its pan half):
@@ -979,6 +1010,7 @@ says it reads is what it reads. A new format is one line there.
   packs. Nor ADPCM WAV, ALAC, WMA, APE/WavPack/DSD, 7z/RAR, encrypted zips.
 - Clutter in folders and archives (`.asd`, `__MACOSX/`, `._*`, artwork, docs,
   MIDI) is skipped quietly; the list stops at 500 candidates.
+  A `.mid` goes into a piano roll instead ([MIDI import](#midi-import)).
 
 #### What goes up
 
