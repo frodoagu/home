@@ -2565,15 +2565,17 @@ To keep it private: seal a `ghcr-creds` docker-registry Secret into the
 
 ### PR previews
 
-Every PR that touches `images/psy-sampler/` or `charts/psy-sampler/` gets its
-own copy at `https://pr-<n>-psy.agu.com.ar`, behind the same Google sign-in as
-the other private apps, and loses it when it is closed or merged.
+Every PR that touches `images/psy-sampler/`, `images/psy-sync/` or
+`charts/psy-sampler/` gets its own copy at `https://pr-<n>-psy.agu.com.ar`,
+behind the same Google sign-in as the other private apps, and loses it when it
+is closed or merged.
 
 1. [`psy-sampler-preview.yml`](../.github/workflows/psy-sampler-preview.yml)
    builds the PR's head commit into `ghcr.io/frodoagu/psy-sampler:pr-<n>-<sha8>`
    (never `latest`), then labels the PR `psy-preview` and comments the URL.
-   Once labelled, every push rebuilds, whatever it touches. Adding the label
-   by hand asks for a preview of any other PR.
+   The workflow's `paths` filter matches the PR's whole diff, so any other
+   PR never runs it, and once in, every push rebuilds. Don't add the label by
+   hand to any other PR: nothing would build its image.
 2. The `psy-sampler-previews` ApplicationSet
    ([`charts/psy-sampler-previews`](../charts/psy-sampler-previews)) polls
    GitHub every 3 min with the pull-request generator, filtered on that label,
