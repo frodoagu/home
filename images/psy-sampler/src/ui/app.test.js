@@ -458,6 +458,37 @@ describe("editors", () => {
     expect(Math.min(...steps())).toBe(0);
   });
 
+  it("⬆ MIDI replaces the part with a .mid's notes, at octave 0, as long as they need", async () => {
+    openEditor("lead.acid");
+    const pick = (name) => editor("lead.acid").querySelector(`[data-control="${name}"]`);
+    pick("octave").value = "-12";
+    pick("octave").dispatchEvent(new Event("change"));
+    const load = async (bytes) => {
+      const input = editor("lead.acid").querySelector('[data-input="midi"]');
+      Object.defineProperty(input, "files", { value: [new File([Uint8Array.from(bytes)], "clip.mid")], configurable: true });
+      input.dispatchEvent(new Event("change"));
+      await flushPromises();
+      return editor("lead.acid").querySelector('[role="status"]').textContent;
+    };
+    // PPQ 96: A4 for an 8th, then 720 ticks (0x85 0x50) later C5 on the 1 of bar 3.
+    const track = [0, 0x90, 69, 100, 48, 0x80, 69, 0, 0x85, 0x50, 0x90, 72, 100, 24, 0x80, 72, 0, 0, 0xff, 0x2f, 0];
+    const head = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0, 96, 0x4d, 0x54, 0x72, 0x6b, 0, 0, 0, track.length];
+    expect(await load([...head, ...track])).toBe("2 notas en 4 compases.");
+    expect(saved().variants["lead.acid"]).toMatchObject({
+      loops: 2,
+      transpose: 0,
+      notes: [
+        { step: 0, midi: 69, len: 2 },
+        { step: 32, midi: 72, len: 1 },
+      ],
+    });
+    expect(pick("octave").value).toBe("0");
+    expect(pick("loops").value).toBe("2");
+    expect(rollCell("lead.acid", 69, 1).dataset.state).toBe("hit");
+    expect(await load([0x52, 0x49, 0x46, 0x46])).toMatch(/no es un MIDI/);
+    expect(saved().variants["lead.acid"].notes).toHaveLength(2);
+  });
+
   it("Cerrar closes the panel", () => {
     openEditor("pad.chord");
     editor("pad.chord").querySelector('[data-action="close"]').click();

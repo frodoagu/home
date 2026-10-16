@@ -740,6 +740,14 @@ export default {
     wavTitle: "Descarga este sonido solo, en WAV",
     fire: "▶ Disparar",
     clearAll: "Borrar todo",
+    midi: "⬆ MIDI",
+    midiTitle:
+      "Trae las notas de un archivo .mid y reemplaza las de esta parte. En Ableton: arrastrá el clip al escritorio, o clic derecho → Export MIDI Clip",
+    midiBad: "Ese archivo no es un MIDI (.mid).",
+    midiEmpty: "Ese MIDI no tiene notas.",
+    midiDone: (notes, bars) => `${notes} notas en ${bars} compases.`,
+    midiDropped: (n) => `${n} pasaban de los 16 compases y quedaron afuera.`,
+    midiOffGrid: (n) => `${n} no caían en semicorcheas (tresillos o swing) y se corrieron a la más cercana.`,
     improvise: "🔀 Improvisar",
     improviseTitle:
       "Clic: prende o apaga. Arrastrá (o flechas ← →) para elegir cuánto cambia: a la izquierda casi nada, a la derecha mucho.",

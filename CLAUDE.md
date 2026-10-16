@@ -78,7 +78,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
                      Sample import in src/import/ (own WAV/AIFF/CAF/AU decoders, zip, SoundFont,
-                     Ableton/SFZ/REAPER references), fixtures from src/test/audioFiles.js.
+                     Ableton/SFZ/REAPER references), fixtures from src/test/audioFiles.js;
+                     a .mid's notes go into a piano roll (src/import/midi.js, ⬆ MIDI).
                      ✨ AI (src/planner.js + src/ai.js): Chrome's Prompt API, an LM Studio
                      endpoint or the listener's own OpenAI/Anthropic/Gemini API key plans
                      the autopilot's next section, called from the listener's browser.
