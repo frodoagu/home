@@ -17,7 +17,7 @@ account, linked with an API key). A second one, the snapshot autopilot, plays th
 saved snapshots in order instead. What plays exports to WAV, as a loop or as a
 live recording, and 🌀 turns the screen into a show of fractals, mandalas
 and organic textures that follows the music ([Visuals](#visuals)).
-The UI is in Spanish, English and Portuguese. All audio is synthesized in the
+The UI is in Spanish, English, Portuguese and French. All audio is synthesized in the
 browser with Web Audio (the pod only serves ~200 kB of static files), except the
 users' own samples, which psy-sync keeps.
 
@@ -1954,7 +1954,7 @@ note names: La/A/Lá) and `i18n.test.js` requires all three to have exactly the
 same shape. The default is the saved language; otherwise the browser's;
 otherwise Spanish. Changing the language rebuilds the app without stopping what
 plays (not the autopilot, not the queue, not the open editor). The picker
-(`ui/langSwitch.js`) is the same ES/EN/PT pill as agu.com.ar's, with a select
+(`ui/langSwitch.js`) is the same ES/EN/PT/FR pill as agu.com.ar's, with a select
 on phones.
 
 The **📖 Help** button in the top bar opens a page (`ui/help.js`, a

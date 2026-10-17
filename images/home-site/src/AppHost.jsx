@@ -26,6 +26,11 @@ export default function AppHost() {
       backHome: "Voltar ao início",
       home: "Início",
     },
+    fr: {
+      notFound: "Je n'ai pas trouvé cette app.",
+      backHome: "Retour à l'accueil",
+      home: "Accueil",
+    },
   }[language];
 
   if (!app) {

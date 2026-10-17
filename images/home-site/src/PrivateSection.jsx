@@ -26,6 +26,11 @@ export default function PrivateSection({ active }) {
       signOut: "Sair",
       empty: "Nada privado em",
     },
+    fr: {
+      title: "Privé",
+      signOut: "Se déconnecter",
+      empty: "Aucun lien privé dans",
+    },
   }[language];
 
   const visible = active
@@ -103,6 +108,11 @@ function SignInGate() {
       body: "Acesso aos serviços self-hosted. Entre com o Google para vê-los.",
       loading: "Carregando Google...",
     },
+    fr: {
+      title: "Zone privée",
+      body: "Accès aux services auto-hébergés. Connecte-toi avec Google pour les voir.",
+      loading: "Chargement de Google...",
+    },
   }[language];
 
   useEffect(() => {
@@ -146,6 +156,11 @@ function NotAuthorized() {
       title: "Sem acesso",
       bodyStart: "A conta",
       bodyEnd: "não está autorizada para esta seção.",
+    },
+    fr: {
+      title: "Accès refusé",
+      bodyStart: "Le compte",
+      bodyEnd: "n'est pas autorisé pour cette section.",
     },
   }[language];
 

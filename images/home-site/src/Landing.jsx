@@ -45,6 +45,15 @@ export default function Landing() {
       soon: "Em breve.",
       footer: "agu.com.ar · self-hosted em um Raspberry Pi",
     },
+    fr: {
+      intro: "Des outils et expériences web que je construis au fil de l'eau. Un mélange de métiers, d'infra et de ce qui viendra ensuite.",
+      publicTitle: "Publiques",
+      privateLabel: "Privées",
+      clearFilter: "effacer le filtre",
+      empty: "Pas encore d'apps dans",
+      soon: "Bientôt.",
+      footer: "agu.com.ar · auto-hébergé sur un Raspberry Pi",
+    },
   }[language];
 
   return (

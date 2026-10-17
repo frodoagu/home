@@ -21,7 +21,7 @@ Dockerfile that bakes it into an nginx image. Deployed by
   `soundfont.js` (SF2/SF3) and `projects.js` (Ableton, SFZ, Decent Sampler,
   REAPER references). Fixtures are built byte by byte in
   [`src/test/audioFiles.js`](src/test/audioFiles.js).
-- `src/i18n/{es,en,pt}.js`: all UI text, same shape in every language.
+- `src/i18n/{es,en,pt,fr}.js`: all UI text, same shape in every language.
 
 Each module has its `*.test.js` beside it. Voice and engine tests run against a
 fake `AudioContext` ([`src/test/fakeAudio.js`](src/test/fakeAudio.js));

@@ -2,9 +2,10 @@
 // are functions in it. Switching language re-renders the app (app.js).
 import en from "./en.js";
 import es from "./es.js";
+import fr from "./fr.js";
 import pt from "./pt.js";
 
-export const DICTS = { es, en, pt };
+export const DICTS = { es, en, pt, fr };
 export const LANGS = Object.keys(DICTS);
 export const DEFAULT_LANG = "es";
 

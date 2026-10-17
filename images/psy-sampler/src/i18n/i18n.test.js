@@ -16,9 +16,10 @@ function shape(value) {
 }
 
 describe("dictionaries", () => {
-  it("en and pt have exactly the shape of es", () => {
+  it("en, pt and fr have exactly the shape of es", () => {
     expect(shape(DICTS.en)).toEqual(shape(DICTS.es));
     expect(shape(DICTS.pt)).toEqual(shape(DICTS.es));
+    expect(shape(DICTS.fr)).toEqual(shape(DICTS.es));
   });
 
   it("name every layer, variant, synth, scale and slider", () => {
@@ -37,7 +38,8 @@ describe("dictionaries", () => {
 describe("detectLang", () => {
   it("prefers the stored choice, then the browser, then Spanish", () => {
     expect(detectLang("pt", ["en-US"])).toBe("pt");
-    expect(detectLang(undefined, ["fr-FR", "pt-BR"])).toBe("pt");
+    expect(detectLang(undefined, ["de-DE", "pt-BR"])).toBe("pt");
+    expect(detectLang(undefined, ["fr-FR", "pt-BR"])).toBe("fr");
     expect(detectLang("xx", ["EN"])).toBe("en");
     expect(detectLang(null, ["de"])).toBe("es");
     expect(detectLang("constructor", ["__proto__"])).toBe("es");

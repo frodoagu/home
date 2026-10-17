@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "site:language";
-export const SUPPORTED = ["es", "en", "pt"];
+export const SUPPORTED = ["es", "en", "pt", "fr"];
 
 function normalizeLanguage(raw) {
   if (!raw || typeof raw !== "string") return "es";
@@ -24,13 +24,15 @@ function sanitizeLanguage(raw) {
 export function localizeText(value, language) {
   if (!value || typeof value !== "object") return value;
   if (typeof value.es === "string" || typeof value.en === "string") {
-    return value[language] || value.es || value.en || "";
+    return value[language] || value.en || value.es || "";
   }
   return value;
 }
 
 // Inline form of localizeText for one-off strings.
-export const pick = (language, es, en, pt) => localizeText({ es, en, pt }, language);
+// A missing translation falls back to English (localizeText), so the tools
+// that predate French still render.
+export const pick = (language, es, en, pt, fr) => localizeText({ es, en, pt, fr }, language);
 
 const LanguageContext = createContext(null);
 

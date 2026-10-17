@@ -3530,8 +3530,15 @@ describe("language", () => {
     expect($('[data-layer="bass"] h2').textContent).toBe("Baixo");
   });
 
-  it("switches from the ES/EN/PT pill and marks the active one", () => {
-    expect([...document.querySelectorAll(".lang-buttons button")].map((b) => b.textContent)).toEqual(["ES", "EN", "PT"]);
+  it("speaks French too", () => {
+    const lang = $('[data-control="lang"]');
+    lang.value = "fr";
+    lang.dispatchEvent(new Event("change"));
+    expect($('[data-layer="bass"] h2').textContent).toBe("Basse");
+  });
+
+  it("switches from the ES/EN/PT/FR pill and marks the active one", () => {
+    expect([...document.querySelectorAll(".lang-buttons button")].map((b) => b.textContent)).toEqual(["ES", "EN", "PT", "FR"]);
     $('[data-lang="en"]').click();
     expect($("button.stop").textContent).toBe("Stop");
     expect($('[data-lang="en"]').getAttribute("aria-pressed")).toBe("true");

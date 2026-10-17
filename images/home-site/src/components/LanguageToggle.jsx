@@ -4,7 +4,7 @@ import { pick, SUPPORTED, useLanguage } from "../i18n/LanguageProvider";
 export default function LanguageToggle() {
   const { language, setLanguage } = useLanguage();
 
-  const label = pick(language, "Idioma", "Language", "Idioma");
+  const label = pick(language, "Idioma", "Language", "Idioma", "Langue");
 
   return (
     <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-2 py-1">

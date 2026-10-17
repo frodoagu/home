@@ -325,6 +325,25 @@ export default function MandelbrotExplorer() {
       coords: "Coordenadas",
       limitWarn: "Perto do limite de precisão (double): mais zoom fica pixelado.",
     },
+    fr: {
+      title: "Mandelbrot · Explorateur de fractales",
+      subtitle: "z <- z^2 + c · coloration lisse · zoom jusqu'à la limite du double",
+      zoomIn: "Zoom avant",
+      zoomOut: "Zoom arrière",
+      resetView: "Réinitialiser la vue",
+      canvasHelp1: "Touche/clique pour zoomer · glisse pour déplacer · molette pour zoomer ·",
+      canvasHelp2: "maj+clic",
+      canvasHelp3: "pour dézoomer",
+      rendering4k: "Rendu 4K...",
+      export4k: "Exporter la vue en 4K (JPG)",
+      spots: "Lieux",
+      palette: "Palette",
+      detail: "Détail",
+      iterations: "Itérations",
+      iterHint: "Plus d'itérations = plus de détail en profondeur (et un rendu plus lent).",
+      coords: "Coordonnées",
+      limitWarn: "Près de la limite de précision (double) : un zoom de plus devient pixelisé.",
+    },
   }[language];
 
   return (
