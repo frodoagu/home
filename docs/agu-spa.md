@@ -109,9 +109,9 @@ Every visible string comes in Spanish, English, Portuguese and French, picked wi
 ES/EN/PT/FR pill (`src/components/LanguageToggle.jsx`). Data carries
 `{ es, en, pt, fr }` objects read with `localizeText`; one-off strings in a
 component use `pick(language, es, en, pt, fr)` (both in
-`src/i18n/LanguageProvider.jsx`). A missing translation falls back to Spanish.
+`src/i18n/LanguageProvider.jsx`). A missing translation falls back to English.
 The choice is saved per browser; otherwise the browser's language wins, and
-anything that isn't es/pt gets English. `registry.test.js` requires all three on
+anything that isn't es/pt/fr gets English. `registry.test.js` requires all four on
 every card.
 
 ## SPA routing & caching
