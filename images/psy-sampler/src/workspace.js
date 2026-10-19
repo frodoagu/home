@@ -4,6 +4,7 @@
 // object always comes out playable.
 import { LAYERS, LAYER_IDS, layerById, layerOfVariant } from "./catalog.js";
 import { COPY_MARK, baseOf, isCopy, isVariant, sanitize } from "./audio/patterns.js";
+import { KEYS, KEY_DEFAULT } from "./audio/music.js";
 import { LEVEL } from "./audio/params.js";
 import { BPM_DEFAULT, BPM_MAX, BPM_MIN } from "./audio/timing.js";
 import { CHANGE_BARS, CHANGE_DEFAULT, SECTION_IDS, STYLES, STYLE_DEFAULT } from "./autopilot.js";
@@ -29,6 +30,7 @@ export { layerOfVariant };
 /**
  * {
  *   bpm, bgKick, quantize, effects: { delay, reverb },
+ *   key:      the mix's tonic, a pitch class (music.js KEYS)
  *   volumes:  { layer: its fader over every sound in it, 0-1.5 }
  *   seed:     the autopilot's seed ("" until the app draws one)
  *   style:    the autopilot's style (autopilot.js STYLES)
@@ -109,6 +111,7 @@ export function normalize(raw) {
   const bpm = Number.isFinite(src.bpm) ? Math.round(Math.min(BPM_MAX, Math.max(BPM_MIN, src.bpm))) : BPM_DEFAULT;
   return {
     bpm,
+    key: KEYS.includes(src.key) ? src.key : KEY_DEFAULT,
     bgKick: bool(src.bgKick, true),
     quantize: bool(src.quantize, true),
     effects: { delay: bool(src.effects?.delay, true), reverb: bool(src.effects?.reverb, true) },

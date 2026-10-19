@@ -32,7 +32,7 @@ export default {
           ["Pilote sur ce qui joue", "Si quelque chose joue déjà, le pilote le prend tel quel et continue à partir de là, sans coupure."],
           ["● Enregistrer avant de jouer", "L'enregistrement attend le premier son : appuie, prépare-toi et lance-toi ; pas de silence au début."],
           ["Réordonner", "Glisse un son dans sa couche (sur mobile, appuie longuement puis déplace), ou toute la couche par son ⠿. Au clavier : Alt + flèches sur un son, flèches sur le ⠿."],
-          ["Entrée", "Dans « Changement de BPM » lance le changement ; dans le nom d'un snapshot, le sauvegarde."],
+          ["Entrée", "Dans le nom d'un snapshot, le sauvegarde."],
         ],
       },
       {
@@ -63,7 +63,7 @@ export default {
           ["Filtres", "Le pilote pilote le passe-haut et le passe-bas de chaque son (pas le kick ni la basse) : le lead s'ouvre pendant une montée, le pad fait de la place à la basse, le Break atténue la brillance. Dans le pic, pads et leads respirent avec le kick."],
           ["Improviser", "À chaque section, le pilote décide quels sons improvisent, à partir de la graine : aucun dans l'intro, le plus possible dans la montée. Ce que tu allumes ou éteins à la main tient jusqu'à la section suivante."],
           ["Graine", "La même graine construit le même morceau dans n'importe quel navigateur. Tape la tienne ou lance 🎲 pour une nouvelle ; avec le pilote en marche, la changer le relance à la boucle suivante (🎲 pulse pendant l'attente)."],
-          ["🔗 Partager", "Copie un lien avec la graine, le style, le BPM et tes sons édités : celui qui l'ouvre et appuie sur 🤖 entend la même chose."],
+          ["🔗 Partager", "Copie un lien avec la graine, le style, le BPM, la tonique et tes sons édités : celui qui l'ouvre et appuie sur 🤖 entend la même chose."],
           ["Tes éditions gagnent", "Le pilote n'écrase jamais ce que tu as édité à la main, sauf le volume et les filtres passe-haut et passe-bas."],
           ["✨ IA", "Au démarrage, un modèle de langage choisit la forme de chaque morceau selon la « Durée » du set : courte (Groove, Montée, Pic, Break), moyenne (Groove, Montée, Pic, Montée, Pic, Break) ou longue (Groove, Montée, Pic, Montée, Pic, Montée, Break), et la durée de chaque section. Elles attendent dans la file avec ✨ et ✕ en retire une ; quand une forme est épuisée, il choisit celle du morceau suivant. Avant tout, l'IA met ton ambiance en anglais et réécrit le genre du style en conséquence : c'est ce genre qu'elle arrange. Ensuite elle planifie chaque section : laquelle, combien de temps, quels sons entrent, comment ils sonnent (plus sombres ou plus brillants, plus courts ou plus longs, sales ou propres, fixes ou mouvants, voire un autre synthé) et leurs mélodies : un motif pour le lead, les accords du pad et la cellule de la basse, que le pilote développe dans la gamme du style. Elle utilise celui de Chrome (Gemini Nano : tourne sur ton ordinateur et apparaît si ton Chrome l'a) ou ton LM Studio (lance son serveur avec CORS activé). Le thème qu'un Break laisse reste ; les FX et les échanges dans chaque section viennent toujours de la graine, et si l'IA est en retard, le pilote décide tout seul. Survole la section ✨ pour voir pourquoi elle l'a choisie. 🔗 Partager garde ce qu'elle a choisi : le lien sonne pareil dans n'importe quel navigateur, avec IA ou sans."],
         ],
@@ -72,9 +72,10 @@ export default {
         icon: "🎚️",
         title: "Jouer en live",
         items: [
-          ["BPM", "De 60 à 180 ; le curseur change le tempo aussitôt."],
+          ["BPM", "De 60 à 180. Boucle arrêtée, le curseur change le tempo aussitôt ; en lecture, il fixe la cible et, quand tu le lâches, y va progressivement. La molette de la souris et les flèches le bougent aussi."],
+          ["Tonique", "La note de base du mix, comme la gamme d'Ableton : tout ce qui est mélodique (basses, leads, pads, samples joués en notes) sonne dans cette tonique, par le chemin le plus court depuis La. Ça ne t'enferme pas dans la gamme : les notes en dehors sonnent toujours comme tu les as écrites, décalées avec le reste. Le kick et les percussions ne bougent pas. Changée en live, elle prend effet à la note suivante."],
           ["Tap", "À gauche du BPM, pour se caler sur un autre morceau ou sur le sampler d'un autre appareil : le premier tap ramène la boucle au 1 de la mesure sur-le-champ (démarre sur le 1 de ce que tu suis) et chaque tap suivant ajuste le BPM et la phase en direct. Plus de taps, plus de précision : une vingtaine donnent le BPM exact. Le demi-temps ou le double fonctionnent aussi ; une pause de 2 s recommence à zéro."],
-          ["Changement de BPM", "Choisis la cible et sur combien de mesures : ▶ Go avance d'un pas par mesure. ■ Arrêter la rampe la stoppe là ; toucher le curseur aussi."],
+          ["Changement de BPM", "À côté du BPM : en combien de mesures il atteint la cible, un pas par mesure. Pendant ce temps, le chiffre dit où il en est et où il va ; ■ Arrêter la rampe le stoppe là, un Tap aussi."],
           ["Filtre DJ", "À gauche il ferme un passe-bas, à droite il ouvre un passe-haut, sur tout le mix."],
           ["💥 Drop", "Arme un drop à la mesure suivante : un roll de kick, une mesure sans kick ni basse sous un balayage, et tout revient avec un impact. Un autre clic avant qu'il démarre le désarme. Sous le pilote, sa boucle suivante est le drop et un Pic suit (✕ dans la file le retire)."],
           ["Delay 3/16 et Reverb", "Les effets du mix : allume-les et éteins-les à tout moment."],
@@ -183,6 +184,8 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
+    key: "Tonique",
+    keyTitle: "La note de base du mix : tout ce qui est mélodique y est décalé, dissonances comprises",
     tapTitle: "Tape-le en rythme, tap tap tap tap : le premier revient au 1 de la mesure, les autres amènent le BPM et la phase sur tes taps",
     bgKick: "Kick de fond",
     delay: "Delay 3/16",
@@ -348,11 +351,9 @@ export default {
     all: "Tout est permis",
   },
   tempo: {
-    label: "Changement de BPM",
     over: "sur",
-    go: "▶ Go",
     cancel: "■ Arrêter la rampe",
-    title: "Atteint ce BPM progressivement : un pas par mesure",
+    title: "Choisis le BPM : en lecture il y va progressivement, un pas par mesure",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -530,7 +531,6 @@ export default {
     start: "Commencer à jouer",
   },
   credits: { repo: "Code source : frodoagu/home", made: "Fait avec ❤️ sur 🌍 avec Claude par Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Retour à agu.com.ar" },
   cloud: {
     pitch: "Connecte-toi pour sauvegarder ta config dans le cloud et l'utiliser sur n'importe quel appareil.",
     checking: "Cloud…",
@@ -928,7 +928,7 @@ export default {
     grains: ["Grains", "granulaire : grains de Hann d'un « aah » chanté, dispersés et panoramiqués"],
     tom: ["Tom", "sinus descendant : un tom tribal accordé"],
   },
-  scales: { minor: "La mineur", phrygian: "La phrygien", harmonic: "La mineur harmonique", chromatic: "Chromatique" },
+  scales: { minor: "Mineur", phrygian: "Phrygien", harmonic: "Mineur harmonique", chromatic: "Chromatique" },
   noteNames: ["C", "C#", "D", "E♭", "E", "F", "F#", "G", "G#", "A", "B♭", "B"],
   visuals: {
     title: "Psy Layers DAW · Visuels",

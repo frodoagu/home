@@ -32,7 +32,7 @@ export default {
           ["Piloto sobre o que toca", "Se já tem algo tocando, o piloto pega do jeito que está e segue dali, sem cortar."],
           ["● Gravar antes de tocar", "A gravação espera o primeiro som: aperte, se prepare e comece; não sobra silêncio no começo."],
           ["Reordenar", "Arraste um som dentro da camada (no celular, segure e mova), ou a camada inteira pelo ⠿. No teclado: Alt + setas num som, setas no ⠿."],
-          ["Enter", "Em «Mudança de BPM» começa a mudança; no nome de um snapshot, salva."],
+          ["Enter", "No nome de um snapshot, salva."],
         ],
       },
       {
@@ -63,7 +63,7 @@ export default {
           ["Filtros", "O piloto mexe no highpass e no lowpass de cada som (não no kick nem no baixo): o lead abre na subida, o pad dá espaço ao baixo, o Break apaga o brilho. No pico, pads e leads respiram com o kick."],
           ["Improvisar", "Em cada fase o piloto decide quais sons improvisam, pela semente: nada na intro, mais na subida. O que você liga ou desliga à mão vale até a próxima fase."],
           ["Semente", "A mesma semente monta a mesma faixa em qualquer navegador. Escreva a sua ou jogue 🎲 por uma nova; com o piloto rodando, mudar reinicia ele no próximo loop (o 🎲 pisca enquanto espera)."],
-          ["🔗 Compartilhar", "Copia um link com a semente, o estilo, o BPM e seus sons editados: quem abrir e tocar 🤖 ouve o mesmo."],
+          ["🔗 Compartilhar", "Copia um link com a semente, o estilo, o BPM, a tônica e seus sons editados: quem abrir e tocar 🤖 ouve o mesmo."],
           ["Suas edições mandam", "O piloto não sobrescreve o que você editou à mão, exceto o volume e os filtros highpass e lowpass."],
           ["✨ IA", "Ao começar, um modelo de linguagem escolhe a forma de cada faixa pela «Duração» do set: curta (Groove, Subida, Pico, Break), média (Groove, Subida, Pico, Subida, Pico, Break) ou longa (Groove, Subida, Pico, Subida, Pico, Subida, Break), e quanto dura cada fase. Ficam na fila com ✨ e ✕ tira uma; quando uma forma acaba, escolhe a da faixa seguinte. Antes de tudo, a IA passa a sua vibe para o inglês e reescreve o gênero do estilo segundo ela: é esse gênero que ela arranja. Depois planeja cada fase: qual, quanto dura, quais sons entram, como soam (mais escuros ou brilhantes, curtos ou longos, sujos ou limpos, parados ou em movimento, e até outro synth) e suas melodias: um motivo para o lead, os acordes do pad e a célula do baixo, que o piloto desenvolve na escala do estilo. Usa o do Chrome (Gemini Nano: roda no seu computador e aparece se o seu Chrome tiver) ou o seu LM Studio (ligue o servidor com CORS). O tema que um Break deixa se mantém; os FX e as trocas dentro de cada fase continuam saindo da semente, e se a IA demora, o piloto decide sozinho. Passe o mouse pela fase ✨ para ver por que ela a escolheu. 🔗 Compartilhar guarda o que ela escolheu: o link soa igual em qualquer navegador, com IA ou sem."],
         ],
@@ -72,9 +72,10 @@ export default {
         icon: "🎚️",
         title: "Tocar ao vivo",
         items: [
-          ["BPM", "De 60 a 180; o slider muda o tempo na hora."],
+          ["BPM", "De 60 a 180. Com o loop parado o slider muda o tempo na hora; tocando, marca o destino e, ao soltar, vai até lá aos poucos. A rodinha do mouse e as setas também o movem."],
+          ["Tônica", "A nota base da mixagem, como a escala do Ableton: tudo o que é melódico (baixos, leads, pads, samples com notas) toca nessa tônica, pelo caminho mais curto desde Lá. Não te prende na escala: as notas de fora continuam tocando como você escreveu, deslocadas junto. O kick e a percussão não mudam. Mudada ao vivo, entra na próxima nota."],
           ["Tap", "À esquerda do BPM, para se sincronizar com outra faixa ou com o sampler em outro dispositivo: o primeiro toque volta o loop ao 1 do compasso ali mesmo (comece no 1 do que você segue) e cada toque seguinte ajusta o BPM e a fase ao vivo. Mais toques, mais preciso: com uns 20 acerta o BPM exato. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
-          ["Mudança de BPM", "Escolha o destino e em quantos compassos: ▶ Ir move um passo por compasso. ■ Cortar para ali; mexer no slider também."],
+          ["Mudança de BPM", "Ao lado do BPM: em quantos compassos chega ao destino, um passo por compasso. Enquanto vai, o número diz onde está e para onde vai; ■ Cortar para ali, um Tap também."],
           ["Filtro DJ", "À esquerda fecha um lowpass, à direita abre um highpass, sobre a mixagem toda."],
           ["💥 Drop", "Arma um drop no próximo compasso: virada do kick, um compasso sem kick nem baixo sob uma varredura, e tudo de volta com um impacto. Outro clique antes de começar desarma. Com o piloto, o próximo loop dele é o drop e depois vem um Pico (✕ na fila tira)."],
           ["Delay 3/16 e Reverb", "Os efeitos da mixagem: ligue e desligue quando quiser."],
@@ -183,6 +184,8 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
+    key: "Tônica",
+    keyTitle: "A nota base da mixagem: tudo o que é melódico vai para esta tônica, dissonâncias incluídas",
     tapTitle: "Toque no ritmo, tap tap tap tap: o primeiro volta ao 1 do compasso, os seguintes trazem o BPM e a fase para os seus toques",
     bgKick: "Kick de fundo",
     delay: "Delay 3/16",
@@ -348,11 +351,9 @@ export default {
     all: "Vale tudo",
   },
   tempo: {
-    label: "Mudança de BPM",
     over: "em",
-    go: "▶ Ir",
     cancel: "■ Cortar",
-    title: "Vai até esse BPM aos poucos: um passo a cada compasso",
+    title: "Escolha o BPM: com o loop tocando vai até lá aos poucos, um passo por compasso",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -530,7 +531,6 @@ export default {
     start: "Começar a tocar",
   },
   credits: { repo: "Código: frodoagu/home", made: "Feito com ❤️ na 🌍 com Claude por Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Voltar para agu.com.ar" },
   cloud: {
     pitch: "Entre para salvar sua configuração na nuvem e usar em qualquer dispositivo.",
     checking: "Nuvem…",
@@ -928,7 +928,7 @@ export default {
     grains: ["Grãos", "granular: grãos Hann de um “aah” cantado, dispersos e panoramizados"],
     tom: ["Tom", "sine que cai: tom tribal afinado"],
   },
-  scales: { minor: "Lá menor", phrygian: "Lá frígio", harmonic: "Lá menor harmônica", chromatic: "Cromática" },
+  scales: { minor: "Menor", phrygian: "Frígio", harmonic: "Menor harmônica", chromatic: "Cromática" },
   noteNames: ["Dó", "Dó#", "Ré", "Mi♭", "Mi", "Fá", "Fá#", "Sol", "Sol#", "Lá", "Si♭", "Si"],
   visuals: {
     title: "Psy Layers DAW · Visuais",

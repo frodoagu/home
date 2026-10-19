@@ -114,19 +114,6 @@ html {
   border-bottom: 1px solid var(--border);
 }
 
-.back {
-  font-weight: 600;
-  color: var(--text);
-  text-decoration: none;
-  padding: 4px 8px;
-  margin-left: -8px;
-  border-radius: 6px;
-}
-
-.back:hover {
-  background: var(--surface-2);
-}
-
 .topbar-end {
   display: flex;
   flex-wrap: wrap;
@@ -1624,7 +1611,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .topbar-transport button {
-  padding: 6px 14px;
+  padding: 6px 12px;
 }
 
 .topbar-tempo {
@@ -1635,7 +1622,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
 }
 
 .topbar-tempo .bpm input {
-  width: min(160px, 40vw);
+  width: min(130px, 40vw);
 }
 
 .snap-btn {
@@ -1682,7 +1669,7 @@ html:has(dialog.help[open], dialog.intro[open]) {
   cursor: default;
 }
 
-/* BPM change: target, length, go. */
+/* BPM change: the bars it takes, and ■ while it runs. */
 .tap {
   min-width: 6ch;
   touch-action: manipulation; /* fast taps are taps, not a zoom */
@@ -1702,21 +1689,33 @@ html:has(dialog.help[open], dialog.intro[open]) {
   gap: 6px 10px;
 }
 
-.ramp-input {
-  width: 8ch;
-  padding: 3px 6px;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
 .ramp [aria-pressed="true"] {
   color: var(--on-current);
   background: var(--current);
   border-color: var(--current);
+}
+
+/* Between a phone and a full-HD screen the top bar still fits one row: the
+   language goes to its select and the sync pill to its ☁ (the words stay in
+   its tooltip). */
+@media (min-width: 641px) and (max-width: 1800px) {
+  .lang-switch select {
+    display: block;
+  }
+  .lang-buttons,
+  .lang-icon,
+  .sync-text {
+    display: none;
+  }
+  .topbar {
+    column-gap: 12px;
+  }
+  .topbar-tempo {
+    column-gap: 8px;
+  }
+  .topbar-transport button {
+    padding: 6px 10px;
+  }
 }
 
 .stop {

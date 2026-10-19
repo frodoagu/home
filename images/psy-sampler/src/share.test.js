@@ -46,10 +46,23 @@ describe("share links", () => {
       seed: "abc",
       style: "goa",
       bpm: 150,
+      key: 9,
       sounds: null,
       plans: null,
       opening: null,
     });
+  });
+
+  it("carry the key when it is not A, and read a missing or broken one as A", async () => {
+    const ws = { ...normalize({ bpm: 150, style: "goa", key: 6 }), seed: "abc" };
+    const hash = await shareFragment(ws);
+    expect(hash).toBe("#seed=abc&style=goa&bpm=150&key=6");
+    expect(readFragment(hash).key).toBe(6);
+    expect(readFragment("#seed=abc&key=0").key).toBe(0);
+    expect(readFragment("#seed=abc").key).toBe(9);
+    expect(readFragment("#seed=abc&key=").key).toBe(9);
+    expect(readFragment("#seed=abc&key=12").key).toBe(9);
+    expect(readFragment("#seed=abc&key=2.5").key).toBe(9);
   });
 
   it("carry the plans the ✨ AI made, one per section, and only when there are some", async () => {

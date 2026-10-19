@@ -1924,15 +1924,20 @@ describe("snapshots", () => {
 });
 
 describe("BPM change", () => {
+  // The slider dragged to `bpm` and let go.
   const rampTo = (bpm, bars) => {
-    $("#ramp-to").value = String(bpm);
     if (bars) {
       const sel = $('[data-control="ramp-bars"]');
       sel.value = String(bars);
       sel.dispatchEvent(new Event("change"));
     }
-    $('[data-action="ramp"]').click();
+    const slider = $("#bpm");
+    slider.value = String(bpm);
+    slider.dispatchEvent(new Event("input"));
+    slider.dispatchEvent(new Event("change"));
   };
+  const cut = () => $('[data-action="ramp"]');
+  const wheel = (deltaY) => $("#bpm").dispatchEvent(new WheelEvent("wheel", { deltaY, cancelable: true }));
 
   it("Tap sets the BPM from the beat you tap, and cuts a ramp short", () => {
     immediate();
@@ -2050,20 +2055,28 @@ describe("BPM change", () => {
     expect(saved().bpm).toBe(160);
   });
 
-  it("while playing, it moves one slice per bar line and lands on the target", () => {
+  it("while playing, the slider is the target: one slice per bar line, landing on it", () => {
     immediate();
     click("kick.long");
     advance(10);
+    const slider = $("#bpm");
+    slider.value = "149";
+    slider.dispatchEvent(new Event("input")); // still dragging: a preview, nothing moves
+    expect($(".bpm-value").textContent).toBe("145 → 149");
+    expect(cut().hidden).toBe(true);
+    expect(saved().bpm).toBe(145);
     rampTo(149, 4);
-    expect($("#bpm").value).toBe("145");
-    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("true");
+    expect(slider.value).toBe("149");
+    expect(cut().hidden).toBe(false);
+    expect(cut().getAttribute("aria-pressed")).toBe("true");
     advanceSeconds(BAR);
-    expect($("#bpm").value).toBe("146");
+    expect(saved().bpm).toBe(146);
+    expect(slider.value).toBe("149");
     expect($(".bpm-value").textContent).toBe("146 → 149");
     advanceSeconds(3 * BAR + 0.5);
-    expect($("#bpm").value).toBe("149");
+    expect(slider.value).toBe("149");
     expect($(".bpm-value").textContent).toBe("149");
-    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    expect(cut().hidden).toBe(true);
     expect(saved().bpm).toBe(149);
     expect(saved().rampBars).toBe(4);
     const kicks = ctx
@@ -2073,21 +2086,46 @@ describe("BPM change", () => {
     expect(kicks.at(-1) - kicks.at(-2)).toBeCloseTo(60 / 149, 6);
   });
 
-  it("the slider, Parar or the button itself cut it", () => {
+  it("■ Cortar, Parar or the slider back where it plays cut it; a new target takes over", () => {
     immediate();
     click("kick.long");
     rampTo(170, 8);
-    $('[data-action="ramp"]').click();
-    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    cut().click();
+    expect(cut().hidden).toBe(true);
+    expect($("#bpm").value).toBe("145"); // back to where it plays
     rampTo(170, 8);
-    const bpm = $("#bpm");
-    bpm.value = "150";
-    bpm.dispatchEvent(new Event("input"));
     advanceSeconds(2 * BAR);
-    expect(bpm.value).toBe("150");
+    const now = saved().bpm;
+    rampTo(now);
+    expect(cut().hidden).toBe(true);
+    rampTo(130, 2);
+    advanceSeconds(2 * BAR + 0.5);
+    expect(saved().bpm).toBe(130); // from where it was, not from 145
     rampTo(170, 8);
     $("button.stop").click();
-    expect($('[data-action="ramp"]').getAttribute("aria-pressed")).toBe("false");
+    expect(cut().hidden).toBe(true);
+  });
+
+  it("the mouse wheel moves the target a BPM a notch and ramps once it settles", () => {
+    immediate();
+    click("kick.long");
+    for (let i = 0; i < 3; i++) wheel(-100);
+    wheel(-40); // half a trackpad notch: not yet
+    expect($("#bpm").value).toBe("148");
+    expect($(".bpm-value").textContent).toBe("145 → 148");
+    expect(cut().hidden).toBe(true);
+    vi.advanceTimersByTime(400);
+    expect(cut().hidden).toBe(false);
+    expect($("#bpm").value).toBe("148");
+    wheel(-60); // the other half
+    expect($("#bpm").value).toBe("149");
+  });
+
+  it("the wheel with the loop stopped sets the BPM at once, and never leaves the range", () => {
+    wheel(100);
+    expect(saved().bpm).toBe(144);
+    for (let i = 0; i < 100; i++) wheel(-100);
+    expect(saved().bpm).toBe(180);
   });
 });
 
@@ -2306,7 +2344,7 @@ describe("autopilot", () => {
     for (let i = 0; i < 4000 && badge() !== "Pico"; i++) {
       if (badge() !== seen.at(-1)) {
         seen.push(badge());
-        if (badge() === "Break") expect(Number($("#bpm").value)).toBeLessThan(150); // it ramps from here
+        if (badge() === "Break") expect(saved().bpm).toBeLessThan(150); // it ramps from here
       }
       expect(saved().style).toBe("psytrance");
       advanceSeconds(0.1);
@@ -2331,13 +2369,13 @@ describe("autopilot", () => {
     advanceSeconds(4 * BAR);
     expect($("#bpm").value).toBe("145");
     pick("hitech");
-    expect($("#ramp-to").value).toBe("170"); // inside the breakdown: it rides this one
+    expect($("#bpm").value).toBe("170"); // inside the breakdown: it rides this one
     advanceSeconds(6 * BAR);
     pick("psytrance");
-    const bpm = Number($("#bpm").value);
+    const bpm = saved().bpm;
     expect(bpm).toBeGreaterThan(145);
     advanceSeconds(16 * BAR);
-    expect(Number($("#bpm").value)).toBe(Math.min(bpm, 148)); // back inside psytrance's range, no further
+    expect(saved().bpm).toBe(Math.min(bpm, 148)); // back inside psytrance's range, no further
     expect(saved().style).toBe("psytrance");
     expect($(".section-queue .restyle")).toBeNull();
   });
@@ -2462,7 +2500,7 @@ describe("🌅 closing", () => {
     for (let i = 0; i < 2000 && !brake.mock.calls.length; i++) advanceSeconds(BAR / 4);
     expect(brake).toHaveBeenCalledTimes(1);
     // The tempo holds still under the brake, whose end is set in audio time.
-    const tempo = [$("#bpm"), $("#ramp-to"), $('[data-action="ramp"]'), $('[data-action="tap"]')];
+    const tempo = [$("#bpm"), $('[data-action="ramp"]'), $('[data-action="tap"]')];
     expect(tempo.every((c) => c.disabled)).toBe(true);
     $('[data-control="style"]').value = "techno";
     $('[data-control="style"]').dispatchEvent(new Event("change"));

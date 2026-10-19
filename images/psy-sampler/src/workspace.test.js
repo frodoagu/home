@@ -12,8 +12,15 @@ describe("normalize", () => {
     expect(ws.order).toEqual([...LAYERS.map((l) => l.id), "snap"]);
     expect(ws.snapshots).toEqual([]);
     expect(ws.rampBars).toBe(8);
+    expect(ws.key).toBe(9);
     expect(ws.lists.kick).toEqual(LAYERS[0].variants);
     expect(ws.active).toEqual({});
+  });
+
+  it("keeps the mix's tonic when it is a pitch class, A otherwise", () => {
+    expect(normalize({ key: 0 }).key).toBe(0);
+    expect(normalize({ key: 11 }).key).toBe(11);
+    for (const key of [12, -1, 2.5, "6", null]) expect(normalize({ key }).key).toBe(9);
   });
 
   it("keeps each layer's volume in range, 1 when missing", () => {

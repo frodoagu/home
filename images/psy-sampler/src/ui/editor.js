@@ -98,6 +98,7 @@ export function createEditor({
   buildUp = false,
   onBuildUp,
   samples = [], // the user's samples: [{ id, name }]
+  shift = 0, // semitones the mix's tonic moves every note (music.js keyShift): the rows name what sounds
   onSample = () => {}, // a sample was picked: load it (and let it be heard)
 }) {
   const def = defOf(id);
@@ -806,7 +807,7 @@ export function createEditor({
       columns = Array.from({ length: LOOP_STEPS }, () => []);
       grid.replaceChildren(...gridHeader(tx, page));
       for (const midi of list) {
-        const name = noteName(midi + current.transpose, t().noteNames);
+        const name = noteName(midi + current.transpose + shift, t().noteNames);
         const rowClass = ["row-label", isRoot(midi) && "root", !inScale(midi, current.scale) && "outside"].filter(Boolean);
         grid.append(el("span", { class: rowClass.join(" "), text: name }));
         for (let s = 0; s < LOOP_STEPS; s++) {

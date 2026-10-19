@@ -114,13 +114,6 @@ describe("cloud save row", () => {
     expect($(".login-off").textContent).toBe("Login no disponible");
   });
 
-  it("the top bar links back to agu.com.ar", async () => {
-    await mount();
-    const back = $(".topbar a.back");
-    expect(back.getAttribute("href")).toBe("https://agu.com.ar/");
-    expect(back.textContent).toBe("← agu.com.ar");
-  });
-
   it("signing in on a fresh browser pulls the saved setup", async () => {
     server.state = { state: { bpm: 166, names: { "perc.hat": "Mi hat" } }, updatedAt: 4 };
     await mount();
@@ -156,7 +149,7 @@ describe("cloud save row", () => {
     expect(server.state.state.bpm).toBe(152);
     expect($(".sync-pill").textContent).toMatch(/^☁ Guardado ✓ \d\d:\d\d/);
     expect($(".sync-pill").dataset.state).toBe("saved");
-    expect($(".sync-pill").title).toBe("Sesión iniciada como ana@example.com");
+    expect($(".sync-pill").title).toMatch(/^Guardado ✓ \d\d:\d\d\. Sesión iniciada como ana@example\.com$/);
   });
 
   it("a newer copy from another device, with changes here too, asks; Cancel keeps and uploads local", async () => {

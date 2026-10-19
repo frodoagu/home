@@ -78,8 +78,10 @@ export function mountAccount({ cloud, tx, lang, snapshot, pristine, apply, confi
       title = tx.cloud.signedInAs(user.email);
     }
     pill.dataset.state = state;
-    pill.textContent = `☁ ${text}`;
-    pill.title = title;
+    // On a mid-width screen the bar shows only the ☁ (style.css): the words
+    // stay in the tooltip.
+    pill.replaceChildren("☁", el("span", { class: "sync-text", text: ` ${text}` }));
+    pill.title = title ? `${text}. ${title}` : text;
   }
 
   function accountMenu(user) {
