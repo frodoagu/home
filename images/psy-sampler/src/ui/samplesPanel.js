@@ -1,11 +1,12 @@
 // The "🎵 Samples" panel: the signed-in user's library (samples.js). Upload,
-// listen, delete, and "+ Sound in…" a layer, which makes a new sound that
+// record from the microphone (audio/mic.js), listen, delete, and "+ Sound in…" a layer, which makes a new sound that
 // plays the sample (the app builds it). Signed out, or without the API, it
 // only says why there is nothing to show. Collapsed by default.
 //
 // Uploads take files, a folder (picked or dropped) or archives; what they
 // hold comes from import/gather.js. A lone audio file goes straight up; more
 // than one, or a project file, opens a picker to choose (and audition) which.
+// A recording waits to be heard and named before it goes up the same way.
 import { LAYERS } from "../catalog.js";
 import { ACCEPT, FORMATS } from "../import/formats.js";
 import { MAX_SECONDS, formatBytes } from "../samples.js";
@@ -35,6 +36,12 @@ function formatsGuide(text) {
   return { node, limits };
 }
 const NAMES_SHOWN = 3;
+const METER_MS = 100;
+const METER_FLOOR_DB = -60;
+
+const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+// A peak (0-1) -> how full the meter is (0-1), in dB from METER_FLOOR_DB.
+export const meterFill = (peak) => (peak > 0 ? Math.max(0, Math.min(1, 1 - (20 * Math.log10(peak)) / METER_FLOOR_DB)) : 0);
 
 // A drop -> [{ file, path }], walking dropped folders. The entries must be taken
 // while the event is dispatched; reading them can wait.
@@ -64,7 +71,7 @@ export function droppedEntries(dataTransfer) {
   };
 }
 
-export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, onPreview, onAudition, onUse, onRemove }) {
+export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confirm, status, onPreview, onAudition, onUse, onRemove }) {
   const t = tx.samples;
   const usage = el("span", { class: "samples-usage" });
   const body = el("div", { class: "samples-body" });
@@ -108,12 +115,119 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     });
   }
 
+  /* ---- 🎙: a take from the microphone, heard and named before it goes up ---- */
+  const m = t.mic;
+  const recordBtn = el("button", { type: "button", class: "rec rec-sample", "data-action": "record-sample" });
+  const meter = el("span", { class: "mic-meter", role: "meter", "aria-label": m.level, "aria-valuemin": "0", "aria-valuemax": "1" }, el("span"));
+  let ticking = null;
+  let taken = null; // the take waiting to go up: { node }
+
+  function showMic() {
+    const now = mic?.state() ?? "idle";
+    recordBtn.textContent = now === "recording" ? m.recording(clock(mic.seconds()), clock(mic.maxSeconds)) : now === "waiting" ? m.waiting : now === "opening" ? m.opening : m.record;
+    recordBtn.title = now === "idle" ? m.recordTitle(MAX_SECONDS) : m.stopTitle;
+    recordBtn.classList.toggle("is-waiting", now === "waiting" || now === "opening");
+    recordBtn.classList.toggle("is-recording", now === "recording");
+    recordBtn.disabled = busy && now === "idle";
+    meter.hidden = now === "idle";
+    const fill = meterFill(mic?.level() ?? 0);
+    meter.style.setProperty("--level", fill.toFixed(3));
+    meter.setAttribute("aria-valuenow", fill.toFixed(2));
+  }
+
+  const stopTicking = () => {
+    clearInterval(ticking);
+    ticking = null;
+  };
+
+  function micError(err) {
+    if (err?.name === "NotAllowedError" || err?.name === "SecurityError") return m.denied;
+    if (err?.name === "NotFoundError" || err?.name === "OverconstrainedError") return m.missing;
+    return m.failed;
+  }
+
+  function startMic() {
+    dropTake();
+    const opening = mic.start(); // inside the click: it may create the AudioContext
+    stopTicking();
+    ticking = setInterval(showMic, METER_MS);
+    showMic();
+    opening.then(showMic, (err) => {
+      stopTicking();
+      showMic();
+      status(micError(err));
+    });
+  }
+
+  async function stopMic() {
+    const was = mic.state();
+    stopTicking();
+    recordBtn.disabled = true;
+    const take = await mic.stop();
+    showMic();
+    if (take) openTake(take);
+    else if (was !== "opening") status(m.silent);
+  }
+
+  recordBtn.addEventListener("click", () => (mic.state() === "idle" ? startMic() : stopMic()));
+  mic?.onFull(() => stopMic());
+
+  function dropTake() {
+    if (!taken) return;
+    taken = null;
+    samples.endAuditions();
+    render();
+  }
+
+  function openTake({ blob, seconds }) {
+    const time = new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+    const fallback = m.name(time);
+    const name = el("input", { type: "text", class: "name-input take-name", maxlength: "60", "aria-label": m.nameLabel, "data-role": "take-name" });
+    name.value = fallback;
+    const candidate = () => ({
+      key: "mic",
+      name: name.value.trim() || fallback,
+      load: async () => ({ bytes: new Uint8Array(await blob.arrayBuffer()) }),
+    });
+    const play = el("button", { type: "button", class: "ghost icon", "data-action": "audition-take", text: "▶" });
+    play.title = t.play;
+    play.setAttribute("aria-label", t.play);
+    play.addEventListener("click", () => {
+      const c = candidate();
+      onAudition?.(c).catch((err) => status(t.failedOne(c.name, errorText(err))));
+    });
+    const go = el("button", { type: "button", class: "action", "data-action": "upload-take", text: m.upload });
+    const discard = el("button", { type: "button", class: "ghost", "data-action": "discard-take", text: m.discard });
+    discard.addEventListener("click", dropTake);
+    go.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        if (await uploadAll([candidate()])) dropTake();
+      } finally {
+        setBusy(false);
+      }
+    });
+    const secs = seconds.toLocaleString(lang, { maximumFractionDigits: 1 });
+    taken = {
+      node: el(
+        "div",
+        { class: "sample-take", role: "group", "aria-label": m.record },
+        el("p", { class: "hint", text: m.take(secs) }),
+        el("div", { class: "tools-row" }, play, name, go, discard),
+      ),
+    };
+    status(m.take(secs));
+    render();
+    name.select();
+  }
+
   const setBusy = (on) => {
     busy = on;
     uploadBtn.disabled = on;
     folderBtn.disabled = on;
-    picking?.node.querySelectorAll("button, input").forEach((b) => (b.disabled = on));
+    for (const box of [picking, taken]) box?.node.querySelectorAll("button, input").forEach((b) => (b.disabled = on));
     if (!on) picking?.sync();
+    showMic();
   };
 
   // What the selection held besides candidates: projects, missing files, closed formats, failures.
@@ -331,11 +445,13 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
     guide.limits.textContent = t.formats.limits(MAX_SECONDS, user && limits ? size(limits.bytes) : null);
     if (!available) {
       picking = null;
+      taken = null;
       body.replaceChildren(el("p", { class: "hint", text: t.unavailable }));
       return;
     }
     if (!user) {
       picking = null;
+      taken = null;
       body.replaceChildren(el("p", { class: "hint", text: t.signIn }), guide.node);
       return;
     }
@@ -344,14 +460,24 @@ export function mountSamplesPanel({ samples, cloud, tx, lang, confirm, status, o
       : el("p", { class: "hint", text: t.empty });
     body.replaceChildren(
       el("p", { class: "hint", text: `${t.hint} ${t.how}` }),
-      el("div", { class: "tools-row" }, uploadBtn, folderBtn, files, folder),
+      el("div", { class: "tools-row" }, uploadBtn, folderBtn, ...(mic ? [recordBtn, meter] : []), files, folder),
       guide.node,
+      ...(taken ? [taken.node] : []),
       ...(picking ? [picking.node] : []),
       items,
     );
   }
 
   const offs = [samples.on(render), cloud?.on((event) => (event === "user" || event === "info") && render())];
+  showMic();
   render();
-  return { node, destroy: () => offs.forEach((off) => off?.()) };
+  return {
+    node,
+    destroy: () => {
+      offs.forEach((off) => off?.());
+      stopTicking();
+      mic?.onFull(null);
+      if (mic && mic.state() !== "idle") mic.stop();
+    },
+  };
 }

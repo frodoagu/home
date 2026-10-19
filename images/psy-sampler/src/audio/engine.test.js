@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
+import { FakeAudioContext, FakeNode, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "./engine.js";
 import { trimOf } from "./loudness.js";
 import { defaultData, sampleDefaults } from "./patterns.js";
@@ -1036,6 +1036,18 @@ describe("tap", () => {
     expect(blocks).toEqual([block, last]);
     expect(out().outputs).not.toContain(node);
     expect(node.disconnected).toBe(true);
+  });
+
+  it("taps another node of its context instead, leaving the output alone", async () => {
+    const mic = new FakeNode(ctx, "mic");
+    const untap = await engine.tap(() => {}, mic);
+    const node = ctx.nodes.find((n) => n.kind === "worklet");
+    expect(mic.outputs).toEqual([node]);
+    expect(out().outputs).not.toContain(node);
+    const closing = untap();
+    node.port.onmessage({ data: null });
+    await closing;
+    expect(mic.outputs).toEqual([]);
   });
 
   it("loads the processor once per context", async () => {

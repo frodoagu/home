@@ -108,6 +108,11 @@ export class FakeAudioContext {
     n.numberOfInputs = inputs;
     return n;
   }
+  createMediaStreamSource(stream) {
+    const n = new FakeNode(this, "mic");
+    n.mediaStream = stream;
+    return n;
+  }
   createAnalyser() {
     const n = new FakeNode(this, "analyser");
     n.context = this;

@@ -32,6 +32,7 @@
 //
 // tap() hands out what `out` sends to the volume, for recording: the
 // listener's volume knob (setVolume) never reaches a take or the visuals.
+// It taps a microphone the same way, for a sample.
 //
 // listen() reports what the scheduler queues, with its audio time, for the
 // visuals: every lane's hits per step, bar lines, lane changes, FX shots, the
@@ -974,11 +975,12 @@ export function createEngine({
   }
 
   /**
-   * Feeds `onAudio([left, right])` with blocks of the output from now on.
+   * Feeds `onAudio([left, right])` with blocks of the output from now on,
+   * or of `source` (a node of ensureContext()'s, like a microphone).
    * Resolves to untap(), which delivers the block in flight and then
    * resolves; rejects where the browser has no AudioWorklet.
    */
-  async function tap(onAudio) {
+  async function tap(onAudio, source) {
     ensureContext();
     tapModule ??= ctx.audioWorklet.addModule(TAP_URL);
     await tapModule;
@@ -986,7 +988,8 @@ export function createEngine({
     const node = createWorklet(ctx, "psy-tap", { channelCount: 2, channelCountMode: "explicit", numberOfOutputs: 1 });
     // Its output is silence; into the destination it keeps the node pulled.
     node.connect(ctx.destination);
-    out.connect(node);
+    const from = source ?? out;
+    from.connect(node);
     let closed = null;
     node.port.onmessage = ({ data }) => {
       if (data) onAudio(data);
@@ -995,7 +998,7 @@ export function createEngine({
     return () =>
       new Promise((resolve) => {
         closed = () => {
-          out.disconnect(node);
+          from.disconnect(node);
           node.disconnect();
           resolve();
         };
