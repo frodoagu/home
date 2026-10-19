@@ -269,6 +269,10 @@ export default {
     setShort: (len) => `set ${len}`,
     setSaved: (len) => `Un set de ${len} : l'IA planifie chaque section selon l'avancée de la nuit.`,
     setOpen: "Set ouvert : l'IA planifie sans durée en tête.",
+    touches: "Touches",
+    touchesTitle: "Une fois les prochaines phases planifiées, l'IA profite de son temps libre pour poser filtres et distorsion sur le lead ou la mélodie qui joue, pendant un, deux ou quatre loops, en rythme avec la mesure",
+    touchesOn: "Oui",
+    touchesOff: "Non",
     level: "Complexité",
     levelTitle: "Combien l'IA décide à chaque section : plus de complexité, des prompts plus longs et des réponses plus lentes",
     levels: {

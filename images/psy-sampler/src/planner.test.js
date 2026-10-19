@@ -16,6 +16,7 @@ import {
   ROLE_LINE,
   SET_LENGTHS,
   SYSTEM,
+  TOUCH_LOOPS,
   TUNE_SYSTEM,
   setLine,
   asksForm,
@@ -31,6 +32,7 @@ import {
   normalizeOpening,
   normalizeOutro,
   normalizePlan,
+  normalizeTouch,
   normalizeTune,
   openWith,
   openingPrompt,
@@ -40,6 +42,8 @@ import {
   readPlans,
   systemOf,
   themeAfter,
+  touchPrompt,
+  touchSchema,
   tunePrompt,
   tuneSchema,
   whyOf,
@@ -715,5 +719,59 @@ describe("levels", () => {
   it("high recalls the tweaks it dressed the playing sounds with", () => {
     const prompt = planPrompt({ ...ask, level: "high", dressed: [{ id: "lead.acid", drive: 1, filter: "vowel o", sweep: "bar" }] });
     expect(prompt).toContain("How you dressed them: lead.acid drive 1 filter vowel o sweep bar.");
+  });
+});
+
+describe("touches", () => {
+  const ids = ["classic.popcorn", "lead.acid"];
+  const ask = (more = {}) =>
+    touchPrompt({
+      section: "peak",
+      loop: 3,
+      loops: 12,
+      active: { kick: "kick.long", lead: "lead.acid", classic: "classic.popcorn" },
+      ids,
+      ...more,
+    });
+
+  it("asks for one sound playing now, with what plays, how it is dressed and the last touches", () => {
+    const prompt = ask({
+      dressed: [{ id: "lead.acid", drive: 1, filter: "lowpass" }, { id: "pad.chord", tone: 1 }],
+      recent: [{ id: "lead.acid", loops: 2, filter: "bandpass" }, { id: null, loops: 4 }],
+      vibe: "dark",
+    });
+    expect(prompt).toContain("Now playing: peak, loop 3 of 12 (2 bars a loop). Sounds playing now: classic.popcorn, kick.long, lead.acid.");
+    expect(prompt).toMatch(/Melodic sounds you can touch: classic\.popcorn \(Popcorn.*; lead\.acid \(/);
+    expect(prompt).toContain("How you dressed them: lead.acid drive 1 filter lowpass.");
+    expect(prompt).toContain("Your last touches, oldest first: lead.acid filter bandpass for 2 loops; nothing for 4 loops.");
+    expect(prompt).toContain('Keep to the listener\'s wish: "dark".');
+    expect(ask({ describe: false })).toContain("Melodic sounds you can touch: classic.popcorn, lead.acid.");
+    expect(ask()).not.toContain("Your last touches");
+  });
+
+  it("follows a schema of those ids, the touch keys and its lengths", () => {
+    const schema = touchSchema(ids);
+    expect(schema.properties.id.enum).toEqual(["", ...ids]);
+    expect(schema.properties.loops.enum).toEqual(TOUCH_LOOPS);
+    expect(schema.properties.drive.enum).toEqual([0, 1, 2]);
+    expect(schema.properties.filter.enum[0]).toBe("");
+    expect(schema.required).toEqual(["why", "id", "loops", "filter", "cutoff", "res", "sweep", "shape", "env", "distortion", "drive"]);
+    expect(schema.properties).not.toHaveProperty("echo");
+  });
+
+  it("keeps a touch on one of the ids with only what it takes, and is idempotent", () => {
+    const raw = { why: "open it up", id: "lead.acid", loops: 2, filter: "lowpass", cutoff: 2, res: 9, sweep: "", shape: "", env: 0, distortion: "fold", drive: 2 };
+    const touch = normalizeTouch(raw, ids);
+    expect(touch).toEqual({ id: "lead.acid", loops: 2, filter: "lowpass", cutoff: 2, distortion: "fold", drive: 2 });
+    expect(normalizeTouch(touch, ids)).toEqual(touch);
+  });
+
+  it("anything else is nothing for those loops, or no answer", () => {
+    expect(normalizeTouch({ id: "pad.chord", loops: 4, filter: "lowpass" }, ids)).toEqual({ id: null, loops: 4 });
+    expect(normalizeTouch({ id: "lead.acid", loops: 3, filter: "wah", drive: 5 }, ids)).toEqual({ id: null, loops: 1 });
+    expect(normalizeTouch({ id: "", loops: 2 }, ids)).toEqual({ id: null, loops: 2 });
+    expect(normalizeTouch({ id: "toString", loops: 2, drive: 1 }, ids)).toEqual({ id: null, loops: 2 });
+    expect(normalizeTouch("lead.acid", ids)).toBeNull();
+    expect(normalizeTouch([], ids)).toBeNull();
   });
 });

@@ -2493,6 +2493,11 @@ html:has(dialog.help[open], dialog.intro[open]) {
   content: "⏫ ";
 }
 
+/* A sound the ✨ AI is riding a filter or a distortion on (a touch). */
+.tile.is-touched .variant-detail::before {
+  content: "✨ ";
+}
+
 /* A snapshot with unsaved edits. */
 .tile.is-dirty .variant-label::after {
   content: " •";

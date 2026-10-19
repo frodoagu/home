@@ -2545,7 +2545,8 @@ describe("✨ AI", () => {
   // to `formAsks` and get `forms`, in turn (by default the set's own form, and
   // no closing). Asks to tune a vibe (their schema has
   // genre) go to `tuneAsks` and get `tune` (nothing usable by default: the
-  // listener's words and the style's genre stay).
+  // listener's words and the style's genre stay). Touches (their schema has
+  // loops) get nothing: touches.test.js covers them.
   function fakeAi({
     chrome = "available",
     answers = [],
@@ -2577,6 +2578,7 @@ describe("✨ AI", () => {
           return typeof answer === "function" ? answer(opts, schema, prompt) : Promise.resolve(answer);
         }
         if (fail) return Promise.reject(new Error("no"));
+        if (schema.properties.loops) return Promise.resolve({ why: "", id: "", loops: 4 });
         if (schema.properties.fx) {
           openings.push({ name, prompt, schema, opts });
           return typeof opening === "function" ? opening(opts, schema, prompt) : Promise.resolve(opening);

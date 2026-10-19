@@ -770,6 +770,25 @@ describe("insert", () => {
     expect(filter.frequency.events.at(-1)).toEqual(["target", 900, ctx.currentTime, 0.02]);
   });
 
+  it("an insert change given an audio time lands then: a bar line the scheduler is queuing", () => {
+    const base = defaultData("lead.arp");
+    engine.setLanes({ lead: "lead.arp" });
+    run(0.3);
+    const [lane] = laneGains();
+    const old = insertOf(lane);
+    const at = ctx.currentTime + 0.1;
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 500 } }, 0, at);
+    const fresh = ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(old.ducker) && n !== old.output);
+    expect(fresh.gain.value).toBe(0); // silent until then
+    expect(fresh.gain.events).toEqual([["set", 0, at], ["linear", 1, at + 0.03]]);
+    expect(old.output.gain.events.at(-1)).toEqual(["linear", 0, at + 0.03]);
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 900 } }, 0, at);
+    const filter = ctx.nodes.find((n) => n.kind === "filter" && n.type === "lowpass" && n.frequency.events.length);
+    expect(filter.frequency.events.at(-1)).toEqual(["target", 900, at, 0.02]);
+    engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", cutoff: 700 } }, 0, ctx.currentTime - 1);
+    expect(filter.frequency.events.at(-1)).toEqual(["target", 700, ctx.currentTime, 0.02]); // never in the past
+  });
+
   it("a filter's LFO follows the BPM and stops with its lane", () => {
     const base = defaultData("lead.arp");
     engine.setData("lead.arp", { ...base, insert: { ...base.insert, filter: "lowpass", lfo: 0.5, rate: 16 } });

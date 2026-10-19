@@ -199,6 +199,20 @@ export function restyle(id, seed, macros, insert) {
   return out;
 }
 
+// A ✨ touch (planner.js normalizeTouch): a filter or a distortion the AI
+// rides on one sound for a loop or a few, laid over its dress. The keys
+// its dress sets are rebuilt with the touch's on top; a distortion the touch
+// names is never shut by the dress's negative drive.
+export const TOUCH_KEYS = ["filter", "cutoff", "res", "sweep", "shape", "env", "distortion"];
+
+/** `id`'s live `insert` with `touch` over its `dress` (a plan's entry, or null). */
+export function touched(id, seed, dress, touch, insert) {
+  const macros = { ...dress };
+  for (const k of [...TOUCH_KEYS, "drive"]) if (Object.hasOwn(touch, k)) macros[k] = touch[k];
+  if (touch.distortion && touch.distortion !== "off" && macros.drive < 0) delete macros.drive;
+  return restyle(id, seed, macros, insert).insert;
+}
+
 // A phrase-end fill: the kick breaks for the last two beats, the percussion
 // rolls over them, both, or nothing. From the seed, the section and the
 // loop, like a sound's dress, so a section's fills come back with it. The
