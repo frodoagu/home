@@ -495,9 +495,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   src/audio/classics.js) is invisible to the pilot and the ✨ AI, and `arrange`
   carries one played by hand through every section. A notes part can be
   several loops long (`loops`): it counts from the bar its lane came in on
-  (`lane.from`), while 2-bar parts keep counting from ▶ so old seeds replay. Output chain ends compressor -> limiter -> 0.8 trim: Chrome's
-  compressors add makeup gain, so re-measure at the destination before touching
-  them. Anything that must land on the grid (queued clicks, autopilot, improvise
+  (`lane.from`), while 2-bar parts keep counting from ▶ so old seeds replay. The whole mix ends in audio/master.js (subsonic HP, mono
+  below 120 Hz, 3-band compressor, limiter, a -1 dBFS ceiling): Web Audio
+  compressors add makeup gain, taken back by measured constants, so re-measure
+  at the destination before touching them. Anything that must land on the grid (queued clicks, autopilot, improvise
   variations) goes through `engine.onBar()`, never a UI timer; Tap is the one
   thing that moves the grid itself (`engine.restart()` on the first tap of a count,
   `engine.align()` after), timed by the event's `timeStamp` and mapped through

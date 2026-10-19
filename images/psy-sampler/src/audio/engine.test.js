@@ -35,12 +35,11 @@ function run(seconds) {
   }
 }
 
-// master -> DJ lowpass -> DJ highpass -> sweep -> compressor; the master is
+// master -> DJ lowpass -> DJ highpass -> sweep -> mastering; the master is
 // the first gain into the DJ filter (the effect returns join it there too).
-const sweepFilter = () => {
-  const comp = ctx.nodes.find((n) => n.kind === "compressor");
-  return ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
-};
+// The mastering chain's input is the one gain held to stereo.
+const masteringInput = () => ctx.nodes.find((n) => n.kind === "gain" && n.channelCountMode === "explicit");
+const sweepFilter = () => ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === masteringInput());
 function masterGain() {
   const high = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === sweepFilter());
   const low = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === high);
@@ -67,7 +66,7 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> DJ filter -> sweep -> compressor -> limiter -> brake -> trim -> volume -> destination once, and resumes a suspended context", () => {
+  it("builds master gain -> DJ filter -> sweep -> mastering -> brake -> out -> volume -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
@@ -81,18 +80,15 @@ describe("context lifecycle", () => {
     expect([low.type, low.frequency.value, high.type, high.frequency.value]).toEqual(["lowpass", 24000, "highpass", 0]);
     const [sweep] = high.outputs;
     expect([sweep.type, sweep.frequency.value, sweep.Q.value]).toEqual(["highpass", 0, 0]); // an identity until a drop
-    const comp = sweep.outputs[0];
-    expect(comp.kind).toBe("compressor");
-    const limiter = comp.outputs[0];
-    expect(limiter.kind).toBe("compressor");
-    expect([limiter.threshold.value, limiter.ratio.value]).toEqual([-1.5, 20]);
-    const [line] = limiter.outputs;
+    expect(sweep.outputs[0]).toBe(masteringInput());
+    const ceiling = ctx.nodes.find((n) => n.kind === "waveshaper" && n.outputs[0]?.outputs[0]?.kind === "delay");
+    const [line] = ceiling.outputs[0].outputs;
     expect([line.kind, line.delayTime.value]).toEqual(["delay", 0]); // the vinyl brake, still until a set's end
     const [brakeGain] = line.outputs;
     expect(brakeGain.gain.value).toBe(1);
-    const trim = brakeGain.outputs[0];
-    expect(trim.gain.value).toBe(0.8);
-    const [volume] = trim.outputs;
+    const out = brakeGain.outputs[0];
+    expect(out.gain.value).toBe(1);
+    const [volume] = out.outputs;
     expect(volume.gain.value).toBe(1);
     expect(volume.outputs[0]).toBe(ctx.destination);
   });
@@ -424,11 +420,11 @@ describe("render", () => {
     expect(offline.nodes.some((n) => n.kind === "gain" && Math.abs(n.gain.value - BASS) < 1e-9)).toBe(true);
   });
 
-  it("an FX renders from time 0 and is trimmed at its tail", async () => {
+  it("an FX renders once the mastering has settled, from there, and is trimmed at its tail", async () => {
     const r = renderer();
     const out = await r.render({ fx: "fx.impact" });
-    expect(Math.min(...offline.sources().map((s) => s.startTime))).toBe(0);
-    expect(out.channels[0].length).toBe(offline.length);
+    expect(Math.min(...offline.sources().map((s) => s.startTime))).toBe(0.2);
+    expect(out.channels[0].length).toBe(offline.length - 0.2 * 48000);
   });
 
   it("a shape cuts and fades every rendered hit", async () => {
@@ -858,14 +854,14 @@ describe("DJ filter", () => {
 describe("master volume", () => {
   const volume = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
 
-  it("starts the context at the knob's level and glides it squared, after the trim the takes and visuals read", () => {
+  it("starts the context at the knob's level and glides it squared, after the output the takes and visuals read", () => {
     engine.setVolume(0.5);
     engine.setLanes({ kick: "kick.punchy" });
     expect(volume().gain.value).toBe(0.25);
     engine.setVolume(0);
     expect(volume().gain.events.at(-1)).toEqual(["target", 0, ctx.currentTime, 0.02]);
-    const trim = ctx.nodes.find((n) => n.outputs.includes(volume()));
-    expect(engine.levels()).toBe(trim.outputs.at(-1));
+    const out = ctx.nodes.find((n) => n.outputs.includes(volume()));
+    expect(engine.levels()).toBe(out.outputs.at(-1));
   });
 });
 
@@ -996,7 +992,8 @@ describe("pump", () => {
 });
 
 describe("tap", () => {
-  const trim = () => ctx.nodes.find((n) => n.kind === "gain" && n.gain.value === 0.8);
+  const volume = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
+  const out = () => ctx.nodes.find((n) => n.outputs.includes(volume()));
 
   it("hands out what goes to the speakers until untapped", async () => {
     const blocks = [];
@@ -1005,7 +1002,7 @@ describe("tap", () => {
     expect(ctx.modules).toHaveLength(1);
     expect(node.name).toBe("psy-tap");
     expect(node.options).toMatchObject({ channelCount: 2, channelCountMode: "explicit" });
-    expect(trim().outputs).toContain(node);
+    expect(out().outputs).toContain(node);
 
     const block = [new Float32Array(4), new Float32Array(4)];
     node.port.onmessage({ data: block });
@@ -1018,7 +1015,7 @@ describe("tap", () => {
     node.port.onmessage({ data: null });
     await closing;
     expect(blocks).toEqual([block, last]);
-    expect(trim().outputs).not.toContain(node);
+    expect(out().outputs).not.toContain(node);
     expect(node.disconnected).toBe(true);
   });
 
