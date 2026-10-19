@@ -576,7 +576,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   the held theme or an owned sound); a queue change keeps only the plans its
   sections still lead to (`keptAhead`), an applied vibe (Aplicar/Enter) drops
   them all but the next section's, a buffer so none plays unplanned while the
-  model thinks; from silence ✨ arms the autopilot and plans `AHEAD` before ▶
+  model thinks; with nothing left to plan, its idle time goes to touches
+  (`planTouch`: a filter or distortion on the lead or classic playing, for
+  1-4 loops, landing on the next loop's first beat). A touch is a `feed()`
+  overlay, never stored and never in a link, and any plan ask aborts it
+  (`ask()`), so it can't hold a plan up; from silence ✨ arms the autopilot and plans `AHEAD` before ▶
   (🤖 plays by itself once they are in); the pilot takes the next section's plan
   only before the playing section's last loop (`withPlan`, else it is dropped),
   and with no plan `advance()`/`arrange()` must draw exactly as before (old

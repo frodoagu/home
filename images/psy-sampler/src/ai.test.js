@@ -308,7 +308,7 @@ describe("settings", () => {
 
   it("clean whatever was stored, and default to LM Studio's local server", () => {
     const none = { openai: "", anthropic: "", gemini: "" };
-    const rest = { keys: none, models: none, level: "mid", set: 0 };
+    const rest = { keys: none, models: none, level: "mid", set: 0, touches: true };
     expect(cleanPrefs(null)).toEqual({ on: false, engine: null, endpoint: LMSTUDIO_URL, model: "", vibe: "", open: true, ...rest });
     expect(
       cleanPrefs({

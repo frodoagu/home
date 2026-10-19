@@ -18,6 +18,7 @@ import {
   moves,
   restyle,
   synthsFor,
+  touched,
 } from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
@@ -240,5 +241,27 @@ describe("bassCutOf", () => {
 
   it("never in a section without a bass groove to cut", () => {
     for (const section of ["intro", "build", "breakdown", "outro"]) expect(cuts(section).every((b) => b === 0)).toBe(true);
+  });
+});
+
+describe("touched: a ✨ touch over a sound's dress", () => {
+  const live = { ...defaultData("lead.acid").insert, lp: 3000 };
+
+  it("lays its filter and distortion over the dress, which keeps the rest", () => {
+    const dressed = { id: "lead.acid", motion: 2, filter: "vowel o", trem: "1/8" };
+    const insert = touched("lead.acid", "s", dressed, { id: "lead.acid", loops: 2, filter: "lowpass", res: 2, distortion: "hard", drive: 2 }, live);
+    expect(insert).toMatchObject({ filter: "lowpass", res: 12, drive: "hard", amount: 0.4, trem: 0.5, lp: 3000 });
+    expect(insert.phaser).toBe(restyle("lead.acid", "s", dressed, live).insert.phaser);
+  });
+
+  it("is the dress itself with nothing to lay, and a drive alone grits a clean sound", () => {
+    expect(touched("lead.acid", "s", null, { id: "lead.acid", loops: 1 }, live)).toEqual(restyle("lead.acid", "s", {}, live).insert);
+    expect(touched("lead.acid", "s", null, { id: "lead.acid", loops: 1, drive: 1 }, live)).toMatchObject({ drive: "soft", amount: 0.35 });
+  });
+
+  it("a distortion it names plays even where the dress drove the sound clean", () => {
+    const clean = { id: "lead.acid", drive: -2 };
+    expect(restyle("lead.acid", "s", { ...clean, distortion: "fold" }, live).insert.drive).toBe("off");
+    expect(touched("lead.acid", "s", clean, { id: "lead.acid", loops: 1, distortion: "fold" }, live)).toMatchObject({ drive: "fold", amount: 0.1 });
   });
 });

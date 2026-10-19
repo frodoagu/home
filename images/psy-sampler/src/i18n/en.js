@@ -269,6 +269,10 @@ export default {
     setShort: (len) => `set ${len}`,
     setSaved: (len) => `A ${len} set: the AI plans each section for where the night is.`,
     setOpen: "Open-ended set: the AI plans with no length in mind.",
+    touches: "Touches",
+    touchesTitle: "Once the sections ahead are planned, the AI spends its idle time putting filters and distortion on the lead or the melody playing, for one, two or four loops, in time with the bar",
+    touchesOn: "On",
+    touchesOff: "Off",
     level: "Complexity",
     levelTitle: "How much the AI decides each section: more complexity, longer prompts and slower answers",
     levels: {

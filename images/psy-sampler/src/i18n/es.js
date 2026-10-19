@@ -271,6 +271,10 @@ export default {
     setShort: (len) => `set ${len}`,
     setSaved: (len) => `Set de ${len}: la IA planea cada fase según por dónde va la noche.`,
     setOpen: "Set libre: la IA planea sin pensar en cuánto dura.",
+    touches: "Toques",
+    touchesTitle: "Cuando ya planeó las fases que vienen, la IA usa el tiempo libre para meterle filtros y distorsión al lead o a la melodía que suena, por uno, dos o cuatro loops, a tiempo con el compás",
+    touchesOn: "Sí",
+    touchesOff: "No",
     level: "Complejidad",
     levelTitle: "Cuánto decide la IA en cada fase: más complejidad, prompts más largos y respuestas más lentas",
     levels: {

@@ -1940,6 +1940,49 @@ playing the user's sample. The description lives in the workspace
 untrusted text like the names. `ROLE_LINE` tells the model those words outrank
 the sound's name. The other levels send exactly what they did before.
 
+### Touches: the model's idle time
+
+Once every plan ahead is in (`AHEAD` planned, or nothing it may plan yet),
+the model would sit idle until the next section starts. **Touches** use that
+time: one ask at a time for a filter or a distortion on **one melodic sound
+playing now** (`planner.js` `TOUCH_LAYERS`: the lead, or a classic's
+melody; never one the listener owns), for 1, 2 or 4 loops, the way a live
+act rides a knob.
+
+- **Asked only when idle.** `planAhead()` falls through to `planTouch()` on
+  every exit where it has nothing to ask. A touch never blocks a plan:
+  `planAhead` asks over one on its way (`ask()` aborts it), and a section
+  start cancels it. Not armed, not stopped, not during a replay, not in a
+  section's last loop (its answer would land on the next section, whose
+  own dress takes over), and never while a touch with loops to go is on:
+  the next one is asked in the last loop of the one on, so they chain.
+  **AI settings → Toques** turns them off (`prefs.touches`, on by default).
+- **The ask** (`touchPrompt` / `touchSchema` / `normalizeTouch`) goes with the
+  plans' own instructions (`systemFor()`), so Chrome keeps its one base
+  session. It names the section and loop, what plays, the sounds it may touch
+  and how the plans dressed them, the last touches (`run.touches`, so it
+  varies) and the vibe. The answer: `why`, `id` (`""` = nothing for those
+  loops: a rest, so not every loop is touched), `loops`, the filter keys of
+  the tweaks (`dress.js` `TOUCH_KEYS`: filter, cutoff, res, sweep, shape,
+  env, distortion) and a `drive` of 0-2. `normalizeTouch()` is the gate: an id
+  of the list, only the keys `fits()` allows.
+- **It lands on the grid.** The answer waits in `state.touchNext` and lands
+  on the next loop's first beat (`stepTouch`, from the bar hook), for this
+  section only and only on a sound still playing. It is an **overlay in
+  `feed()`**, like a drop's gap: `dress.js` `touched()` rebuilds the insert
+  from the sound's dress with the touch on top, and nothing reaches the
+  workspace or storage. It comes off after its loops, at the section start,
+  when the sound leaves or when the pilot lets go, on a bar line too.
+  `engine.setData(id, data, ramp, at)` takes that bar line's audio time, so
+  the insert changes there and not when the bar hook runs (up to the
+  lookahead, 120 ms, earlier; more in a hidden tab). A type change crossfades
+  the new chain in from it.
+- The tile shows ✨ while touched (`.is-touched`), with the model's `why` as
+  its tooltip. The ✨ button and the timeline don't pulse for a touch: it is
+  no plan on its way (`thinking()`).
+- **Not replayed.** When a touch lands depends on when the model had time,
+  so a seed can't bring it back, and 🔗 doesn't carry touches.
+
 ### Seeds, share links and replay
 
 A model's answers can't come back from a seed, so the run records the plans it
