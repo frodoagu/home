@@ -51,7 +51,18 @@ export function withBuildUp(data, from) {
 // build-up they read their bar in place: no speed, iter or echo.
 const inPlace = (data, steps, mods) => ({ ...data, steps, mods, speed: 1, iter: 1, echo: null });
 
-/** Nothing at all, drums and notes alike: kick and bass in the bar before a drop. */
+/** A hit every `every` steps over the bar starting at `from`: a long drop's roll before its build-up bar. */
+export function withPulse(data, from, every) {
+  const steps = data.steps.slice();
+  const mods = data.mods.slice();
+  for (let i = 0; i < BAR_STEPS; i++) {
+    steps[(from + i) % steps.length] = i % every ? OFF : HIT;
+    mods[(from + i) % steps.length] = null;
+  }
+  return inPlace(data, steps, mods);
+}
+
+/** Nothing at all, drums and notes alike: kick and bass in a drop's gap, the bass in its cuts. */
 export function silenced(data) {
   if (data.notes) return { ...data, notes: [], echo: null };
   return inPlace(data, data.steps.map(() => OFF), data.mods.map(() => null));

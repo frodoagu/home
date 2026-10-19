@@ -1384,6 +1384,21 @@ describe("💥 drop", () => {
     expect(pump).toHaveBeenLastCalledWith({ pad: 0.6, lead: 0.35 }, expect.any(Number));
     expect(dropBtn().getAttribute("aria-pressed")).toBe("false");
   });
+
+  it("under the autopilot 💥 always plays the classic two bars, whatever the seed would draw", () => {
+    const sweep = vi.spyOn(engine, "sweep");
+    for (const seed of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
+      $("#seed").value = seed;
+      $("#seed").dispatchEvent(new Event("change"));
+      $("button.auto").click();
+      dropBtn().click();
+      advanceSeconds(2 * BAR);
+      const [from, to] = sweep.mock.calls.at(-1);
+      expect((to - from) / BAR).toBeCloseTo(2, 6);
+      $("button.stop").click();
+      sweep.mockClear();
+    }
+  });
 });
 
 describe("autopilot: fills, filters and improvise", () => {
@@ -1409,6 +1424,21 @@ describe("autopilot: fills, filters and improvise", () => {
     for (const data of Object.values(saved().variants)) {
       if (data.steps) expect(data.steps.slice(24, 32).join()).not.toBe("1,0,1,0,1,1,2,2");
     }
+  });
+
+  it("drops come in several lengths, the gap where its sweep ends; the bass sits out some phrase ends on its own", () => {
+    const sweep = vi.spyOn(engine, "sweep");
+    const sweepOff = vi.spyOn(engine, "sweepOff");
+    const setData = vi.spyOn(engine, "setData");
+    run(120);
+    const silent = (d) => (d.notes ? !d.notes.length : d.steps.every((v) => v === OFF));
+    const lengths = sweep.mock.calls.map(([from, to]) => Math.round((to - from) / BAR));
+    expect(lengths.every((bars) => [1, 2, 3, 4, 8].includes(bars))).toBe(true);
+    expect(new Set(lengths).size).toBeGreaterThan(1);
+    sweep.mock.calls.forEach(([, to], i) => expect(sweepOff.mock.calls[i][0]).toBeCloseTo(to, 6));
+    const silenced = (layer) => setData.mock.calls.filter(([id, d]) => id.startsWith(`${layer}.`) && silent(d)).length;
+    expect(silenced("bass")).toBeGreaterThan(silenced("kick")); // the cuts take the bass alone
+    for (const data of Object.values(saved().variants)) if (data.notes) expect(data.notes.length).toBeGreaterThan(0);
   });
 
   it("rides the leads' and pads' filters, never the kick's or the bass's", () => {
