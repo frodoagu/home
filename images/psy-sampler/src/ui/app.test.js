@@ -1355,8 +1355,8 @@ describe("💥 drop", () => {
     click("kick.punchy");
     dropBtn().click();
     advanceSeconds(1.5 * BAR); // in the roll
-    const comp = ctx.nodes.find((n) => n.kind === "compressor");
-    const sweep = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === comp);
+    const mastering = ctx.nodes.find((n) => n.kind === "gain" && n.channelCountMode === "explicit");
+    const sweep = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === mastering);
     expect(sweep.frequency.events.at(-1)[0]).toBe("exp"); // on its way up
     $("button.stop").click();
     expect(sweep.frequency.events.at(-1)).toEqual(["set", 0, expect.closeTo(ctx.currentTime + 0.03, 9)]);

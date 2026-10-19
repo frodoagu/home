@@ -1,7 +1,7 @@
 // Audio engine: owns the AudioContext, the output chain, the lookahead
 // scheduler and one gain "lane" per playing variant.
 //
-//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> compressor ─> limiter ─> trim ─> volume ─> destination
+//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> mastering ─> brake ─> out ─> volume ─> destination
 //                                   fx gain  ───┤                      ▲
 //                                               ├─ delay send ─> delay 3/16 ─> return ─┤
 //                                               └─ reverb send ─> convolver ─> return ─┘
@@ -30,7 +30,7 @@
 // Tap sync: restart() takes the loop back to its first step at a tap, and
 // align() moves the grid onto the beat the taps lay down (tempo.js).
 //
-// tap() hands out what the trim sends to the volume, for recording: the
+// tap() hands out what `out` sends to the volume, for recording: the
 // listener's volume knob (setVolume) never reaches a take or the visuals.
 //
 // listen() reports what the scheduler queues, with its audio time, for the
@@ -58,6 +58,7 @@ import {
 } from "./timing.js";
 import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
 import { trimOf } from "./loudness.js";
+import { buildMaster } from "./master.js";
 import { KEY_DEFAULT, keyShift } from "./music.js";
 import { auditionEvent, baseOf, defOf, eventsAt, partSteps, sampleDefaults } from "./patterns.js";
 import { fadesOnly, ringing, shaped } from "./shape.js";
@@ -66,7 +67,6 @@ import { trimTail } from "./wav.js";
 import TAP_URL from "./tap.worklet.js?url&no-inline";
 
 const MASTER_GAIN = 0.7;
-const OUTPUT_TRIM = 0.8;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
 const LAYER_LEVEL = { kick: 0.9, bass: 0.45, perc: 0.85, lead: 0.3, pad: 0.35, glitch: 0.3, classic: 0.4, fx: 0.6 };
@@ -83,7 +83,7 @@ const SENDS = {
 };
 const DELAY_STEPS = 3; // dotted 8th: the classic psy lead echo
 const DELAY_FEEDBACK = 0.38;
-// Returns feed the compressor directly, so they already carry the master level.
+// Returns join after the master gain (into the DJ filter), so they carry its level.
 const RETURN_LEVEL = MASTER_GAIN;
 const REVERB_SECONDS = 2.4;
 const AUDITION_SECONDS = 1.5;
@@ -93,6 +93,10 @@ const RENDER_RATE = 48000;
 const FX_MAX_BARS = 4;
 const FX_TAIL_SECONDS = 4.6;
 const FX_RENDER_SECONDS = Math.ceil(FX_MAX_BARS * BAR_STEPS * stepDuration(BPM_MIN) + FX_TAIL_SECONDS);
+// The mastering compressors start as if out of a full-scale signal and settle
+// in ~150 ms (measured in Chrome), so an FX render plays that late and drops
+// the wait. A loop render keeps its second pass anyway.
+const RENDER_SETTLE = 0.2;
 // The editor's waveform only has to look right.
 const SKETCH_RATE = 22050;
 // Sidechain: the kick, rectified and clipped to 0..1 (DUCK_DRIVE: its body
@@ -133,34 +137,15 @@ function impulse(ctx, seconds) {
   return buf;
 }
 
-// Output chain: master -> DJ filter -> sweep -> compressor -> limiter ->
-// brake -> trim -> volume -> destination, plus the shared delay and reverb buses (their
-// returns go through the DJ filter and the sweep too). Built once per
+// Output chain: master -> DJ filter -> sweep -> mastering (master.js) ->
+// brake -> out -> volume -> destination, plus the shared delay and reverb buses (their
+// returns go through the DJ filter, the sweep and the mastering too). Built once per
 // context, live or offline; a render keeps the sweep open and never brakes.
 // The brake is a delay line at 0 and a gain at 1 until brake() slows the
 // whole mix down like a vinyl.
 function buildChain(ctx, bpm, effects, djValue = 0) {
-  // Gentle settings: it only catches peaks when layers stack up. The
-  // defaults (-24 dB, 12:1) would flatten exactly the dynamics a solo
-  // layer is meant to let you hear.
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -10;
-  comp.knee.value = 6;
-  comp.ratio.value = 4;
-  comp.attack.value = 0.003;
-  comp.release.value = 0.15;
-  // Safety net for big stacks: every layer + FX + tails peaks ~+1.5 dBFS
-  // through the compressor alone. Both compressors add automatic makeup
-  // gain (Chrome), so the trim takes ~2 dB back: measured, a solo layer
-  // peaks around -3 dBFS and the full stack stays under -1.5 dBFS.
-  const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -1.5;
-  limiter.knee.value = 0;
-  limiter.ratio.value = 20;
-  limiter.attack.value = 0.001;
-  limiter.release.value = 0.08;
-  const trim = ctx.createGain();
-  trim.gain.value = OUTPUT_TRIM;
+  const mastering = buildMaster(ctx);
+  const out = ctx.createGain();
   const volume = ctx.createGain();
   const master = ctx.createGain();
   master.gain.value = MASTER_GAIN;
@@ -178,9 +163,9 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   sweep.Q.value = SWEEP_Q;
   const bus = buildBus(ctx, dj.low, bpm, effects);
   const brake = { line: ctx.createDelay(BRAKE_MAX / 2 + 0.1), gain: ctx.createGain() };
-  master.connect(dj.low).connect(dj.high).connect(sweep).connect(comp).connect(limiter);
-  limiter.connect(brake.line).connect(brake.gain).connect(trim).connect(volume).connect(ctx.destination);
-  return { master, dj, sweep, brake, out: trim, volume, bus, side: buildSidechain(ctx) };
+  master.connect(dj.low).connect(dj.high).connect(sweep).connect(mastering.input);
+  mastering.output.connect(brake.line).connect(brake.gain).connect(out).connect(volume).connect(ctx.destination);
+  return { master, dj, sweep, brake, out, volume, bus, side: buildSidechain(ctx) };
 }
 
 // The kick lanes' sum in `input`, its envelope out of `env` (never heard).
@@ -296,7 +281,7 @@ export function createEngine({
 } = {}) {
   let ctx = null;
   let master = null;
-  let out = null; // the trim: the mix before the listener's volume
+  let out = null; // the mix before the listener's volume
   let volumeGain = null;
   let volumeValue = 1;
   let tapModule = null; // addModule()'s promise, once per context
@@ -326,7 +311,7 @@ export function createEngine({
   const volumes = new Map(); // layer id -> its fader over every sound in it (1 otherwise)
   let solo = null; // the variant heard alone while its 🎧 is held
   const listeners = new Set(); // listen()'s callbacks
-  let analyser = null; // levels for the visuals, off the trim; made on first ask
+  let analyser = null; // levels for the visuals, off `out`; made on first ask
 
   const emit = (event) => {
     for (const fn of listeners) fn(event);
@@ -923,18 +908,20 @@ export function createEngine({
     const long = Object.values(desired).map(dataOf).filter((d) => (d.loops ?? 1) > 1);
     const span = Math.max(LOOP_STEPS, ...long.map((d) => partSteps(d) / (d.speed ?? 1)));
     const loop = Math.round(span * stepDur * RENDER_RATE);
-    const length = fx ? FX_RENDER_SECONDS * RENDER_RATE : 2 * loop;
+    const settle = fx ? Math.round(RENDER_SETTLE * RENDER_RATE) : 0;
+    const length = fx ? FX_RENDER_SECONDS * RENDER_RATE + settle : 2 * loop;
     const off = createOffline(2, length, RENDER_RATE);
     const chain = buildChain(off, bpm, effects, djValue);
-    const into = (level, layer, insert, duck = 0) => {
-      const holder = withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, 0);
+    const into = (level, layer, insert, duck = 0, at = 0) => {
+      const holder = withInsert(off, connectGain(off, chain, level, layer), insert, stepDur, at);
       duckWith(off, holder, chain.side, duck);
       return holder;
     };
     if (fx) {
-      const shot = into(shotLevel(fx), "fx", dataOf(fx).insert);
-      shot.chain.trigger(0);
-      fxVoice(off, shot.input, 0, stepDur, fx);
+      const at = settle / RENDER_RATE;
+      const shot = into(shotLevel(fx), "fx", dataOf(fx).insert, 0, at);
+      shot.chain.trigger(at);
+      fxVoice(off, shot.input, at, stepDur, fx);
     } else {
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
@@ -955,7 +942,7 @@ export function createEngine({
     const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
     return {
       sampleRate: RENDER_RATE,
-      channels: fx ? trimTail(channels, RENDER_RATE) : channels.map((d) => d.slice(loop, 2 * loop)),
+      channels: fx ? trimTail(channels.map((d) => d.slice(settle)), RENDER_RATE) : channels.map((d) => d.slice(loop, 2 * loop)),
     };
   }
 
@@ -1023,7 +1010,7 @@ export function createEngine({
   }
 
   /**
-   * An AnalyserNode on what the trim sends to the volume, for the visuals'
+   * An AnalyserNode on what `out` sends to the volume, for the visuals'
    * levels; null until the context exists.
    */
   function levels() {

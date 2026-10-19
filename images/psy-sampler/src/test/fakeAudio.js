@@ -98,6 +98,16 @@ export class FakeAudioContext {
   createGain() {
     return withParams(new FakeNode(this, "gain"), { gain: 1 });
   }
+  createChannelSplitter(outputs = 6) {
+    const n = new FakeNode(this, "splitter");
+    n.numberOfOutputs = outputs;
+    return n;
+  }
+  createChannelMerger(inputs = 6) {
+    const n = new FakeNode(this, "merger");
+    n.numberOfInputs = inputs;
+    return n;
+  }
   createAnalyser() {
     const n = new FakeNode(this, "analyser");
     n.context = this;

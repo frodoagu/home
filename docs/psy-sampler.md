@@ -38,7 +38,7 @@ flowchart LR
     K[kick] & BK[background kick] & B[bass] & P[percussion ×n] & L[lead ×n] & PD[pad ×n] & G[glitch ×n] & CL[classic ×n]
   end
   FX[one insert + GainNode per playing FX]
-  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> C[compressor] --> LIM[limiter] --> T[trim 0.8] --> V[volume] --> D[destination]
+  lanes --> M[master 0.7] --> DJ[DJ filter] --> SW[drop sweep] --> MA[mastering] --> O[out] --> V[volume] --> D[destination]
   FX --> M
   lanes -. send .-> DL[delay 3/16] -.-> DJ
   lanes -. send .-> RV[reverb] -.-> DJ
@@ -328,18 +328,18 @@ with one wandering on the chaos LFO, `pad.glass` through the shifter and
 starts with the insert off.
 
 The **DJ filter** (transport) is one bipolar knob on the master bus, before the
-compressor and after the effect returns: left closes a lowpass from Nyquist to
+mastering and after the effect returns: left closes a lowpass from Nyquist to
 150 Hz, right opens a highpass from 0 to 6 kHz, both on a log scale with Q 1.2;
 the centre is an identity (lowpass at Nyquist, highpass at 0) and has a small
 detent; a double click recentres it. It is a performance control: never saved,
 but carried across a remount and applied to WAV exports.
 
 The **Volume** knob (transport, next to it) is the last gain before the
-speakers, after the trim: 0-100 %, squared into the gain so its travel follows
+speakers, after the mastering: 0-100 %, squared into the gain so its travel follows
 loudness (`engine.setVolume`). It is the listener's monitor level, kept per
 browser in `psy-sampler:volume` (never in the workspace, a link or the cloud),
 and it reaches neither a ⏺ take, a WAV export nor the visuals' levels, which
-all read the trim.
+all read the output before it.
 
 After it sits the **drop sweep**, a highpass of its own that only a drop
 moves (`engine.sweep(at, end)` / `sweepOff(at)`), so it never fights your hand
@@ -860,7 +860,7 @@ makes itself (a new version, another tab or device took over) skip the question.
   take starts on the first sample above -80 dBFS; the silence after the last
   sound is trimmed. `engine.tap()` connects an AudioWorklet
   (`audio/tap.worklet.js`, loaded as its own file via `?url&no-inline`) after
-  the output trim, so the DJ filter, FX, auditions and the limiter are all in
+  the output (`out`), so the DJ filter, FX, auditions and the mastering are all in
   it (the Volume knob is not), at the context's own sample rate. `audio/take.js` encodes 24-bit PCM as
   blocks arrive and folds it into a Blob every 16 MB, so memory holds about the
   file's size, not the floats. **Capped at 15 min** (`MAX_SECONDS` in
@@ -1520,7 +1520,7 @@ it takes the mix that plays first (as 🤖 over a mix).
   the bass leave first, the rest sinks slowly as every lowpass closes, kick
   and bass too, but still sounds. The levels hold there through the brake.
 - **The vinyl brake** (`braking()`, `engine.brake` from its first loop to the
-  end) takes the whole mix: a delay line between the limiter and the trim
+  end) takes the whole mix: a delay line between the mastering and the output
   stretches as t²/2T, so its slope (one minus the speed) climbs from 0 to 1
   and pitch and tempo fall to nothing over its 4 or 8 bars, with the level
   following over its last 30 %. At most `BRAKE_MAX` (24 s, 8 bars down to
@@ -2073,7 +2073,7 @@ source ──events──> stage ──frame──> director ──scene, strobe
   build's sweep and the drop, with their audio time, and `perfTimeOf()` turns
   that into the `performance.now()` moment they leave the speakers. So the show
   hits on the kick itself, not on an FFT guess, and knows a build from a drop.
-  `engine.levels()` adds an AnalyserNode off the trim for the levels.
+  `engine.levels()` adds an AnalyserNode off the output (before the Volume knob) for the levels.
 - **Another window** (⧉, `visuals.html`): the sampler's `createFeed()`
   (`feed.js`, started in `main.js`) posts the engine's events over a
   BroadcastChannel, times as wall-clock ms (each window's `performance.now()`
@@ -2454,25 +2454,74 @@ At their layer level (glitch 0.3, percussion 0.85), the glitch sounds sit at
 -33: they are sparse by design. Stutter, Crackle, Bwip, Bleeps, Bitcrush and
 Tape stop were raised 5-10 dB to get there, and the stutter roll FX 8 dB.
 
-At the real output (every node, taken from the destination):
+At the real output (`engine.render()` in Chrome, 145 BPM, delay and reverb on,
+so every node down to the mastering's ceiling), against the chain before the
+[mastering](#mastering) (one compressor, -10 dB 4:1, then a -1.5 dB limiter
+and a 0.8 trim):
 
-| | peak dBFS |
-|---|---|
-| one layer alone (kick / bass / acid / pad) | -3.4 / -3.6 / -3.1 / -3.7 |
-| **everything stacked**: 18 loops + riser+impact + crash + impact + siren, with delay and reverb | -1.8 (0 samples over 1.0) |
+| | peak dBFS | LUFS (BS.1770) | before |
+|---|---|---|---|
+| kick alone (Punchy) | -1.9 | -16.3 | -19.3 |
+| bass alone (Rolling) | -4.5 | -16.4 | -18.1 |
+| lead alone (Acid) | -5.4 | -20.6 | -22.4 |
+| pad alone (Supersaw) | -13.2 | -24.2 | -26.4 |
+| hi-hat alone (16ths) | -1.8 | -21.9 | -24.0 |
+| 6 loops (kick, bass, hat, clap, acid, chord) | -1.4 | -12.1 | -14.3 |
+| 11 loops | -1.2 | -9.6 | -12.1 |
+| **18 loops stacked** | -1.1 | -10.3 | -12.9 |
+
+FX alone peak lower: Riser + impact -1.9, Impact -3.4, Crash -3.0. Nothing
+can pass -1 dBFS: the ceiling holds every sample under it.
 
 The drop sweep and the tone filters were not measured this way: only their
 automation is tested (against the fake context). Each has a ~1.25 dB bump at
 its cutoff, so a sweep crossing the kick's fundamental can lift it by about
 that much for a beat, which the limiter takes.
 
-Without the limiter, everything stacked went to +1.5 dBFS. The compressor is
-gentle on purpose (-10 dB, 4:1, knee 6, 3 ms / 150 ms: Web Audio's defaults,
--24 dB 12:1, would flatten the dynamics a single layer has to let through);
-after it comes a limiter (-1.5 dB, 20:1, knee 0, 1 ms / 80 ms) and a 0.8 trim.
-
 These figures are the voices' own levels. The balance a sound starts at sits
 on top of them, set by ear: see [Loudness](#loudness).
+
+### Mastering
+
+Everything (lanes, FX, auditions and the effect returns) goes through
+`audio/master.js` after the drop sweep, live and in WAV exports alike:
+
+```mermaid
+flowchart LR
+  IN[sweep] --> SUB[subsonic HP 16 Hz] --> MS[mono < 120 Hz] --> X{crossovers 150 Hz / 5 kHz}
+  X --> LO[low comp] & MI[mid comp] & HI[high comp] --> DR[drive +4.5 dB] --> LIM[limiter -2 dB] --> CE[ceiling -1 dBFS] --> OUT[brake → out]
+```
+
+- **Cleanup.** A 24 dB/octave highpass at 16 Hz takes out DC (a stack of
+  distorted sounds sat at -32 dBFS of it, headroom the limiter was spending)
+  and the rumble under the kick: -0.2 dB at 40 Hz. Then mid/side: the side
+  loses everything under 120 Hz (Linkwitz-Riley highpass) and the mid goes
+  through the matching allpass, so above 120 Hz the stereo image is untouched
+  (a left-only 1 kHz sine leaves the right channel at -114 dB) and below it
+  a panned sound or a reverb tail plays in the middle.
+- **Three bands**, split by Linkwitz-Riley crossovers (two Butterworth biquads
+  a side, with the lows run through the upper crossover's allpass), which sum
+  back flat: measured with every compressor idle, +4.50 dB ±0.01 from 100 Hz
+  to 16 kHz. Each band has the same compressor (-24 dB, 2:1, knee 12), its own
+  threshold set by the gain around it (`trim`: lows -5, mids -2, highs -9 dB)
+  and its own timing (lows 10 ms attack, so the kick's click passes). It only
+  leans on stacks: a sound alone moves by under 1 dB against the others (the
+  [Loudness](#loudness) balance holds), and a kick no longer pumps the hats as
+  the single broadband compressor did, so a dense mix reads ~2 dB brighter
+  than before.
+- **Limiter and ceiling.** `drive` (+4.5 dB) is the whole chain's gain below
+  the thresholds; a fast limiter (-2 dB, 20:1, 1 ms / 60 ms) holds the peaks
+  and a waveshaper after it rounds off whatever overshoots (identity up to
+  -1.8 dB, a tanh bend to -1 dBFS, and nothing past it). Not oversampled: the
+  4x downsampling filter rang up to 0.5 dB over the curve.
+- **Makeup gain.** Web Audio compressors add a fixed makeup gain from their
+  threshold, knee and ratio; the gain after each one takes it back
+  (`BAND_MAKEUP_DB` 5.31, measured in Chrome; the limiter's comes from the
+  spec's formula), so moving a threshold doesn't move the level.
+- **Settling.** A new compressor starts as if out of a full-scale signal and
+  needs ~150 ms to settle (an impulse at 50 ms came out 2-4 dB low). Live it
+  passes unnoticed; an FX render plays 0.2 s late and drops the wait
+  (`RENDER_SETTLE`), a loop render keeps its second pass anyway.
 
 ### Loudness
 
@@ -2786,10 +2835,12 @@ npm run build
 - **`AudioContext` only on the first click** (autoplay policy). `ensureContext()`
   is called synchronously inside the handler and calls `resume()` if it's
   `suspended`.
-- **Automatic makeup gain.** Chrome's `DynamicsCompressor` raises the output
-  according to threshold/ratio; with two in series the net gain went up ~2 dB and
-  a single layer reached -1.3 dBFS. The 0.8 trim after the limiter compensates.
-  Measure at the real output before touching threshold or ratio.
+- **Automatic makeup gain.** A `DynamicsCompressor` raises its output by a
+  fixed gain from its threshold, knee and ratio, so the mastering takes it back
+  after every compressor (`BAND_MAKEUP_DB`, measured in Chrome). Change a band
+  compressor's threshold, knee or ratio and that figure must be measured again;
+  a band's `trim` or the limiter's threshold are safe. Measure at the real output
+  (see [Mastering](#mastering)) before touching any of it.
 - **A new voice** needs: the function in `voices.js` (in `INSTRUMENTS` if it's
   melodic, with an entry in `SYNTHS` in `params.js`; if it's a drum, its spec in
   `PARAMS`, and in `GLITCH` if it's one), and to pass the anti-click invariant.
