@@ -115,6 +115,14 @@ export const SAMPLE_PARAMS = [
   { key: "length", label: "length", min: 0.02, max: 1, step: 0.01, def: 1, fmt: pct },
 ];
 
+// The cut and fades of each hit or note, whatever plays it (shape.js). The
+// cut is the voice's: a sample cuts with its own start and length.
+export const SHAPE_PARAMS = [
+  { key: "length", label: "length", min: 0.02, max: 1, step: 0.01, def: 1, fmt: pct },
+  { key: "fadeIn", label: "fadeIn", min: 0, max: 1, step: 0.01, def: 0, fmt: pct },
+  { key: "fadeOut", label: "fadeOut", min: 0, max: 1, step: 0.01, def: 0, fmt: pct },
+];
+
 // Every sound's filter and distortion (insert.js). `log`: the slider moves
 // evenly in octaves, not in Hz.
 export const INSERT_PARAMS = [

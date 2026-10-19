@@ -60,6 +60,7 @@ import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.j
 import { trimOf } from "./loudness.js";
 import { KEY_DEFAULT, keyShift } from "./music.js";
 import { auditionEvent, baseOf, defOf, eventsAt, partSteps, sampleDefaults } from "./patterns.js";
+import { fadesOnly, ringing, shaped } from "./shape.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
 import TAP_URL from "./tap.worklet.js?url&no-inline";
@@ -92,6 +93,8 @@ const RENDER_RATE = 48000;
 const FX_MAX_BARS = 4;
 const FX_TAIL_SECONDS = 4.6;
 const FX_RENDER_SECONDS = Math.ceil(FX_MAX_BARS * BAR_STEPS * stepDuration(BPM_MIN) + FX_TAIL_SECONDS);
+// The editor's waveform only has to look right.
+const SKETCH_RATE = 22050;
 // Sidechain: the kick, rectified and clipped to 0..1 (DUCK_DRIVE: its body
 // already reads as full), then smoothed into an envelope by a lowpass this
 // slow, which sets the pump's attack and release.
@@ -263,6 +266,16 @@ function withInsert(ctx, gain, insert, stepDur, at) {
   return { gain, input, chain, ducker, depth: null };
 }
 
+// A buffer's channels averaged into one, back to front when `reverse`.
+function mono(buffer, reverse) {
+  const out = new Float32Array(buffer.length);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < out.length; i++) out[i] += data[i] / buffer.numberOfChannels;
+  }
+  return reverse ? out.reverse() : out;
+}
+
 // Calls `fn` every `ms` from a worker, whose timers a background tab does not
 // throttle; returns its stop(), or null where there are no workers.
 function workerClock(ms, fn) {
@@ -347,18 +360,23 @@ export function createEngine({
     return ctx;
   }
 
-  // One event on any context. A sample plays only once it is decoded.
-  function voice(c, out, t, ev, stepDur) {
-    if (ev.voice !== "sample") return VOICES[ev.voice](c, out, t, ev, stepDur);
+  // One event on any context, through its sound's `shape` (shape.js). A
+  // sample plays only once it is decoded.
+  function voice(c, out, t, ev, stepDur, shape) {
+    if (ev.voice !== "sample") return shaped(c, out, t, shape, (into, cx) => VOICES[ev.voice](cx, into, t, ev, stepDur));
     const buffer = sampleBuffer(ev.sample.id);
-    return buffer ? sample(c, out, t, { ...ev, buffer }, stepDur) : VOICES[ev.fallback](c, out, t, ev, stepDur);
+    return buffer
+      ? shaped(c, out, t, fadesOnly(shape), (into, cx) => sample(cx, into, t, { ...ev, buffer }, stepDur))
+      : shaped(c, out, t, shape, (into, cx) => VOICES[ev.fallback](cx, into, t, ev, stepDur));
   }
 
   // An FX shot: its sample if it has one and it is loaded, else its synth.
-  function fxVoice(c, out, t, stepDur, id) {
+  function fxVoice(c, out, t, stepDur, id, shape = dataOf(id).shape) {
     const { params, sample: s } = dataOf(id);
     const buffer = s && sampleBuffer(s.id);
-    return buffer ? sample(c, out, t, { sample: s, buffer }, stepDur) : FX[baseOf(id)](c, out, t, stepDur, params);
+    return buffer
+      ? shaped(c, out, t, fadesOnly(shape), (into, cx) => sample(cx, into, t, { sample: s, buffer }, stepDur))
+      : shaped(c, out, t, shape, (into, cx) => FX[baseOf(id)](cx, into, t, stepDur, params));
   }
 
   // A ratchet's repeats (and a swung 16th) land `offset` steps after their
@@ -376,7 +394,7 @@ export function createEngine({
     for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop, lane.from)) {
       const t = Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge);
       lane.chain.trigger(t);
-      voice(ctx, lane.input, t, keyed(ev), stepDur);
+      voice(ctx, lane.input, t, keyed(ev), stepDur, d.shape);
       first = first === null ? t : Math.min(first, t);
       accent ||= Boolean(ev.accent);
       count++;
@@ -848,7 +866,7 @@ export function createEngine({
     const t = ctx.currentTime + SAFETY;
     const shot = openVoice(shotLevel(id), layer, dataOf(id).insert, t);
     shot.chain.trigger(t);
-    voice(ctx, shot.input, t, keyed(ev), stepDuration(bpm));
+    voice(ctx, shot.input, t, keyed(ev), stepDuration(bpm), dataOf(id).shape);
     fadeOut(shot, t + AUDITION_SECONDS);
   }
 
@@ -928,7 +946,7 @@ export function createEngine({
           for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
             const t = Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge);
             insert.trigger(t);
-            voice(off, input, t, keyed(ev), stepDur);
+            voice(off, input, t, keyed(ev), stepDur, d.shape);
           }
         }
       }
@@ -939,6 +957,31 @@ export function createEngine({
       sampleRate: RENDER_RATE,
       channels: fx ? trimTail(channels, RENDER_RATE) : channels.map((d) => d.slice(loop, 2 * loop)),
     };
+  }
+
+  /**
+   * One event of `id` for the editor's waveform: { sampleRate, data, whole }.
+   * With its sample decoded, the whole sample (mono, reversed when it plays
+   * reversed), so the editor marks its start and end on it (`whole`); else
+   * one hit, note (the part's first) or FX shot of its voice, dry (no insert,
+   * no shape), for as long as it rings.
+   */
+  async function sketch(id) {
+    const d = dataOf(id);
+    const buffer = d.sample && sampleBuffer(d.sample.id);
+    if (buffer) return { sampleRate: buffer.sampleRate, data: mono(buffer, d.sample.reverse), whole: true };
+    const stepDur = stepDuration(bpm);
+    const length = FX_RENDER_SECONDS * SKETCH_RATE;
+    const off = createOffline(1, length, SKETCH_RATE);
+    const first = d.notes?.[0];
+    const end = ringing(off, 0, (c) => {
+      if (defOf(id).kind === "fx") return fxVoice(c, off.destination, 0, stepDur, id, null);
+      const ev = auditionEvent(id, { ...d, sample: null }, { midi: first?.midi ?? 57 });
+      return voice(c, off.destination, 0, keyed(first ? { ...ev, steps: first.len } : ev), stepDur, null);
+    });
+    const rendered = await off.startRendering();
+    const frames = Math.min(length, Math.ceil(end * SKETCH_RATE));
+    return { sampleRate: SKETCH_RATE, data: rendered.getChannelData(0).slice(0, frames), whole: false };
   }
 
   /**
@@ -1031,6 +1074,7 @@ export function createEngine({
     fromOf: (variant) => [...lanes.values()].find((l) => l.variant === variant)?.from ?? 0,
     stop,
     render,
+    sketch,
     tap,
     onBar: (fn) => {
       barHook = fn;

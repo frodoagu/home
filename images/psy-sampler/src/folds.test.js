@@ -9,8 +9,9 @@ const tweaked = (id, patch = {}, insert = {}) => {
 
 describe("cleanFolds", () => {
   it("folds every box unless it was stored open", () => {
-    expect(cleanFolds()).toEqual({ insert: false, modulation: false, space: false, pattern: false });
+    expect(cleanFolds()).toEqual({ wave: false, insert: false, modulation: false, space: false, pattern: false });
     expect(cleanFolds({ pattern: true, space: "yes", gone: true })).toEqual({
+      wave: false,
       insert: false,
       modulation: false,
       space: false,

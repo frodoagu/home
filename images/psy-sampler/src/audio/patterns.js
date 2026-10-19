@@ -11,10 +11,11 @@
 // left off.
 //   fx     { params, level }                                      one-shot
 //
-// All three also carry `insert` (its filter and distortion, insert.js) and
-// `sample`: null, or a user's sample { id, name, pitch, start, length,
-// reverse } that plays instead of the voice. A sample event names the voice
-// it replaces as `fallback`, which plays whenever the sample is not loaded.
+// All three also carry `insert` (its filter and distortion, insert.js),
+// `shape` (the cut and fades of every event, shape.js) and `sample`: null,
+// or a user's sample { id, name, pitch, start, length, reverse } that plays
+// instead of the voice. A sample event names the voice it replaces as
+// `fallback`, which plays whenever the sample is not loaded.
 //
 // A mod (Strudel's sometimes / every / ply, Elektron's trig conditions) rides
 // on one hit or note: { p, cond, ply }, each key only when it is not the
@@ -26,6 +27,7 @@ import { CLASSICS, midiOf } from "./classics.js";
 import { DRIVE_TYPES, FILTER_TYPES, INSERT_DEFAULT, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "./insert.js";
 import { NOTE, SCALES, midiToFreq } from "./music.js";
 import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, PARAMS, SAMPLE_PARAMS, SYNTH_IDS, paramDefaults } from "./params.js";
+import { SHAPE_DEFAULT, cleanShape } from "./shape.js";
 import { LOOP_STEPS } from "./timing.js";
 
 // How many 2-bar loops a notes part can run.
@@ -131,7 +133,7 @@ const PLAYBACK = { speed: 1, iter: 1, echo: null };
 const GROOVE = { swing: 0, nudge: 0, duck: 0 };
 
 // What every variant starts with on top of its own data.
-const extras = (insert = {}) => ({ insert: { ...INSERT_DEFAULT, ...insert }, sample: null });
+const extras = (insert = {}) => ({ insert: { ...INSERT_DEFAULT, ...insert }, shape: { ...SHAPE_DEFAULT }, sample: null });
 
 function drum(voice, pattern, params = {}) {
   return {
@@ -710,6 +712,7 @@ export function sanitize(id, saved) {
   }
   out.params = params;
   out.insert = cleanInsert(saved.insert, base.insert);
+  out.shape = cleanShape(saved.shape);
   out.sample = cleanSample(saved.sample);
 
   if (def.kind !== "fx") {

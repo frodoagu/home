@@ -2882,6 +2882,22 @@ html:has(dialog.help[open], dialog.intro[open]) {
   padding: 2px 12px 10px;
 }
 
+/* The waveform box: the drawing stretches to the editor; a vertical swipe
+   still scrolls the page, a sideways drag moves a marker. */
+.wave-canvas {
+  display: block;
+  width: 100%;
+  height: 112px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  touch-action: pan-y;
+}
+
+.wave[data-state="loading"] .wave-canvas {
+  opacity: 0.6;
+}
+
 /* What a click on the grid does: one pressed button among four. */
 .segmented {
   display: inline-flex;

@@ -2330,6 +2330,11 @@ export function mountApp(root, engine, opts = {}) {
           if (buffer && open?.id === id && !engine.isRunning()) engine.audition(id, { midi: 57 });
         });
       },
+      onWave: async () => {
+        const s = dataOf(id).sample;
+        if (s) await samples?.load(s.id);
+        return engine.sketch(id);
+      },
       buildUp: state.buildUp?.id === id,
       onBuildUp: (on) => {
         setBuildUp(id, on);

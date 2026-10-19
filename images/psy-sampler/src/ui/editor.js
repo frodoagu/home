@@ -5,7 +5,8 @@
 // Every kind also picks its source (its own voice or one of the user's
 // samples, which swaps the voice's sliders for the sample's) and has a
 // filter + distortion section (the insert).
-// The sections under the sliders (insert, modulation, space, pattern) fold;
+// The sections under the sliders (waveform, insert, modulation, space,
+// pattern) fold;
 // the header, the source, the sliders and the grid never do.
 // Every change goes out through onChange(next) as fresh data; the editor
 // never talks to the engine itself. The header names the variant (editable)
@@ -13,7 +14,7 @@
 // or the whole sound), delete (copies). Under it, for the sounds the ✨ AI
 // may pick, the user's words for how it sounds (its level max reads them).
 import { DRIVE_TYPES, FILTER_TYPES, LFO_RATES, LFO_SHAPES, TREM_RATES, VOWELS } from "../audio/insert.js";
-import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SYNTHS } from "../audio/params.js";
+import { GROOVE_PARAMS, INSERT_PARAMS, LEVEL, SAMPLE_PARAMS, SHAPE_PARAMS, SYNTHS } from "../audio/params.js";
 import {
   CHANCES,
   COND_EVERY,
@@ -53,6 +54,7 @@ import { MAX_MIDI_BYTES, importMidi } from "../import/midi.js";
 import { DESCRIPTION_MAX } from "../workspace.js";
 import { t } from "../i18n/index.js";
 import { amountSlider, checkbox, el, nextId, select, slider } from "./dom.js";
+import { createWaveform } from "./waveform.js";
 
 const localized = (spec) => ({ ...spec, label: t().params[spec.label] });
 
@@ -100,6 +102,7 @@ export function createEditor({
   samples = [], // the user's samples: [{ id, name }]
   shift = 0, // semitones the mix's tonic moves every note (music.js keyShift): the rows name what sounds
   onSample = () => {}, // a sample was picked: load it (and let it be heard)
+  onWave = null, // () => Promise of what the waveform draws (engine.js sketch); null: no waveform
 }) {
   const def = defOf(id);
   const tx = t().editor;
@@ -115,6 +118,7 @@ export function createEditor({
   let paintAmount = () => {};
   let newPartBtn = null;
   let tone = null; // { hp, lp }: the tone sliders, once the insert box is built
+  let wave = null; // the waveform box's hooks, once it is built
   const cleanups = [];
   const foldMarks = []; // repaint each section's "on" flag
 
@@ -123,6 +127,7 @@ export function createEditor({
     onChange(current);
     showBrush();
     paintFolds();
+    wave?.changed();
   }
 
   /* ---- a foldable section: a <details> whose summary flags it while it
@@ -434,12 +439,97 @@ export function createEditor({
       const reverse = checkbox(nextId("reverse"), tx.reverse, s.reverse);
       reverse.input.dataset.param = "reverse";
       reverse.input.addEventListener("change", () => setSample({ reverse: reverse.input.checked }));
-      voiceKnobs.replaceChildren(
-        ...SAMPLE_PARAMS.map((spec) => slider(localized(spec), s[spec.key], (v) => setSample({ [spec.key]: v }))),
-        reverse.node,
-      );
+      const pitch = SAMPLE_PARAMS.find((p) => p.key === "pitch");
+      voiceKnobs.replaceChildren(slider(localized(pitch), s.pitch, (v) => setSample({ pitch: v })), reverse.node);
     }
     for (const n of synthOnly) n.hidden = Boolean(s);
+    wave?.renderKnobs();
+  }
+
+  /* ---- waveform: the cut and fades of each hit or note, Simpler style ---- */
+  // The box draws one event (or the whole sample) and its markers; the
+  // sliders under it move the same values. A sample cuts with its own start
+  // and length; a voice with the shape's length. The fades are the shape's.
+  function waveControls() {
+    const knobs = el("div", { class: "knobs" });
+    let sliders = {};
+    const spec = (list, key) => localized(list.find((p) => p.key === key));
+    const setShape = (patch) => set({ shape: { ...current.shape, ...patch } });
+    const setSample = (patch) => set({ sample: { ...current.sample, ...patch } });
+    // The two fades share what is kept: one pushes the other back.
+    const fade = (key, other) =>
+      slider(spec(SHAPE_PARAMS, key), current.shape[key], (v) => {
+        const rest = Math.min(current.shape[other], Math.round((1 - v) * 100) / 100);
+        if (rest !== current.shape[other]) sliders[other].setValue(rest);
+        setShape({ [key]: v, [other]: rest });
+      });
+    const renderKnobs = () => {
+      const s = current.sample;
+      sliders = s
+        ? {
+            start: slider(spec(SAMPLE_PARAMS, "start"), s.start, (v) => setSample({ start: v })),
+            length: slider(spec(SAMPLE_PARAMS, "length"), s.length, (v) => setSample({ length: v })),
+          }
+        : { length: slider(spec(SHAPE_PARAMS, "length"), current.shape.length, (v) => setShape({ length: v })) };
+      sliders.fadeIn = fade("fadeIn", "fadeOut");
+      sliders.fadeOut = fade("fadeOut", "fadeIn");
+      knobs.replaceChildren(...Object.values(sliders));
+    };
+    renderKnobs();
+    const box = fold("wave", tx.wave, knobs, legend(tx.waveLegend));
+    if (!onWave) {
+      wave = { changed: () => {}, renderKnobs, draw: () => {} };
+      return box;
+    }
+
+    const view = createWaveform({
+      label: tx.waveLabel,
+      load: onWave,
+      get: () => ({ shape: current.shape, sample: current.sample }),
+      onDrag: ({ shape, sample }) => {
+        set({ shape, sample });
+        const s = current.sample;
+        for (const [key, node] of Object.entries(sliders)) {
+          node.setValue(s && (key === "start" || key === "length") ? s[key] : current.shape[key]);
+        }
+      },
+      onPlay: () => {
+        if (def.kind === "fx") onTrigger();
+        else onAudition(def.kind === "drum" ? { accent: false } : { midi: current.notes[0]?.midi ?? 57, accent: false });
+      },
+    });
+    box.querySelector(".fold-body").prepend(view.node);
+    // What the drawing depends on, besides the shape it draws over: redraw
+    // only when that changes, and only while the box is open.
+    const drawn = () =>
+      JSON.stringify([current.sample?.id, current.sample?.reverse, current.synth, current.params, current.transpose, current.notes?.[0]]);
+    let loaded = null;
+    let timer = null;
+    const reload = () => {
+      clearTimeout(timer);
+      timer = null;
+      loaded = drawn();
+      view.reload();
+    };
+    const changed = () => {
+      if (!box.open) return;
+      if (drawn() === loaded) view.draw();
+      else {
+        clearTimeout(timer);
+        timer = setTimeout(reload, 200);
+      }
+    };
+    box.addEventListener("toggle", () => {
+      if (box.open && drawn() !== loaded) reload();
+      else if (box.open) view.draw();
+    });
+    if (box.open) reload();
+    cleanups.push(() => {
+      clearTimeout(timer);
+      view.destroy();
+    });
+    wave = { changed, renderKnobs, draw: () => box.open && view.draw() };
+    return box;
   }
 
   /* ---- source: the voice, or one of the user's samples ---- */
@@ -620,11 +710,11 @@ export function createEditor({
   if (def.kind === "fx") {
     const fire = el("button", { type: "button", class: "action", text: tx.fire });
     fire.addEventListener("click", onTrigger);
-    node.append(source, knobs, insertControls(), modulationControls(), spaceControls(), el("div", { class: "editor-actions" }, fire));
+    node.append(source, knobs, waveControls(), insertControls(), modulationControls(), spaceControls(), el("div", { class: "editor-actions" }, fire));
   } else if (def.kind === "drum") {
-    node.append(source, knobs, insertControls(), modulationControls(), spaceControls(), ...drumGrid());
+    node.append(source, knobs, waveControls(), insertControls(), modulationControls(), spaceControls(), ...drumGrid());
   } else {
-    node.append(...noteControls(), knobs, insertControls(), modulationControls(), spaceControls(), ...pianoRoll());
+    node.append(...noteControls(), knobs, waveControls(), insertControls(), modulationControls(), spaceControls(), ...pianoRoll());
   }
   renderVoiceKnobs();
 
@@ -972,6 +1062,7 @@ export function createEditor({
       refreshGrid();
       showBrush();
       paintFolds();
+      wave?.changed();
     },
     // The volume, set from the tile's fill.
     showLevel: (v) => {
