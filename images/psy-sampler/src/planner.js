@@ -29,12 +29,16 @@
 // and echo (dress.js TWEAKS); max also tells it each sound's role (ROLE)
 // and the listener's own words for it, where they wrote some
 // (`descriptions`). `describe` off lists the sounds by id alone.
+//
+// With every plan ahead in, the model's idle time goes to touches
+// (touchPrompt): a filter or a distortion on one melodic sound playing now,
+// for a loop or a few, from the next loop's first beat (dress.js touched).
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { CLOSE_MAX, OUTRO, SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
 import { KEY_DEFAULT } from "./audio/music.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
-import { CHOICES, MACROS, MACRO_MAX, TWEAKS, UNIT_TWEAKS, fits, moves, synthsFor } from "./dress.js";
+import { CHOICES, MACROS, MACRO_MAX, TOUCH_KEYS, TWEAKS, UNIT_TWEAKS, fits, moves, synthsFor } from "./dress.js";
 import { DEGREES, PART_LENGTHS, REST } from "./editing.js";
 import { laneKey } from "./selection.js";
 import en from "./i18n/en.js";
@@ -995,4 +999,93 @@ function cleanPlan(raw, { lists, style }, section, lengths, range) {
 export function readPlans(value) {
   if (!Array.isArray(value)) return null;
   return value.slice(0, PLAN_MAX).map((p) => (p && typeof p === "object" && !Array.isArray(p) ? p : null));
+}
+
+// A touch rides one of these, while it plays: the lead, or a classic's melody.
+export const TOUCH_LAYERS = ["lead", "classic"];
+export const TOUCH_LOOPS = [1, 2, 4];
+const TOUCH_DRIVES = [0, 1, MACRO_MAX];
+const TOUCH_RECALL = 4;
+
+// "lead.acid filter lowpass cutoff 1 for 2 loops", or "nothing for 1 loop".
+const touchLine = ({ id, loops, ...keys }) =>
+  `${id ? dressLine({ id, ...keys }) : "nothing"} for ${loops} loop${loops === 1 ? "" : "s"}`;
+
+/**
+ * What to ask for a touch, while the section plays and every plan ahead is
+ * in: one of `ids` (the TOUCH_LAYERS sounds playing now) through a filter or
+ * a distortion for a loop or a few, from the next loop's first beat; or
+ * nothing for a while. `loop` is the loop playing of the section's `loops`;
+ * `dressed`, the plans' dress entries in force; `recent`, the last touches
+ * (normalizeTouch), oldest first. `names`, `synths`, `descriptions`,
+ * `level` and `describe` as in planPrompt().
+ */
+export function touchPrompt({
+  section,
+  loop,
+  loops,
+  active,
+  ids,
+  dressed = [],
+  recent = [],
+  names = {},
+  synths = {},
+  descriptions = {},
+  vibe = "",
+  level = LEVEL_DEFAULT,
+  describe: told = true,
+}) {
+  const own = tells(level) ? descriptions : null;
+  const say = !told ? (id) => id : levelOf(level) === "low" ? (id) => brief(id, names) : (id) => describe(id, names, synths, own);
+  const playing = [...new Set(Object.values(active))].sort();
+  const worn = dressed.filter((d) => ids.includes(d.id));
+  const lines = [
+    "No section to plan this time: a touch on the music playing, the way a live act rides a knob.",
+    `Now playing: ${section}, loop ${loop} of ${loops} (2 bars a loop). Sounds playing now: ${playing.join(", ")}.`,
+    `Melodic sounds you can touch: ${ids.map(say).join(told ? "; " : ", ")}.`,
+  ];
+  if (worn.length) lines.push(`How you dressed them: ${worn.map(dressLine).join("; ")}.`);
+  if (recent.length) lines.push(`Your last touches, oldest first: ${recent.slice(-TOUCH_RECALL).map(touchLine).join("; ")}.`);
+  lines.push(
+    `A touch lays a filter or a distortion over one of them for 1, 2 or 4 loops, from the next loop's first beat; then the sound goes back to its dress. Set only what you change ("" or 0 keeps its dress): filter (${CHOICES.filter.join(", ")}), cutoff (-${MACRO_MAX} dark to ${MACRO_MAX} bright), res (-${MACRO_MAX} smooth to ${MACRO_MAX} screaming), sweep (an LFO on the cutoff, one cycle per ${CHOICES.sweep.filter((k) => k !== "off").join(", ")}; or off) with its shape (${CHOICES.shape.join(", ")}), env (a filter envelope on every note: -${MACRO_MAX} closes, ${MACRO_MAX} opens), distortion (${CHOICES.distortion.join(", ")}) and drive (how hard, 0 to ${MACRO_MAX}).`,
+    "Make it heard and make it fit the moment: a resonant lowpass opening over a loop or two before the section turns, a bandpass or a vowel on a motif, grit on a peak's lead, a closing envelope that turns it into a pluck. One or two moves at a time, and a different one each time. Leave the id empty for nothing over those loops: a touch on every loop tires the ear.",
+  );
+  if (vibe) lines.push(`Keep to the listener's wish: ${JSON.stringify(vibe)}.`);
+  lines.push("Start the answer with why: one short sentence on the touch and the reason.");
+  return lines.join("\n");
+}
+
+/** The JSON Schema of a touch on one of `ids` ("" for none), every key required. */
+export function touchSchema(ids) {
+  const unit = { type: "integer", enum: UNITS };
+  const choice = (k) => ({ type: "string", enum: ["", ...CHOICES[k]] });
+  return {
+    type: "object",
+    properties: {
+      why: { type: "string", maxLength: WHY_LOW },
+      id: { type: "string", enum: ["", ...ids] },
+      loops: { type: "integer", enum: TOUCH_LOOPS },
+      ...Object.fromEntries(TOUCH_KEYS.map((k) => [k, UNIT_TWEAKS.includes(k) ? unit : choice(k)])),
+      drive: { type: "integer", enum: TOUCH_DRIVES },
+    },
+    required: ["why", "id", "loops", ...TOUCH_KEYS, "drive"],
+    additionalProperties: false,
+  };
+}
+
+/**
+ * Anyone's touch -> { id, loops, ...keys } or null. `id` must be one of
+ * `ids`, with only the keys it takes (dress.js fits) and a drive of 1 or
+ * 2; one with nothing usable left, or no id, is { id: null, loops }: nothing
+ * for those loops. A length not in TOUCH_LOOPS is one loop. Idempotent.
+ */
+export function normalizeTouch(raw, ids) {
+  if (!isObject(raw)) return null;
+  const loops = TOUCH_LOOPS.includes(raw.loops) ? raw.loops : 1;
+  const id = typeof raw.id === "string" && ids.includes(raw.id) ? raw.id : null;
+  if (!id) return { id: null, loops };
+  const out = { id, loops };
+  for (const k of TOUCH_KEYS) if (Object.hasOwn(raw, k) && fits(id, k, raw[k])) out[k] = raw[k];
+  if (TOUCH_DRIVES.includes(raw.drive) && raw.drive) out.drive = raw.drive;
+  return Object.keys(out).length > 2 ? out : { id: null, loops };
 }

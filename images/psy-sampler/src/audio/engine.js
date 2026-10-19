@@ -499,11 +499,11 @@ export function createEngine({
     }
   }
 
-  // A filter or distortion type changed: a fresh chain crossfades in.
-  function swapInsert(lane, insert) {
-    const now = ctx.currentTime;
+  // A filter or distortion type changed: a fresh chain crossfades in at `now`.
+  function swapInsert(lane, insert, now = ctx.currentTime) {
     const old = lane.chain;
     const next = buildInsert(ctx, insert, { stepDur: stepDuration(bpm), at: now });
+    next.output.gain.value = 0;
     next.output.gain.setValueAtTime(0, now);
     next.output.gain.linearRampToValueAtTime(1, now + FADE);
     lane.input.connect(next.input);
@@ -518,7 +518,7 @@ export function createEngine({
         // The lane was released first: nothing left to unplug.
       }
       old.output.disconnect();
-    }, (FADE + 0.05) * 1000);
+    }, (now - ctx.currentTime + FADE + 0.05) * 1000);
     lane.chain = next;
   }
 
@@ -639,15 +639,17 @@ export function createEngine({
    * scheduled step; a volume change glides the lanes playing it (20 ms, or
    * in a straight line over `ramp` seconds) so the slider never zips, and so
    * do the insert's knobs (its tone filters in an exponential line over
-   * `ramp`).
+   * `ramp`). The insert changes at audio time `at` when one is given (a bar
+   * line the scheduler is queuing), else now.
    */
-  function setData(id, next, ramp = 0) {
+  function setData(id, next, ramp = 0, at = 0) {
     data.set(id, next);
     if (!ctx) return;
+    const when = Math.max(at, ctx.currentTime);
     for (const [key, lane] of lanes) {
       if (lane.variant !== id) continue;
-      if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, ctx.currentTime, ramp);
-      else swapInsert(lane, next.insert);
+      if (kindOf(next.insert) === lane.chain.kind) lane.chain.update(next.insert, when, ramp);
+      else swapInsert(lane, next.insert, when);
       duckWith(ctx, lane, side, duckOf(id), ctx.currentTime);
       const level = liveLane(key, id);
       if (level === lane.level) continue;

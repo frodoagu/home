@@ -81,7 +81,7 @@ import {
   withForm,
   withPlan,
 } from "../autopilot.js";
-import { coin, doubleRollOf, fillOf, restyle } from "../dress.js";
+import { coin, doubleRollOf, fillOf, restyle, touched } from "../dress.js";
 import { cleanFolds } from "../folds.js";
 import {
   IMPROV_DEFAULT,
@@ -109,6 +109,7 @@ import {
   PLAN_SECTIONS,
   BARS_BY_HAND,
   SET_LENGTHS,
+  TOUCH_LAYERS,
   TUNE_SYSTEM,
   asksForm,
   closingPrompt,
@@ -121,6 +122,7 @@ import {
   normalizeOpening,
   normalizeOutro,
   normalizePlan,
+  normalizeTouch,
   openWith,
   openingPrompt,
   openingSchema,
@@ -128,6 +130,8 @@ import {
   planSchema,
   systemOf,
   themeAfter,
+  touchPrompt,
+  touchSchema,
   normalizeTune,
   tunePrompt,
   tuneSchema,
@@ -214,7 +218,7 @@ const stamp = (d = new Date()) => {
 // first is the one the pilot holds). From silence it also gets `opening`
 // (planner.js normalizeOpening; null once asked for in vain) and its `why`,
 // and `nowWhy`, the why of the plan the section playing took.
-const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], formed: false, formWhy: "", closeWhy: "", nowWhy: "" });
+const newRun = () => ({ sections: [], sounds: [], plans: [], dress: {}, ahead: [], touches: [], formed: false, formWhy: "", closeWhy: "", nowWhy: "" });
 // Form chips the queue shows before folding the rest into "+n".
 // An ask the model has not answered by then is cut off, and a failed one is
 // tried again after RETRY_MS: neither may hold the ✨ AI up until a reload.
@@ -284,6 +288,8 @@ export function mountApp(root, engine, opts = {}) {
     varying: resume?.varying ?? new Map(), // variant -> the part improvise varies around
     openFx: null, // the ✨ AI opening's swell, fired on the first bar line ▶ plays
     buildUp: null, // { id, from }: a kick build-up, armed (from null) or playing the bar at `from`
+    touch: null, // { id, left, why, ...keys }: the ✨ touch laid over a sound for `left` more loops (id null: none)
+    touchNext: null, // { touch, why, at }: the ✨ touch landing on the next loop of section `at`
     drop: resume?.drop ?? null, // { phase: "armed" | "roll" | "gap", hand }: a drop on its way (see stepDrop)
     bar: resume?.bar ?? null, // { from, kinds: { variant: "gap" | "break" | "roll" } }: this bar's overlays
     autoVary: resume?.autoVary ?? new Set(), // sounds whose 🔀 the autopilot switched on
@@ -330,15 +336,20 @@ export function mountApp(root, engine, opts = {}) {
   const fed = new Map();
   const live = new Map();
   const OVERLAYS = { gap: silenced, break: withBreak, roll: withRoll, build: withBuildUp };
-  function feed(id, data, glide) {
+  // A ✨ touch rides on top of them all; `at` lands the insert on a bar line.
+  function feed(id, data, glide, at) {
     fed.set(id, data);
     const b = state.buildUp;
     const kind = state.bar?.kinds[id];
     let next = data;
     if (b?.id === id && b.from !== null) next = withBuildUp(data, b.from);
     else if (kind) next = OVERLAYS[kind](data, state.bar.from);
+    const t = state.touch;
+    if (t?.id === id && state.auto && !owned(id)) {
+      next = { ...next, insert: touched(id, ws.seed, state.run?.dress?.[id] ?? null, t, next.insert) };
+    }
     live.set(id, next);
-    engine.setData(id, next, glide);
+    engine.setData(id, next, glide, at);
   }
   const dataNow = (id) => fed.get(id) ?? dataOf(id);
 
@@ -515,6 +526,14 @@ export function mountApp(root, engine, opts = {}) {
     ...SET_LENGTHS.map((minutes) => el("option", { value: String(minutes), text: tx.ai.sets[minutes] })),
   );
   const setBox = field("ai-set", tx.ai.set, setInput, tx.ai.setTitle);
+  // Whether the model's idle time goes to touches (planTouch).
+  const touchInput = el(
+    "select",
+    { id: "ai-touch", "data-control": "ai-touch" },
+    el("option", { value: "on", text: tx.ai.touchesOn }),
+    el("option", { value: "off", text: tx.ai.touchesOff }),
+  );
+  const touchBox = field("ai-touch", tx.ai.touches, touchInput, tx.ai.touchesTitle);
   const endpointInput = el("input", {
     type: "url",
     id: "ai-endpoint",
@@ -587,7 +606,7 @@ export function mountApp(root, engine, opts = {}) {
     "details",
     { class: "ai-panel" },
     el("summary", {}, el("span", { class: "ai-title", text: tx.ai.settings }), aiSummary),
-    el("div", { class: "tools-row ai-row" }, engineBox, keyBox, endpointBox, modelBox, levelBox, setBox, vibeBox),
+    el("div", { class: "tools-row ai-row" }, engineBox, keyBox, endpointBox, modelBox, levelBox, setBox, touchBox, vibeBox),
     vibeNote,
   );
 
@@ -1065,6 +1084,7 @@ export function mountApp(root, engine, opts = {}) {
         vary.style.setProperty("--amount", `${Math.round(improvOf(id) * 100)}%`);
       }
       tile.classList.toggle("is-building", state.buildUp?.id === id);
+      tile.classList.toggle("is-touched", state.touch?.id === id);
       if (!layer.oneShot) node.setAttribute("aria-pressed", String(on));
     }
     for (const [id, { node, tile }] of snapTiles) {
@@ -1089,10 +1109,11 @@ export function mountApp(root, engine, opts = {}) {
     cueBtn.classList.toggle("is-armed", state.armed);
   }
 
-  // The ✨ AI's answer for section number `at` of the run, or for the form
-  // (`form` set, no `at`), on its way ({ at, abort, form }). Up here because
+  // The ✨ AI's answer for section number `at` of the run, for the form
+  // (`form` set, no `at`) or a touch (`touch`), on its way ({ at, abort, form }). Up here because
   // showSection() shows it.
   let planning = null;
+  const thinking = () => Boolean(planning) && !planning.touch; // a touch is no plan on its way
   let vibeFresh = false; // the vibe changed and no plan has followed it yet
   // The vibe as the model gets it (planner.js tunePrompt): in English, and
   // each style's genre rewritten to it. Asked once per style and vibe,
@@ -1232,7 +1253,7 @@ export function mountApp(root, engine, opts = {}) {
       restyled?.firstChild.after(el("span", { class: "restyle", text: `→ ${name}` }));
       if (restyled) restyled.title = tx.pilot.styleOn(name);
     }
-    if (p && planning) {
+    if (p && thinking()) {
       const slot = planning.form || planning.tune ? chips.length : planning.at - sectionNo() - 1;
       const thinking = chips[slot] ?? chips[chips.push(el("li", { class: "queued is-auto is-ai" }, el("span", { text: tx.ai.thinking }))) - 1];
       thinking.classList.add("is-thinking");
@@ -1554,6 +1575,7 @@ export function mountApp(root, engine, opts = {}) {
       const fx = move.fx.filter((id) => !ws.banned.includes(id)); // drawn all the same: the seed goes on as ever
       const restyled = (own?.dress ?? []).filter((d) => playing.has(d.id));
       for (const d of restyled) state.run.dress[d.id] = d;
+      if (sectionStart) untouch(time); // the new section's dress takes over
       dressIn([...new Set([...entering(state.active, move.active), ...fx, ...restyled.map((d) => d.id)])]);
       for (const id of move.rewrite) rewrite(id);
       for (const [layer, degrees] of Object.entries(own?.parts ?? {})) {
@@ -1564,10 +1586,17 @@ export function mountApp(root, engine, opts = {}) {
       state.active = move.active;
       improviseIn(sectionStart ? Object.values(move.active) : entering(was, move.active), entering(move.active, was));
       if (sectionStart) enterSection();
-      else if (state.pilot.left === 1 && planning?.at === sectionNo() + 1) cancelPlanning(); // too late for the next one's plan
+      else {
+        if (state.pilot.left === 1 && planning?.at === sectionNo() + 1) cancelPlanning(); // too late for the next one's plan
+        stepTouch(time);
+      }
       showSection();
       changed = true;
     }
+    // A touched sound that left, or the pilot let go: the touch comes off on this bar line.
+    const t = state.touch;
+    if (t && (!state.auto || (t.id && !Object.values(state.active).includes(t.id)))) untouch(time);
+    if (!state.auto) state.touchNext = null;
     if (state.leaving.size) {
       const kept = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => !state.leaving.has(v)));
       if (state.auto) {
@@ -1732,6 +1761,41 @@ export function mountApp(root, engine, opts = {}) {
       setVariant(id, next, { generated: true });
       if (open?.id === id) openEditor(open.layer, id);
     }
+  }
+
+  // The ✨ touch on its sound comes off (feed lays it no more), at `at` or now.
+  function untouch(at) {
+    const t = state.touch;
+    state.touch = null;
+    if (t?.id && tiles.has(t.id)) {
+      feed(t.id, dataNow(t.id), undefined, at);
+      const { tile } = tiles.get(t.id);
+      tile.classList.remove("is-touched");
+      tile.removeAttribute("title");
+    }
+  }
+
+  // A loop's first beat, inside a section: the touch on counts the loop and
+  // comes off after its last, and the next one lands on its sound if it
+  // still plays and is not yours. Then the ✨ AI may ask for another.
+  function stepTouch(time) {
+    if (state.touch && --state.touch.left <= 0) untouch(time);
+    const next = state.touchNext;
+    state.touchNext = null;
+    if (next?.at === sectionNo()) {
+      const { touch, why } = next;
+      if (touch.id && (!Object.values(state.active).includes(touch.id) || owned(touch.id))) return;
+      untouch(time);
+      state.touch = { ...touch, left: touch.loops, why };
+      if (state.run.touches.push(touch) > 8) state.run.touches.shift();
+      if (touch.id) {
+        feed(touch.id, dataNow(touch.id), undefined, time);
+        const { tile } = tiles.get(touch.id);
+        tile.classList.add("is-touched");
+        tile.title = why;
+      }
+    }
+    if (!planning && !retry) setTimeout(planAhead); // off the engine's tick
   }
 
   // A plan's part (planner.js `parts`), in the style's scale, unless the
@@ -2660,6 +2724,8 @@ export function mountApp(root, engine, opts = {}) {
     state.tour = null;
     state.bare = 0;
     state.rng = seeded(hashSeed(ws.seed));
+    untouch();
+    state.touchNext = null;
     if (Object.keys(playing).length) {
       if (ws.bgKick && !playing.kick) playing.kick = BG_KICK_VARIANT;
       state.pilot = joinPilot(playing, section);
@@ -2910,7 +2976,7 @@ export function mountApp(root, engine, opts = {}) {
     const cloud = isCloud(engine);
     const model = modelOf(engine);
     aiBtn.setAttribute("aria-pressed", String(on));
-    aiBtn.classList.toggle("is-thinking", Boolean(planning));
+    aiBtn.classList.toggle("is-thinking", thinking());
     aiPanel.hidden = !ai || !on;
     if (aiPanel.open !== state.aiPrefs.open) aiPanel.open = state.aiPrefs.open;
     const linked = cloud && !keyOf(engine) ? `${name} ${tx.ai.notLinked}` : model ? `${name} (${model})` : name;
@@ -2920,6 +2986,7 @@ export function mountApp(root, engine, opts = {}) {
     aiSummary.textContent = vibe ? `${what} · «${vibe}»` : what;
     levelInput.value = level;
     setInput.value = String(state.aiPrefs.set);
+    touchInput.value = state.aiPrefs.touches ? "on" : "off";
     levelBox.title = `${tx.ai.levelTitle}. ${levelName}: ${levelWhat}`;
     const engines = [...(state.chrome === "unavailable" ? [] : ["chrome"]), "lmstudio", ...clouds];
     if (engineInput.options.length !== engines.length) {
@@ -2997,12 +3064,14 @@ export function mountApp(root, engine, opts = {}) {
     if (alive) showAi();
   }
 
-  // One ask to the model at a time: `planning` holds what it is for. It is
+  // One ask to the model at a time: `planning` holds what it is for; a
+  // touch gives way to any other (planAhead asks over it). It is
   // cut off after ASK_TIMEOUT_MS whether or not the model honours the abort,
   // and a failed one asks again RETRY_MS later. `take` gets the answer;
   // `then(ok)` runs once it is over, unless something else took its place.
   let retry = 0;
   function ask(engine, what, send, take, then) {
+    planning?.abort.abort(); // only a touch is ever on its way here: it gives way
     const abort = new AbortController();
     const cut = new Promise((_, reject) => abort.signal.addEventListener("abort", () => reject(new Error("cut")), { once: true }));
     const timer = setTimeout(() => abort.abort(), ASK_TIMEOUT_MS);
@@ -3194,7 +3263,7 @@ export function mountApp(root, engine, opts = {}) {
   // An armed autopilot plays when the asks stop, or says it is ready.
   function planAhead() {
     const p = state.pilot;
-    if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || planning || replaying()) return;
+    if (!ai || !state.aiPrefs.on || !state.auto || !p || !state.run || thinking() || replaying()) return;
     const engine = engineNow();
     if (isCloud(engine) && !keyOf(engine)) return;
     if (untuned(ws.style)) {
@@ -3222,11 +3291,13 @@ export function mountApp(root, engine, opts = {}) {
       layForm(null);
     }
     const slot = state.run.ahead.length;
-    if (slot >= AHEAD || (slot === 0 && p.left <= 1)) return;
     const coming = sequence(p);
     const next = coming[slot] ?? null; // queued by hand or by the form: the model arranges that one
-    if (p.closing && !next) return; // nothing plays after the outro
-    if (next && !PLAN_SECTIONS.includes(next) && next !== OUTRO) return;
+    // Nothing to plan (or not yet): the model's time goes to a touch.
+    if (slot >= AHEAD || (slot === 0 && p.left <= 1) || (p.closing && !next) || (next && !PLAN_SECTIONS.includes(next) && next !== OUTRO)) {
+      planTouch();
+      return;
+    }
     const at = sectionNo() + 1 + slot;
     const loops = loopsAt(p, slot);
     const ctx = { lists: pilotLists(), style: styleAt(p, slot, ws.style), next, bars: loops && loops * 2, ...asked() };
@@ -3288,6 +3359,49 @@ export function mountApp(root, engine, opts = {}) {
     );
     const opened = state.run.opening !== undefined ? 1 : 0;
     if (state.armed && !failing) status(tx.ai.arming(slot + 1 + opened, AHEAD + opened));
+  }
+
+  // The sounds a touch may ride: the lead and the classic playing, not yours.
+  const touchable = () =>
+    [...new Set(Object.values(state.active))]
+      .filter((id) => TOUCH_LAYERS.includes(layerOf(id).id) && defOf(id).kind === "notes" && !owned(id))
+      .sort();
+
+  // Idle, playing: asks for a touch to land on the next loop, unless one
+  // waits or the one on has loops to go. Its answer is for this section only.
+  function planTouch() {
+    const p = state.pilot;
+    const t = state.touch;
+    if (!state.aiPrefs.touches || planning || retry || state.armed || !engine.isRunning() || state.touchNext) return;
+    if ((t && t.left > 1) || p.left <= 1) return; // the last loop: the section's own dress comes next
+    const ids = touchable();
+    if (!ids.length) return;
+    const which = engineNow();
+    const at = sectionNo();
+    const prompt = touchPrompt({
+      section: p.section,
+      loop: p.length - p.left + 1,
+      loops: p.length,
+      active: state.active,
+      ids,
+      dressed: Object.values(state.run.dress),
+      recent: state.run.touches,
+      names: ws.names,
+      synths: synthsNow(),
+      descriptions: ws.descriptions,
+      vibe: vibeFor(ws.style),
+      ...asked(),
+    });
+    ask(
+      which,
+      { touch: true },
+      (signal) => ai[which].plan(prompt, touchSchema(ids), asking(which, signal)),
+      (raw) => {
+        const touch = normalizeTouch(raw, ids);
+        if (touch && state.auto && at === sectionNo()) state.touchNext = { touch, why: whyOf(raw), at };
+      },
+      () => {},
+    );
   }
 
   // With a vibe, the first ask for a style: the vibe in English and the
@@ -3446,6 +3560,12 @@ export function mountApp(root, engine, opts = {}) {
     setPrefs({ set: SET_LENGTHS.includes(minutes) ? minutes : 0 });
     status(state.aiPrefs.set ? tx.ai.setSaved(tx.ai.sets[state.aiPrefs.set]) : tx.ai.setOpen);
   });
+  // On, the next idle moment asks for one; off, the touch on plays out.
+  touchInput.addEventListener("change", () => {
+    setPrefs({ touches: touchInput.value === "on" });
+    if (state.aiPrefs.touches) planAhead();
+    else if (planning?.touch) cancelPlanning();
+  });
   vibeInput.addEventListener("input", noteVibe);
   // Pasted, typed then Enter or Vincular: the same key twice is checked once,
   // unless the provider refused it or didn't answer.
@@ -3516,9 +3636,9 @@ export function mountApp(root, engine, opts = {}) {
     revibe();
     const p = state.auto ? state.pilot : null;
     const kept = state.run?.ahead[0]?.plan.section;
-    if (planning && !state.armed) status(tx.ai.vibeAsking(vibe, p && kept ? tx.sections[kept] : null));
-    else if (p && state.aiPrefs.on && !replaying() && !planning && !state.armed) status(tx.ai.vibeLater(vibe));
-    else if (!planning) status(tx.ai.vibeSaved(vibe));
+    if (thinking() && !state.armed) status(tx.ai.vibeAsking(vibe, p && kept ? tx.sections[kept] : null));
+    else if (p && state.aiPrefs.on && !replaying() && !thinking() && !state.armed) status(tx.ai.vibeLater(vibe));
+    else if (!thinking()) status(tx.ai.vibeSaved(vibe));
     showSection();
   }
   vibeInput.addEventListener("change", () => {
