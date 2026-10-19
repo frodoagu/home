@@ -32,7 +32,7 @@ export default {
           ["Piloto sobre o que toca", "Se já tem algo tocando, o piloto pega do jeito que está e segue dali, sem cortar."],
           ["● Gravar antes de tocar", "A gravação espera o primeiro som: aperte, se prepare e comece; não sobra silêncio no começo."],
           ["Reordenar", "Arraste um som dentro da camada (no celular, segure e mova), ou a camada inteira pelo ⠿. No teclado: Alt + setas num som, setas no ⠿."],
-          ["Enter", "Em «Mudança de BPM» começa a mudança; no nome de um snapshot, salva."],
+          ["Enter", "No nome de um snapshot, salva."],
         ],
       },
       {
@@ -72,10 +72,10 @@ export default {
         icon: "🎚️",
         title: "Tocar ao vivo",
         items: [
-          ["BPM", "De 60 a 180; o slider muda o tempo na hora."],
+          ["BPM", "De 60 a 180. Com o loop parado o slider muda o tempo na hora; tocando, marca o destino e, ao soltar, vai até lá aos poucos. A rodinha do mouse e as setas também o movem."],
           ["Tônica", "A nota base da mixagem, como a escala do Ableton: tudo o que é melódico (baixos, leads, pads, samples com notas) toca nessa tônica, pelo caminho mais curto desde Lá. Não te prende na escala: as notas de fora continuam tocando como você escreveu, deslocadas junto. O kick e a percussão não mudam. Mudada ao vivo, entra na próxima nota."],
           ["Tap", "À esquerda do BPM, para se sincronizar com outra faixa ou com o sampler em outro dispositivo: o primeiro toque volta o loop ao 1 do compasso ali mesmo (comece no 1 do que você segue) e cada toque seguinte ajusta o BPM e a fase ao vivo. Mais toques, mais preciso: com uns 20 acerta o BPM exato. Meio ou dobro do tempo também funciona; uma pausa de 2 s recomeça."],
-          ["Mudança de BPM", "Escolha o destino e em quantos compassos: ▶ Ir move um passo por compasso. ■ Cortar para ali; mexer no slider também."],
+          ["Mudança de BPM", "Ao lado do BPM: em quantos compassos chega ao destino, um passo por compasso. Enquanto vai, o número diz onde está e para onde vai; ■ Cortar para ali, um Tap também."],
           ["Filtro DJ", "À esquerda fecha um lowpass, à direita abre um highpass, sobre a mixagem toda."],
           ["💥 Drop", "Arma um drop no próximo compasso: virada do kick, um compasso sem kick nem baixo sob uma varredura, e tudo de volta com um impacto. Outro clique antes de começar desarma. Com o piloto, o próximo loop dele é o drop e depois vem um Pico (✕ na fila tira)."],
           ["Delay 3/16 e Reverb", "Os efeitos da mixagem: ligue e desligue quando quiser."],
@@ -351,11 +351,9 @@ export default {
     all: "Vale tudo",
   },
   tempo: {
-    label: "Mudança de BPM",
     over: "em",
-    go: "▶ Ir",
     cancel: "■ Cortar",
-    title: "Vai até esse BPM aos poucos: um passo a cada compasso",
+    title: "Escolha o BPM: com o loop tocando vai até lá aos poucos, um passo por compasso",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -533,7 +531,6 @@ export default {
     start: "Começar a tocar",
   },
   credits: { repo: "Código: frodoagu/home", made: "Feito com ❤️ na 🌍 com Claude por Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Voltar para agu.com.ar" },
   cloud: {
     pitch: "Entre para salvar sua configuração na nuvem e usar em qualquer dispositivo.",
     checking: "Nuvem…",

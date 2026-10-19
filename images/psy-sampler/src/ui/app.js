@@ -190,6 +190,8 @@ const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
 
 // Drag on a tile's 🔀 over the whole improvise range: the button is small.
 const TILE_SLIDE_PX = 120;
+// The wheel on the BPM slider: the ramp starts this long after its last notch.
+const WHEEL_SETTLE_MS = 400;
 // The drop by hand: the riser into it, the hit on it, and the layers its
 // second bar takes out.
 const DROP_RISER = "fx.riser";
@@ -231,6 +233,18 @@ const fresh = () => ({
   replay: null,
   replayOpening: null,
 });
+
+
+// A top-bar button down to its icon ("🌀 Visuales" -> "🌀"): the words stay
+// its name and its tooltip.
+function iconOnly(button) {
+  const label = button.textContent;
+  button.setAttribute("aria-label", label);
+  button.title ||= label;
+  button.textContent = label.split(" ")[0];
+  button.classList.add("icon");
+  return button;
+}
 
 export function mountApp(root, engine, opts = {}) {
   const {
@@ -355,6 +369,7 @@ export function mountApp(root, engine, opts = {}) {
     step: "1",
     value: String(ws.bpm),
   });
+  bpm.title = tx.tempo.title;
   const bpmOut = el("output", { for: "bpm", class: "bpm-value", text: String(ws.bpm) });
   // The mix's tonic: notes move at the engine, the parts stay written in A.
   const keyPick = select(
@@ -392,17 +407,7 @@ export function mountApp(root, engine, opts = {}) {
   const dropBtn = el("button", { type: "button", class: "drop-btn", "data-action": "drop", "aria-pressed": "false", text: tx.transport.drop });
   dropBtn.title = tx.transport.dropTitle;
 
-  /* ---- BPM change: a ramp, bar by bar ---- */
-  const rampTo = el("input", {
-    type: "number",
-    id: "ramp-to",
-    class: "ramp-input",
-    min: String(BPM_MIN),
-    max: String(BPM_MAX),
-    step: "1",
-    inputmode: "numeric",
-  });
-  rampTo.value = String(state.ramp?.to ?? ws.bpm);
+  /* ---- BPM change: the slider's target, reached bar by bar ---- */
   const rampBars = select(
     tx.tempo.over,
     RAMP_BARS.map((n) => ({ value: n, label: tx.bars(n) })),
@@ -413,15 +418,8 @@ export function mountApp(root, engine, opts = {}) {
     },
     "ramp-bars",
   );
-  const rampBtn = el("button", { type: "button", class: "ghost", "data-action": "ramp" });
-  rampBtn.title = tx.tempo.title;
-  const rampBox = el(
-    "div",
-    { class: "ramp" },
-    el("label", { class: "pick", for: "ramp-to" }, el("span", { text: tx.tempo.label }), rampTo),
-    rampBars,
-    rampBtn,
-  );
+  const rampBtn = el("button", { type: "button", class: "ghost", "data-action": "ramp", text: tx.tempo.cancel, hidden: "" });
+  const rampBox = el("div", { class: "ramp" }, rampBars, rampBtn);
 
   /* ---- autopilot + seed ---- */
   const autoBtn = el("button", {
@@ -943,16 +941,14 @@ export function mountApp(root, engine, opts = {}) {
       })
     : null;
 
-  // Top bar: the way back to agu.com.ar, the transport buttons, the tempo, then
-  // the how-to page, where the setup is saved (account.js) and the language.
+  // Top bar: the transport buttons, the tempo, then the visuals and the how-to
+  // page (their icons alone), where the setup is saved (account.js) and the
+  // language. One row on a 1080p screen: 💥 Drop lives by 🌅 in the pilot's row.
   const help = createHelp(tx.help);
-  const back = el("a", { class: "back", href: "https://agu.com.ar/", text: `← ${tx.topbar.back}` });
-  back.title = tx.topbar.backTitle;
   const topbar = el(
     "nav",
     { class: "topbar" },
-    back,
-    el("div", { class: "topbar-transport" }, snapBtn, dropBtn, cueBtn, stopBtn, recBtn),
+    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
     el(
       "div",
       { class: "topbar-tempo" },
@@ -961,7 +957,7 @@ export function mountApp(root, engine, opts = {}) {
       rampBox,
       keyPick,
     ),
-    el("div", { class: "topbar-end" }, visualsButton(engine, tx.visuals), help.button, ...(account ? [account.node] : []), language),
+    el("div", { class: "topbar-end" }, iconOnly(visualsButton(engine, tx.visuals)), iconOnly(help.button), ...(account ? [account.node] : []), language),
   );
 
   const samplesPanel = samples
@@ -1003,7 +999,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "div",
       { class: "tools panel" },
-      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, nextBtn, closeBtn),
+      el("div", { class: "tools-row pilot-row" }, autoBtn, aiBtn, tourBtn, nextBtn, closeBtn, dropBtn),
       aiPanel,
       el("div", { class: "tools-row" }, style, seedLabel, diceBtn, shareBtn),
       el(
@@ -1346,7 +1342,7 @@ export function mountApp(root, engine, opts = {}) {
     closeBtn.setAttribute("aria-pressed", String(Boolean(p?.closing)));
     closeBtn.disabled = !engine.isRunning() || state.armed || Boolean(p?.closing && !closingOpen(p));
     for (const b of phaseBtns) b.disabled = Boolean(p?.closing); // nothing plays after the outro
-    for (const c of [bpm, rampTo, rampBtn, tapBtn]) c.disabled = braking(p); // a vinyl stopping keeps its tempo
+    for (const c of [bpm, rampBtn, tapBtn]) c.disabled = braking(p); // a vinyl stopping keeps its tempo
     const coming = Boolean(state.drop) || Boolean(p && (dropping(p) || (sequence(p)[0] === "peak" && p.left <= 2)));
     dropBtn.setAttribute("aria-pressed", String(coming));
     dropBtn.disabled = !engine.isRunning() || Boolean(p?.closing && !closingOpen(p)); // the outro has its own drop
@@ -2059,25 +2055,31 @@ export function mountApp(root, engine, opts = {}) {
   function setTempo(value) {
     state.tempo = value;
     ws.bpm = Math.round(value);
-    bpm.value = String(ws.bpm);
     engine.setBpm(value);
     persist();
   }
 
+  // The slider shows where the BPM is going, the readout where it is. A hand
+  // on the slider (or the wheel) keeps it where the hand put it.
+  let held = false;
   function showRamp() {
     const r = state.ramp;
-    rampBtn.textContent = r ? tx.tempo.cancel : tx.tempo.go;
+    rampBtn.hidden = !r;
     rampBtn.setAttribute("aria-pressed", String(Boolean(r)));
+    if (!held) bpm.value = String(r?.to ?? ws.bpm);
     bpmOut.textContent = r ? tx.tempo.ramping(ws.bpm, r.to) : String(ws.bpm);
   }
 
-  // With the loop stopped there are no bar lines: the BPM just changes.
-  function startRamp() {
+  // With the loop stopped there are no bar lines: the BPM just changes. Back
+  // to the BPM the readout shows, a ramp on its way stops there (a ramp passes
+  // fractions: that last bit is too small to hear).
+  function startRamp(target) {
     if (state.auto && braking(state.pilot)) return; // a new style's ramp too: the brake ends where it was set
-    const to = clampBpm(Number(rampTo.value));
-    rampTo.value = String(to);
-    if (!engine.isRunning()) setTempo(to);
-    else if (to !== state.tempo) state.ramp = { from: state.tempo, to, bars: ws.rampBars, done: 0 };
+    const to = clampBpm(target);
+    if (!engine.isRunning() || to === ws.bpm) {
+      state.ramp = null;
+      setTempo(to);
+    } else state.ramp = { from: state.tempo, to, bars: ws.rampBars, done: 0 };
     showRamp();
   }
 
@@ -2819,9 +2821,7 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   function startRampTo(bpm) {
-    if (bpm === state.tempo) return;
-    rampTo.value = String(bpm);
-    startRamp();
+    if (bpm !== state.tempo) startRamp(bpm);
   }
 
   // A style the pilot has not reached yet: it plays from now on.
@@ -2838,7 +2838,6 @@ export function mountApp(root, engine, opts = {}) {
     const handoff = p?.handoff;
     if (!handoff?.broke) return;
     const to = bpmFor(handoff.style, state.tempo);
-    rampTo.value = String(to);
     const loops = p.left + (p.section === "breakdown" ? SECTIONS.build.loops[0] : 0);
     state.ramp = to === state.tempo ? null : { from: state.tempo, to, bars: loops * 2, done: 0 };
     showRamp();
@@ -3538,11 +3537,48 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   /* ---- controls ---- */
+  // The slider picks the target: stopped, the BPM follows it; playing, the
+  // readout previews it and letting go (a key, the wheel settling) starts the
+  // ramp there over the chosen bars.
   bpm.addEventListener("input", () => {
-    state.ramp = null; // the hand on the slider wins
-    setTempo(Number(bpm.value));
-    showRamp();
+    const to = Number(bpm.value);
+    if (!engine.isRunning()) startRamp(to);
+    else bpmOut.textContent = tx.tempo.ramping(ws.bpm, to);
   });
+  bpm.addEventListener("pointerdown", () => {
+    held = true;
+  });
+  bpm.addEventListener("pointerup", () => {
+    held = false;
+  });
+  bpm.addEventListener("change", () => {
+    held = false;
+    startRamp(Number(bpm.value));
+  });
+  // The wheel: a BPM a notch (a mouse's 100 px, a trackpad's in sums), the
+  // ramp once it settles.
+  let wheelSum = 0;
+  let wheelTimer = 0;
+  bpm.addEventListener(
+    "wheel",
+    (e) => {
+      if (bpm.disabled) return;
+      e.preventDefault();
+      wheelSum -= e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      const steps = Math.trunc(wheelSum / 100);
+      if (!steps) return;
+      wheelSum -= steps * 100;
+      held = true;
+      bpm.value = String(clampBpm(Number(bpm.value) + steps));
+      bpm.dispatchEvent(new Event("input"));
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(() => {
+        held = false;
+        if (alive) startRamp(Number(bpm.value));
+      }, WHEEL_SETTLE_MS);
+    },
+    { passive: false },
+  );
   // Tap tempo (tempo.js): the first tap of a count takes the loop back to its
   // 1, every tap after it brings the BPM and the phase onto the tapped beat.
   // On the press, not the release, and timed by the event, not by when the
@@ -3582,14 +3618,8 @@ export function mountApp(root, engine, opts = {}) {
     if (e.detail === 0 && performance.now() - keyedAt > 1000) tap(e);
   });
   rampBtn.addEventListener("click", () => {
-    if (!state.ramp) startRamp();
-    else {
-      state.ramp = null;
-      showRamp();
-    }
-  });
-  rampTo.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") startRamp();
+    state.ramp = null;
+    showRamp();
   });
   snapBtn.addEventListener("click", takeSnapshot);
   const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);

@@ -32,7 +32,7 @@ export default {
           ["Autopilot over what's playing", "If something already plays, the autopilot takes it as it is and carries on from there, no cut."],
           ["● Record before you play", "Recording waits for the first sound: press it, get ready and start; no silence at the top."],
           ["Reorder", "Drag a sound within its layer (on a phone, press and hold it, then move), or a whole layer by its ⠿. Keyboard: Alt + arrows on a sound, arrows on the ⠿."],
-          ["Enter", "In «BPM change» it starts the change; in a snapshot's name it saves it."],
+          ["Enter", "In a snapshot's name it saves it."],
         ],
       },
       {
@@ -72,10 +72,10 @@ export default {
         icon: "🎚️",
         title: "Playing live",
         items: [
-          ["BPM", "From 60 to 180; the slider changes the tempo at once."],
+          ["BPM", "From 60 to 180. With the loop stopped the slider changes the tempo at once; playing, it sets the target and, once you let go, gets there gradually. The mouse wheel and the arrow keys move it too."],
           ["Key", "The mix's root note, like Ableton's scale: everything melodic (basses, leads, pads, sampled notes) plays in that key, the shortest way from A. It doesn't lock you into the scale: notes outside it still play as you wrote them, moved along. The kick and percussion stay put. Changed live, it takes on the next note."],
           ["Tap", "Left of the BPM, to lock onto another track or the sampler on another device: the first tap takes the loop back to the 1 of the bar right there (start on the 1 of what you follow) and every tap after it adjusts the BPM and the phase live. More taps, more precise: about 20 nail the exact BPM. Half or double time works too; a 2 s pause starts over."],
-          ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
+          ["BPM change", "Next to the BPM: over how many bars it reaches the target, one step per bar. While it moves, the readout says where it is and where it's going; ■ Stop ramp halts it there, and so does a Tap."],
           ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],
           ["💥 Drop", "Arms a drop on the next bar: a kick roll, a bar without kick and bass under a sweep, and everything back with an impact. Another click before it starts disarms it. Under the autopilot its next loop is the drop and a Peak follows (✕ in the queue takes it out)."],
           ["Delay 3/16 and Reverb", "The mix effects: switch them on and off any time."],
@@ -351,11 +351,9 @@ export default {
     all: "Anything goes",
   },
   tempo: {
-    label: "BPM change",
     over: "over",
-    go: "▶ Go",
     cancel: "■ Stop ramp",
-    title: "Gets to that BPM gradually: one step every bar",
+    title: "Pick the BPM: with the loop playing it gets there gradually, one step per bar",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -533,7 +531,6 @@ export default {
     start: "Start playing",
   },
   credits: { repo: "Source: frodoagu/home", made: "Made with ❤️ on 🌍 with Claude by Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Back to agu.com.ar" },
   cloud: {
     pitch: "Sign in to save your setup to the cloud and use it on any device.",
     checking: "Cloud…",

@@ -34,7 +34,7 @@ export default {
           ["Piloto sobre lo que suena", "Si ya hay algo sonando, el piloto lo toma tal cual y sigue desde ahí, sin cortar."],
           ["● Grabar antes de tocar", "La grabación espera al primer sonido: apretalo, preparate y arrancá; no queda silencio al principio."],
           ["Reordenar", "Arrastrá un sonido dentro de su capa (en el celular, mantenelo apretado y movelo), o la capa entera desde ⠿. Con teclado: Alt + flechas en un sonido, flechas en el ⠿."],
-          ["Enter", "En «Cambio de BPM» arranca el cambio; en el nombre de un snapshot lo guarda."],
+          ["Enter", "En el nombre de un snapshot lo guarda."],
         ],
       },
       {
@@ -74,10 +74,10 @@ export default {
         icon: "🎚️",
         title: "Tocar en vivo",
         items: [
-          ["BPM", "Entre 60 y 180; el slider cambia el tempo al instante."],
+          ["BPM", "Entre 60 y 180. Con el loop parado la barrita cambia el tempo al instante; andando, marca el destino y al soltarla va hasta ahí de a poco. También con la ruedita del mouse o las flechas."],
           ["Tónica", "La nota base de la mezcla, como la escala de Ableton: todo lo melódico (bajos, leads, pads, samples con notas) suena en esa tónica, por el camino más corto desde La. No te encierra en la escala: las notas de afuera siguen sonando como las escribiste, corridas igual. El kick y la percusión no cambian. Cambiarla en vivo entra en la próxima nota."],
           ["Tap", "A la izquierda del BPM, para engancharte con otro tema o con el sampler en otro dispositivo: el primer toque vuelve el loop al 1 del compás ahí mismo (empezá en el 1 de lo que seguís) y cada toque que sigue ajusta el BPM y la fase en vivo. Más toques, más preciso: con unos 20 clava el BPM exacto. Medio o doble tiempo también funciona; una pausa de 2 s empieza de nuevo."],
-          ["Cambio de BPM", "Elegí el destino y en cuántos compases: ▶ Ir lo mueve un paso por compás. ■ Cortar lo frena ahí; tocar el slider también."],
+          ["Cambio de BPM", "Al lado del BPM: en cuántos compases llega al destino, un paso por compás. Mientras va, el número dice dónde está y hacia dónde; ■ Cortar lo frena ahí, un Tap también."],
           ["Filtro DJ", "A la izquierda cierra un lowpass, a la derecha abre un highpass, sobre toda la mezcla."],
           ["💥 Drop", "Arma un drop en el próximo compás: redoble del kick, un compás sin kick ni bajo mientras barre el filtro, y todo de vuelta con un impacto. Otro clic antes de que empiece lo desarma. Con el piloto, su próximo loop es el drop y después viene un Pico (✕ en la cola lo saca)."],
           ["Delay 3/16 y Reverb", "Los efectos de la mezcla: prendelos y apagalos cuando quieras."],
@@ -353,11 +353,9 @@ export default {
     all: "Todo vale",
   },
   tempo: {
-    label: "Cambio de BPM",
     over: "en",
-    go: "▶ Ir",
     cancel: "■ Cortar",
-    title: "Va hasta ese BPM de a poco: un paso en cada compás",
+    title: "Elegí el BPM: con el loop andando va hasta ahí de a poco, un paso por compás",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -535,7 +533,6 @@ export default {
     start: "Empezar a jugar",
   },
   credits: { repo: "Código: frodoagu/home", made: "Hecho con ❤️ en 🌍 con Claude por Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Volver a agu.com.ar" },
   cloud: {
     pitch: "Iniciá sesión para guardar tu configuración en la nube y usarla en cualquier dispositivo.",
     checking: "Nube…",

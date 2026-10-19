@@ -113,7 +113,7 @@ goes through it:
   one after (see below).
 - **Snapshots** (see below): a click plays the saved moment from the next bar,
   always, even with "On the beat" off.
-- **💥 Drop** (top bar, next to Snapshot; only while the loop runs): armed, the
+- **💥 Drop** (in the autopilot row, next to 🌅; only while the loop runs): armed, the
   next bar line starts a drop, the same one the autopilot plays into its peaks
   (see *Drops* below), with a riser fired on its first bar and an impact on
   the drop. A second click before that bar line disarms it. Under the
@@ -121,13 +121,24 @@ goes through it:
   section end after the next loop (`dropNext`), so that loop is the pilot's
   drop; ✕ on the queued Peak takes it back. Under the snapshot autopilot it
   is the drop by hand, over whatever snapshot plays.
-- **BPM change** (in the top bar, next to the BPM slider): "BPM change [N]
-  over [1-32 bars] ▶ Go" moves one linear stretch on each bar line (`rampAt`
-  in `tempo.js`) and lands exactly on N on the last one. The in-between BPM goes to the engine with decimals, and rounded to the
-  slider and to storage. The scheduler reads the BPM every tick, so each stretch
-  comes in at most one step after the line. With the loop stopped there are no
-  bars: it changes right away. Moving the slider, Stop, Tap or the same button
-  cut it short.
+- **BPM change**: the BPM slider is the target. With the loop running,
+  dragging only previews it in the readout ("145 → 150"); letting go (an
+  arrow key, or the mouse wheel 400 ms after its last notch: a BPM per 100 px
+  of `deltaY`, so a trackpad adds up) starts the ramp "over [1-32 bars]",
+  one linear stretch on each bar line (`rampAt` in `tempo.js`), landing
+  exactly on the target on the last one. While it runs the slider stays on
+  the target and the readout says where the BPM is; a hand on the slider
+  (`held`) is never moved under it. The in-between BPM goes to the engine
+  with decimals, and rounded to the readout and to storage. The scheduler
+  reads the BPM every tick, so each stretch comes in at most one step after
+  the line. With the loop stopped there are no bars: the slider changes it
+  right away. ■ Stop ramp (shown only while one runs), Stop, Tap, or the
+  slider back on the BPM it plays at cut it short; a new target takes over
+  from wherever the BPM is.
+- **One row**: the top bar fits one row from about 1366 px wide (a 1080p
+  screen at 125 % zoom is 1536): Visuals and Help show only their icons,
+  💥 Drop sits in the autopilot row, and under 1800 px the language goes to
+  its select and the cloud pill to its ☁ (its words stay in the tooltip).
 - **Tap** (left of the BPM): tap along to another track, or psy-sampler on another
   device, and the loop locks onto it, tempo and phase (one browser runs one
   sampler: see [One tab at a time](#one-tab-at-a-time)).
@@ -833,7 +844,8 @@ makes itself (a new version, another tab or device took over) skip the question.
 
 Anyone with a Google account can save their workspace on the server and use it
 on another device. The state is **always visible** in the top bar
-(`ui/account.js`), next to the link back to agu.com.ar and the language:
+(`ui/account.js`), next to the language (under 1800 px wide just the ☁,
+colored, with the words in its tooltip):
 
 | Pill | When |
 |---|---|

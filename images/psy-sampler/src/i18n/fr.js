@@ -32,7 +32,7 @@ export default {
           ["Pilote sur ce qui joue", "Si quelque chose joue déjà, le pilote le prend tel quel et continue à partir de là, sans coupure."],
           ["● Enregistrer avant de jouer", "L'enregistrement attend le premier son : appuie, prépare-toi et lance-toi ; pas de silence au début."],
           ["Réordonner", "Glisse un son dans sa couche (sur mobile, appuie longuement puis déplace), ou toute la couche par son ⠿. Au clavier : Alt + flèches sur un son, flèches sur le ⠿."],
-          ["Entrée", "Dans « Changement de BPM » lance le changement ; dans le nom d'un snapshot, le sauvegarde."],
+          ["Entrée", "Dans le nom d'un snapshot, le sauvegarde."],
         ],
       },
       {
@@ -72,10 +72,10 @@ export default {
         icon: "🎚️",
         title: "Jouer en live",
         items: [
-          ["BPM", "De 60 à 180 ; le curseur change le tempo aussitôt."],
+          ["BPM", "De 60 à 180. Boucle arrêtée, le curseur change le tempo aussitôt ; en lecture, il fixe la cible et, quand tu le lâches, y va progressivement. La molette de la souris et les flèches le bougent aussi."],
           ["Tonique", "La note de base du mix, comme la gamme d'Ableton : tout ce qui est mélodique (basses, leads, pads, samples joués en notes) sonne dans cette tonique, par le chemin le plus court depuis La. Ça ne t'enferme pas dans la gamme : les notes en dehors sonnent toujours comme tu les as écrites, décalées avec le reste. Le kick et les percussions ne bougent pas. Changée en live, elle prend effet à la note suivante."],
           ["Tap", "À gauche du BPM, pour se caler sur un autre morceau ou sur le sampler d'un autre appareil : le premier tap ramène la boucle au 1 de la mesure sur-le-champ (démarre sur le 1 de ce que tu suis) et chaque tap suivant ajuste le BPM et la phase en direct. Plus de taps, plus de précision : une vingtaine donnent le BPM exact. Le demi-temps ou le double fonctionnent aussi ; une pause de 2 s recommence à zéro."],
-          ["Changement de BPM", "Choisis la cible et sur combien de mesures : ▶ Go avance d'un pas par mesure. ■ Arrêter la rampe la stoppe là ; toucher le curseur aussi."],
+          ["Changement de BPM", "À côté du BPM : en combien de mesures il atteint la cible, un pas par mesure. Pendant ce temps, le chiffre dit où il en est et où il va ; ■ Arrêter la rampe le stoppe là, un Tap aussi."],
           ["Filtre DJ", "À gauche il ferme un passe-bas, à droite il ouvre un passe-haut, sur tout le mix."],
           ["💥 Drop", "Arme un drop à la mesure suivante : un roll de kick, une mesure sans kick ni basse sous un balayage, et tout revient avec un impact. Un autre clic avant qu'il démarre le désarme. Sous le pilote, sa boucle suivante est le drop et un Pic suit (✕ dans la file le retire)."],
           ["Delay 3/16 et Reverb", "Les effets du mix : allume-les et éteins-les à tout moment."],
@@ -351,11 +351,9 @@ export default {
     all: "Tout est permis",
   },
   tempo: {
-    label: "Changement de BPM",
     over: "sur",
-    go: "▶ Go",
     cancel: "■ Arrêter la rampe",
-    title: "Atteint ce BPM progressivement : un pas par mesure",
+    title: "Choisis le BPM : en lecture il y va progressivement, un pas par mesure",
     ramping: (now, to) => `${now} → ${to}`,
   },
   snap: {
@@ -533,7 +531,6 @@ export default {
     start: "Commencer à jouer",
   },
   credits: { repo: "Code source : frodoagu/home", made: "Fait avec ❤️ sur 🌍 avec Claude par Fr0D3" },
-  topbar: { back: "agu.com.ar", backTitle: "Retour à agu.com.ar" },
   cloud: {
     pitch: "Connecte-toi pour sauvegarder ta config dans le cloud et l'utiliser sur n'importe quel appareil.",
     checking: "Cloud…",
