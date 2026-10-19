@@ -39,6 +39,7 @@ async function fakeFetch(url, { method = "GET", body } = {}) {
   if (path === "/api/samples" && method === "POST") {
     const sample = { id: `up${String(server.samples.length).padStart(20, "0")}`, name: new URLSearchParams(url.split("?")[1]).get("name"), type: "audio/wav", bytes: body.byteLength, createdAt: 2 };
     server.samples.push(sample);
+    server.bodies.push(body);
     return reply(201, sample);
   }
   const id = path.split("/").pop();
@@ -85,7 +86,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("requestAnimationFrame", () => 0);
   vi.stubGlobal("cancelAnimationFrame", () => {});
-  server = { user: { email: "ana@example.com" }, samples: [KICK] };
+  server = { user: { email: "ana@example.com" }, samples: [KICK], bodies: [] };
   localStorage.clear();
   history.replaceState(null, "", "/");
   resetAccountForTests();
@@ -110,7 +111,7 @@ function fakeMedia(fail) {
     }),
   };
 }
-const micTap = () => ctx.nodes.find((n) => n.kind === "worklet" && n.name === "psy-tap");
+const micTap = () => ctx.nodes.findLast((n) => n.kind === "worklet" && n.name === "psy-tap");
 const hear = (frames, v) => micTap().port.onmessage({ data: [new Float32Array(frames).fill(v), new Float32Array(frames).fill(v)] });
 const recordBtn = () => $('[data-action="record-sample"]');
 async function stopRecording() {
@@ -174,6 +175,48 @@ describe("recording a sample with the microphone", () => {
     micTap().port.onmessage({ data: null });
     await settle();
     expect($(".sample-take").textContent).toContain("Grabación de 15 s");
+  });
+
+  it("a take goes up with the effects it was given", async () => {
+    await mount({ media: fakeMedia() });
+    recordBtn().click();
+    await settle();
+    hear(48000, 0.5);
+    await stopRecording();
+    const preset = $('[data-control="take-preset"]');
+    expect(preset.value).toBe("none");
+    expect([...preset.options].map((o) => o.textContent)).toContain("Coro");
+    const auditions = () => ctx.nodes.filter((n) => n.kind === "buffer").length;
+    const before = auditions();
+
+    choose(preset, "chorus"); // a preset plays at once
+    await vi.waitFor(() => expect(auditions()).toBeGreaterThan(before));
+    const knob = (key) => $(`.take-fx [data-param="${key}"]`);
+    expect(knob("chorus").value).toBe("0.7");
+    knob("pitch").value = "-5";
+    knob("pitch").dispatchEvent(new Event("input"));
+    expect(preset.value).toBe("custom");
+    expect(knob("pitch").closest(".knob").querySelector("output").textContent).toBe("-5 st");
+
+    $('[data-action="upload-take"]').click();
+    await vi.waitFor(() => expect(server.samples).toHaveLength(2));
+    // Stereo (the chorus), 16-bit so 15 s still fit a file.
+    const header = new DataView(new Uint8Array(server.bodies[0]).buffer);
+    expect(header.getUint16(22, true)).toBe(2);
+    expect(header.getUint16(34, true)).toBe(16);
+  });
+
+  it("the next take starts with the last one's effects", async () => {
+    await mount({ media: fakeMedia() });
+    for (const take of [1, 2]) {
+      recordBtn().click();
+      await settle();
+      hear(4800, 0.5);
+      await stopRecording();
+      if (take === 1) choose($('[data-control="take-preset"]'), "robot");
+    }
+    expect($('[data-control="take-preset"]').value).toBe("robot");
+    expect($('.take-fx [data-param="robot"]').value).toBe("1");
   });
 
   it("a take nobody keeps goes away with Descartar", async () => {

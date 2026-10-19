@@ -1594,6 +1594,36 @@ html:has(dialog.help[open], dialog.intro[open]) {
   min-width: 0;
 }
 
+/* The take's effects: a preset beside ▶, the sliders folded under it. */
+.take-fx summary {
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.take-fx > .hint {
+  margin: 6px 0 0;
+}
+
+.take-fx-group {
+  margin: 8px 0 0;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.take-fx-group legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ▶ while the effects render. */
+.sample-take .is-busy {
+  opacity: 0.5;
+  cursor: progress;
+}
+
 .pick-head {
   display: flex;
   flex-wrap: wrap;
