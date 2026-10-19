@@ -82,3 +82,54 @@ export function createMicRecorder(engine, { media = globalThis.navigator?.mediaD
     },
   };
 }
+
+/**
+ * 🎧: the microphone through the take's effects (engine.monitor), live,
+ * to try them before recording. Its own stream, so ⏺ and 🎙 work under it.
+ */
+export function createMicMonitor(engine, { media = globalThis.navigator?.mediaDevices } = {}) {
+  let run = null; // { stream, live, opening }
+  let fx = null;
+
+  const close = (r) => r.stream?.getTracks().forEach((track) => track.stop());
+
+  /** Call inside a click; rejects when the microphone is refused or missing. */
+  function start(settings) {
+    fx = settings;
+    if (run) return run.opening;
+    const ctx = engine.ensureContext();
+    const r = { stream: null, live: null };
+    run = r;
+    r.opening = (async () => {
+      r.stream = await media.getUserMedia(CONSTRAINTS);
+      if (run !== r) return close(r);
+      const live = await engine.monitor(ctx.createMediaStreamSource(r.stream), fx);
+      if (run !== r) return live.stop();
+      r.live = live;
+    })();
+    r.opening.catch(() => {
+      close(r);
+      if (run === r) run = null;
+    });
+    return r.opening;
+  }
+
+  function stop() {
+    const r = run;
+    if (!r) return;
+    run = null;
+    r.live?.stop();
+    close(r);
+  }
+
+  return {
+    start,
+    stop,
+    set(settings) {
+      fx = settings;
+      run?.live?.set(settings);
+    },
+    // "idle", "opening" (asking for the microphone) or "live"
+    state: () => (!run ? "idle" : run.live ? "live" : "opening"),
+  };
+}

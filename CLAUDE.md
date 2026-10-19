@@ -561,8 +561,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   into a mono `createTake` with a `threshold` and a `preroll`: a mic is never
   digitally silent, so the default `SILENCE` (-80 dBFS) would start every take on the
   room's hiss. Echo cancelling, noise suppression and auto gain stay off.
-  A take's effects (`src/audio/takeFx.js`, presets + sliders) are baked into the
-  file before upload, in a worker; stereo output goes up 16-bit to stay under 3 MiB.
+  A take's effects (presets + sliders) are baked into the file before upload, in a
+  worker; stereo output goes up 16-bit to stay under 3 MiB. 🎧 plays the mic through
+  the SAME streaming chain (`src/audio/fxChain.js`, state kept between blocks) in the
+  `psy-take-fx` worklet: keep a stage streaming, and keep fxChain.js free of browser
+  APIs (a worklet's scope lacks them). It's imported `?worker&url` so its imports are bundled.
   The ✨ AI
   first plans the opening from silence, armed (`openingPrompt`: a long,
   spacey intro, 16-32 bars, with more room than `SECTIONS.intro` via

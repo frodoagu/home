@@ -7,6 +7,7 @@ import {
   FX_RANGES,
   biquad,
   chorus,
+  createChain,
   drive,
   echo,
   fft,
@@ -138,6 +139,35 @@ describe("the stages", () => {
     click[0] = 1;
     const out = echo(click, RATE, 0.5, 0.25, 0.5);
     expect([out[0], out[2000], out[4000], out[6000]]).toEqual([0.5, 0.5, 0.25, 0.125]);
+  });
+});
+
+describe("the chain", () => {
+  it("plays the same 128 frames at a time as in one block: the live preview is the render", () => {
+    const s = sanitizeFx({ pitch: -3, robot: 0.5, whisper: 0.3, ring: 0.4, filter: "bandpass", drive: "soft", chorus: 0.5, echo: 0.4, echoTime: 0.1, reverb: 0.4 });
+    const input = noise(0.5);
+    const whole = createChain(RATE).process(input, s).map((c) => c.slice());
+    const live = createChain(RATE);
+    const parts = [[], []];
+    for (let at = 0; at < input.length; at += 128) live.process(input.subarray(at, at + 128), s).forEach((c, i) => parts[i].push(...c));
+    for (const c of [0, 1]) parts[c].forEach((x, i) => expect(x).toBeCloseTo(whole[c][i], 5));
+  });
+
+  it("trails by what pitch, robot and whisper read ahead", () => {
+    const chain = createChain(RATE);
+    expect(chain.latency(sanitizeFx({ reverb: 1, chorus: 1, drive: "hard" }))).toBe(0);
+    expect(chain.latency(sanitizeFx({ pitch: 2 }))).toBe(200); // half of 50 ms
+    expect(chain.latency(sanitizeFx({ pitch: 2, whisper: 1 }))).toBe(200 + 64);
+  });
+
+  it("a stage switched off forgets its tail", () => {
+    const chain = createChain(RATE);
+    const click = new Float32Array(128);
+    click[0] = 1;
+    chain.process(click, sanitizeFx({ echo: 1, echoTime: 0.05, echoFb: 0.9 }));
+    chain.process(new Float32Array(128), sanitizeFx({}));
+    const [again] = chain.process(new Float32Array(800), sanitizeFx({ echo: 1, echoTime: 0.05, echoFb: 0.9 }));
+    expect(peak(again)).toBe(0);
   });
 });
 

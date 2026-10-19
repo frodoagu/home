@@ -1085,12 +1085,13 @@ mono at 48 kHz is about 2.1 MB, under the 3 MiB per-file limit, so it is stored
 as recorded. The mic is not routed to the speakers, which rules out feedback,
 but it does hear whatever the speakers play.
 
-Before it goes up, the take can take **effects**
-([`takeFx.js`](../images/psy-sampler/src/audio/takeFx.js)): a preset (Coro,
-Robot, Dalek, Radio, Megáfono, Monstruo, Ardilla, Alien, Susurro, Bajo el agua,
-Catedral, Espacio, Lo-fi, Fantasma) beside ▶, and every setting under
-🎛 Ajustar efectos. They are rendered into the file, so the sample sounds the
-same in every sound that plays it. The chain is plain math over the take's
+Takes can have **effects**: a preset (Coro, Robot, Dalek, Radio, Megáfono,
+Monstruo, Ardilla, Alien, Susurro, Bajo el agua, Catedral, Espacio, Lo-fi,
+Fantasma) under 🎙 Grabar, and every setting under 🎛 Ajustar efectos. They are
+rendered into the file, so the sample sounds the same in every sound that plays
+it. **🎧 Probar en vivo** plays the microphone through them before anything is
+recorded. The chain
+([`fxChain.js`](../images/psy-sampler/src/audio/fxChain.js)) is plain math over
 samples, in this order:
 
 | Stage | How |
@@ -1111,7 +1112,26 @@ fades out) and drops the silence at its end. Stereo goes up as 16-bit (15 s at
 48 kHz is 2.9 MB, under the 3 MiB limit); mono stays 24-bit. A full chain on
 15 s takes about a second, so it runs in a worker (`takeFx.worker.js`) and the
 scheduler never stalls; ▶ and ⬆ share the last render. A preset or a released
-control plays it. The next take starts with the last one's effects.
+control plays the take, unless 🎧 is on. The effects stay the panel's, so the
+next take starts with the same ones.
+
+**Live and rendered are the same code.** Every stage keeps its state between
+blocks, so [`takeFx.js`](../images/psy-sampler/src/audio/takeFx.js) renders a
+whole take as one block, and the `psy-take-fx` AudioWorklet
+([`takeFx.worklet.js`](../images/psy-sampler/src/audio/takeFx.worklet.js)) runs
+the mic through the chain 128 frames at a time. A test checks the two match
+sample for sample. A stage only runs while it is on, and forgets its state when
+it goes off. Pitch, robot and whisper read ahead: pitch by 25 ms, robot by its
+frame (2048 samples at 48 kHz, ~43 ms, sized for the lowest note so the note can
+move live) and whisper by ~5 ms. Live, that is a delay. A render pads the take
+and drops the same number of samples. Reverse can't be heard live. The worklet
+is imported with `?worker&url`, which bundles it together with what it imports,
+since a worklet module can't load the page's chunks. It stays free of browser
+APIs that a worklet's scope lacks. `engine.monitor(source, fx)` connects it
+after the mastering, into the listener's volume: ⏺ doesn't record it, and the
+output is clipped to full scale. The preview opens its own mic stream, so
+🎙 records the dry mic under it. Over speakers, the mic hears the preview (echo
+cancelling is off, it feeds back), so the button asks for headphones.
 
 #### What goes up
 

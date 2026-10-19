@@ -66,6 +66,8 @@ import { fadesOnly, ringing, shaped } from "./shape.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
 import TAP_URL from "./tap.worklet.js?url&no-inline";
+// Bundled with what it imports: a worklet's module can't reach the page's chunks.
+import TAKE_FX_URL from "./takeFx.worklet.js?worker&url";
 
 const MASTER_GAIN = 0.7;
 const FADE = 0.03;
@@ -286,6 +288,7 @@ export function createEngine({
   let volumeGain = null;
   let volumeValue = 1;
   let tapModule = null; // addModule()'s promise, once per context
+  let fxModule = null; // the same, for monitor()'s worklet
   let dj = null; // { low, high }: the DJ filter's two biquads
   let djValue = 0;
   let sweepFilter = null; // the drop's highpass
@@ -1006,6 +1009,30 @@ export function createEngine({
       });
   }
 
+  /**
+   * Plays `source` (a microphone of ensureContext()'s) through the take's
+   * effects, after the mastering, so ⏺ doesn't record it, but under the
+   * listener's volume. Resolves to { set(fx), stop() }; rejects where the
+   * browser has no AudioWorklet.
+   */
+  async function monitor(source, fx) {
+    ensureContext();
+    fxModule ??= ctx.audioWorklet.addModule(TAKE_FX_URL);
+    await fxModule;
+    const node = createWorklet(ctx, "psy-take-fx", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+    node.port.postMessage(fx);
+    source.connect(node);
+    node.connect(volumeGain);
+    return {
+      set: (next) => node.port.postMessage(next),
+      stop() {
+        source.disconnect(node);
+        node.disconnect();
+        node.port.postMessage(null);
+      },
+    };
+  }
+
   // performance.now() time at which audio time `t` leaves the speakers: the
   // inverse of audioTimeAt().
   function perfTimeOf(t) {
@@ -1058,6 +1085,7 @@ export function createEngine({
     triggerFx,
     audition,
     previewSample,
+    monitor,
     activeFx,
     // Step (0..31) and loop audible now, or null.
     visibleStep: () => visible()?.step ?? null,

@@ -469,9 +469,15 @@ export default {
       missing: "Aucun micro n'est branché.",
       failed: "Impossible d'ouvrir le micro.",
       fx: {
+        title: "Effet du micro",
+        live: "🎧 Essayer en direct",
+        liveOn: "■ Arrêter d'écouter",
+        liveTitle: "Écoute le micro avec l'effet, en direct, avant d'enregistrer. Mets un casque : sur les haut-parleurs, ça larsen.",
+        liveOffTitle: "Couper l'écoute en direct",
+        reverseTitle: "Seulement sur la prise : en direct, rien ne peut jouer à l'envers",
         preset: "Effet",
         adjust: "🎛 Régler les effets",
-        hint: "Appliqués avant l'envoi : le sample les garde. Choisir un effet ou relâcher un réglage le fait jouer.",
+        hint: "Appliqués à ce que tu enregistres avant l'envoi : le sample les garde. Avec 🎧 tu les entends en direct ; sinon, choisir un effet ou relâcher un réglage fait jouer la prise.",
         presets: {
           none: "Sans effet",
           chorus: "Chœur",

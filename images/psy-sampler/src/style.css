@@ -1594,7 +1594,17 @@ html:has(dialog.help[open], dialog.intro[open]) {
   min-width: 0;
 }
 
-/* The take's effects: a preset beside ▶, the sliders folded under it. */
+/* The microphone's effects: a preset and 🎧, the sliders folded under it. */
+.mic-fx {
+  display: grid;
+  gap: 4px;
+}
+
+[data-action="monitor-fx"].is-live {
+  color: var(--stop);
+  border-color: var(--stop);
+}
+
 .take-fx summary {
   font-size: 0.85rem;
   color: var(--muted);

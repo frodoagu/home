@@ -34,7 +34,7 @@ import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefault
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
 import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
-import { createMicRecorder, micAvailable } from "../audio/mic.js";
+import { createMicMonitor, createMicRecorder, micAvailable } from "../audio/mic.js";
 import { encodeWav } from "../audio/wav.js";
 import {
   CHANGE_BARS,
@@ -998,6 +998,7 @@ export function mountApp(root, engine, opts = {}) {
         samples,
         cloud,
         mic: micAvailable(media) ? createMicRecorder(engine, { media }) : null,
+        monitor: micAvailable(media) ? createMicMonitor(engine, { media }) : null,
         tx,
         lang: lang(),
         confirm,

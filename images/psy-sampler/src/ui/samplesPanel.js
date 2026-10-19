@@ -105,7 +105,7 @@ export function droppedEntries(dataTransfer) {
   };
 }
 
-export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confirm, status, onPreview, onAudition, onUse, onRemove }) {
+export function mountSamplesPanel({ samples, cloud, mic = null, monitor = null, tx, lang, confirm, status, onPreview, onAudition, onUse, onRemove }) {
   const t = tx.samples;
   const usage = el("span", { class: "samples-usage" });
   const body = el("div", { class: "samples-body" });
@@ -154,8 +154,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
   const recordBtn = el("button", { type: "button", class: "rec rec-sample", "data-action": "record-sample" });
   const meter = el("span", { class: "mic-meter", role: "meter", "aria-label": m.level, "aria-valuemin": "0", "aria-valuemax": "1" }, el("span"));
   let ticking = null;
-  let taken = null; // the take waiting to go up: { node }
-  let lastFx = { preset: "none", fx: presetFx("none") }; // the next take starts with the last one's effects
+  let taken = null; // the take waiting to go up: { node, audition }
 
   function showMic() {
     const now = mic?.state() ?? "idle";
@@ -214,13 +213,101 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     render();
   }
 
+  /* ---- the take's effects: tried live (🎧) before recording, then baked into the take ---- */
+  const f = m.fx;
+  let preset = "none";
+  let fx = presetFx(preset);
+  const liveBtn = el("button", { type: "button", class: "ghost", "data-action": "monitor-fx" });
+
+  // An effect changed: live, the preview takes it; otherwise the take plays with it.
+  function changed() {
+    monitor?.set(fx);
+    if ((monitor?.state() ?? "idle") === "idle") taken?.audition();
+  }
+
+  const controls = new Map(); // key -> (value) => void, to show a preset
+  const edit = (key, v) => {
+    fx = sanitizeFx({ ...fx, [key]: v });
+    preset = "custom";
+    presets.querySelector("select").value = preset;
+    monitor?.set(fx);
+  };
+  const control = (item) => {
+    if (item === "filter" || item === "drive") {
+      const list = item === "filter" ? FX_FILTERS : FX_DRIVES;
+      const types = item === "filter" ? tx.editor.filterTypes : tx.editor.driveTypes;
+      const node = select(tx.editor[item], list.map((v) => ({ value: v, label: types[v] })), fx[item], (v) => {
+        edit(item, v);
+        changed();
+      }, `take-${item}`);
+      controls.set(item, (v) => (node.querySelector("select").value = v));
+      return node;
+    }
+    if (item === "reverse") {
+      const box = checkbox(nextId("take-reverse"), f.params.reverse, fx.reverse);
+      box.input.dataset.param = "reverse";
+      box.node.title = f.reverseTitle;
+      box.input.addEventListener("change", () => {
+        edit("reverse", box.input.checked);
+        changed();
+      });
+      controls.set(item, (v) => (box.input.checked = v));
+      return box.node;
+    }
+    const [min, max] = FX_RANGES[item.key];
+    const node = slider({ ...item, label: f.params[item.key], min, max }, fx[item.key], (v) => edit(item.key, v));
+    node.querySelector("input").addEventListener("change", changed);
+    controls.set(item.key, (v) => node.setValue(v));
+    return node;
+  };
+  const groups = Object.entries(FX_GROUPS).map(([group, items]) =>
+    el("fieldset", { class: "take-fx-group" }, el("legend", { text: f.groups[group] }), el("div", { class: "knobs" }, ...items.map(control))),
+  );
+  const presetOptions = [...Object.keys(FX_PRESETS), "custom"].map((value) => ({ value, label: f.presets[value] }));
+  const presets = select(f.preset, presetOptions, preset, (value) => {
+    if (value === "custom") return;
+    preset = value;
+    fx = presetFx(value);
+    for (const [key, show] of controls) show(fx[key]);
+    changed();
+  }, "take-preset");
+  presets.querySelector("option[value=custom]").disabled = true;
+
+  function showLive() {
+    const now = monitor?.state() ?? "idle";
+    liveBtn.textContent = now === "live" ? f.liveOn : now === "opening" ? m.opening : f.live;
+    liveBtn.title = now === "idle" ? f.liveTitle : f.liveOffTitle;
+    liveBtn.classList.toggle("is-live", now === "live");
+    liveBtn.setAttribute("aria-pressed", String(now !== "idle"));
+  }
+  liveBtn.addEventListener("click", () => {
+    if (monitor.state() !== "idle") {
+      monitor.stop();
+      showLive();
+      return;
+    }
+    samples.endAuditions();
+    const opening = monitor.start(fx); // inside the click: it may create the AudioContext
+    showLive();
+    opening.then(showLive, (err) => {
+      showLive();
+      status(micError(err));
+    });
+  });
+
+  const fxBox = el(
+    "div",
+    { class: "mic-fx", role: "group", "aria-label": f.title },
+    el("div", { class: "tools-row" }, presets, ...(monitor ? [liveBtn] : [])),
+    el("details", { class: "take-fx", "data-role": "take-fx" }, el("summary", { text: f.adjust }), el("p", { class: "hint", text: f.hint }), ...groups),
+  );
+
   function openTake({ blob, seconds }) {
     const time = new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
     const fallback = m.name(time);
     const name = el("input", { type: "text", class: "name-input take-name", maxlength: "60", "aria-label": m.nameLabel, "data-role": "take-name" });
     name.value = fallback;
 
-    let { preset, fx } = lastFx;
     const raw = blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
     let rendered = null; // { key, bytes }: the last render, for ▶ and ⬆ alike
     // The take's bytes with the effects as they are now; dry, as recorded.
@@ -228,7 +315,8 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
       if (isDry(fx)) return raw;
       const key = JSON.stringify(fx);
       if (rendered?.key !== key) {
-        const wanted = { key, bytes: raw.then((b) => renderFxOffThread(decodeWav(b), fx)).then(asWav) };
+        const settings = fx;
+        const wanted = { key, bytes: raw.then((b) => renderFxOffThread(decodeWav(b), settings)).then(asWav) };
         rendered = wanted;
         wanted.bytes.catch(() => rendered === wanted && (rendered = null));
       }
@@ -248,56 +336,6 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     }
     play.addEventListener("click", audition);
 
-    const f = m.fx;
-    const controls = new Map(); // key -> (value) => void, to show a preset
-    const edit = (key, v) => {
-      fx = sanitizeFx({ ...fx, [key]: v });
-      preset = "custom";
-      presets.querySelector("select").value = preset;
-      lastFx = { preset, fx };
-    };
-    const control = (item) => {
-      if (item === "filter" || item === "drive") {
-        const list = item === "filter" ? FX_FILTERS : FX_DRIVES;
-        const types = item === "filter" ? tx.editor.filterTypes : tx.editor.driveTypes;
-        const node = select(tx.editor[item], list.map((v) => ({ value: v, label: types[v] })), fx[item], (v) => {
-          edit(item, v);
-          audition();
-        }, `take-${item}`);
-        controls.set(item, (v) => (node.querySelector("select").value = v));
-        return node;
-      }
-      if (item === "reverse") {
-        const box = checkbox(nextId("take-reverse"), f.params.reverse, fx.reverse);
-        box.input.dataset.param = "reverse";
-        box.input.addEventListener("change", () => {
-          edit("reverse", box.input.checked);
-          audition();
-        });
-        controls.set(item, (v) => (box.input.checked = v));
-        return box.node;
-      }
-      const [min, max] = FX_RANGES[item.key];
-      const node = slider({ ...item, label: f.params[item.key], min, max }, fx[item.key], (v) => edit(item.key, v));
-      node.querySelector("input").addEventListener("change", audition);
-      controls.set(item.key, (v) => node.setValue(v));
-      return node;
-    };
-    const groups = Object.entries(FX_GROUPS).map(([group, items]) =>
-      el("fieldset", { class: "take-fx-group" }, el("legend", { text: f.groups[group] }), el("div", { class: "knobs" }, ...items.map(control))),
-    );
-
-    const presetOptions = [...Object.keys(FX_PRESETS), "custom"].map((value) => ({ value, label: f.presets[value] }));
-    const presets = select(f.preset, presetOptions, preset, (value) => {
-      if (value === "custom") return;
-      preset = value;
-      fx = presetFx(value);
-      lastFx = { preset, fx };
-      for (const [key, show] of controls) show(fx[key]);
-      audition();
-    }, "take-preset");
-    presets.querySelector("option[value=custom]").disabled = true;
-
     const go = el("button", { type: "button", class: "action", "data-action": "upload-take", text: m.upload });
     const discard = el("button", { type: "button", class: "ghost", "data-action": "discard-take", text: m.discard });
     discard.addEventListener("click", dropTake);
@@ -315,9 +353,9 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
         "div",
         { class: "sample-take", role: "group", "aria-label": m.record },
         el("p", { class: "hint", text: m.take(secs) }),
-        el("div", { class: "tools-row" }, play, presets, name, go, discard),
-        el("details", { class: "take-fx", "data-role": "take-fx" }, el("summary", { text: f.adjust }), el("p", { class: "hint", text: f.hint }), ...groups),
+        el("div", { class: "tools-row" }, play, name, go, discard),
       ),
+      audition,
     };
     status(m.take(secs));
     render();
@@ -555,6 +593,8 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     if (!user) {
       picking = null;
       taken = null;
+      monitor?.stop();
+      showLive();
       body.replaceChildren(el("p", { class: "hint", text: t.signIn }), guide.node);
       return;
     }
@@ -564,6 +604,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     body.replaceChildren(
       el("p", { class: "hint", text: `${t.hint} ${t.how}` }),
       el("div", { class: "tools-row" }, uploadBtn, folderBtn, ...(mic ? [recordBtn, meter] : []), files, folder),
+      ...(mic ? [fxBox] : []),
       guide.node,
       ...(taken ? [taken.node] : []),
       ...(picking ? [picking.node] : []),
@@ -573,6 +614,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
 
   const offs = [samples.on(render), cloud?.on((event) => (event === "user" || event === "info") && render())];
   showMic();
+  showLive();
   render();
   return {
     node,
@@ -580,6 +622,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
       offs.forEach((off) => off?.());
       stopTicking();
       mic?.onFull(null);
+      monitor?.stop();
       if (mic && mic.state() !== "idle") mic.stop();
     },
   };
