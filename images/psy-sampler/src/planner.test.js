@@ -66,6 +66,8 @@ describe("the prompt", () => {
     expect(house).toContain('The listener\'s wish for the track: "deep, de noche".');
     expect(house).not.toMatch(/psytrance|techno/);
     expect(briefOf({ style: "darkpsy", bpm: 150 })).toMatch(/dark psytrance track.*\nTempo: 150 BPM \(the style runs 148-165\)\. Key: A Phrygian/);
+    expect(briefOf({ style: "darkpsy", bpm: 150, key: 6 })).toContain("Key: F# Phrygian.");
+    expect(briefOf({ style: "all", bpm: 140, key: 0 })).toContain("Key: C, each sound in its own scale (most in C minor).");
     expect(briefOf({ style: "darkpsy", bpm: 150 })).not.toContain("wish");
     expect(briefOf({ style: "all", bpm: 140 })).toMatch(/^You arrange an electronic dance track of no one style.*\nTempo: 140 BPM\. Key:/);
     expect(systemOf({ style: "house", bpm: 124 })).toBe(`${briefOf({ style: "house", bpm: 124 })}\n${SYSTEM}`);

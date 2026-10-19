@@ -63,7 +63,7 @@ export default {
           ["Filters", "The autopilot rides every sound's high-pass and low-pass (not the kick or the bass): the lead opens up across a build-up, the pad makes room for the bass, the Breakdown dims the brightness. In the peak, pads and leads breathe with the kick."],
           ["Improvise", "In every section the autopilot decides which sounds improvise, from the seed: none in the intro, the most in the build-up. What you switch on or off by hand holds until the next section."],
           ["Seed", "The same seed builds the same track in any browser. Type your own or roll 🎲 for a new one; with the autopilot running, changing it restarts it on the next loop (🎲 pulses while it waits)."],
-          ["🔗 Share", "Copies a link with the seed, style, BPM and your edited sounds: whoever opens it and hits 🤖 hears the same."],
+          ["🔗 Share", "Copies a link with the seed, style, BPM, key and your edited sounds: whoever opens it and hits 🤖 hears the same."],
           ["Your edits win", "The autopilot never overwrites what you edited by hand, except the volume and the high-pass and low-pass filters."],
           ["✨ AI", "On start, a language model picks the form of each track from the set's «Length»: short (Groove, Build-up, Peak, Breakdown), mid (Groove, Build-up, Peak, Build-up, Peak, Breakdown) or long (Groove, Build-up, Peak, Build-up, Peak, Build-up, Breakdown), and how long each section lasts. They wait in the queue with ✨ and ✕ drops one; when a form runs out, it picks the next track's. First of all, the AI puts your vibe in English and rewrites the style's genre to it: that genre is the one it arranges. Then it plans each section: which one, how long, which sounds come in, how they sound (darker or brighter, shorter or longer, dirty or clean, still or moving, even another synth) and their melodies: a motif for the lead, the pad's chords and the bass's cell, which the autopilot develops in the style's scale. It uses Chrome's (Gemini Nano: runs on your computer and shows up if your Chrome has it) or your LM Studio (start its server with CORS on). The theme a Breakdown leaves stays; FX and the swaps inside each section still come from the seed, and if the AI is late, the autopilot decides by itself. Hover the ✨ section to see why it picked it. 🔗 Share keeps what it picked: the link sounds the same in any browser, with AI or without."],
         ],
@@ -73,6 +73,7 @@ export default {
         title: "Playing live",
         items: [
           ["BPM", "From 60 to 180; the slider changes the tempo at once."],
+          ["Key", "The mix's root note, like Ableton's scale: everything melodic (basses, leads, pads, sampled notes) plays in that key, the shortest way from A. It doesn't lock you into the scale: notes outside it still play as you wrote them, moved along. The kick and percussion stay put. Changed live, it takes on the next note."],
           ["Tap", "Left of the BPM, to lock onto another track or the sampler on another device: the first tap takes the loop back to the 1 of the bar right there (start on the 1 of what you follow) and every tap after it adjusts the BPM and the phase live. More taps, more precise: about 20 nail the exact BPM. Half or double time works too; a 2 s pause starts over."],
           ["BPM change", "Pick the target and over how many bars: ▶ Go moves one step per bar. ■ Stop ramp halts it there; touching the slider does too."],
           ["DJ filter", "To the left it closes a low-pass, to the right it opens a high-pass, over the whole mix."],
@@ -183,6 +184,8 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
+    key: "Key",
+    keyTitle: "The mix's root note: everything melodic moves to it, dissonances included",
     tapTitle: "Tap it to the beat, tap tap tap tap: the first goes back to the 1 of the bar, the rest bring the BPM and the phase to your taps",
     bgKick: "Background kick",
     delay: "Delay 3/16",
@@ -928,7 +931,7 @@ export default {
     grains: ["Grains", "granular: Hann grains of a sung \"aah\", scattered and panned"],
     tom: ["Tom", "falling sine: a tuned tribal tom"],
   },
-  scales: { minor: "A minor", phrygian: "A Phrygian", harmonic: "A harmonic minor", chromatic: "Chromatic" },
+  scales: { minor: "Minor", phrygian: "Phrygian", harmonic: "Harmonic minor", chromatic: "Chromatic" },
   noteNames: ["C", "C#", "D", "E♭", "E", "F", "F#", "G", "G#", "A", "B♭", "B"],
   visuals: {
     title: "Psy Layers DAW · Visuals",

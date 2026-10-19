@@ -31,6 +31,7 @@
 // (`descriptions`). `describe` off lists the sounds by id alone.
 import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { CLOSE_MAX, OUTRO, SECTIONS, SECTION_IDS, STYLES, THEME_PATH, countRange, leftOut, poolOf } from "./autopilot.js";
+import { KEY_DEFAULT } from "./audio/music.js";
 import { SYNTHS } from "./audio/params.js";
 import { baseOf, defOf, isCopy } from "./audio/patterns.js";
 import { CHOICES, MACROS, MACRO_MAX, TWEAKS, UNIT_TWEAKS, fits, moves, synthsFor } from "./dress.js";
@@ -338,22 +339,26 @@ const LOW_SYSTEM = [
 // dress.js imports this module through share.js, so CHOICES may not be there yet.
 const tweakLine = () => `At this level each dress entry also builds the sound's insert ("" or 0 leaves the factory's): filter (${CHOICES.filter.join(", ")}), cutoff (-${MACRO_MAX} dark to ${MACRO_MAX} bright: where that filter sits), res (-${MACRO_MAX} smooth to ${MACRO_MAX} screaming), sweep (an LFO on the cutoff, one cycle per ${CHOICES.sweep.filter((k) => k !== "off").join(", ")}; or off) with its shape (${CHOICES.shape.join(", ")}), env (a filter envelope on every note: -${MACRO_MAX} closes, ${MACRO_MAX} opens, a pluck or a wah), distortion (${CHOICES.distortion.join(", ")}; drive sets how much), trem (a tremolo, one cycle per ${CHOICES.trem.filter((k) => k !== "off").join(", ")}), autopan (slow, fast) and echo (each note answered ${CHOICES.echo.filter((k) => k !== "off").join(", ")} later; melodic sounds only). Leads and pads take all of it, percussion and glitches all but echo, the bass only a lowpass, cutoff, res, env and a soft or hard distortion, the kick only a soft one; pads take no fold. Distortion is grit, not volume: it plays a little quieter, so use it on one or two sounds at a time. Dress every lead and pad you plan, boldly, so each section sounds its own: an acid lead through a resonant lowpass sweeping over 2 bars, a pad through a slow vowel, a pluck from a closing envelope, a dotted echo on a sparse motif; and a gritty bass in a peak.`;
 
-const keyOf = (style) => {
+// `key`: the mix's tonic (music.js KEYS). Parts are written in degrees, so
+// the name is all the model needs of it.
+const SCALE_NAMES = { minor: "minor", phrygian: "Phrygian", harmonic: "harmonic minor", chromatic: "chromatic" };
+const keyOf = (style, key = KEY_DEFAULT) => {
   const scale = STYLES[style]?.scale;
-  return scale ? en.scales[scale] : "A, each sound in its own scale (most in A minor)";
+  const tonic = en.noteNames[key];
+  return scale ? `${tonic} ${SCALE_NAMES[scale]}` : `${tonic}, each sound in its own scale (most in ${tonic} minor)`;
 };
 
 /**
  * What the track is, from the settings: `style`'s genre (GENRE, or `genre`,
- * that genre tuned to the wish by tunePrompt), its key and BPM range, the
+ * that genre tuned to the wish by tunePrompt), its BPM range, the `key`, the
  * `bpm` it plays at and the listener's `vibe`, their standing wish
  * (planPrompt says when it is fresh).
  */
-export function briefOf({ style, bpm, vibe = "", genre = "" }) {
+export function briefOf({ style, bpm, key, vibe = "", genre = "" }) {
   const range = STYLES[style]?.bpm;
   const lines = [
     `You arrange ${genre || (GENRE[style] ?? GENRE.all)}. It plays live, made of 2-bar loops grouped in sections.`,
-    `Tempo: ${Math.round(bpm)} BPM${range ? ` (the style runs ${range[0]}-${range[1]})` : ""}. Key: ${keyOf(style)}.`,
+    `Tempo: ${Math.round(bpm)} BPM${range ? ` (the style runs ${range[0]}-${range[1]})` : ""}. Key: ${keyOf(style, key)}.`,
   ];
   if (vibe) lines.push(`The listener's wish for the track: ${JSON.stringify(vibe)}.`);
   return lines.join("\n");

@@ -505,6 +505,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   sound or synth needs a measured row, and a driven sound plays quieter on
   purpose (`insert.js` `DRIVE_TRIM`); the ✨ AI's drive amounts are its own
   (`dress.js` `AI_DRIVE`, `DRIVES`). See docs/psy-sampler.md#loudness.
+  Every part is written in A: the mix's tonic (`ws.key`, 🔗 `&key=`) moves
+  note events at the engine (`keyed`), never the stored notes, so seeds and
+  the ✨ AI's degrees are key-free; never snap notes to the scale.
   Sounds banned with ⊘ (`ws.banned`) leave the pilot's and the ✨ AI's lists
   via `unbanned()`, so they shorten pools and travel in 🔗's `&s=`; banned FX
   are drawn and then dropped, so they don't shift seeds.

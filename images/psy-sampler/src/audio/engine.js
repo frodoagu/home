@@ -23,7 +23,9 @@
 // whatever lanes it returns open on that step (no backfill, no early entry).
 //
 // What a variant plays is data (patterns.js) the UI can edit at any time:
-// setData() swaps it and the scheduler reads it on the next step.
+// setData() swaps it and the scheduler reads it on the next step. setKey()
+// moves every note to the mix's tonic the same way: notes already sounding
+// ring out in the old key.
 //
 // Tap sync: restart() takes the loop back to its first step at a tap, and
 // align() moves the grid onto the beat the taps lay down (tempo.js).
@@ -56,6 +58,7 @@ import {
 } from "./timing.js";
 import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
 import { trimOf } from "./loudness.js";
+import { KEY_DEFAULT, keyShift } from "./music.js";
 import { auditionEvent, baseOf, defOf, eventsAt, partSteps, sampleDefaults } from "./patterns.js";
 import { FX, VOICES, sample } from "./voices.js";
 import { trimTail } from "./wav.js";
@@ -293,6 +296,7 @@ export function createEngine({
   let bus = null; // { delay, delaySend, delayReturn, reverbSend, reverbReturn }
   let side = null; // the kick sidechain: { input, env }
   let bpm = BPM_DEFAULT;
+  let keyRatio = 1; // what the tonic (setKey) does to every note's frequency
   let timer = null;
   let stopClock = null; // the worker clock's, next to the page's own timer
   let cursor = null; // { step, time, loop } of the next step to schedule; null when stopped
@@ -316,6 +320,8 @@ export function createEngine({
   };
 
   const dataOf = (id) => data.get(id) ?? defOf(id).data;
+  // A note in the mix's key. Hits carry no `freq`: a drum stays where it is.
+  const keyed = (ev) => (ev.freq && keyRatio !== 1 ? { ...ev, freq: ev.freq * keyRatio } : ev);
   const volumeOf = (layer) => volumes.get(layer) ?? 1;
   // The layer's level, the sound's own by ear (loudness.js), its layer fader and its volume.
   const laneLevel = (key, variant) =>
@@ -370,7 +376,7 @@ export function createEngine({
     for (const ev of eventsAt(lane.variant, step, !lane.entered, d, loop, lane.from)) {
       const t = Math.max(earliest, time + (ev.offset ?? 0) * stepDur + nudge);
       lane.chain.trigger(t);
-      voice(ctx, lane.input, t, ev, stepDur);
+      voice(ctx, lane.input, t, keyed(ev), stepDur);
       first = first === null ? t : Math.min(first, t);
       accent ||= Boolean(ev.accent);
       count++;
@@ -693,6 +699,11 @@ export function createEngine({
     for (const lane of lanes.values()) lane.chain.setStepDur(stepDuration(bpm), ctx.currentTime);
   }
 
+  // The mix's tonic, a pitch class (music.js KEYS). Takes on the next note.
+  function setKey(key = KEY_DEFAULT) {
+    keyRatio = 2 ** (keyShift(key) / 12);
+  }
+
   // The DJ filter knob, -1 (lowpass closed) .. 0 (open) .. 1 (highpass up).
   function setMasterFilter(value) {
     djValue = value;
@@ -837,7 +848,7 @@ export function createEngine({
     const t = ctx.currentTime + SAFETY;
     const shot = openVoice(shotLevel(id), layer, dataOf(id).insert, t);
     shot.chain.trigger(t);
-    voice(ctx, shot.input, t, ev, stepDuration(bpm));
+    voice(ctx, shot.input, t, keyed(ev), stepDuration(bpm));
     fadeOut(shot, t + AUDITION_SECONDS);
   }
 
@@ -917,7 +928,7 @@ export function createEngine({
           for (const ev of eventsAt(variant, i % LOOP_STEPS, i === 0, d, loop)) {
             const t = Math.max(0, (i + (ev.offset ?? 0)) * stepDur + nudge);
             insert.trigger(t);
-            voice(off, input, t, ev, stepDur);
+            voice(off, input, t, keyed(ev), stepDur);
           }
         }
       }
@@ -998,6 +1009,7 @@ export function createEngine({
     setSolo,
     setEffects,
     setBpm,
+    setKey,
     restart,
     align,
     setMasterFilter,

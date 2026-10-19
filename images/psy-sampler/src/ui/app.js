@@ -27,7 +27,7 @@
 // drives recorder.js, which outlives remounts like the engine.
 import { CLOUDS, CLOUD_IDS, LMSTUDIO_URL, cleanEndpoint, cleanKey, isCloud, loadPrefs, savePrefs } from "../ai.js";
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
-import { scaleRows } from "../audio/music.js";
+import { KEYS, keyShift, scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
@@ -333,6 +333,7 @@ export function mountApp(root, engine, opts = {}) {
   engine.setEffects(ws.effects);
   for (const [id, v] of Object.entries(ws.volumes)) engine.setLayerVolume(id, v);
   engine.setBpm(state.tempo);
+  engine.setKey(ws.key);
 
   /* ---- header + transport ---- */
   const language = langSwitch(
@@ -355,6 +356,20 @@ export function mountApp(root, engine, opts = {}) {
     value: String(ws.bpm),
   });
   const bpmOut = el("output", { for: "bpm", class: "bpm-value", text: String(ws.bpm) });
+  // The mix's tonic: notes move at the engine, the parts stay written in A.
+  const keyPick = select(
+    tx.transport.key,
+    KEYS.map((value) => ({ value, label: t().noteNames[value] })),
+    ws.key,
+    (value) => {
+      ws.key = Number(value);
+      engine.setKey(ws.key);
+      persist();
+      if (open && defOf(open.id).kind === "notes") openEditor(open.layer, open.id); // its rows name the new notes
+    },
+    "key",
+  );
+  keyPick.title = tx.transport.keyTitle;
   const tapBtn = el("button", { type: "button", class: "ghost tap", "data-action": "tap", text: tx.transport.tap });
   tapBtn.title = tx.transport.tapTitle;
   const bgKick = checkbox("bgkick", tx.transport.bgKick, ws.bgKick);
@@ -944,6 +959,7 @@ export function mountApp(root, engine, opts = {}) {
       tapBtn,
       el("label", { class: "bpm", for: "bpm" }, el("span", { text: tx.transport.bpm }), bpm, bpmOut),
       rampBox,
+      keyPick,
     ),
     el("div", { class: "topbar-end" }, visualsButton(engine, tx.visuals), help.button, ...(account ? [account.node] : []), language),
   );
@@ -2305,6 +2321,7 @@ export function mountApp(root, engine, opts = {}) {
       onWav: () => exportWav({ layer, id }),
       onVary: (on) => setVarying(id, on),
       samples: samples?.info.samples ?? [],
+      shift: keyShift(ws.key),
       onSample: (sampleId) => {
         engine.ensureContext(); // inside the change event: the first sound may be this one
         samples?.load(sampleId).then((buffer) => {
@@ -2567,9 +2584,9 @@ export function mountApp(root, engine, opts = {}) {
     return mountApp(root, engine, { ...opts, recorder, resume: next });
   }
 
-  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, sounds, plans, opening }) {
+  async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, key, sounds, plans, opening }) {
     history.replaceState(null, "", location.pathname + location.search);
-    let next = { ...ws, seed, style: sharedStyle ?? ws.style, bpm: sharedBpm ?? ws.bpm };
+    let next = { ...ws, seed, style: sharedStyle ?? ws.style, bpm: sharedBpm ?? ws.bpm, key };
     let replay = null;
     let replayOpening = null;
     try {
@@ -2865,7 +2882,7 @@ export function mountApp(root, engine, opts = {}) {
   // An ask goes with the instructions for the track it plans: the brief of
   // its style at its BPM and the listener's wish, then its level's rules.
   const systemFor = (style = ws.style, bpm = state.tempo) =>
-    systemOf({ level: state.aiPrefs.level, style, bpm, vibe: vibeFor(style), genre: tuneOf(style).genre });
+    systemOf({ level: state.aiPrefs.level, style, bpm, key: ws.key, vibe: vibeFor(style), genre: tuneOf(style).genre });
   const asking = (engine, signal, track = {}) => ({ ...reach(engine), system: systemFor(track.style, track.bpm), signal });
   // What a prompt and its schema take from the settings.
   // An empty vibe is no message: the sounds go by id, with no words to match,

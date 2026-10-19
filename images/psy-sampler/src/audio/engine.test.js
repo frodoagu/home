@@ -687,6 +687,23 @@ describe("audition", () => {
     vi.runOnlyPendingTimers();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("plays notes in the mix's key, the shortest way from A, and leaves the drums alone", () => {
+    engine.setData("lead.arp", { ...defaultData("lead.arp"), synth: "fmBell" });
+    const heard = (key) => {
+      engine.setKey(key);
+      const before = ctx.sources().length;
+      engine.audition("lead.arp", { midi: 69 });
+      return ctx.sources()[before].frequency.value;
+    };
+    expect(heard(0)).toBeCloseTo(440 * 2 ** (3 / 12), 9); // C: up a minor third
+    expect(heard(4)).toBeCloseTo(440 * 2 ** (-5 / 12), 9); // E: down a fourth
+    expect(heard(9)).toBe(440);
+    engine.setKey(0);
+    const before = ctx.sources().length;
+    engine.audition("kick.punchy", {});
+    expect(ctx.sources()[before].frequency.events[0][1]).toBe(defaultData("kick.punchy").params.f0);
+  });
 });
 
 describe("insert", () => {

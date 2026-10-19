@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { centsToRatio, inAMinor, inScale, isRoot, midiToFreq, noteName, NOTE, scaleRows } from "./music.js";
+import { KEYS, centsToRatio, inAMinor, inScale, isRoot, keyShift, midiToFreq, noteName, NOTE, scaleRows } from "./music.js";
 
 describe("music", () => {
+  it("moves a part from A to any tonic by at most a tritone down or a fifth up", () => {
+    expect(keyShift(9)).toBe(0);
+    expect(keyShift(0)).toBe(3); // C
+    expect(keyShift(2)).toBe(5); // D
+    expect(keyShift(3)).toBe(-6); // E♭
+    expect(keyShift(6)).toBe(-3); // F#
+    const shifts = KEYS.map(keyShift);
+    expect(new Set(shifts.map((s) => (s + 9 + 12) % 12))).toEqual(new Set(KEYS));
+    expect(Math.min(...shifts)).toBe(-6);
+    expect(Math.max(...shifts)).toBe(5);
+  });
+
   it("maps MIDI to equal-tempered Hz around A4 = 440", () => {
     expect(midiToFreq(69)).toBe(440);
     expect(midiToFreq(NOTE.A1)).toBeCloseTo(55, 10);

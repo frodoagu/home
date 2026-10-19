@@ -473,8 +473,17 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
   four); a lead with an 8-step motif in A A' A B form; a pad
   with one triad per bar; sparse toms with a fill at the end.
 - Scales in A: minor, **Phrygian** (B♭, the typical psy tension), harmonic minor
-  and chromatic. Notes outside the chosen scale stay visible (in italics) so
-  they can be deleted.
+  and chromatic. Notes outside the chosen scale stay visible (in italics) and
+  play as written: the scale only picks the rows, it never corrects a note.
+- **Tonic** (top bar, next to the BPM): the mix's key, like Ableton's scale
+  root. Parts stay written in A; the engine moves every note event (one with a
+  `freq`: synths, sampled notes, echoes) by `keyShift(ws.key)`, the shortest
+  way from A (-6..+5 semitones, so E♭ goes down a tritone and D up a fourth),
+  in `scheduleLane`, `render` and `audition`. Hits carry no `freq`, so kicks
+  and percussion keep their tuning. Nothing stored changes, so seeds, the ✨
+  AI's scale degrees and out-of-scale notes are the same in every key; the
+  piano roll names its rows by what sounds. A change takes on the next note:
+  held notes ring out in the old key.
 - **One editor open at a time**: opening one folds whichever was open, in any
   layer. It floats over the page like a context menu, as wide as its layer and
   just under its tile (`placeEditor`), so the rows below don't move; a press
@@ -1396,7 +1405,8 @@ For the replay to hold:
   Breakdown on. A seed shared before them plays the same track up to its
   first tease or its first Breakdown → Build-up.
 
-**🔗 Share** copies a `#seed=…&style=…&bpm=…` link and, if you have edited,
+**🔗 Share** copies a `#seed=…&style=…&bpm=…` link (plus `&key=` when the tonic
+isn't A; a link without one plays in A) and, if you have edited,
 duplicated or banned sounds, `&s=…`: those sounds (and the bans) as a JSON preset, `deflate-raw` and
 base64url (`share.js`), because the track is only the same with the same sounds.
 What the autopilot wrote or dressed doesn't travel: the seed regenerates it.

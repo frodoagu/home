@@ -65,7 +65,7 @@ export default {
           ["Filtros", "El piloto mueve el highpass y el lowpass de cada sonido (no el kick ni el bajo): el lead se abre en la subida, el pad le deja lugar al bajo, el Break apaga el brillo. En el pico, pads y leads respiran con el kick."],
           ["Improvisar", "En cada fase el piloto decide qué sonidos improvisan, según la semilla: nada en la intro, más en la subida. Lo que prendas o apagues a mano dura hasta la próxima fase."],
           ["Semilla", "La misma semilla arma el mismo tema en cualquier browser. Escribí la tuya o tirá 🎲 por una nueva; con el piloto andando, cambiarla lo reinicia en el próximo loop (el 🎲 titila mientras espera)."],
-          ["🔗 Compartir", "Copia un link con la semilla, el estilo, el BPM y tus sonidos editados: quien lo abra y toque 🤖 escucha lo mismo."],
+          ["🔗 Compartir", "Copia un link con la semilla, el estilo, el BPM, la tónica y tus sonidos editados: quien lo abra y toque 🤖 escucha lo mismo."],
           ["Tus ediciones mandan", "El piloto no pisa lo que editaste a mano, salvo el volumen y los filtros highpass y lowpass."],
           ["✨ IA", "Al arrancar, un modelo de lenguaje elige la forma de cada tema según la «Duración» del set: corta (Groove, Subida, Pico, Break), media (Groove, Subida, Pico, Subida, Pico, Break) o larga (Groove, Subida, Pico, Subida, Pico, Subida, Break), y cuánto dura cada fase. Quedan en cola con ✨ y ✕ saca una; cuando se termina una forma, elige la del tema siguiente. Antes de todo, la IA pasa tu onda al inglés y reescribe el género del estilo según ella: ese género es el que arregla. Después planea cada fase: cuál, cuánto dura, qué sonidos entran, cómo suenan (más oscuros o brillantes, cortos o largos, sucios o limpios, quietos o en movimiento, y hasta otro synth) y sus melodías: un motivo para el lead, los acordes del pad y la célula del bajo, que el piloto desarrolla en la escala del estilo. Usa el de Chrome (Gemini Nano: corre en tu compu y aparece si tu Chrome lo trae) o tu LM Studio (prendé su servidor con CORS). El tema que deja un Break se mantiene; los FX y los cambios dentro de cada fase siguen saliendo de la semilla, y si la IA tarda, el piloto decide solo. Pasá el mouse por la fase ✨ para ver por qué la eligió. 🔗 Compartir guarda lo que eligió: el link suena igual en cualquier browser, con IA o sin."],
         ],
@@ -75,6 +75,7 @@ export default {
         title: "Tocar en vivo",
         items: [
           ["BPM", "Entre 60 y 180; el slider cambia el tempo al instante."],
+          ["Tónica", "La nota base de la mezcla, como la escala de Ableton: todo lo melódico (bajos, leads, pads, samples con notas) suena en esa tónica, por el camino más corto desde La. No te encierra en la escala: las notas de afuera siguen sonando como las escribiste, corridas igual. El kick y la percusión no cambian. Cambiarla en vivo entra en la próxima nota."],
           ["Tap", "A la izquierda del BPM, para engancharte con otro tema o con el sampler en otro dispositivo: el primer toque vuelve el loop al 1 del compás ahí mismo (empezá en el 1 de lo que seguís) y cada toque que sigue ajusta el BPM y la fase en vivo. Más toques, más preciso: con unos 20 clava el BPM exacto. Medio o doble tiempo también funciona; una pausa de 2 s empieza de nuevo."],
           ["Cambio de BPM", "Elegí el destino y en cuántos compases: ▶ Ir lo mueve un paso por compás. ■ Cortar lo frena ahí; tocar el slider también."],
           ["Filtro DJ", "A la izquierda cierra un lowpass, a la derecha abre un highpass, sobre toda la mezcla."],
@@ -185,6 +186,8 @@ export default {
   transport: {
     bpm: "BPM",
     tap: "Tap",
+    key: "Tónica",
+    keyTitle: "La nota base de la mezcla: todo lo melódico se corre a esta tónica, disonancias incluidas",
     tapTitle: "Tocalo al ritmo, tap tap tap tap: el primero vuelve al 1 del compás, los siguientes ajustan el BPM y la fase a tus toques",
     bgKick: "Kick de fondo",
     delay: "Delay 3/16",
@@ -930,7 +933,7 @@ export default {
     grains: ["Granos", "granular: granos Hann de un «aah» cantado, dispersos y paneados"],
     tom: ["Tom", "sine que cae: tom tribal afinado"],
   },
-  scales: { minor: "La menor", phrygian: "La frigio", harmonic: "La menor armónica", chromatic: "Cromática" },
+  scales: { minor: "Menor", phrygian: "Frigio", harmonic: "Menor armónica", chromatic: "Cromática" },
   noteNames: ["Do", "Do#", "Re", "Mi♭", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "Si♭", "Si"],
   visuals: {
     title: "Psy Layers DAW · Visuales",

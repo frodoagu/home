@@ -52,6 +52,14 @@ export const inAMinor = (midi) => inScale(midi, "minor");
 
 export const isRoot = (midi) => pitchClass(midi) === ROOT;
 
+// The mix's tonic, a pitch class (0 = C). Parts stay written in A and the
+// engine moves what they play by keyShift(): the shortest way there, -6..+5
+// semitones, so a bass never climbs more than a fifth or drops more than a
+// tritone. Seeds and the ✨ AI's scale degrees are the same in every key.
+export const KEYS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+export const KEY_DEFAULT = ROOT;
+export const keyShift = (key) => pitchClass(key - ROOT + 6) - 6;
+
 const NAMES = ["Do", "Do#", "Re", "Mi♭", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "Si♭", "Si"];
 
 // Name with scientific octave: 69 -> "La4", 60 -> "Do4" (Spanish unless
