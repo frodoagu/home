@@ -1547,7 +1547,8 @@ html:has(dialog.help[open], dialog.intro[open]) {
   outline-offset: 4px;
 }
 
-.sample-picker {
+.sample-picker,
+.sample-take {
   display: grid;
   gap: 8px;
   padding: 10px;
@@ -1555,8 +1556,42 @@ html:has(dialog.help[open], dialog.intro[open]) {
   border-radius: 8px;
 }
 
-.sample-picker .hint {
+.sample-picker .hint,
+.sample-take .hint {
   margin: 0;
+}
+
+/* 🎙: the button keeps its width while its text counts; the meter fills in dB. */
+.rec-sample {
+  min-width: 12ch;
+}
+
+.mic-meter {
+  --level: 0;
+  align-self: center;
+  width: 80px;
+  height: 8px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.mic-meter[hidden] {
+  display: none;
+}
+
+.mic-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--stop);
+  transform: scaleX(var(--level));
+  transform-origin: left;
+}
+
+.take-name {
+  flex: 1 1 16ch;
+  min-width: 0;
 }
 
 .pick-head {

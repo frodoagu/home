@@ -51,4 +51,29 @@ describe("createTake", () => {
     // Sound right up to the cap: no tail to trim, and nothing past it.
     expect(take.finish().seconds).toBeCloseTo(0.3);
   });
+
+  it("starts over a threshold and keeps the preroll before it, across blocks", async () => {
+    const take = createTake({ sampleRate: RATE, channelCount: 1, maxSeconds: 60, threshold: 0.1, preroll: 0.03 });
+    const noise = new Float32Array(100).fill(0.05);
+    take.push([noise]);
+    expect(take.started()).toBe(false);
+    const hit = new Float32Array(100).fill(0.05);
+    hit[10] = 0.5;
+    take.push([hit]);
+    expect(take.started()).toBe(true);
+    // 20 frames of the block before + 10 of this one + the hit and the rest of it.
+    expect(take.seconds()).toBeCloseTo((20 + 100) / RATE);
+    // The noise after the hit is under the threshold: only the pad stays.
+    const { seconds } = take.finish();
+    expect(seconds).toBeCloseTo((20 + 10 + 1 + 50) / RATE);
+  });
+
+  it("takes the preroll from the same block when it has room", () => {
+    const take = createTake({ sampleRate: RATE, channelCount: 1, maxSeconds: 60, threshold: 0.1, preroll: 0.03 });
+    const hit = new Float32Array(100);
+    hit[60] = 0.5;
+    take.push([new Float32Array(100)]);
+    take.push([hit]);
+    expect(take.seconds()).toBeCloseTo(70 / RATE);
+  });
 });

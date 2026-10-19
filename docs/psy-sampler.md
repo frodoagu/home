@@ -1067,6 +1067,24 @@ says it reads is what it reads. A new format is one line there.
   MIDI) is skipped quietly; the list stops at 500 candidates.
   A `.mid` goes into a piano roll instead ([MIDI import](#midi-import)).
 
+#### Recording one
+
+**🎙 Grabar** records a sample from the microphone
+([`mic.js`](../images/psy-sampler/src/audio/mic.js)). It opens the mic with echo
+cancelling, noise suppression and auto gain **off**, since they are built for a
+voice call and reshape anything else. The engine's `tap()` worklet, the same one
+the ⏺ recording uses, feeds a **mono** take
+([`take.js`](../images/psy-sampler/src/audio/take.js)) on the playing
+AudioContext. A mic is never digitally silent, so the take starts on the first
+sample over **-46 dBFS** (`THRESHOLD`), keeps the 20 ms before it so the attack
+survives, and cuts what trails off under that level. The button shows the time
+and a dB meter. The take stops by itself at `MAX_SECONDS`, the longest a sample
+may last. It is not uploaded until the user listens to it (▶), names it and
+presses ⬆ Subir; then it goes through the same checks as a file. 15 s of 24-bit
+mono at 48 kHz is about 2.1 MB, under the 3 MiB per-file limit, so it is stored
+as recorded. The mic is not routed to the speakers, which rules out feedback,
+but it does hear whatever the speakers play.
+
 #### What goes up
 
 - **Checked twice.** The page decodes every candidate before sending it (the

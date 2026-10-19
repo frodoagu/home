@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeAudioContext } from "../test/fakeAudio.js";
+import { FakeAudioContext, FakeWorklet } from "../test/fakeAudio.js";
 import { createEngine } from "../audio/engine.js";
 import { createCloud } from "../cloud.js";
 import { createSamples } from "../samples.js";
@@ -70,14 +70,14 @@ const choose = (selectEl, value) => {
   selectEl.dispatchEvent(new Event("change"));
 };
 
-async function mount() {
+async function mount(opts = {}) {
   const cloud = createCloud({ fetch: fakeFetch, storage: localStorage, debounceMs: 100 });
   samples = createSamples({ fetch: fakeFetch, decode: async () => ctx.createBuffer(1, 4800, 48000) });
-  engine = createEngine({ createContext: () => ctx, sampleBuffer: samples.get });
+  engine = createEngine({ createContext: () => ctx, sampleBuffer: samples.get, createWorklet: (c, name, options) => new FakeWorklet(c, name, options) });
   root = document.createElement("div");
   document.body.replaceChildren(root);
   const loadButton = async () => ({ renderButton: () => {} });
-  mountApp(root, engine, { languages: ["es"], cloud, samples, confirm: () => confirmAnswer, loadButton });
+  mountApp(root, engine, { languages: ["es"], cloud, samples, confirm: () => confirmAnswer, loadButton, ...opts });
   await settle();
 }
 
@@ -97,6 +97,111 @@ afterEach(() => {
   engine.stop();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+// A microphone the test plays through the tap's worklet.
+function fakeMedia(fail) {
+  const track = { stop: vi.fn() };
+  return {
+    track,
+    getUserMedia: vi.fn(async () => {
+      if (fail) throw Object.assign(new Error(fail), { name: fail });
+      return { getTracks: () => [track] };
+    }),
+  };
+}
+const micTap = () => ctx.nodes.find((n) => n.kind === "worklet" && n.name === "psy-tap");
+const hear = (frames, v) => micTap().port.onmessage({ data: [new Float32Array(frames).fill(v), new Float32Array(frames).fill(v)] });
+const recordBtn = () => $('[data-action="record-sample"]');
+async function stopRecording() {
+  recordBtn().click();
+  await settle();
+  micTap().port.onmessage({ data: null }); // the worklet's flush
+  await settle();
+}
+
+describe("recording a sample with the microphone", () => {
+  it("no microphone API, no button", async () => {
+    await mount({ media: undefined });
+    expect($('[data-action="upload-sample"]')).not.toBeNull();
+    expect(recordBtn()).toBeNull();
+  });
+
+  it("records from the first sound, then the take is heard, named and uploaded", async () => {
+    const media = fakeMedia();
+    await mount({ media });
+    expect(recordBtn().textContent).toBe("🎙 Grabar");
+    recordBtn().click();
+    expect(recordBtn().textContent).toBe("🎙 Abriendo el micrófono…");
+    await settle();
+    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    expect(ctx.nodes.find((n) => n.kind === "mic").outputs).toContain(micTap());
+    expect(recordBtn().textContent).toBe("■ Esperando sonido…");
+    hear(4800, 0.001); // the room
+    vi.advanceTimersByTime(100);
+    expect(recordBtn().textContent).toBe("■ Esperando sonido…");
+    hear(96000, 0.5);
+    vi.advanceTimersByTime(100);
+    expect(recordBtn().textContent).toBe("■ 0:02 / 0:15");
+    expect(recordBtn().classList.contains("is-recording")).toBe(true);
+    expect($(".mic-meter").hidden).toBe(false);
+    expect(Number($(".mic-meter").style.getPropertyValue("--level"))).toBeCloseTo(0.9); // -6 dBFS
+
+    await stopRecording();
+    expect(media.track.stop).toHaveBeenCalled();
+    expect(recordBtn().textContent).toBe("🎙 Grabar");
+    expect($(".mic-meter").hidden).toBe(true);
+    expect($(".sample-take").textContent).toContain("Grabación de 2 s");
+    const name = $('[data-role="take-name"]');
+    expect(name.value).toMatch(/^Grabación \d\d:\d\d$/);
+
+    $('[data-action="audition-take"]').click();
+    await settle();
+    name.value = "Voz";
+    $('[data-action="upload-take"]').click();
+    await settle();
+    expect(server.samples.map((s) => s.name)).toEqual(["Kick 909", "Voz"]);
+    expect($(".sample-take")).toBeNull();
+    expect($(".status").textContent).toBe("Sample «Voz» subido.");
+  });
+
+  it("stops by itself at the longest a sample lasts", async () => {
+    await mount({ media: fakeMedia() });
+    recordBtn().click();
+    await settle();
+    hear(48000 * 16, 0.5);
+    await settle();
+    micTap().port.onmessage({ data: null });
+    await settle();
+    expect($(".sample-take").textContent).toContain("Grabación de 15 s");
+  });
+
+  it("a take nobody keeps goes away with Descartar", async () => {
+    await mount({ media: fakeMedia() });
+    recordBtn().click();
+    await settle();
+    hear(4800, 0.5);
+    await stopRecording();
+    $('[data-action="discard-take"]').click();
+    expect($(".sample-take")).toBeNull();
+    expect(server.samples).toHaveLength(1);
+  });
+
+  it("says when nothing was heard, or the microphone was refused", async () => {
+    await mount({ media: fakeMedia() });
+    recordBtn().click();
+    await settle();
+    hear(4800, 0.001);
+    await stopRecording();
+    expect($(".sample-take")).toBeNull();
+    expect($(".status").textContent).toBe("No se oyó nada: ¿el micrófono está silenciado o muy lejos?");
+
+    await mount({ media: fakeMedia("NotAllowedError") });
+    recordBtn().click();
+    await settle();
+    expect($(".status").textContent).toBe("El navegador no dio permiso para usar el micrófono.");
+    expect(recordBtn().textContent).toBe("🎙 Grabar");
+  });
 });
 
 describe("samples panel", () => {
