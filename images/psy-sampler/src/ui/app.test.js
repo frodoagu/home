@@ -14,6 +14,9 @@ let engine;
 let root;
 let frames;
 let downloads;
+// What the test's apps (remounts too) listen to on window and document,
+// taken off after it: it would keep every earlier app and its DOM alive.
+let listening;
 
 const BAR = 16 * stepDuration(145);
 
@@ -37,6 +40,14 @@ const mount = (node, eng = engine, opts = {}) =>
   mountApp(node, eng, { languages: ["es-AR"], confirm: () => true, ...opts });
 
 beforeEach(() => {
+  listening = [];
+  for (const target of [window, document]) {
+    const add = target.addEventListener;
+    vi.spyOn(target, "addEventListener").mockImplementation(function (...args) {
+      listening.push([target, args]);
+      return add.apply(this, args);
+    });
+  }
   vi.useFakeTimers();
   // Drive animation frames by hand.
   frames = [];
@@ -65,9 +76,12 @@ beforeEach(() => {
 
 afterEach(() => {
   engine.stop();
-  vi.useRealTimers();
+  // In reverse: unstubbed after the clock, requestAnimationFrame would go back
+  // to its fake, and the next clock would keep this one (and its app) alive.
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  for (const [target, args] of listening) target.removeEventListener(...args);
 });
 
 const $ = (sel) => root.querySelector(sel);
