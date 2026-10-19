@@ -13,9 +13,11 @@
 // fires a 2-bar riser so it lands on it; entering a section can fire an FX and
 // ask for parts to be rewritten (every lead that comes in gets a new melody).
 //
-// That loop is a drop (`dropping`): the UI rolls the kick on its first bar,
-// takes kick and bass out on its second and sweeps a highpass up the mix
-// across both. Every build ends in one, and one build in ten is a tease that
+// That loop is a drop (`dropping`): the UI rolls the kick, takes kick and bass
+// out and sweeps a highpass up the mix across it all, over 1 to 8 bars of a
+// shape drawn from the seed (dress.js DROPS); a build or an opening, which
+// always drop, may start a long one loops before its last (`dropsAlways`,
+// `dropStart`). Every build ends in one, and one build in ten is a tease that
 // lands in a breakdown instead (`odds`, one draw like any pick). The lead a
 // breakdown plays is the track's theme: it stays through the build and the
 // peak after it (`theme`), so the drop delivers the melody the breakdown
@@ -796,6 +798,12 @@ export const dropping = (pilot) =>
   pilot.left === 1 &&
   pilot.next !== undefined &&
   (pilot.next === "peak" || pilot.next === OUTRO || pilot.section === "build" || Boolean(pilot.opening));
+
+/** Whether the pilot's section always ends in a drop (a build, an opening), so one may start loops before its last. */
+export const dropsAlways = (pilot) => Boolean(pilot) && (pilot.section === "build" || Boolean(pilot.opening));
+
+/** Where a drop `bars` long starts to end with its section: `left` loops to go, on the loop's `bar` (0 or 1). */
+export const dropStart = (bars) => ({ left: Math.ceil(bars / 2), bar: bars % 2 });
 
 /** This loop's number in its section (from 1) when it ends a phrase and is not a drop; else 0. */
 export function phraseEnd(pilot) {

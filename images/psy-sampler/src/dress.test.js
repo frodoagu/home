@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { SYNTHS } from "./audio/params.js";
 import { DEFAULTS, defaultData, paramSpecs } from "./audio/patterns.js";
-import { DOUBLE_ROLL, FILLS, coin, doubleRollOf, dress, fillOf, fits, moves, restyle, synthsFor, touched } from "./dress.js";
+import {
+  BASS_CUT,
+  DOUBLE_ROLL,
+  DROPS,
+  FILLS,
+  bassCutOf,
+  coin,
+  doubleRollOf,
+  dress,
+  dropBars,
+  dropOf,
+  dropPlan,
+  fillOf,
+  fits,
+  moves,
+  restyle,
+  synthsFor,
+  touched,
+} from "./dress.js";
 
 const groupOf = (synth) => SYNTHS.find((s) => s.id === synth).group;
 
@@ -164,6 +182,65 @@ describe("restyle: the AI's macros over the seed's dress", () => {
     expect(restyle("lead.acid", "s", { synth: "sub" }, null).synth).toBe(dress("lead.acid", "s").synth);
     expect(synthsFor("kick.long")).toEqual([]);
     expect(synthsFor("pad.chord").every((id) => groupOf(id) === "pad")).toBe(true);
+  });
+});
+
+describe("dropOf", () => {
+  const seeds = Array.from({ length: 300 }, (_, i) => `s${i}`);
+
+  it("is the same for the same seed and section, and differs from one drop to the next", () => {
+    expect(dropOf("goa", "build", 3, 8)).toBe(dropOf("goa", "build", 3, 8));
+    const shapes = new Set(Array.from({ length: 20 }, (_, n) => dropOf("goa", "build", n, 8)));
+    expect(shapes.size).toBeGreaterThan(2);
+  });
+
+  it("draws every shape that fits, and none longer than `most`", () => {
+    const long = new Set(seeds.map((seed) => dropOf(seed, "build", 1, 8)));
+    expect(long.size).toBe(DROPS.length);
+    const short = seeds.map((seed) => dropBars(dropOf(seed, "groove", 1, 2)));
+    expect(new Set(short)).toEqual(new Set([1, 2]));
+    expect(seeds.every((seed) => dropBars(dropOf(seed, "build", 1, 4)) <= 4)).toBe(true);
+    expect(dropBars(dropOf("goa", "build", 1, 0))).toBe(1);
+  });
+
+  it("plays the classic two bars most often", () => {
+    const share = seeds.filter((seed) => dropBars(dropOf(seed, "build", 2, 8)) === 2).length / seeds.length;
+    expect(share).toBeGreaterThan(0.25);
+    expect(share).toBeLessThan(0.5);
+  });
+});
+
+describe("dropPlan", () => {
+  it("rolls the kick faster and faster into the build-up bar, then leaves the gap", () => {
+    expect(DROPS.map(dropPlan)).toEqual([
+      ["gap"],
+      ["build", "gap"],
+      ["pulse8", "build", "gap", "gap"],
+      ["pulse4", "pulse8", "build", "gap"],
+      ["pulse4", "pulse4", "pulse8", "pulse8", "pulse8", "build", "gap", "gap"],
+    ]);
+    for (const d of DROPS) expect(dropPlan(d)).toHaveLength(dropBars(d));
+  });
+});
+
+describe("bassCutOf", () => {
+  const seeds = Array.from({ length: 600 }, (_, i) => `s${i}`);
+  const cuts = (section) => seeds.map((seed) => bassCutOf(seed, section, 4));
+
+  it("cuts the bass out of some of a groove's and a peak's phrase ends, a bar more often than two", () => {
+    expect(bassCutOf("goa", "peak", 8)).toBe(bassCutOf("goa", "peak", 8));
+    for (const [section, odds] of Object.entries(BASS_CUT)) {
+      const all = cuts(section);
+      const share = all.filter(Boolean).length / all.length;
+      expect(share).toBeGreaterThan(odds - 0.08);
+      expect(share).toBeLessThan(odds + 0.08);
+      expect(all.filter((b) => b === 1).length).toBeGreaterThan(all.filter((b) => b === 2).length);
+      expect(new Set(all)).toEqual(new Set([0, 1, 2]));
+    }
+  });
+
+  it("never in a section without a bass groove to cut", () => {
+    for (const section of ["intro", "build", "breakdown", "outro"]) expect(cuts(section).every((b) => b === 0)).toBe(true);
   });
 });
 

@@ -241,3 +241,55 @@ export function doubleRollOf(seed, section, at, last) {
   const odds = Math.max(DOUBLE_ROLL[section] ?? 0, last ? DOUBLE_ROLL.last : 0);
   return coin(seed, `roll2/${section}/${at}`) < odds;
 }
+
+// A drop's shape, in bars: the kick rolls over `roll` of them, speeding up
+// (dropPlan), then kick and bass sit out the `gap`, the sweep rising across
+// it all; everything is back on the 1 after. Drawn by `weight` from the seed
+// and the section's number in the set, so a seed replays its drops and each
+// can differ. Only a build or an opening, which always drop, may drop for
+// longer than their last loop (autopilot.js dropsAlways).
+export const DROPS = [
+  { roll: 0, gap: 1, weight: 2 }, // a cut: straight into the gap
+  { roll: 1, gap: 1, weight: 4 }, // the classic
+  { roll: 2, gap: 2, weight: 2 }, // a breath: two bars without kick and bass
+  { roll: 3, gap: 1, weight: 2 },
+  { roll: 6, gap: 2, weight: 1 }, // the whole of a build
+];
+export const DROP_CLASSIC = DROPS[1];
+export const dropBars = (drop) => drop.roll + drop.gap;
+
+/** The drop ending section number `n` (a `section`) under `seed`, at most `most` bars long. */
+export function dropOf(seed, section, n, most) {
+  const fits = DROPS.filter((d) => dropBars(d) <= most);
+  if (!fits.length) return DROPS[0];
+  let r = coin(seed, `drop/${section}/${n}`) * fits.reduce((sum, d) => sum + d.weight, 0);
+  return fits.find((d) => (r -= d.weight) < 0) ?? fits.at(-1);
+}
+
+/**
+ * A drop's bars in order, as bar overlays: the kick's roll (a pulse in
+ * quarters, then in 8ths, the ⏫ Build-up bar last) and the gap's.
+ */
+export function dropPlan({ roll, gap }) {
+  const before = Math.max(0, roll - 1);
+  const slow = Math.floor(before / 2);
+  return [
+    ...Array(slow).fill("pulse4"),
+    ...Array(before - slow).fill("pulse8"),
+    ...(roll ? ["build"] : []),
+    ...Array(gap).fill("gap"),
+  ];
+}
+
+// The bass sitting out the end of a phrase, 1 or 2 bars, to punch back in on
+// its 1: the odds per section, one bar twice as often as two. Its own coin,
+// so fills and double rolls stay as they were, and can land with it.
+export const BASS_CUT = { groove: 0.3, peak: 0.4 };
+
+/** The bars (0, 1 or 2) the bass sits out at the end of loop `at` of `section` under `seed`. */
+export function bassCutOf(seed, section, at) {
+  const odds = BASS_CUT[section] ?? 0;
+  const r = coin(seed, `cut/${section}/${at}`);
+  if (r >= odds) return 0;
+  return r < (odds * 2) / 3 ? 1 : 2;
+}

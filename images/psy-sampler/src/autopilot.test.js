@@ -28,7 +28,9 @@ import {
   closingOpen,
   dequeue,
   dropNext,
+  dropStart,
   dropping,
+  dropsAlways,
   enqueue,
   fillMelodic,
   frenzy,
@@ -235,6 +237,20 @@ describe("autopilot", () => {
     expect(dropping({ section: "groove", left: 1, length: 4, queue: [], next: "build" })).toBe(false);
     expect(dropping(skip({ section: "build", left: 3, length: 4, queue: [] }))).toBe(false);
     expect(dropping(null)).toBe(false);
+  });
+
+  it("a drop starts so it ends with its section; only a build or an opening may start one loops early", () => {
+    expect([1, 2, 3, 4, 8].map(dropStart)).toEqual([
+      { left: 1, bar: 1 },
+      { left: 1, bar: 0 },
+      { left: 2, bar: 1 },
+      { left: 2, bar: 0 },
+      { left: 4, bar: 0 },
+    ]);
+    expect(dropsAlways({ section: "build", left: 3, length: 4 })).toBe(true);
+    expect(dropsAlways({ section: "intro", left: 3, length: 8, opening: true })).toBe(true);
+    expect(dropsAlways({ section: "groove", left: 1, length: 4, next: "peak" })).toBe(false);
+    expect(dropsAlways(null)).toBe(false);
   });
 
   it("the breakdown's lead is the theme: held through the build and into the peak, never rewritten", () => {

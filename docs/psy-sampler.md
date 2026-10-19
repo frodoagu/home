@@ -1309,20 +1309,51 @@ it is stored, and none of it draws from the track's PRNG except the tease
 
 **Drops.** A loop is a drop (`dropping(pilot)`) when it is the last of a
 Build-up, or the last before a Peak (only `advance()` marks it, so ⏭ moves on
-without one). The UI plays it over its two bars (`stepDrop` in `app.js`):
+without one). The UI plays it as a few bars that end with the section
+(`stepDrop` in `app.js`): the kick **rolls** (its own pattern replaced bar by
+bar), then kick and bass sit out the **gap**, and the drop sweep rises across
+all of it. On the 1 after, everything is back on the downbeat, the sweep
+snaps open and the next section's FX fire.
 
-| Bar | What happens |
-|---|---|
-| 1 | the playing kick rolls (the ⏫ Build-up bar: quarters → 8ths → accented 16ths); the drop sweep starts rising |
-| 2 | kick and bass drop out (their parts silenced for the bar); the sweep keeps rising under the riser |
-| the 1 after | everything back on the downbeat, the sweep snaps open, the next section's FX |
+Not every drop is the same: its shape comes from `DROPS` in `dress.js`, drawn
+by weight from the seed and the section's number in the set
+(`dropOf(seed, section, n, most)`, the `coin`, never the PRNG), so a seed
+replays its drops and each one can differ:
 
-Bar 2 is silenced as data, not by muting the lane: the scheduler just finds
+| Shape | Bars | Roll → gap (`dropPlan`) | Weight |
+|---|---|---|---|
+| cut | 1 | gap | 2 |
+| classic | 2 | Build-up bar → gap | 4 |
+| breath | 4 | 8ths → Build-up bar → gap, gap | 2 |
+| long | 4 | quarters → 8ths → Build-up bar → gap | 2 |
+| whole build | 8 | quarters ×2 → 8ths ×3 → Build-up bar → gap, gap | 1 |
+
+The Build-up bar is the ⏫ one (quarters → 8ths → accented 16ths); the
+quarters and 8ths are `withPulse` in `editing.js`. A drop starts where it
+ends with its section (`dropStart(bars)`: loops to go, and which bar of that
+loop). Only `advance()`'s last loop knows the next section, so a shape longer
+than one loop is only drawn where the section always drops: a Build-up or an
+opening (`dropsAlways`), at most its own length (`most`). Anywhere else
+(a Groove queued into a Peak) `most` is 2: a cut or the classic. 💥 always
+plays the classic: by hand with a riser and an impact, and under the pilot
+`state.drop` holds `{ phase: "asked" }` until the section's last loop, so
+the seed's shape never stands in for it (✕ on its Peak takes that back too).
+⏭ in the middle of a drop lands it on that bar line.
+
+The gap is silenced as data, not by muting the lane: the scheduler just finds
 nothing to play there. The tails of the roll ring out naturally, the kick
 stops feeding the sidechain (so whatever ducks opens up), and the bass's long
-notes don't get cut. One bar, not the classic one beat, because the bar hook
-only runs on bar lines; a shorter gap would need a hook on every beat in the
-scheduler.
+notes don't get cut. Whole bars, not the classic one beat, because the bar
+hook only runs on bar lines; a shorter gap would need a hook on every beat
+in the scheduler.
+
+**Bass cuts.** Some phrase ends of a Groove or a Peak take the bass alone out
+for their last bar or two, so it punches back in on the phrase's 1
+(`cutKinds` in `app.js`). `bassCutOf(seed, section, loop)` in `dress.js`
+decides on its own coin: 30 % of a Groove's phrases and 40 % of a Peak's
+(`BASS_CUT`), one bar twice as often as two. It lands on top of whatever
+fill or double roll the phrase plays (the kick breaking in the same bar is
+the hardest punch), never on a drop's loop and never in other sections.
 
 **The tease.** `SECTIONS.build.odds` is `[0.9, 0.1]` over `["peak",
 "breakdown"]`: one Build-up in ten plays every cue of a drop and lands in a
@@ -1360,8 +1391,8 @@ and 30 % of any section's last phrase, the way into the next one
 build's pick is the only one drawn, and a build always drops). Neither does
 the outro (its frenzy rolls its last two loops anyway).
 
-The roll bar, the gap, the fills and the double rolls are **bar overlays**: `feed()` lays them on
-a sound's data for one bar (`state.bar`, `silenced` / `withBreak` / `withRoll`
+A drop's roll and gap, the bass cuts, the fills and the double rolls are **bar overlays**: `feed()` lays them on
+a sound's data for one bar (`state.bar`, `silenced` / `withPulse` / `withBuildUp` / `withBreak` / `withRoll`
 in `editing.js`, read in place like the build-up) and the next bar line takes
 them off. They never reach storage, snapshots or exports, and the tiles flash
 what the engine actually got.

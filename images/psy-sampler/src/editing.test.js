@@ -32,6 +32,7 @@ import {
   varySteps,
   withBreak,
   withBuildUp,
+  withPulse,
   withRoll,
   writePart,
 } from "./editing.js";
@@ -102,6 +103,15 @@ describe("bar overlays", () => {
     expect([d.speed, d.iter, d.echo]).toEqual([1, 1, null]);
     const notes = { notes: [n(0, 33, 4)], echo: { steps: 3, semis: 7 }, synth: "sub" };
     expect(silenced(notes)).toEqual({ notes: [], echo: null, synth: "sub" });
+  });
+
+  it("a pulse lays a hit every few steps over its bar alone, in place", () => {
+    const d = withPulse(drums(), 16, 2);
+    expect(d.steps.slice(0, 16).every((v) => v === HIT)).toBe(true);
+    expect(d.steps.slice(16).join()).toBe("1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0");
+    expect(d.mods.slice(16).every((m) => m === null)).toBe(true);
+    expect([d.speed, d.iter, d.echo]).toEqual([1, 1, null]);
+    expect(withPulse(drums(), 0, 4).steps.slice(0, 16).filter((v) => v === HIT)).toHaveLength(4);
   });
 
   it("a break empties the last two beats of its bar, in place", () => {
