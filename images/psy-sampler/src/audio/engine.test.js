@@ -1057,6 +1057,34 @@ describe("tap", () => {
   });
 });
 
+describe("monitor", () => {
+  const volume = () => ctx.nodes.find((n) => n.kind === "gain" && n.outputs.includes(ctx.destination));
+
+  it("plays a microphone through the take's effects under the listener's volume, not into ⏺", async () => {
+    const mic = new FakeNode(ctx, "mic");
+    const live = await engine.monitor(mic, { robot: 1 });
+    const node = ctx.nodes.find((n) => n.kind === "worklet");
+    expect(node.name).toBe("psy-take-fx");
+    expect(node.options).toMatchObject({ outputChannelCount: [2] });
+    expect(mic.outputs).toEqual([node]);
+    expect(node.outputs).toEqual([volume()]);
+    live.set({ pitch: 3 });
+    expect(node.port.sent).toEqual([{ robot: 1 }, { pitch: 3 }]);
+
+    live.stop();
+    expect(mic.outputs).toEqual([]);
+    expect(node.disconnected).toBe(true);
+    expect(node.port.sent.at(-1)).toBeNull();
+  });
+
+  it("loads its processor once per context, apart from the tap's", async () => {
+    await engine.monitor(new FakeNode(ctx, "mic"), {});
+    await engine.monitor(new FakeNode(ctx, "mic"), {});
+    await engine.tap(() => {});
+    expect(ctx.modules).toHaveLength(2);
+  });
+});
+
 describe("groove: sidechain and nudge", () => {
   const sidechain = () => {
     const shaper = ctx.nodes.find((n) => n.kind === "waveshaper" && n.curve?.length === 1025);

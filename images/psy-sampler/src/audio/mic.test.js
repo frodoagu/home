@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CONSTRAINTS, THRESHOLD, createMicRecorder, micAvailable } from "./mic.js";
+import { CONSTRAINTS, THRESHOLD, createMicMonitor, createMicRecorder, micAvailable } from "./mic.js";
 
 // A microphone the test plays by hand through `feed`.
 let feed;
@@ -8,7 +8,9 @@ let untapped;
 let engine;
 let media;
 let tracks;
+let live;
 beforeEach(() => {
+  live = null;
   feed = null;
   tapped = null;
   untapped = 0;
@@ -16,6 +18,10 @@ beforeEach(() => {
   const stream = { getTracks: () => tracks };
   engine = {
     ensureContext: vi.fn(() => ({ sampleRate: 1000, createMediaStreamSource: (s) => ({ kind: "mic", stream: s }) })),
+    monitor: vi.fn(async (source, fx) => {
+      live = { source, fx, set: vi.fn(), stop: vi.fn() };
+      return live;
+    }),
     tap: vi.fn(async (onAudio, source) => {
       feed = onAudio;
       tapped = source;
@@ -101,5 +107,53 @@ describe("createMicRecorder", () => {
     expect(micAvailable(media)).toBe(true);
     expect(micAvailable(undefined)).toBe(false);
     expect(micAvailable({})).toBe(false);
+  });
+});
+
+describe("createMicMonitor", () => {
+  it("plays the microphone through the effects until stopped", async () => {
+    const mon = createMicMonitor(engine, { media });
+    expect(mon.state()).toBe("idle");
+    const opening = mon.start({ robot: 1 });
+    expect(mon.state()).toBe("opening");
+    await opening;
+    expect(mon.state()).toBe("live");
+    expect(media.getUserMedia).toHaveBeenCalledWith(CONSTRAINTS);
+    expect(live.source.kind).toBe("mic");
+    expect(live.fx).toEqual({ robot: 1 });
+    mon.set({ pitch: -4 });
+    expect(live.set).toHaveBeenCalledWith({ pitch: -4 });
+
+    mon.stop();
+    expect(mon.state()).toBe("idle");
+    expect(live.stop).toHaveBeenCalled();
+    expect(tracks[0].stop).toHaveBeenCalled();
+  });
+
+  it("stopped while the microphone opens, it closes it again", async () => {
+    const mon = createMicMonitor(engine, { media });
+    const opening = mon.start({});
+    mon.stop();
+    await opening;
+    expect(mon.state()).toBe("idle");
+    expect(engine.monitor).not.toHaveBeenCalled();
+    expect(tracks[0].stop).toHaveBeenCalled();
+  });
+
+  it("starts with the settings set while it was opening", async () => {
+    const mon = createMicMonitor(engine, { media });
+    const opening = mon.start({ robot: 1 });
+    mon.set({ chorus: 1 });
+    await opening;
+    expect(live.fx).toEqual({ chorus: 1 });
+  });
+
+  it("goes back to idle when the microphone is refused", async () => {
+    media.getUserMedia = async () => {
+      throw Object.assign(new Error("no"), { name: "NotAllowedError" });
+    };
+    const mon = createMicMonitor(engine, { media });
+    await expect(mon.start({})).rejects.toThrow();
+    expect(mon.state()).toBe("idle");
   });
 });

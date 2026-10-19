@@ -219,6 +219,44 @@ describe("recording a sample with the microphone", () => {
     expect($('.take-fx [data-param="robot"]').value).toBe("1");
   });
 
+  it("🎧 plays the microphone through the chosen effect, live, before recording", async () => {
+    const media = fakeMedia();
+    await mount({ media });
+    const live = () => $('[data-action="monitor-fx"]');
+    const fxNode = () => ctx.nodes.find((n) => n.kind === "worklet" && n.name === "psy-take-fx");
+    expect(live().textContent).toBe("🎧 Probar en vivo");
+    choose($('[data-control="take-preset"]'), "robot");
+
+    live().click();
+    expect(live().textContent).toBe("🎙 Abriendo el micrófono…");
+    await settle();
+    expect(live().textContent).toBe("■ Dejar de escuchar");
+    expect(live().getAttribute("aria-pressed")).toBe("true");
+    expect(ctx.nodes.find((n) => n.kind === "mic").outputs).toContain(fxNode());
+    expect(fxNode().port.sent.at(-1)).toMatchObject({ robot: 1 });
+
+    // Live, an edit reaches the preview at once.
+    const pitch = $('.take-fx [data-param="pitch"]');
+    pitch.value = "5";
+    pitch.dispatchEvent(new Event("input"));
+    expect(fxNode().port.sent.at(-1)).toMatchObject({ robot: 1, pitch: 5 });
+    choose($('[data-control="take-preset"]'), "cathedral");
+    expect(fxNode().port.sent.at(-1)).toMatchObject({ robot: 0, pitch: 0, reverb: 0.6 });
+
+    live().click();
+    expect(live().textContent).toBe("🎧 Probar en vivo");
+    expect(media.track.stop).toHaveBeenCalled();
+    expect(fxNode().disconnected).toBe(true);
+  });
+
+  it("says when the live preview can't open the microphone", async () => {
+    await mount({ media: fakeMedia("NotAllowedError") });
+    $('[data-action="monitor-fx"]').click();
+    await settle();
+    expect($('[data-action="monitor-fx"]').textContent).toBe("🎧 Probar en vivo");
+    expect($(".status").textContent).toBe("El navegador no dio permiso para usar el micrófono.");
+  });
+
   it("a take nobody keeps goes away with Descartar", async () => {
     await mount({ media: fakeMedia() });
     recordBtn().click();

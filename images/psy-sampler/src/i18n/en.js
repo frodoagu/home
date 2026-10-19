@@ -469,9 +469,15 @@ export default {
       missing: "No microphone is connected.",
       failed: "Could not open the microphone.",
       fx: {
+        title: "Microphone effect",
+        live: "🎧 Try it live",
+        liveOn: "■ Stop listening",
+        liveTitle: "Hear the microphone through the effect, live, before recording. Use headphones: on speakers it feeds back.",
+        liveOffTitle: "Stop the live preview",
+        reverseTitle: "Only on the take: live, nothing can play backwards",
         preset: "Effect",
         adjust: "🎛 Adjust effects",
-        hint: "Applied before it goes up: the sample keeps them. Picking an effect or letting go of a control plays it.",
+        hint: "Applied to what you record before it goes up: the sample keeps them. With 🎧 you hear them live; otherwise picking an effect or letting go of a control plays the take.",
         presets: {
           none: "No effect",
           chorus: "Chorus",

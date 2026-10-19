@@ -469,9 +469,15 @@ export default {
       missing: "Não há nenhum microfone conectado.",
       failed: "Não foi possível abrir o microfone.",
       fx: {
+        title: "Efeito do microfone",
+        live: "🎧 Testar ao vivo",
+        liveOn: "■ Parar de ouvir",
+        liveTitle: "Ouça o microfone com o efeito, ao vivo, antes de gravar. Use fones: nos alto-falantes ele microfona.",
+        liveOffTitle: "Parar a escuta ao vivo",
+        reverseTitle: "Só na gravação: ao vivo não dá para ouvir ao contrário",
         preset: "Efeito",
         adjust: "🎛 Ajustar efeitos",
-        hint: "Aplicados antes de enviar: o sample fica com eles. Escolher um efeito ou soltar um controle faz ele tocar.",
+        hint: "Aplicados ao que você gravar antes de enviar: o sample fica com eles. Com 🎧 você ouve ao vivo; senão, escolher um efeito ou soltar um controle toca a gravação.",
         presets: {
           none: "Sem efeito",
           chorus: "Coro",
