@@ -223,6 +223,11 @@ describe("sanitize", () => {
     expect(sanitize("perc.hat", "x")).toEqual(defaultData("perc.hat"));
   });
 
+  it("keeps a sound's cut and fades, and gives old data a flat shape", () => {
+    expect(sanitize("perc.hat", { shape: { length: 0.5, fadeOut: 0.3 } }).shape).toEqual({ length: 0.5, fadeIn: 0, fadeOut: 0.3 });
+    expect(sanitize("perc.hat", { level: 1 }).shape).toEqual({ length: 1, fadeIn: 0, fadeOut: 0 });
+  });
+
   it("keeps valid edits and clamps or drops the rest", () => {
     const out = sanitize("lead.arp", {
       notes: [

@@ -476,7 +476,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   scheduled closer than `SAFETY` (15 ms) to `currentTime`: a note whose start is
   already past begins mid-envelope = click. `voices.test.js` enforces "every
   audible source starts and ends at gain 0" for every variant, synth and FX — keep
-  it passing when adding a voice. Every variant is DATA (patterns.js `DEFAULTS`:
+  it passing when adding a voice. A sound's `shape` (cut + fades, shape.js,
+  the editor's Waveform box) wraps every event: drum and note voices return
+  nothing, so `ringing()` reads their end from the latest source `stop()`
+  they schedule, and a new voice must stop its sources when it falls silent.
+  Every variant is DATA (patterns.js `DEFAULTS`:
   drum steps / piano-roll notes + synth / FX params, plus an `insert` (filter +
   distortion, insert.js) and an optional user `sample` that replaces the voice
   but keeps it as the `fallback` whenever the sample isn't decoded) that the UI

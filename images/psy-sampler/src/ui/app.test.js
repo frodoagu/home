@@ -959,19 +959,20 @@ describe("foldable sections", () => {
   it("the sections under the sliders start folded; the header, sliders and grid never fold", () => {
     openEditor("kick.punchy");
     const folds = [...editor("kick.punchy").querySelectorAll("details")];
-    expect(folds.map((d) => d.dataset.fold)).toEqual(["insert", "modulation", "space", "pattern"]);
+    expect(folds.map((d) => d.dataset.fold)).toEqual(["wave", "insert", "modulation", "space", "pattern"]);
     expect(folds.some((d) => d.open)).toBe(false);
     for (const sel of ['[data-action="name"]', '[data-control="source"]', 'input[data-param="level"]', ".brush", ".grid"]) {
       expect(editor("kick.punchy").querySelector(sel).closest("details"), sel).toBeNull();
     }
     openEditor("fx.riser");
-    expect([...editor("fx.riser").querySelectorAll("details")].map((d) => d.dataset.fold)).toEqual(["insert", "modulation", "space"]);
+    expect([...editor("fx.riser").querySelectorAll("details")].map((d) => d.dataset.fold)).toEqual(["wave", "insert", "modulation", "space"]);
   });
 
   it("an opened section stays open in every editor and on the next visit, apart from the workspace", () => {
     openEditor("kick.punchy");
     toggleFold("kick.punchy", "pattern");
     expect(JSON.parse(localStorage.getItem("psy-sampler:folds"))).toEqual({
+      wave: false,
       insert: false,
       modulation: false,
       space: false,
@@ -993,9 +994,29 @@ describe("foldable sections", () => {
     expect(fold("bass.offbeat", "space").open).toBe(true);
   });
 
+  it("the waveform box cuts and fades every hit; its fades push each other back", () => {
+    openEditor("perc.hat");
+    const wave = fold("perc.hat", "wave");
+    const params = () => [...wave.querySelectorAll("input[data-param]")];
+    expect(params().map((i) => i.dataset.param)).toEqual(["length", "fadeIn", "fadeOut"]);
+    expect(wave.querySelector("canvas")).not.toBeNull();
+    const slide = (key, value) => {
+      const input = wave.querySelector(`input[data-param="${key}"]`);
+      input.value = String(value);
+      input.dispatchEvent(new Event("input"));
+    };
+    slide("fadeOut", 0.5);
+    slide("fadeIn", 0.8);
+    expect(saved().variants["perc.hat"].shape).toEqual({ length: 1, fadeIn: 0.8, fadeOut: 0.2 });
+    expect(wave.querySelector('input[data-param="fadeOut"]').value).toBe("0.2");
+    expect(flagged("perc.hat", "wave")).toBe(true);
+    slide("length", 0.4);
+    expect(saved().variants["perc.hat"].shape.length).toBe(0.4);
+  });
+
   it("a section flags that it still changes the sound, folded or not", () => {
     openEditor("perc.hat");
-    expect(["insert", "modulation", "space", "pattern"].filter((k) => flagged("perc.hat", k))).toEqual([]);
+    expect(["wave", "insert", "modulation", "space", "pattern"].filter((k) => flagged("perc.hat", k))).toEqual([]);
     const filter = editor("perc.hat").querySelector('[data-control="filter"]');
     filter.value = "lowpass";
     filter.dispatchEvent(new Event("change"));

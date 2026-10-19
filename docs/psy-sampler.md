@@ -504,8 +504,8 @@ the loop stopped they apply right away. ■ Stop drops whatever was queued.
   dark mode) and the tile being edited sits above it with an outline; the veil
   lets clicks through, so the other sounds still play live. The grids have a bar header (1, 2) and a beat header (1-4), beats 2 and
   4 shaded, and a rule between the two bars.
-- **Foldable sections.** *Filter and distortion*, *Modulation*, *Groove and
-  space* and *Pattern* are `<details>` (`fold` in `editor.js`), folded by
+- **Foldable sections.** *Waveform*, *Filter and distortion*, *Modulation*,
+  *Groove and space* and *Pattern* are `<details>` (`fold` in `editor.js`), folded by
   default; the header, the source, the voice's sliders, the Click row, the grid
   and its actions never fold. Which ones are open is app state shared by every
   editor (open Pattern on the kick and it is open on the bass too), carried
@@ -630,6 +630,40 @@ The import sets *Octave* to 0, so the part plays at the pitch it was written
 in, and leaves the scale alone: notes outside it show as rows marked out of
 scale. It goes through `onChange` like any edit, so it saves, travels in 🔗 and
 counts as a part the user owns (the autopilot doesn't rewrite it).
+
+### Waveform: cut and fades
+
+The editor's **Waveform** box works like the one-shot box of Ableton's
+Simpler, on every sound, synthesized or a sample. It draws one event: a hit,
+the part's first note (its pitch and length) or the FX shot, rendered dry and
+offline (`engine.sketch`, mono at 22.05 kHz: no insert, no shape, at the
+current BPM); with a decoded sample, the whole file, reversed if it plays
+reversed. Over it are the gain line and four markers to drag: the **start** and
+**end** along the bottom (a voice only has its end, its cut) and the **fade in**
+and **fade out** squares along the top. The faint wave is what the voice plays;
+the solid one is what the shape leaves. A click away from the markers plays the
+sound. The sliders under it set the same values from the keyboard. The math
+lives in [`waveform.js`](../images/psy-sampler/src/waveform.js) and the canvas
+in `ui/waveform.js`.
+
+The values are the variant's `shape: { length, fadeIn, fadeOut }`
+([`shape.js`](../images/psy-sampler/src/audio/shape.js)), as **shares**, not
+seconds: `length` keeps that share of each event (of however long the voice
+rings), and the fades ramp the first and last shares of what is kept, so one
+shape fits a short hit and a long pad note alike. The fades share what is kept:
+pushing one past the other pulls the other back. A sample keeps cutting with
+its own `start` and `length` (the end marker moves those) and takes only the
+fades from the shape, so a voice's cut left behind does nothing while a sample
+plays.
+
+The engine runs every event through `shaped()`: a flat shape (the default)
+adds no node, anything else adds one gain per event that starts at 0 under a
+fade-in and ends at 0 at the cut, with at least a 5 ms ramp (`CUT_RAMP`) so a
+cut never clicks. The voices don't report when they fall silent (only the FX and
+the sample voice return it), but each one stops its own sources then, so
+`ringing()` reads the latest `stop()` the voice schedules through a proxy of the
+context. There is one proxy per context, so the voices' per-context caches
+(noise, waves) still hit.
 
 ### Groove and space: swing, nudge, duck, pan
 
@@ -1060,8 +1094,9 @@ says it reads is what it reads. A new format is one line there.
   id (`sample: { id, name, pitch, start, length, reverse }`), so shared links
   and presets travel without the audio.
 - **Playing one.** In any editor, **Source** picks the sound's own voice or a
-  sample; with a sample, the voice's knobs become Pitch (±24 semitones), Start
-  and Length (fractions of the file) and Reverse. A hit or an FX plays the
+  sample; with a sample, the voice's knobs become Pitch (±24 semitones) and
+  Reverse, and Start and Length (fractions of the file) move to the
+  [Waveform](#waveform-cut-and-fades) box, where they are drawn on the file. A hit or an FX plays the
   sample out; a note transposes it from **A3** (where it plays as recorded) and
   lasts as long as the note. Every playback gets 2-6 ms fades, so a slice cut
   mid-waveform doesn't click.

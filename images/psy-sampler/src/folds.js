@@ -2,8 +2,9 @@
 // whether a folded one still changes the sound, so its summary can say so.
 // The header, the source, the voice's sliders and the grid never fold.
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
+import { fadesOnly, isFlat } from "./audio/shape.js";
 
-export const FOLDS = ["insert", "modulation", "space", "pattern"];
+export const FOLDS = ["wave", "insert", "modulation", "space", "pattern"];
 
 // Folded until opened. Anything but a true (a missing key, a stored
 // value from another version) reads as folded.
@@ -14,6 +15,12 @@ export const cleanFolds = (saved) => Object.fromEntries(FOLDS.map((k) => [k, sav
 export function foldActive(key, data) {
   const ins = data.insert;
   switch (key) {
+    case "wave": {
+      // A sample cuts with its own start and length, not the voice's.
+      const s = data.sample;
+      if (!s) return !isFlat(data.shape);
+      return !isFlat(fadesOnly(data.shape)) || s.start > 0 || s.length < 1;
+    }
     case "insert":
       return ins.filter !== "off" || ins.drive !== "off" || ins.hp > HP_OPEN || ins.lp < LP_OPEN;
     case "modulation":

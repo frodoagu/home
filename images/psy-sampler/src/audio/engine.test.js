@@ -430,6 +430,25 @@ describe("render", () => {
     expect(Math.min(...offline.sources().map((s) => s.startTime))).toBe(0);
     expect(out.channels[0].length).toBe(offline.length);
   });
+
+  it("a shape cuts and fades every rendered hit", async () => {
+    const r = renderer();
+    r.setData("kick.punchy", { ...defaultData("kick.punchy"), shape: { length: 0.5, fadeIn: 0, fadeOut: 0.5 } });
+    await r.render({ lanes: { kick: "kick.punchy" } });
+    const shapes = offline.nodes.filter((n) => n.kind === "gain" && n.gain.events.at(-1)?.[0] === "linear" && n.gain.events.length === 3);
+    expect(shapes.length).toBeGreaterThanOrEqual(16); // a hit a beat, two passes
+  });
+
+  it("sketches one hit of a voice as long as it rings, before any shape", async () => {
+    const r = renderer();
+    const flat = await r.sketch("kick.punchy");
+    expect(flat.whole).toBe(false);
+    expect(flat.sampleRate).toBe(22050);
+    expect(flat.data.length).toBeGreaterThan(0);
+    expect(flat.data.length).toBeLessThan(22050); // a kick, not the whole render
+    r.setData("kick.punchy", { ...defaultData("kick.punchy"), shape: { length: 0.1, fadeIn: 0, fadeOut: 0 } });
+    expect((await r.sketch("kick.punchy")).data.length).toBe(flat.data.length);
+  });
 });
 
 describe("stop", () => {
@@ -795,6 +814,24 @@ describe("samples", () => {
     const { start, end } = engine.triggerFx("fx.impact");
     expect(end).toBeCloseTo(start + 0.5, 9);
     expect(ctx.sources().map((s) => s.buffer)).toEqual([buffer]);
+  });
+
+  it("a sample takes the shape's fades but cuts with its own length", () => {
+    buffer = ctx.createBuffer(1, 24000, 48000);
+    engine.setData("fx.impact", { ...withSample("fx.impact"), shape: { length: 0.1, fadeIn: 0, fadeOut: 0.5 } });
+    const { start, end } = engine.triggerFx("fx.impact");
+    expect(end).toBeCloseTo(start + 0.5, 9);
+    const fades = ctx.sources()[0].outputs[0].outputs[0];
+    expect(fades.gain.events.at(-1)).toEqual(["linear", 0, end]);
+  });
+
+  it("sketches the whole sample, mixed to one channel and reversed as it plays", async () => {
+    buffer = ctx.createBuffer(2, 4, 48000);
+    buffer.getChannelData(0).set([1, 0, 0, 0]);
+    buffer.getChannelData(1).set([0, 0, 0, 1]);
+    engine.setData("perc.hat", { ...withSample("perc.hat"), sample: { ...sampleDefaults(ID, "x"), reverse: true } });
+    const out = await engine.sketch("perc.hat");
+    expect(out).toEqual({ sampleRate: 48000, data: new Float32Array([0.5, 0, 0, 0.5]), whole: true });
   });
 
   it("previews a library sample, once it is there", () => {

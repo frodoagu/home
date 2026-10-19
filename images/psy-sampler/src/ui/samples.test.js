@@ -160,7 +160,9 @@ describe("samples panel", () => {
     const source = () => $('[data-editor="perc.hat"] [data-control="source"]');
     choose(source(), KICK.id);
     expect(saved().variants["perc.hat"].sample.id).toBe(KICK.id);
-    expect($('[data-editor="perc.hat"] [data-param="start"]')).not.toBeNull();
+    // Its start and length mark the sample in the waveform box, by the fades.
+    const wave = $('[data-editor="perc.hat"] [data-fold="wave"]');
+    expect([...wave.querySelectorAll("input[data-param]")].map((i) => i.dataset.param)).toEqual(["start", "length", "fadeIn", "fadeOut"]);
     choose(source(), "");
     expect(saved().variants["perc.hat"].sample).toBeNull();
     expect($('[data-editor="perc.hat"] [data-param="tone"]')).not.toBeNull();
