@@ -12,7 +12,7 @@ image:
   pullPolicy: IfNotPresent
   # Managed by Argo CD Image Updater. Starts as the mutable tag; gets pinned to
   # `latest@sha256:<digest>` on the first reconcile after CI pushes the image.
-  tag: "latest@sha256:bd28013104f9a1f5450306d48bc4680c7f6b0736832b419c50c87fbbe1d2fafd"
+  tag: "latest@sha256:97af0b34c361b287e2fbe5e46444b8dfae297bb5ffe68efcc06829bea45005c6"
 # The image is static, public content (anyone can fetch the same files from
 # psy.agu.com.ar), so the GHCR package is meant to be PUBLIC and needs no pull
 # secret. GHCR creates it private on the first push: flip it once in GitHub >
