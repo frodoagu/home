@@ -1085,6 +1085,34 @@ mono at 48 kHz is about 2.1 MB, under the 3 MiB per-file limit, so it is stored
 as recorded. The mic is not routed to the speakers, which rules out feedback,
 but it does hear whatever the speakers play.
 
+Before it goes up, the take can take **effects**
+([`takeFx.js`](../images/psy-sampler/src/audio/takeFx.js)): a preset (Coro,
+Robot, Dalek, Radio, Megáfono, Monstruo, Ardilla, Alien, Susurro, Bajo el agua,
+Catedral, Espacio, Lo-fi, Fantasma) beside ▶, and every setting under
+🎛 Ajustar efectos. They are rendered into the file, so the sample sounds the
+same in every sound that plays it. The chain is plain math over the take's
+samples, in this order:
+
+| Stage | How |
+|---|---|
+| Pitch | two read heads sliding through a 50 ms delay, sin² crossfaded: keeps the length |
+| Robot | STFT, every frame's phase set to zero, one frame per period of the robot's note |
+| Whisper | STFT with random (seeded) phases over ~5 ms frames, too short to resolve the harmonics |
+| Ring mod | times a sine |
+| Filter | an RBJ biquad (lowpass, highpass, bandpass) |
+| Drive | the insert's own curves (`driveCurve`/`driveGains`) |
+| Chorus | three modulated delays a side: makes it stereo |
+| Echo | a feedback delay |
+| Reverb | Freeverb (8 combs, 4 allpasses, the right side 23 samples longer): makes it stereo |
+| Reverse | last, so a reverb or echo tail swells into the take |
+
+The result keeps the take's peak, lasts `MAX_SECONDS` at most (a tail cut there
+fades out) and drops the silence at its end. Stereo goes up as 16-bit (15 s at
+48 kHz is 2.9 MB, under the 3 MiB limit); mono stays 24-bit. A full chain on
+15 s takes about a second, so it runs in a worker (`takeFx.worker.js`) and the
+scheduler never stalls; ▶ and ⬆ share the last render. A preset or a released
+control plays it. The next take starts with the last one's effects.
+
 #### What goes up
 
 - **Checked twice.** The page decodes every candidate before sending it (the

@@ -6,11 +6,15 @@
 // Uploads take files, a folder (picked or dropped) or archives; what they
 // hold comes from import/gather.js. A lone audio file goes straight up; more
 // than one, or a project file, opens a picker to choose (and audition) which.
-// A recording waits to be heard and named before it goes up the same way.
+// A recording waits to be heard, dressed with effects (audio/takeFx.js) and
+// named before it goes up the same way.
 import { LAYERS } from "../catalog.js";
+import { FX_DRIVES, FX_FILTERS, FX_PRESETS, FX_RANGES, isDry, presetFx, renderFxOffThread, sanitizeFx } from "../audio/takeFx.js";
+import { encodeWav } from "../audio/wav.js";
 import { ACCEPT, FORMATS } from "../import/formats.js";
+import { decodeWav } from "../import/pcm.js";
 import { MAX_SECONDS, formatBytes } from "../samples.js";
-import { el, nextId, select } from "./dom.js";
+import { checkbox, el, nextId, select, slider } from "./dom.js";
 
 const MAX_DROPPED = 20000;
 const FORMAT_GROUPS = ["audio", "archives", "instruments", "projects", "closed"];
@@ -38,6 +42,36 @@ function formatsGuide(text) {
 const NAMES_SHOWN = 3;
 const METER_MS = 100;
 const METER_FLOOR_DB = -60;
+
+// The take's effects, in the panel's groups: a slider spec per number
+// (dom.js slider), or "filter" / "drive" / "reverse" for the other controls.
+const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
+const pct = (v) => `${Math.round(v * 100)} %`;
+const FX_GROUPS = {
+  voice: [
+    { key: "pitch", step: 1, fmt: (v) => `${v > 0 ? "+" : ""}${v} st` },
+    { key: "robot", step: 0.05, fmt: pct },
+    { key: "robotHz", step: 1, fmt: hz, log: true },
+    { key: "whisper", step: 0.05, fmt: pct },
+    { key: "ring", step: 0.05, fmt: pct },
+    { key: "ringHz", step: 1, fmt: hz, log: true },
+  ],
+  tone: ["filter", { key: "cutoff", step: 10, fmt: hz, log: true }, { key: "res", step: 0.1, fmt: (v) => v.toFixed(1) }, "drive", { key: "amount", step: 0.05, fmt: pct }],
+  space: [
+    { key: "chorus", step: 0.05, fmt: pct },
+    { key: "chorusDepth", step: 0.05, fmt: pct },
+    { key: "echo", step: 0.05, fmt: pct },
+    { key: "echoTime", step: 0.01, fmt: (v) => `${Math.round(v * 1000)} ms` },
+    { key: "echoFb", step: 0.05, fmt: pct },
+    { key: "reverb", step: 0.05, fmt: pct },
+    { key: "reverbSize", step: 0.05, fmt: pct },
+    "reverse",
+  ],
+};
+
+// Rendered effects -> .wav bytes. Stereo goes 16-bit: 15 s of it at 48 kHz
+// stays under the 3 MiB a file may weigh.
+const asWav = (take) => new Uint8Array(encodeWav(take, take.channels.length > 1 ? 16 : 24));
 
 const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 // A peak (0-1) -> how full the meter is (0-1), in dB from METER_FLOOR_DB.
@@ -121,6 +155,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
   const meter = el("span", { class: "mic-meter", role: "meter", "aria-label": m.level, "aria-valuemin": "0", "aria-valuemax": "1" }, el("span"));
   let ticking = null;
   let taken = null; // the take waiting to go up: { node }
+  let lastFx = { preset: "none", fx: presetFx("none") }; // the next take starts with the last one's effects
 
   function showMic() {
     const now = mic?.state() ?? "idle";
@@ -184,18 +219,85 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     const fallback = m.name(time);
     const name = el("input", { type: "text", class: "name-input take-name", maxlength: "60", "aria-label": m.nameLabel, "data-role": "take-name" });
     name.value = fallback;
-    const candidate = () => ({
-      key: "mic",
-      name: name.value.trim() || fallback,
-      load: async () => ({ bytes: new Uint8Array(await blob.arrayBuffer()) }),
-    });
+
+    let { preset, fx } = lastFx;
+    const raw = blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+    let rendered = null; // { key, bytes }: the last render, for ▶ and ⬆ alike
+    // The take's bytes with the effects as they are now; dry, as recorded.
+    async function bytes() {
+      if (isDry(fx)) return raw;
+      const key = JSON.stringify(fx);
+      if (rendered?.key !== key) {
+        const wanted = { key, bytes: raw.then((b) => renderFxOffThread(decodeWav(b), fx)).then(asWav) };
+        rendered = wanted;
+        wanted.bytes.catch(() => rendered === wanted && (rendered = null));
+      }
+      return rendered.bytes;
+    }
+    const candidate = () => ({ key: "mic", name: name.value.trim() || fallback, load: async () => ({ bytes: await bytes() }) });
+
     const play = el("button", { type: "button", class: "ghost icon", "data-action": "audition-take", text: "▶" });
     play.title = t.play;
     play.setAttribute("aria-label", t.play);
-    play.addEventListener("click", () => {
+    function audition() {
       const c = candidate();
-      onAudition?.(c).catch((err) => status(t.failedOne(c.name, errorText(err))));
-    });
+      play.classList.add("is-busy");
+      onAudition?.(c)
+        .catch((err) => status(t.failedOne(c.name, errorText(err))))
+        .finally(() => play.classList.remove("is-busy"));
+    }
+    play.addEventListener("click", audition);
+
+    const f = m.fx;
+    const controls = new Map(); // key -> (value) => void, to show a preset
+    const edit = (key, v) => {
+      fx = sanitizeFx({ ...fx, [key]: v });
+      preset = "custom";
+      presets.querySelector("select").value = preset;
+      lastFx = { preset, fx };
+    };
+    const control = (item) => {
+      if (item === "filter" || item === "drive") {
+        const list = item === "filter" ? FX_FILTERS : FX_DRIVES;
+        const types = item === "filter" ? tx.editor.filterTypes : tx.editor.driveTypes;
+        const node = select(tx.editor[item], list.map((v) => ({ value: v, label: types[v] })), fx[item], (v) => {
+          edit(item, v);
+          audition();
+        }, `take-${item}`);
+        controls.set(item, (v) => (node.querySelector("select").value = v));
+        return node;
+      }
+      if (item === "reverse") {
+        const box = checkbox(nextId("take-reverse"), f.params.reverse, fx.reverse);
+        box.input.dataset.param = "reverse";
+        box.input.addEventListener("change", () => {
+          edit("reverse", box.input.checked);
+          audition();
+        });
+        controls.set(item, (v) => (box.input.checked = v));
+        return box.node;
+      }
+      const [min, max] = FX_RANGES[item.key];
+      const node = slider({ ...item, label: f.params[item.key], min, max }, fx[item.key], (v) => edit(item.key, v));
+      node.querySelector("input").addEventListener("change", audition);
+      controls.set(item.key, (v) => node.setValue(v));
+      return node;
+    };
+    const groups = Object.entries(FX_GROUPS).map(([group, items]) =>
+      el("fieldset", { class: "take-fx-group" }, el("legend", { text: f.groups[group] }), el("div", { class: "knobs" }, ...items.map(control))),
+    );
+
+    const presetOptions = [...Object.keys(FX_PRESETS), "custom"].map((value) => ({ value, label: f.presets[value] }));
+    const presets = select(f.preset, presetOptions, preset, (value) => {
+      if (value === "custom") return;
+      preset = value;
+      fx = presetFx(value);
+      lastFx = { preset, fx };
+      for (const [key, show] of controls) show(fx[key]);
+      audition();
+    }, "take-preset");
+    presets.querySelector("option[value=custom]").disabled = true;
+
     const go = el("button", { type: "button", class: "action", "data-action": "upload-take", text: m.upload });
     const discard = el("button", { type: "button", class: "ghost", "data-action": "discard-take", text: m.discard });
     discard.addEventListener("click", dropTake);
@@ -213,7 +315,8 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
         "div",
         { class: "sample-take", role: "group", "aria-label": m.record },
         el("p", { class: "hint", text: m.take(secs) }),
-        el("div", { class: "tools-row" }, play, name, go, discard),
+        el("div", { class: "tools-row" }, play, presets, name, go, discard),
+        el("details", { class: "take-fx", "data-role": "take-fx" }, el("summary", { text: f.adjust }), el("p", { class: "hint", text: f.hint }), ...groups),
       ),
     };
     status(m.take(secs));
@@ -225,7 +328,7 @@ export function mountSamplesPanel({ samples, cloud, mic = null, tx, lang, confir
     busy = on;
     uploadBtn.disabled = on;
     folderBtn.disabled = on;
-    for (const box of [picking, taken]) box?.node.querySelectorAll("button, input").forEach((b) => (b.disabled = on));
+    for (const box of [picking, taken]) box?.node.querySelectorAll("button, input, select").forEach((b) => (b.disabled = on));
     if (!on) picking?.sync();
     showMic();
   };
