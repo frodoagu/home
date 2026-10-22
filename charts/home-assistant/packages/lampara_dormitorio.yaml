@@ -188,7 +188,7 @@ template:
         effect: &effect >-
           {%- set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
           {%- set id = z.sceneId | default(0) | int %}
-          {{- escenas.get(id, escenas.get(id | string, '')) }}
+          {{- escenas.get(id, escenas.get(id | string)) }}
         # Mireds: 6500 K .. 2200 K.
         min_mireds: &min_mireds "154"
         max_mireds: &max_mireds "455"

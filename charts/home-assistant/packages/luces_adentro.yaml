@@ -1,0 +1,110 @@
+# HA package: the indoor lamps' evening while Fede is home. 10 min after sunset
+# the bedroom and office lamps come on at 100 % in warm white and dim in a
+# straight line to 10 % at 23:30, where they stay. Getting home inside that
+# window turns on the lamps that are off at the ramp's current level.
+# See docs/home-assistant.md#evening-lamps.
+#
+# The ramp only ever lowers a lamp that is following it: one dimmed by hand
+# sits below the ramp, one turned up by hand sits above where the ramp was
+# 30 min ago, and both are left alone. It sends brightness only, so a colour
+# or scene picked in the evening stays.
+#
+# Away, simulacion_presencia.yaml drives the same lamps. They never act at
+# once: this one needs `binary_sensor.fede_en_casa` on, the simulation needs it
+# off. Lamps the simulation left on are at or below this ramp (its own reaches
+# 10 % at 23:00), so after a return they hold until the ramp comes down to
+# them and follow it from there.
+
+automation:
+  - id: luces_adentro
+    alias: Luces adentro - Atardecer con Fede en casa
+    description: >-
+      Con Fede en casa, prende las lámparas del dormitorio y la oficina 10 min
+      después del atardecer al 100 % en blanco cálido y las baja en línea recta
+      hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
+      apagadas al nivel que corresponde. No baja una lámpara que alguien movió
+      a mano.
+    trigger:
+      - platform: sun
+        event: sunset
+        offset: "00:10:00"
+        id: encender
+      - platform: state
+        entity_id: binary_sensor.fede_en_casa
+        from: "off"
+        to: "on"
+        id: llegada
+      - platform: time_pattern
+        minutes: "/5"
+        id: rampa
+    condition:
+      - condition: state
+        entity_id: binary_sensor.fede_en_casa
+        state: "on"
+    action:
+      - variables:
+          lamparas:
+            - light.lampara_dormitorio_grupo
+            - light.lampara_oficina
+          kelvin: 2700
+          # `next_setting` is today's or tomorrow's sunset, a minute or two
+          # apart, so only its time of day is used.
+          inicio: >-
+            {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
+            {{- today_at((ocaso | as_local + timedelta(minutes=10)).strftime('%H:%M')).isoformat() if ocaso else '' }}
+          fin: "{{ today_at('23:30').isoformat() }}"
+          # The 23:30 tick lands a moment after 23:30.
+          dentro: >-
+            {%- set i = inicio | as_datetime(none) %}
+            {{- i is not none and i <= now() < fin | as_datetime + timedelta(minutes=1) }}
+          largo: >-
+            {%- set i = inicio | as_datetime(none) %}
+            {{- (fin | as_datetime - i).total_seconds() if i else 0 }}
+          # The ramp's level now, and 30 min ago (`tope`).
+          brillo: >-
+            {%- set i = inicio | as_datetime(none) %}
+            {%- set avance = (now() - i).total_seconds() / largo if i and largo > 0 else 0 %}
+            {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
+          tope: >-
+            {%- set i = inicio | as_datetime(none) %}
+            {%- set avance = (now() - timedelta(minutes=30) - i).total_seconds() / largo if i and largo > 0 else 0 %}
+            {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
+          # 1-2 % of slack for the 0-255 round trip.
+          bajar: >-
+            {%- set ns = namespace(lista=[]) %}
+            {%- for e in lamparas if is_state(e, 'on') %}
+            {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
+            {%- if brillo + 1 < pct <= tope + 2 %}
+            {%- set ns.lista = ns.lista + [e] %}
+            {%- endif %}
+            {%- endfor %}
+            {{- ns.lista }}
+          apagadas: "{{ lamparas | select('is_state', 'off') | list }}"
+      - choose:
+          - conditions: "{{ trigger.id == 'encender' }}"
+            sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: "{{ lamparas }}"
+                data:
+                  brightness_pct: 100
+                  color_temp_kelvin: "{{ kelvin }}"
+          - conditions: "{{ trigger.id == 'llegada' and dentro and apagadas | count > 0 }}"
+            sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: "{{ apagadas }}"
+                data:
+                  brightness_pct: "{{ brillo }}"
+                  color_temp_kelvin: "{{ kelvin }}"
+          - conditions: "{{ trigger.id == 'rampa' and dentro and bajar | count > 0 }}"
+            sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: "{{ bajar }}"
+                data:
+                  brightness_pct: "{{ brillo }}"
+    mode: queued
