@@ -1066,33 +1066,28 @@ or the lamp shows up twice.
 ## Presence simulation
 
 [`packages/simulacion_presencia.yaml`](../charts/home-assistant/packages/simulacion_presencia.yaml)
-runs an evening routine on the bedroom lamp and the bedroom TV while nobody is
-home, at different times every night. The outdoor lights already follow
+runs an evening routine on the bedroom and office lamps while nobody is home, at
+different times every night. The outdoor lights already follow
 dusk/dawn on their own ([luces_afuera.yaml](#duskdawn-schedule)); this adds a
 room that changes during the evening.
 
-**Tonight's schedule** is four timestamp sensors, drawn at 12:00 (a "night"
+**Tonight's schedule** is two timestamp sensors, drawn at 12:00 (a "night"
 runs noon to noon, so an off time past midnight belongs to the evening before,
 weekday included):
 
 | Sensor | Window | Fri/Sat nights |
 |---|---|---|
 | `sensor.simulacion_presencia_lampara_prender` | sunset − 15 min, kept within 19:30-20:00, + 0-44 min | — |
-| `sensor.simulacion_presencia_tv_prender` | 20:45 + 0-44 min | — |
-| `sensor.simulacion_presencia_tv_apagar` | 23:30 + 0-44 min | +60 min |
 | `sensor.simulacion_presencia_lampara_apagar` | 00:15 + 0-44 min | +60 min |
 
-The windows follow Argentine habits, not the house's own history (the lamp
-has too little of it so far): dinner around 21:30, broadcast prime time until
-about midnight with its peaks after 23:00, and an average bedtime around 01:00
+The off window follows Argentine habits, not the house's own history (the lamps
+have too little of it so far): an average bedtime around 01:00
 ([Samsung, 2021-2023](https://news.samsung.com/ar/un-estudio-de-samsung-revela-como-duermen-los-argentinos-y-sus-tendencias-de-sueno)).
-The lamp follows the sunset so it doesn't come on in daylight in summer, when
-the sun sets past 20:00 in AMBA. The 20:00 cap keeps it ahead of the TV.
-Once the recorder has a few months of the lamp and the TV, their real times
-are a better source than national averages.
+The lamps follow the sunset so they don't come on in daylight in summer, when
+the sun sets past 20:00 in AMBA. Once the recorder has a few months of the
+lamps, their real times are a better source than national averages.
 
-The windows don't overlap, so the order (lamp on, TV on, TV off, lamp off) always
-holds. The sensors also draw on HA start, but keep a restored time that still
+The sensors also draw on HA start, but keep a restored time that still
 falls in tonight's window (with 5 min of slack, because the sunset moves between
 the noon draw and a restart), so a restart never moves a time that already went
 by. Only a stale schedule (HA down at noon) is drawn again. They're trigger-based
@@ -1104,21 +1099,28 @@ records it in **`input_boolean.simulacion_presencia_ausencia`**, which survives
 a restart (`zone.home`'s `last_changed` doesn't). After an HA start the 15 min
 count from the start.
 
-**What drives the devices** (`automation.simulacion_de_presencia_lampara_y_tv_del_dormitorio`),
+**What drives the lamps** (`automation.simulacion_de_presencia_lamparas`),
 only while an absence is recorded, `zone.home` is `0` and the pause is off:
 
 | Trigger | Effect |
 |---|---|
-| One of the four times | That device only, in that direction |
-| The absence is recorded | Both devices reconciled with their window: on inside it, off outside |
+| One of the two times | Lamps on or off |
+| The absence is recorded | Lamps reconciled with their window: on inside it, off outside |
 | Pause switched off while away | Same reconcile |
 | HA start | Same reconcile, after 1 min for the person/zone states to settle |
+| Every 5 min, inside the lamps' window | Ramp: re-dims the lamps that are on |
 
-A device already in the target state isn't touched, so a lamp left on keeps its
-colour or scene. A reconcile also turns off what is on outside its window: a
-bedroom TV left on in the morning goes off 15 min after the last person leaves.
-A change made remotely while away (the lamp switched off from the app) holds
-until that device's next time. Nothing re-applies the schedule every minute.
+**The lamps move together**, in warm white (2700 K). Their brightness falls in a
+straight line from 100 % at tonight's on time to 10 % at 23:00 (WiZ's floor),
+then holds at 10 % until they go off. A turn-on, a reconcile or the ramp sends a
+lamp the brightness for that moment, so a lamp turned on by a reconcile at 22:00
+comes on at about 40 %.
+
+A lamp already in the target state isn't touched. A reconcile also turns off a
+lamp that is on outside the window: one left on in the morning goes off 15 min
+after the last person leaves. Inside the window the ramp overrides a lamp's
+colour, scene or brightness within 5 min, but it only touches lamps that are
+on: one switched off remotely while away stays off until the next on time.
 
 On 2026.9, `homeassistant: start` fires at `EVENT_HOMEASSISTANT_STARTED`, after
 startup has finished, so the start delays don't hold up the boot.
@@ -1132,34 +1134,24 @@ off what is already on.
 
 **Coming back** (`automation.simulacion_de_presencia_volvio_alguien`) is
 `zone.home` above `0` for 5 min, so a GPS blip doesn't count. With an absence
-recorded, it turns the TV off if the simulation turned it on
-(**`input_boolean.simulacion_presencia_tv`**) and it's still on, and clears the
-absence and the pause. A pause covers one outing and can't be left on by mistake.
-A TV that was already on when everyone left isn't the simulation's, so it stays
-on, and so does the lamp. A return before the absence was recorded changes
-nothing. The same check runs 5 min after an HA start, for someone who got back
+recorded, it clears the absence and the pause. A pause covers one outing and
+can't be left on by mistake. The lamps stay as they are. A return before the
+absence was recorded changes nothing. The same check runs 5 min after an HA start, for someone who got back
 while HA was down.
 
 Entities it drives:
 
-- **The lamp goes through `light.lampara_dormitorio_grupo`**, not the wiz
+- **The bedroom lamp goes through `light.lampara_dormitorio_grupo`**, not the wiz
   entity. The group keeps its meaning after the upstream zone split (see
   [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
-  entity becomes zone A. Turned on at 60 % and 2700 K.
-- **The TV goes through `script.tv_dormitorio_turn_on`/`_off`** from
-  [tv.yaml](#lg-webos-tvs--unified-webos--ir-entity), which keep the IR
-  fallback for a TV that reports off but doesn't wake. That IR power code is a
-  toggle, so the package calls a script only when `media_player.tv_dormitorio`
-  says the TV is in the opposite state. While it's `unavailable` or `unknown`
-  the TV is left alone in both directions: a blind toggle could turn it on with
-  nothing left to turn it off. The TV comes back on whatever input it was on.
-  If that's an empty HDMI input, the room shows a "no signal" box instead of a
-  changing picture.
+  entity becomes zone A.
+- **The office lamp is `light.lampara_oficina`**, the wiz entity of the WiZ
+  RGBW Tunable at `lampara-oficina` (`192.168.0.61`).
 
 The helpers are **not on the saved Overview** (a storage-mode dashboard
 doesn't pick up new entities; see the bedroom lamp section above). Add the pause
-there by hand, next to the four schedule sensors if you want tonight's times in
-view. The other two are internal flags.
+there by hand, next to the two schedule sensors if you want tonight's times in
+view. The absence is an internal flag.
 
 ## Probes
 
