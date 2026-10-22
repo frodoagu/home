@@ -1,5 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
+import { LANGS } from "./src/i18n/index.js";
+import { pageHtml, sitemap } from "./src/seo.js";
 
 // Static SPA built to ./dist, baked into an nginx image (see Dockerfile) and
 // served by the psy-sampler chart at psy.agu.com.ar. Each build gets an id,
@@ -10,6 +12,20 @@ export default defineConfig(({ command }) => {
   return {
     define: { "import.meta.env.BUILD_ID": JSON.stringify(build) },
     plugins: [
+      {
+        // `/` gets the x-default head (dev and build); the build adds a copy
+        // of the page per language (/en/index.html...) and the sitemap.
+        name: "seo-pages",
+        enforce: "post",
+        transformIndexHtml(html, { filename }) {
+          return filename.endsWith("/index.html") ? pageHtml(html, null) : html;
+        },
+        generateBundle(_, bundle) {
+          const page = String(bundle["index.html"].source);
+          for (const id of LANGS) this.emitFile({ type: "asset", fileName: `${id}/index.html`, source: pageHtml(page, id) });
+          this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemap() });
+        },
+      },
       {
         name: "version-json",
         apply: "build",

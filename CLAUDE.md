@@ -76,8 +76,11 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.
-  psy-sampler/       Psy Layers DAW at psy.agu.com.ar, a live music DAW (Vite + vanilla JS, Web Audio, no runtime
-                     deps) AND its Dockerfile. Pure logic in src/audio/{timing,patterns,music}.js and
+  psy-sampler/       Trance Lab (formerly Psy Layers DAW) at psy.agu.com.ar, a live music DAW (Vite + vanilla JS,
+                     Web Audio, no runtime deps) AND its Dockerfile. One page per language for search
+                     engines (/es/ /en/ /pt/ /fr/ + `/` as x-default, hreflang; src/seo.js + the
+                     seo-pages plugin in vite.config.js, text in each dictionary's `seo`/`about`): the
+                     address's language wins over the saved one, and a language change moves the address. Pure logic in src/audio/{timing,patterns,music}.js and
                      src/selection.js; voices/engine tested against a fake AudioContext
                      (src/test/fakeAudio.js). Own devDeps (Vite 8 / Vitest 5), not home-site's.
                      Sample import in src/import/ (own WAV/AIFF/CAF/AU decoders, zip, SoundFont,

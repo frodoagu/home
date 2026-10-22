@@ -28,7 +28,7 @@ describe("Landing", () => {
 
   it("las apps externas abren su subdominio en otra pestaña", () => {
     renderLanding();
-    const psy = screen.getByRole("link", { name: /Psy Layers/i });
+    const psy = screen.getByRole("link", { name: /Trance Lab/i });
     expect(psy).toHaveAttribute("href", "https://psy.agu.com.ar");
     expect(psy).toHaveAttribute("target", "_blank");
   });

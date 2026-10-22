@@ -19,8 +19,19 @@ export function setLang(id) {
   return current;
 }
 
-// The stored choice wins; else the browser's first supported language.
-export function detectLang(saved, languages = []) {
+// Each language has a page of its own (/es/, /en/...), for search engines.
+export const langPath = (id) => `/${id}/`;
+
+export function pathLang(pathname = "") {
+  const id = /^\/([a-z]{2})\/?$/.exec(pathname)?.[1];
+  return Object.hasOwn(DICTS, id) ? id : null;
+}
+
+// The page's language wins, then the stored choice, then the browser's first
+// supported language.
+export function detectLang(saved, languages = [], pathname = "") {
+  const fromPath = pathLang(pathname);
+  if (fromPath) return fromPath;
   if (Object.hasOwn(DICTS, saved)) return saved;
   for (const l of languages) {
     const id = String(l).slice(0, 2).toLowerCase();

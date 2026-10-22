@@ -1,6 +1,6 @@
 # psy-sampler
 
-**Psy Layers DAW**: a live electronic music DAW in the browser, at `https://psy.agu.com.ar`. Each button loops a
+**Trance Lab** (formerly Psy Layers DAW): a free online DAW for psytrance and techno in the browser, at `https://psy.agu.com.ar`. Each button loops a
 layer (kick, bass, percussion, lead, pad, glitch; 9-15 sounds per layer) over a
 grid of 32 sixteenths (2 bars), plus a layer of classics (famous melodies,
 whole, several loops long) played by hand; FX are one-shots outside the loop. **Everything
@@ -2801,16 +2801,36 @@ Same pipeline as `agu-spa`: a push to `main` touching `images/psy-sampler/` →
 
 ### Search engines
 
-The page is one URL, so there's no prerender. Google runs the JS, and the head
-carries what it reads before: title, description, canonical
-`https://psy.agu.com.ar/`, Open Graph tags and a `WebApplication` JSON-LD
-(`index.html`; a data block, so the CSP doesn't apply to it). `public/` ships
-`robots.txt` and a one-URL `sitemap.xml`. `visuals.html` and `404.html` are
-`noindex`. nginx has no SPA fallback: share links live in the `#`, so any other
-path is a real 404 serving `404.html` (with the pages' headers), never a soft
-404. The `agu.com.ar` Domain property in Search Console covers this host too;
-submit `https://psy.agu.com.ar/sitemap.xml` there. Previews sit behind
-google-auth, so a crawler only ever sees the sign-in redirect.
+The page has one address per language: `/es/`, `/en/`, `/pt/` and `/fr/`, plus
+`/`, the `x-default`, which keeps picking the language in the browser (stored
+choice, then `navigator.languages`). On a language's page its language wins
+over the stored one, and switching language moves the address
+(`history.replaceState`, keeping the `#` of a share link), so a reload or a
+link lands in the same language.
+
+- **Heads.** `src/seo.js` writes each page's title, description, canonical,
+  `hreflang` alternates, Open Graph tags and a `WebApplication` JSON-LD
+  (`alternateName: "Psy Layers DAW"`, the old name) between the `<!--seo-->`
+  markers of `index.html`. The `seo-pages` plugin in `vite.config.js` fills `/`
+  (described in English, the language Googlebot renders in) in dev and build,
+  and emits `<lang>/index.html` and `sitemap.xml` at build. The text is each
+  dictionary's `seo` (title, description, keywords).
+- **Visible text.** Google weighs what's on the page over any meta tag, so the
+  foot of the page has a "what it is" block and a short FAQ (`ui/about.js`,
+  each dictionary's `about`). Keywords live there in plain sentences: the
+  styles it really has, "online DAW", "make psytrance/techno online". Don't add
+  a style or a feature the sampler doesn't have, and don't chase "live
+  looping": it means mic record + overdub, which this isn't, and a visit that
+  bounces ranks the page down.
+- **nginx** has no SPA fallback: share links live in the `#`, so any other path
+  is a real 404 serving `404.html`. `/en` redirects to `/en/`
+  (`absolute_redirect off`, so the Location stays relative behind Traefik).
+  Every `.html` gets the CSP and the other page headers. A new dictionary
+  needs its code in that redirect's regex.
+- `public/` ships `robots.txt`; `visuals.html` and `404.html` are `noindex`.
+  The `agu.com.ar` Domain property in Search Console covers this host; submit
+  `https://psy.agu.com.ar/sitemap.xml` there. Previews sit behind google-auth,
+  so a crawler only ever sees the sign-in redirect.
 
 ### New-version notice
 

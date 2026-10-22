@@ -61,7 +61,7 @@ createFeed(engine, { bandsOf });
 // The app mounts once this tab holds the sampler: with another tab already on
 // it, only after you choose to cut that one off. A tab cut off that way stops,
 // saves and reloads into the same question.
-setLang(detectLang(loadState(browserStorage()).lang, navigator.languages ?? []));
+setLang(detectLang(loadState(browserStorage()).lang, navigator.languages ?? [], location.pathname));
 claimTab({
   playing: engine.isRunning,
   ask: ({ playing }) => askToTake({ where: "tab", playing }),

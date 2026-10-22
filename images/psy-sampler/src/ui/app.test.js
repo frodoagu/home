@@ -40,6 +40,7 @@ const mount = (node, eng = engine, opts = {}) =>
   mountApp(node, eng, { languages: ["es-AR"], confirm: () => true, ...opts });
 
 beforeEach(() => {
+  history.replaceState(null, "", "/"); // a language change moves the address
   listening = [];
   for (const target of [window, document]) {
     const add = target.addEventListener;
@@ -3640,6 +3641,24 @@ describe("language", () => {
     lang.value = "fr";
     lang.dispatchEvent(new Event("change"));
     expect($('[data-layer="bass"] h2').textContent).toBe("Basse");
+  });
+
+  it("takes the page's language from its address, and moves the address with it", () => {
+    history.replaceState(null, "", "/pt/#s=abc");
+    const page = document.createElement("div");
+    mountApp(page, newEngine(), { languages: ["es-AR"], confirm: () => true });
+    expect(page.querySelector('[data-layer="bass"] h2').textContent).toBe("Baixo");
+
+    $('[data-lang="fr"]').click();
+    expect(location.pathname).toBe("/fr/");
+    expect(location.hash).toBe("#s=abc");
+  });
+
+  it("says what it is at the foot of the page, in the page's language", () => {
+    expect($(".about h2").textContent).toBe("Un creador de psytrance y techno en el navegador");
+    expect(document.querySelectorAll(".about dt")).toHaveLength(4);
+    $('[data-lang="en"]').click();
+    expect($(".about h2").textContent).toBe("A psytrance and techno maker in your browser");
   });
 
   it("switches from the ES/EN/PT/FR pill and marks the active one", () => {

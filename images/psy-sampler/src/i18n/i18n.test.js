@@ -3,7 +3,7 @@ import { LAYERS } from "../catalog.js";
 import { DEFAULTS } from "../audio/patterns.js";
 import { PARAMS, LEVEL, SYNTHS } from "../audio/params.js";
 import { SCALES } from "../audio/music.js";
-import { DICTS, detectLang } from "./index.js";
+import { DICTS, detectLang, pathLang } from "./index.js";
 
 // Same keys, same value kinds (string, function, array length) at every depth.
 function shape(value) {
@@ -43,5 +43,21 @@ describe("detectLang", () => {
     expect(detectLang("xx", ["EN"])).toBe("en");
     expect(detectLang(null, ["de"])).toBe("es");
     expect(detectLang("constructor", ["__proto__"])).toBe("es");
+  });
+
+  it("a language's own page wins over both", () => {
+    expect(detectLang("pt", ["en-US"], "/fr/")).toBe("fr");
+    expect(detectLang("pt", ["en-US"], "/")).toBe("pt");
+  });
+});
+
+describe("pathLang", () => {
+  it("reads /<lang>/ and nothing else", () => {
+    expect(pathLang("/en/")).toBe("en");
+    expect(pathLang("/en")).toBe("en");
+    expect(pathLang("/")).toBeNull();
+    expect(pathLang("/de/")).toBeNull();
+    expect(pathLang("/en/visuals.html")).toBeNull();
+    expect(pathLang("/__/")).toBeNull();
   });
 });

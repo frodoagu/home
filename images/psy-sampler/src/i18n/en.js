@@ -5,9 +5,35 @@ export default {
     "A live electronic music DAW, in your browser: kick, bass, percussion, glitches, leads, pads and FX you build, " +
     "edit, filter, distort and mix while they play, or your own samples. Pick a style and let the 🤖 Autopilot build the track " +
     "from a seed, or take over: queue sections, improvise parts and save moments with 📸.",
+  seo: {
+    title: "Trance Lab · Make psytrance & techno online, free",
+    description:
+      "Free online DAW for psytrance, goa and techno: build and mix loops live in your browser, with an autopilot, your own samples and WAV export. No install.",
+    keywords:
+      "online DAW, web DAW, browser DAW, psytrance maker, make psytrance online, techno maker, make techno online, electronic music maker, " +
+      "psytrance, progressive psytrance, goa trance, dark psy, hi-tech, psytech, techno, tech house, house, beat maker, online drum machine, Web Audio",
+  },
+  about: {
+    title: "A psytrance and techno maker in your browser",
+    text: [
+      "Trance Lab is a free online DAW for electronic music. Every row is a layer (kick, bass, percussion, lead, pad, glitch and FX) " +
+        "of loops you switch on, edit and mix while the track plays, always on the bar line, like a live set.",
+      "It has styles for psytrance, progressive psytrance, goa, dark psy, hi-tech, psytech, techno, tech house and house, each with its own BPM and sounds. " +
+        "The 🤖 Autopilot builds a whole track from a seed, with build-ups, drops and breakdowns, or an ✨ AI model plans the sections for you.",
+      "Every factory sound is a synthesizer computed live, with no samples, and you can add your own: WAV, AIFF, FLAC, MP3, SoundFonts and Ableton sets, " +
+        "or record one with the microphone. Write melodies in the piano roll, import a MIDI file and export what you play to WAV.",
+    ],
+    faqTitle: "FAQ",
+    faq: [
+      ["Is it free?", "Yes. No account, no install and no ads: open the page and play. Signing in with Google only adds cloud save for your work and your samples."],
+      ["Do I need to install anything?", "No. It runs in the browser with Web Audio. Use headphones or speakers with real bass: the kick and the bass don't come out of a laptop's or a phone's speakers."],
+      ["Can I make a track without knowing production?", "Yes: pick a style and press 🤖. The autopilot plays a full track that you can steer by queuing sections, banning sounds or improvising."],
+      ["How do I save or share a track?", "Record it to WAV with ● Record, or copy a link with 🔗 Share: whoever opens it hears the same track."],
+    ],
+  },
   help: {
     open: "📖 Help",
-    title: "How to use Psy Layers DAW",
+    title: "How to use Trance Lab",
     close: "Close",
     intro: "First the tricks you won't spot at a glance; then everything each part does.",
     search: "Search the help…",
@@ -393,7 +419,7 @@ export default {
     exportTitle: "Downloads the snapshots as a file, with the sounds they use",
     import: "⬆ Import",
     importTitle: "Adds the snapshots in a file (or a preset) to the ones you have",
-    importFailed: "That file has no Psy Layers snapshots.",
+    importFailed: "That file has no Trance Lab snapshots.",
     imported: (n, left) =>
       (n ? `${n === 1 ? "1 snapshot imported" : `${n} snapshots imported`}.` : "You already had those snapshots.") +
       (left ? ` ${left} did not fit: you reached the maximum.` : ""),
@@ -415,7 +441,7 @@ export default {
     rendered: (file) => `Done: ${file}`,
     nothingPlaying: "Turn some layer on to export the mix.",
     imported: "Preset loaded.",
-    importFailed: "That file is not a Psy Layers preset.",
+    importFailed: "That file is not a Trance Lab preset.",
     renderFailed: "This browser could not render the audio.",
   },
   share: {
@@ -582,7 +608,7 @@ export default {
     },
   },
   intro: {
-    title: "This is Psy Layers DAW",
+    title: "This is Trance Lab",
     what:
       "A psychedelic electronic music DAW that runs entirely in your browser. No samples: every kick, " +
       "bass, lead and pad is a formula computed live, and you choose what plays and when.",
@@ -1007,7 +1033,7 @@ export default {
   scales: { minor: "Minor", phrygian: "Phrygian", harmonic: "Harmonic minor", chromatic: "Chromatic" },
   noteNames: ["C", "C#", "D", "E♭", "E", "F", "F#", "G", "G#", "A", "B♭", "B"],
   visuals: {
-    title: "Psy Layers DAW · Visuals",
+    title: "Trance Lab · Visuals",
     button: "🌀 Visuals",
     buttonTitle: "Full-screen fractals, mandalas and organic textures, in time with what plays",
     scenes: { bulb: "Mandelbulb", kifs: "Fractal tunnel", mandala: "Mandala", flow: "Liquid", julia: "Julia", gyroid: "Gyroid flesh", coral: "Fractal reef", cells: "Cells", phyllo: "Romanesco", hyper: "Hyperbolic tiling", turing: "Turing patterns", physarum: "Physarum" },

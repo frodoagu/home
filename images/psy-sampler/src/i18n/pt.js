@@ -5,9 +5,35 @@ export default {
     "Um DAW de música eletrônica ao vivo, no navegador: kick, baixo, percussão, glitches, leads, pads e FX que você monta, " +
     "edita, filtra, distorce e mixa enquanto tocam, ou seus próprios samples. Escolha um estilo e deixe o 🤖 Piloto automático montar a faixa " +
     "a partir de uma semente, ou assuma o controle: enfileire fases, improvise partes e salve momentos com 📸.",
+  seo: {
+    title: "Trance Lab · Faça psytrance e techno online, grátis",
+    description:
+      "DAW online e grátis de psytrance, goa e techno: monte e mixe loops ao vivo no navegador, com piloto automático, seus samples e export em WAV. Sem instalar nada.",
+    keywords:
+      "DAW online, DAW web, DAW no navegador, fazer psytrance, fazer techno online, criador de música eletrônica, " +
+      "psytrance, progressive psytrance, goa trance, dark psy, hi-tech, psytech, techno, tech house, house, beat maker, bateria eletrônica online, Web Audio",
+  },
+  about: {
+    title: "Um criador de psytrance e techno no navegador",
+    text: [
+      "Trance Lab é um DAW online e grátis de música eletrônica. Cada linha é uma camada (kick, baixo, percussão, lead, pad, glitch e FX) " +
+        "de loops que você liga, edita e mixa enquanto a faixa toca, sempre no tempo do compasso, como num set ao vivo.",
+      "Tem estilos de psytrance, progressive psytrance, goa, dark psy, hi-tech, psytech, techno, tech house e house, cada um com seu BPM e seus sons. " +
+        "O 🤖 Piloto automático monta uma faixa inteira a partir de uma semente, com subidas, drops e breaks, ou um modelo de ✨ IA planeja as fases para você.",
+      "Cada som de fábrica é um sintetizador calculado ao vivo, sem samples, e você pode somar os seus: WAV, AIFF, FLAC, MP3, SoundFonts e sets do Ableton, " +
+        "ou gravar um com o microfone. Escreva melodias no piano roll, importe um MIDI e exporte o que você toca em WAV.",
+    ],
+    faqTitle: "Perguntas frequentes",
+    faq: [
+      ["É grátis?", "Sim. Sem conta, sem instalar e sem anúncios: abra a página e toque. Entrar com o Google só acrescenta o salvamento na nuvem do seu trabalho e dos seus samples."],
+      ["Preciso instalar alguma coisa?", "Não. Roda no navegador com Web Audio. Use fones ou caixas com graves: o kick e o baixo não saem pelos alto-falantes de um notebook ou de um celular."],
+      ["Dá para fazer uma faixa sem saber produzir?", "Sim: escolha um estilo e toque em 🤖. O piloto toca uma faixa completa que você pode guiar enfileirando fases, banindo sons ou improvisando."],
+      ["Como salvo ou compartilho uma faixa?", "Grave em WAV com ● Gravar, ou copie um link com 🔗 Compartilhar: quem abrir ouve a mesma faixa."],
+    ],
+  },
   help: {
     open: "📖 Ajuda",
-    title: "Como usar o Psy Layers DAW",
+    title: "Como usar o Trance Lab",
     close: "Fechar",
     intro: "Primeiro os truques que não se veem de cara; depois, tudo o que cada parte faz.",
     search: "Buscar na ajuda…",
@@ -393,7 +419,7 @@ export default {
     exportTitle: "Baixa os snapshots num arquivo, com os sons que eles usam",
     import: "⬆ Importar",
     importTitle: "Adiciona os snapshots de um arquivo (ou de um preset) aos que você já tem",
-    importFailed: "Esse arquivo não tem snapshots do Psy Layers.",
+    importFailed: "Esse arquivo não tem snapshots do Trance Lab.",
     imported: (n, left) =>
       (n ? `${n === 1 ? "1 snapshot importado" : `${n} snapshots importados`}.` : "Você já tinha esses snapshots.") +
       (left ? ` ${left} não ${left === 1 ? "coube" : "couberam"}: você chegou ao máximo.` : ""),
@@ -415,7 +441,7 @@ export default {
     rendered: (file) => `Pronto: ${file}`,
     nothingPlaying: "Ligue alguma camada para exportar o mix.",
     imported: "Preset carregado.",
-    importFailed: "Esse arquivo não é um preset do Psy Layers.",
+    importFailed: "Esse arquivo não é um preset do Trance Lab.",
     renderFailed: "Este navegador não conseguiu gerar o áudio.",
   },
   share: {
@@ -582,7 +608,7 @@ export default {
     },
   },
   intro: {
-    title: "Isto é o Psy Layers DAW",
+    title: "Isto é o Trance Lab",
     what:
       "Um DAW de música eletrônica psicodélica que roda inteiro no seu navegador. Sem samples: cada kick, " +
       "baixo, lead e pad é uma fórmula calculada ao vivo, e você escolhe o que toca e quando.",
@@ -1007,7 +1033,7 @@ export default {
   scales: { minor: "Menor", phrygian: "Frígio", harmonic: "Menor harmônica", chromatic: "Cromática" },
   noteNames: ["Dó", "Dó#", "Ré", "Mi♭", "Mi", "Fá", "Fá#", "Sol", "Sol#", "Lá", "Si♭", "Si"],
   visuals: {
-    title: "Psy Layers DAW · Visuais",
+    title: "Trance Lab · Visuais",
     button: "🌀 Visuais",
     buttonTitle: "Fractais, mandalas e texturas orgânicas em tela cheia, no ritmo do que toca",
     scenes: { bulb: "Mandelbulb", kifs: "Túnel fractal", mandala: "Mandala", flow: "Fluido", julia: "Julia", gyroid: "Carne de giroide", coral: "Recife fractal", cells: "Células", phyllo: "Romanesco", hyper: "Mosaico hiperbólico", turing: "Padrões de Turing", physarum: "Physarum" },
