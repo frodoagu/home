@@ -39,6 +39,9 @@
 # recorded in `input_boolean.simulacion_presencia_ausencia` so it survives a
 # restart. A return is the sensor turning back on.
 #
+# With Fede home the same lamps follow luces_adentro.yaml instead; the two
+# never act at once.
+#
 # Anyone but Fede is invisible to it: kids with a babysitter, guests, or Fede
 # home with a dead phone. For that there's
 # `input_boolean.simulacion_presencia_pausa`: while it's on nothing here acts.

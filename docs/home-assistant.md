@@ -49,7 +49,7 @@ How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
   (`climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
-  `luces_afuera.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
+  `luces_adentro.yaml`, `luces_afuera.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
   `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
@@ -1119,6 +1119,35 @@ for a whole day at home with 100 m accuracy on a 100 m zone; ping, which an
 idle Android phone doesn't answer; and the ARP cache Pi-hole parses, whose
 `lastSeen` for the phone lagged an hour behind its DNS queries.
 
+## Evening lamps
+
+[`packages/luces_adentro.yaml`](../charts/home-assistant/packages/luces_adentro.yaml)
+runs the bedroom and office lamps' evening while Fede is home
+([`binary_sensor.fede_en_casa`](#presence) `on`):
+
+| Trigger | Effect |
+|---|---|
+| Sunset + 10 min | Both lamps on at **100 %**, warm white (2700 K) |
+| Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
+| Fede gets home inside that window | Lamps that are off come on at the ramp's current level, warm white |
+
+- **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
+  below the ramp; one turned up by hand sits above where the ramp was 30 min
+  ago. Both are left alone for the rest of the night. The ramp sends brightness
+  only, so a colour or scene picked in the evening stays.
+- **Nothing after 23:30**, and nothing turns the lamps off.
+- **No HA-start catch-up.** A restart past sunset + 10 doesn't turn them on;
+  the next 5-min tick resumes the ramp on lamps that are on.
+- The window starts from `sun.sun`'s `next_setting` time of day (today's or
+  tomorrow's sunset, a minute or two apart).
+
+**It never overlaps the [presence simulation](#presence-simulation)**, which
+drives the same lamps while Fede is away: one needs `fede_en_casa` `on`, the
+other `off`. When he gets back, the lamps the simulation left on are at or
+below this ramp (the simulation's reaches 10 % at 23:00, not 23:30), so they
+hold until the ramp comes down to them and follow it from there. When he
+leaves, the sensor turns `off` 30 min later and the simulation takes over.
+
 ## Presence simulation
 
 [`packages/simulacion_presencia.yaml`](../charts/home-assistant/packages/simulacion_presencia.yaml)
@@ -1183,7 +1212,8 @@ on: one switched off remotely while away stays off until the next on time.
 On 2026.9, `homeassistant: start` fires at `EVENT_HOMEASSISTANT_STARTED`, after
 startup has finished, so the start delays don't hold up the boot.
 
-**"Nobody home"** is [`binary_sensor.fede_en_casa`](#presence) `off`. Only
+**"Nobody home"** is [`binary_sensor.fede_en_casa`](#presence) `off`; with
+Fede home the same lamps follow [Evening lamps](#evening-lamps) instead. Only
 Fede's phone counts: kids with a babysitter, guests, or Fede home with a dead
 phone are invisible to it. For
 those there's **`input_boolean.simulacion_presencia_pausa`** (*Pausar simulación
