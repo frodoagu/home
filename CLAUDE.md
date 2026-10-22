@@ -70,6 +70,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      links (`privateLinks`) gated by client-side Google sign-in (src/auth/).
                      Pure logic lives in plain .js modules next to each component (mandelbrot.js,
                      neutralCurrent.js, auth.js) and is unit-tested with Vitest (*.test.js[x]).
+                     Prerendered per route at build (scripts/prerender.js, metadata in src/seo.js):
+                     nginx serves app/<slug>.html and real 404s, no SPA fallback.
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.

@@ -15,6 +15,11 @@ the Dockerfile that bakes it into an nginx image. Deployed by
   [`src/auth/config.js`](src/auth/config.js). It hides the URLs from casual
   visitors; each linked service still does its own auth.
 
+- **Prerender**: `npm run build` also renders every route to static HTML
+  (`scripts/prerender.js`, metadata in [`src/seo.js`](src/seo.js)) and writes
+  `sitemap.xml`, so crawlers get content without running JS. See
+  [docs/agu-spa.md](../../docs/agu-spa.md#routing-caching--search-engines).
+
 Pure logic lives in a plain `.js` module next to its component
 (`mandelbrot.js`, `neutralCurrent.js`, `auth/auth.js`) with a `*.test.js`
 beside it; components stay thin.
@@ -36,8 +41,8 @@ client for sign-in to work in dev.
 ## Image
 
 Two stages: `node:24-alpine` builds `dist/`, `nginx:1.31-alpine` serves it. The
-image ships only the files; the chart mounts its own nginx `default.conf` (SPA
-fallback, caching, `/healthz`).
+image ships only the files; the chart mounts its own nginx `default.conf` (one
+file per route, real 404s, caching, `/healthz`).
 
 ## CI and deploy
 
