@@ -106,7 +106,7 @@ import {
   withRoll,
   writePart,
 } from "../editing.js";
-import { DICTS, LANGS, detectLang, lang, setLang, t } from "../i18n/index.js";
+import { DICTS, LANGS, detectLang, lang, langPath, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import {
   AHEAD,
@@ -189,6 +189,7 @@ import { amountSlider, checkbox, download, el, select, slider, slug } from "./do
 import { brandMark } from "./brands.js";
 import { mountAccount } from "./account.js";
 import { BRUSH, EUCLID, createEditor } from "./editor.js";
+import { about } from "./about.js";
 import { createHelp } from "./help.js";
 import { mountSamplesPanel } from "./samplesPanel.js";
 import { createSnapshotEditor } from "./snapshotEditor.js";
@@ -273,7 +274,7 @@ export function mountApp(root, engine, opts = {}) {
     resume = null,
   } = opts;
   const stored = loadState(storage);
-  setLang(resume ? lang() : detectLang(stored.lang, languages));
+  setLang(resume ? lang() : detectLang(stored.lang, languages, location?.pathname));
   document.documentElement.lang = lang();
   const tx = t();
 
@@ -323,6 +324,12 @@ export function mountApp(root, engine, opts = {}) {
     const snap = snapshot();
     saveState(storage, snap);
     cloud?.changed(snap);
+  };
+  // The address follows a language change (/en/...), so a reload or a link keeps it.
+  const showLang = () => {
+    if (!location?.pathname) return;
+    const history = globalThis.history;
+    history?.replaceState(history.state, "", `${langPath(lang())}${location.search}${location.hash}`);
   };
 
   const allIds = () => Object.values(ws.lists).flat();
@@ -381,6 +388,7 @@ export function mountApp(root, engine, opts = {}) {
     lang(),
     (value) => {
       setLang(value);
+      showLang();
       persist();
       remount();
     },
@@ -964,7 +972,10 @@ export function mountApp(root, engine, opts = {}) {
         snapshot,
         pristine: () => JSON.stringify({ ...ws, seed: "" }) === JSON.stringify({ ...factory, seed: "" }),
         apply: (remote) => {
-          if (Object.hasOwn(DICTS, remote?.lang)) setLang(remote.lang);
+          if (Object.hasOwn(DICTS, remote?.lang)) {
+            setLang(remote.lang);
+            showLang();
+          }
           state.varying = new Map();
           remount({ ws: normalize(remote), open: null, status: t().cloud.pulled });
         },
@@ -1017,7 +1028,7 @@ export function mountApp(root, engine, opts = {}) {
     el(
       "header",
       { class: "top" },
-      el("h1", { text: "Psy Layers DAW" }),
+      el("h1", { text: "Trance Lab" }),
       el("p", { class: "synth-note", text: tx.synthNote }),
       el("p", { class: "lede", text: tx.lede }),
     ),
@@ -1049,6 +1060,7 @@ export function mountApp(root, engine, opts = {}) {
     timeline,
     layersMain,
     ...(samplesPanel ? [samplesPanel.node] : []),
+    about(tx.about),
     el(
       "footer",
       { class: "credits" },

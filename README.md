@@ -18,7 +18,7 @@ services running on a Raspberry Pi with k3s.
 | [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) | Google sign-in gate for the Traefik dashboard (Traefik ForwardAuth) | `charts/oauth2-proxy/` |
 | [Home Assistant](https://www.home-assistant.io/) | Home automation | `charts/home-assistant/` |
 | [nginx](https://nginx.org/) | Serves the `agu.com.ar` SPA (built from `images/home-site/` into a GHCR image) | `charts/agu-spa/` |
-| [nginx](https://nginx.org/) | Serves `psy.agu.com.ar`, Psy Layers DAW, a live electronic music DAW in the browser (Web Audio, built from `images/psy-sampler/` into a GHCR image) | `charts/psy-sampler/` |
+| [nginx](https://nginx.org/) | Serves `psy.agu.com.ar`, Trance Lab (formerly Psy Layers DAW), a free online DAW for psytrance and techno in the browser (Web Audio, built from `images/psy-sampler/` into a GHCR image) | `charts/psy-sampler/` |
 | [Argo CD ApplicationSet](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/) | PR previews of psy-sampler at `pr-<n>-psy.agu.com.ar` (pull-request generator, Google sign-in gated) | `charts/psy-sampler-previews/` |
 | [nginx](https://nginx.org/) | Serves the `yaskia.com` SPA — chart + source live in the separate [`frodoagu/yaskia`](https://github.com/frodoagu/yaskia) repo; only the ArgoCD `Application` lives here | `apps/yaskia-spa.yaml` |
 | [Argo CD Image Updater](https://argocd-image-updater.readthedocs.io/) | Auto-updates the CI-built images (SPA, sampler, firewall) — pins new digests into git | `charts/argocd-image-updater/` |

@@ -69,12 +69,12 @@ export const apps = [
   },
   {
     slug: "psy-sampler",
-    title: { es: "Psy Layers DAW", en: "Psy Layers DAW", pt: "Psy Layers DAW", fr: "Psy Layers DAW" },
+    title: { es: "Trance Lab", en: "Trance Lab", pt: "Trance Lab", fr: "Trance Lab" },
     description: {
-      es: "Un DAW de musica electronica en vivo, en el navegador: arma, edita y mezcla un tema de psytrance o techno mientras suena.",
-      en: "A live electronic music DAW, in your browser: build, edit and mix a psytrance or techno track while it plays.",
-      pt: "Um DAW de música eletrônica ao vivo, no navegador: monte, edite e mixe uma faixa de psytrance ou techno enquanto ela toca.",
-      fr: "Un DAW de musique électronique en direct, dans le navigateur : construis, édite et mixe un morceau de psytrance ou de techno pendant qu'il joue.",
+      es: "Un DAW online y gratis para hacer psytrance, goa y techno en el navegador: arma, edita y mezcla loops mientras suenan.",
+      en: "A free online DAW to make psytrance, goa and techno in your browser: build, edit and mix loops while they play.",
+      pt: "Um DAW online e grátis para fazer psytrance, goa e techno no navegador: monte, edite e mixe loops enquanto tocam.",
+      fr: "Un DAW en ligne et gratuit pour faire de la psytrance, de la goa et de la techno dans le navigateur : construis, édite et mixe des boucles pendant qu'elles jouent.",
     },
     href: "https://psy.agu.com.ar",
     categories: ["music"],

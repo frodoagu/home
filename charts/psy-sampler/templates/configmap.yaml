@@ -36,6 +36,9 @@ data:
         listen       [::]:80;
         server_name  _;
         server_tokens off;
+        # Relative Location headers: behind Traefik, nginx's own scheme (http)
+        # and port would leak into an absolute one.
+        absolute_redirect off;
 
         root   {{ .Values.contentRoot }};
         index  index.html;
@@ -48,8 +51,17 @@ data:
         }
 
         # The page has no routes of its own (share links live in the #), so
-        # nothing falls back to index.html. `/` reaches it through `index`.
+        # nothing falls back to index.html. `/` and each language's page
+        # (/en/...: one per dictionary, for search engines) reach their
+        # index.html through `index`.
         location = / {
+        }
+
+        location ~ ^/(es|en|pt|fr)/$ {
+        }
+
+        location ~ ^/(es|en|pt|fr)$ {
+            return 301 /$1/$is_args$args;
         }
 
         location / {
@@ -58,11 +70,11 @@ data:
 
         error_page 404 /404.html;
 
-        # Every page load ends here (`/` via an internal redirect; the visuals'
-        # window asks for its own page by name), so the pages' security
-        # headers live in this block: nginx drops server-level add_header in
-        # any location that sets its own.
-        location ~ ^/(index|visuals|404)\.html$ {
+        # Every page load ends here (`/` and /<lang>/ via an internal
+        # redirect; the visuals' window asks for its own page by name), so the
+        # pages' security headers live in this block: nginx drops server-level
+        # add_header in any location that sets its own.
+        location ~ \.html$ {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
             add_header Content-Security-Policy "{{ $csp }}" always;
             add_header X-Content-Type-Options nosniff always;
