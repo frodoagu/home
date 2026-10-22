@@ -9,9 +9,9 @@
 # 30 min ago, and both are left alone. It sends brightness only, so a colour
 # or scene picked in the evening stays.
 #
-# Away, simulacion_presencia.yaml drives the same lamps. They never act at
-# once: this one needs `binary_sensor.fede_en_casa` on, the simulation needs it
-# off. Lamps the simulation left on are at or below this ramp (its own reaches
+# With the house empty, simulacion_presencia.yaml drives the same lamps. They
+# never act at once: this one needs `binary_sensor.fede_en_casa` on, the
+# simulation needs `binary_sensor.casa_ocupada` (Fede or Irupé) off. Lamps the simulation left on are at or below this ramp (its own reaches
 # 10 % at 23:00), so after a return they hold until the ramp comes down to
 # them and follow it from there.
 

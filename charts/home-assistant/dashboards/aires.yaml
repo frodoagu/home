@@ -306,6 +306,8 @@ views:
         **Modo dormir** no es toggle, hace siempre lo mismo: deja las dos piezas
 
         en {{ m_piezas }} con el ventilador al mínimo, y apaga cocina y living.
+        La de los chicos solo prende si están (calendario "Chicos"); si no, se
+        apaga con el resto.
 
 
         {% set otros = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_chicos''] | map(''states'')
