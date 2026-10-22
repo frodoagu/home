@@ -35,7 +35,7 @@ import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefault
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
 import { STEMS } from "../audio/engine.js";
-import { MAX_SECONDS, STEMS_MAX_SECONDS, createRecorder, createStemsRecorder } from "../audio/recorder.js";
+import { MAX_SECONDS, createRecorder, createStemsRecorder } from "../audio/recorder.js";
 import { createMicMonitor, createMicRecorder, micAvailable } from "../audio/mic.js";
 import { encodeWav } from "../audio/wav.js";
 import { zipBlob } from "../zip.js";
@@ -2705,7 +2705,7 @@ export function mountApp(root, engine, opts = {}) {
           ? tx.stems.waiting
           : tx.stems.idle;
     stemsBtn.title =
-      now === "recording" ? tx.stems.recordingTitle(STEMS_MAX_SECONDS / 60) : now === "waiting" ? tx.stems.waitingTitle : tx.stems.idleTitle;
+      now === "recording" ? tx.stems.recordingTitle(Math.floor(stemsRecorder.maxSeconds() / 60)) : now === "waiting" ? tx.stems.waitingTitle : tx.stems.idleTitle;
     stemsBtn.classList.toggle("is-waiting", now === "waiting");
     stemsBtn.classList.toggle("is-recording", now === "recording");
     stemsBtn.setAttribute("aria-pressed", String(now !== "idle"));
@@ -2745,7 +2745,7 @@ export function mountApp(root, engine, opts = {}) {
     stats?.count("recordings");
     stats?.count("recorded", done.seconds);
     const saved = tx.stems.saved(name, done.stems.length, clock(done.seconds));
-    status(full ? `${tx.rec.full(STEMS_MAX_SECONDS / 60)} ${saved}` : saved);
+    status(full ? `${tx.rec.full(Math.floor(stemsRecorder.maxSeconds() / 60))} ${saved}` : saved);
   }
   stemsRecorder.onFull(() => finishStems(true));
 

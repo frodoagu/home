@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createRecorder, createStemsRecorder } from "./recorder.js";
+import { STEMS_MAX_SECONDS, createRecorder, createStemsRecorder, stemsMaxSeconds } from "./recorder.js";
 import { STEMS } from "./engine.js";
 
 // An engine whose output the test plays by hand through `feed`.
@@ -114,6 +114,30 @@ describe("createStemsRecorder", () => {
     expect(files.map((f) => [f.id, f.blob.size])).toEqual([["kick", 44 + 1500 * 6]]);
     expect(untapped).toBe(1);
     expect(rec.state()).toBe("idle");
+  });
+
+  it("lets a bar announced before the tap connects go by, and starts on the next", async () => {
+    const rec = createStemsRecorder(engine);
+    const starting = rec.start();
+    listener({ kind: "bar", time: 0.5, bpm: 145 }); // the worklet still loading
+    await starting;
+    feed(stems(1000, 0.5), 0);
+    expect(rec.state()).toBe("waiting");
+    listener({ kind: "bar", time: 1.5, bpm: 145 });
+    feed(stems(1000, 0.5), 1000);
+    expect(rec.seconds()).toBe(0.5);
+  });
+
+  it("takes 10 minutes at 48 kHz, and less at a faster device rate, so the zip stays under 4 GB", () => {
+    expect(stemsMaxSeconds(48000)).toBe(STEMS_MAX_SECONDS);
+    expect(stemsMaxSeconds(96000)).toBe(STEMS_MAX_SECONDS); // ~3.1 GB
+    const seconds = stemsMaxSeconds(192000);
+    expect(seconds).toBeLessThan(STEMS_MAX_SECONDS);
+    expect(seconds * 192000 * 6 * STEMS.length).toBeLessThan(2 ** 32 - 2 ** 20);
+    const rec = createStemsRecorder(engine);
+    engine.ensureContext = () => ({ sampleRate: 192000 });
+    rec.start();
+    expect(rec.maxSeconds()).toBe(stemsMaxSeconds(192000));
   });
 
   it("stops listening for the bar when stopped before it", async () => {

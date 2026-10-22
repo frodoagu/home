@@ -897,7 +897,11 @@ makes itself (a new version, another tab or device took over) skip the question.
     Blobs like a take, but only from the block where that layer first sounds:
     the silence before is counted and written as zeros out of one shared
     second at the end. **Capped at 10 min** (`STEMS_MAX_SECONDS`, ~1.5 GB
-    with all nine playing). On stop, `src/zip.js` packs the files stored (no
+    with all nine playing at 48 kHz); a device running the context faster
+    gets less (`stemsMaxSeconds`: ~6 min at 192 kHz), so the zip stays under
+    4 GB. The take only starts on a bar announced after the tap is connected:
+    the first tap in a context waits for the worklet module, and a bar queued
+    meanwhile would lose its start. On stop, `src/zip.js` packs the files stored (no
     deflate: WAV barely shrinks, and the zip is then a Blob of the stems' own
     Blobs); it reads each file once for its CRC-32 (~200 MB/s), which is the
     "Packing the .zip…" wait. No ZIP64: the cap keeps it under 4 GB.

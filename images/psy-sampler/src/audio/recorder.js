@@ -10,8 +10,14 @@ import { createTake } from "./take.js";
 // 24-bit stereo at 48 kHz is ~17 MB a minute: 15 minutes (~260 MB) holds a
 // whole track or a short set and still fits a phone's tab.
 export const MAX_SECONDS = 15 * 60;
-// Stems take that for each layer that plays: 10 minutes of all nine is ~1.5 GB.
+// Stems take that for each layer that plays: 10 minutes of all nine is ~1.5 GB
+// at 48 kHz. A faster device rate gets less, so the zip stays under 4 GB.
 export const STEMS_MAX_SECONDS = 10 * 60;
+const STEMS_MAX_BYTES = 2 ** 32 - 2 ** 26;
+
+/** The longest stems take at `sampleRate`, in seconds. */
+export const stemsMaxSeconds = (sampleRate, maxSeconds = STEMS_MAX_SECONDS) =>
+  Math.min(maxSeconds, Math.floor(STEMS_MAX_BYTES / (sampleRate * 6 * STEMS.length)));
 
 export function createRecorder(engine, { maxSeconds = MAX_SECONDS } = {}) {
   let take = null;
@@ -64,6 +70,8 @@ export function createStemsRecorder(engine, { maxSeconds = STEMS_MAX_SECONDS } =
   let take = null;
   let tapping = null;
   let bpm = null; // the tempo at the bar the take starts on
+  let ready = false; // the tap is connected: a bar from now on is heard whole
+  let cap = stemsMaxSeconds(48000, maxSeconds); // the longest take at the context's rate
   let unlisten = null;
   let onFull = null;
 
@@ -76,20 +84,28 @@ export function createStemsRecorder(engine, { maxSeconds = STEMS_MAX_SECONDS } =
   function start() {
     if (take) return tapping;
     const ctx = engine.ensureContext();
-    const t = createStemsTake({ sampleRate: ctx.sampleRate, names: STEMS, maxSeconds });
+    cap = stemsMaxSeconds(ctx.sampleRate, maxSeconds);
+    const t = createStemsTake({ sampleRate: ctx.sampleRate, names: STEMS, maxSeconds: cap });
     take = t;
-    // Bar lines are announced as they are queued, ahead of the audio.
+    ready = false;
+    // Bar lines are announced as they are queued, ahead of the audio; one
+    // announced while the worklet still loads could start before the tap.
     unlisten = engine.listen((event) => {
-      if (event.kind !== "bar") return;
+      if (event.kind !== "bar" || !ready) return;
       t.startAt(Math.round(event.time * ctx.sampleRate));
       bpm = event.bpm;
       stopListening();
     });
-    tapping = engine.tapStems((channels, frame) => {
-      if (t.full()) return;
-      t.push(channels, frame);
-      if (t.full()) onFull?.();
-    });
+    tapping = engine
+      .tapStems((channels, frame) => {
+        if (t.full()) return;
+        t.push(channels, frame);
+        if (t.full()) onFull?.();
+      })
+      .then((untap) => {
+        if (take === t) ready = true;
+        return untap;
+      });
     tapping.catch(() => {
       if (take !== t) return;
       take = null;
@@ -119,6 +135,8 @@ export function createStemsRecorder(engine, { maxSeconds = STEMS_MAX_SECONDS } =
     // "idle", "waiting" (for a bar line) or "recording"
     state: () => (!take ? "idle" : take.started() ? "recording" : "waiting"),
     seconds: () => take?.seconds() ?? 0,
+    /** The longest take, in seconds: STEMS_MAX_SECONDS, or less at a fast device rate. */
+    maxSeconds: () => cap,
     onFull: (fn) => {
       onFull = fn;
     },
