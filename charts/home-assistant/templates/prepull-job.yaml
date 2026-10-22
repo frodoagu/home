@@ -1,0 +1,47 @@
+{{- if .Values.prePull.enabled }}
+# Pulls the HA image onto the node before Argo CD touches the Deployment, so a
+# version bump's Recreate gap is HA's boot alone, not the pull + the boot.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-prepull
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      # Not the selector labels: the Service would pick this pod as an endpoint.
+      labels:
+        app.kubernetes.io/name: {{ include "home-assistant.name" . }}-prepull
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      # Same placement as the Deployment: the image has to land on HA's node.
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: prepull
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/true"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+{{- end }}
