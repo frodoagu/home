@@ -1,6 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
-import { LANGS } from "./src/i18n/index.js";
+import { LANGS, pathLang } from "./src/i18n/index.js";
 import { pageHtml, sitemap } from "./src/seo.js";
 
 // Static SPA built to ./dist, baked into an nginx image (see Dockerfile) and
@@ -13,12 +13,13 @@ export default defineConfig(({ command }) => {
     define: { "import.meta.env.BUILD_ID": JSON.stringify(build) },
     plugins: [
       {
-        // `/` gets the x-default head (dev and build); the build adds a copy
-        // of the page per language (/en/index.html...) and the sitemap.
+        // `/` gets the x-default head and, under `npm run dev`, /<lang>/ its
+        // own; the build adds a copy of the page per language
+        // (/en/index.html...) and the sitemap.
         name: "seo-pages",
         enforce: "post",
-        transformIndexHtml(html, { filename }) {
-          return filename.endsWith("/index.html") ? pageHtml(html, null) : html;
+        transformIndexHtml(html, { filename, originalUrl = "" }) {
+          return filename.endsWith("/index.html") ? pageHtml(html, pathLang(originalUrl.split("?")[0])) : html;
         },
         generateBundle(_, bundle) {
           const page = String(bundle["index.html"].source);
