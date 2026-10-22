@@ -29,7 +29,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   psy-sampler/       nginx serving the psy.agu.com.ar psytrance layer sampler (images/psy-sampler → GHCR,
                      digest pinned by Image Updater). Public, no google-auth, no pull secret (the GHCR
                      package must be public). Also deploys its cloud-save API (images/psy-sync) as a
-                     separate Deployment + PVC behind /api/. See docs/psy-sampler.md + gotchas.
+                     separate Deployment + PVC behind /api/. No SPA fallback: unknown paths are real
+                     404s (public/404.html). See docs/psy-sampler.md + gotchas.
   psy-sampler-previews/  PR previews: an ApplicationSet (pull-request generator, label `psy-preview`)
                      rendering charts/psy-sampler from each PR's branch at pr-<n>-psy.agu.com.ar
                      (google-auth, no cloud save), plus its locked-down AppProject + shared
