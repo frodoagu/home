@@ -7,6 +7,7 @@ import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
 import { STYLES } from "../autopilot.js";
 import { FORMS, GENRE, systemOf } from "../planner.js";
+import { zipEntries } from "../import/zip.js";
 import { mountApp } from "./app.js";
 
 let ctx;
@@ -3721,7 +3722,7 @@ describe("export, import, reset", () => {
     const tap = () => ctx.nodes.filter((n) => n.kind === "worklet").at(-1);
     const play = (seconds, level = 0.5) => {
       const n = 48000 * seconds;
-      tap().port.onmessage({ data: [new Float32Array(n).fill(level), new Float32Array(n).fill(level)] });
+      tap().port.onmessage({ data: { frame: 0, channels: [new Float32Array(n).fill(level), new Float32Array(n).fill(level)] } });
     };
     // The worklet answers the flush with what it held, then null.
     const stopRec = async () => {
@@ -3795,6 +3796,74 @@ describe("export, import, reset", () => {
       await flushPromises();
       expect($(".status").textContent).toMatch(/no puede grabar/);
       expect(rec().textContent).toBe("● Grabar");
+    });
+  });
+
+  describe("stem recording", () => {
+    const stems = () => $('[data-action="record-stems"]');
+    const tap = () => ctx.nodes.filter((n) => n.kind === "worklet" && n.options.numberOfInputs === 9).at(-1);
+    // `seconds` of every stem from context frame `frame`, the ones in `loud` at 0.5.
+    const play = (frame, seconds, loud) => {
+      const n = 48000 * seconds;
+      const channels = Array.from({ length: 18 }, (_, c) => new Float32Array(n).fill(loud.includes(c >> 1) ? 0.5 : 0));
+      tap().port.onmessage({ data: { frame, channels } });
+    };
+    const stopStems = async () => {
+      stems().click();
+      await flushPromises();
+      tap().port.onmessage({ data: null });
+      await vi.waitFor(() => expect(stems().disabled).toBe(false));
+    };
+    beforeEach(() => vi.stubGlobal("Blob", NodeBlob)); // jsdom's can't be read back
+
+    it("waits for a bar line, then downloads a zip with a WAV per layer that played, all from that bar", async () => {
+      expect(stems().textContent).toBe("● Pistas");
+      stems().click();
+      await flushPromises();
+      expect(stems().textContent).toBe("● Esperando el compás…");
+      play(0, 1, [1, 8]); // before ▶: not kept
+      click("bass.offbeat"); // ▶: the first bar is queued
+      const bar = Math.round(ctx.currentTime * 48000 + 0.06 * 48000);
+      play(48000, 2, [1, 8]);
+      vi.advanceTimersByTime(250);
+      expect(stems().classList.contains("is-recording")).toBe(true);
+
+      await stopStems();
+      const zip = downloads.at(-1);
+      expect(zip.fileName).toMatch(/^psy-layers-\d{4}-\d\d-\d\d-\d{4}-145bpm\.zip$/);
+      const base = zip.fileName.replace(".zip", "");
+      const entries = await zipEntries(zip);
+      expect(entries.map((e) => [e.name, e.size])).toEqual([
+        [`${base}/02-bajo.wav`, 44 + (3 * 48000 - bar) * 6],
+        [`${base}/09-delay-reverb.wav`, 44 + (3 * 48000 - bar) * 6],
+      ]);
+      expect($(".status").textContent).toMatch(/2 pistas guardadas: .*\.zip \(0:02\)/);
+      expect(stems().textContent).toBe("● Pistas");
+    });
+
+    it("downloads nothing when nothing sounded", async () => {
+      stems().click();
+      await flushPromises();
+      click("bass.offbeat");
+      play(0, 1, []);
+      const before = downloads.length;
+      await stopStems();
+      expect(downloads).toHaveLength(before);
+      expect($(".status").textContent).toMatch(/No sonó nada/);
+    });
+
+    it("keeps recording through a language change", async () => {
+      stems().click();
+      await flushPromises();
+      click("bass.offbeat");
+      play(0, 1, [0]);
+      const lang = $('[data-control="lang"]');
+      lang.value = "en";
+      lang.dispatchEvent(new Event("change"));
+      expect(stems().classList.contains("is-recording")).toBe(true);
+      await stopStems();
+      expect(downloads.at(-1).fileName).toMatch(/\.zip$/);
+      expect($(".status").textContent).toMatch(/^1 stem saved/);
     });
   });
 

@@ -163,6 +163,7 @@ export default {
         title: "Enregistrement et export",
         items: [
           ["● Enregistrer", "Enregistre ce qui sort des haut-parleurs et le télécharge en WAV à l'arrêt. Jusqu'à 15 minutes."],
+          ["● Pistes", "Enregistre chaque couche dans son propre WAV, plus le delay + reverb, sans le filtre DJ ni le mastering. Il démarre pile sur une mesure et tous les fichiers ont la même durée : dans Ableton, règle le tempo du nom et dépose-les tous sur la mesure 1. Les couches qui n'ont pas joué sont laissées de côté. Jusqu'à 10 minutes, dans un .zip."],
           ["⬇ Audio du mix", "Télécharge en WAV une boucle de 2 mesures de ce qui joue."],
           ["Exporter et Importer un preset", "Un fichier .json avec tes sons, snapshots et ordre, à garder ou à transmettre."],
           ["Réinitialiser les sons", "Ramène chaque son et sa mélodie à l'usine et les désélectionne tous ; copies, snapshots et disposition restent (demande d'abord)."],
@@ -250,6 +251,18 @@ export default {
     full: (max) => `Maximum de ${max} minutes atteint : l'enregistrement s'arrête là.`,
     empty: "Rien n'a joué : pas d'enregistrement.",
     unsupported: "Ce navigateur ne peut pas enregistrer.",
+  },
+  stems: {
+    idle: "● Pistes",
+    idleTitle: "Enregistre chaque couche dans son propre WAV (et le delay + reverb dans un autre), dès la prochaine mesure, et télécharge un .zip pour Ableton ou un autre DAW à l'arrêt",
+    waiting: "● En attente de la mesure…",
+    waitingTitle: "Démarre à la prochaine mesure ; à l'arrêt, quand tu appuies sur ▶. Clique pour annuler",
+    recording: (time) => `■ Pistes ${time}`,
+    recordingTitle: (max) => `Arrête l'enregistrement et télécharge les pistes dans un .zip (${max} min max)`,
+    packing: "● Préparation du .zip…",
+    saved: (file, n, time) => `${n === 1 ? "1 piste sauvegardée" : `${n} pistes sauvegardées`} : ${file} (${time})`,
+    failed: "Impossible de préparer le .zip.",
+    returns: "Delay + reverb",
   },
   sections: { intro: "Intro", groove: "Groove", build: "Montée", peak: "Pic", breakdown: "Break", outro: "Outro" },
   ai: {

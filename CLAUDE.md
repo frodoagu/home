@@ -563,6 +563,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (a sample must play wherever its owner signs in) — don't widen psy-sync's
   `sniffAudio` for it. Project files (Ableton `.als`…) only hold paths the page
   can't follow: their samples must come in the same selection (the project folder).
+  ● Stems (zip of one WAV per layer + the effect returns, for a DAW) relies on
+  there being NO single master gain: every lane and shot goes into its layer's
+  stem gain (0.7) and the stems sum into the DJ filter, so a new layer needs its
+  `LAYER_LEVEL` entry (that is what makes its stem, `STEMS`). The stems are tapped
+  by ONE multi-input `psy-tap` worklet (never one per stem: separate nodes don't
+  start on the same frame) and the take starts on a queued bar's frame
+  (`currentFrame` rides each block). See docs/psy-sampler.md.
   🎙 recording (`src/audio/mic.js`) taps the mic through `engine.tap(onAudio, source)`
   into a mono `createTake` with a `threshold` and a `preroll`: a mic is never
   digitally silent, so the default `SILENCE` (-80 dBFS) would start every take on the

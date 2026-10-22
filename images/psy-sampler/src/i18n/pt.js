@@ -163,6 +163,7 @@ export default {
         title: "Gravar e exportar",
         items: [
           ["● Gravar", "Grava o que sai pelos alto-falantes e ao terminar baixa em WAV. Até 15 minutos."],
+          ["● Faixas", "Grava cada camada no seu próprio WAV, mais o delay + reverb, sem o filtro DJ nem a masterização. Começa bem num compasso e todas têm a mesma duração: no Ableton, ponha o tempo do nome e solte todas no compasso 1. As camadas que não tocaram ficam de fora. Até 10 minutos, em um .zip."],
           ["⬇ Áudio do mix", "Baixa em WAV um loop de 2 compassos do que está tocando."],
           ["Exportar e Importar preset", "Um arquivo .json com seus sons, snapshots e ordem, para guardar ou passar adiante."],
           ["Restaurar sons", "Volta cada som e sua melodia ao de fábrica e desmarca todos; os duplicados, os snapshots e a ordem ficam (pergunta antes)."],
@@ -250,6 +251,18 @@ export default {
     full: (max) => `Chegou ao máximo de ${max} minutos: a gravação parou aí.`,
     empty: "Nada tocou: não há gravação.",
     unsupported: "Este navegador não consegue gravar.",
+  },
+  stems: {
+    idle: "● Faixas",
+    idleTitle: "Grava cada camada no seu próprio WAV (e o delay + reverb em outro), a partir do próximo compasso, e ao terminar baixa um .zip para o Ableton ou outra DAW",
+    waiting: "● Esperando o compasso…",
+    waitingTitle: "Começa no próximo compasso; se estiver parado, quando você der ▶. Clique para cancelar",
+    recording: (time) => `■ Faixas ${time}`,
+    recordingTitle: (max) => `Termina a gravação e baixa as faixas em um .zip (máximo ${max} min)`,
+    packing: "● Montando o .zip…",
+    saved: (file, n, time) => `${n === 1 ? "1 faixa salva" : `${n} faixas salvas`}: ${file} (${time})`,
+    failed: "Não deu para montar o .zip.",
+    returns: "Delay + reverb",
   },
   sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break", outro: "Outro" },
   ai: {

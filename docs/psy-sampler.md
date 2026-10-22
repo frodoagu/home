@@ -868,6 +868,43 @@ makes itself (a new version, another tab or device took over) skip the question.
   phone's tab); at the cap it stops and downloads on its own. The recorder
   lives as long as the engine, so a language switch or an import doesn't cut
   the take.
+- **● Stems** (top bar, next to ● Record): records every layer to its own
+  WAV, for Ableton or any DAW, and downloads
+  `psy-layers-<date>-<time>-<bpm>bpm.zip` on stop: a folder of
+  `NN-<layer>.wav` (the layer's name in the page's language, numbered in
+  `STEMS` order, so a DAW lists them as the page does) plus
+  `09-delay-reverb.wav`, the shared effect returns. Layers that never sounded
+  are left out.
+  - **What a stem is.** Every lane and FX shot goes through its layer's stem,
+    a gain at the master level (0.7), and the stems sum into the DJ filter
+    (`engine.js` `buildChain`). So a stem carries the layer's inserts,
+    sidechain ducking, faders, autopilot rides and solo, and the stems add up
+    exactly to what enters the DJ filter. What comes after is NOT in them: the
+    DJ filter, the build's sweep, the mastering and the vinyl brake (● Record
+    keeps those). That is a DAW's stem export: the master bus is redone there.
+  - **Alignment.** `engine.tapStems()` taps all nine stems with ONE
+    `psy-tap` worklet of nine stereo inputs, so they come in on the same
+    render quantum, and every block carries the context frame it starts on
+    (`currentFrame`). The take starts on the next bar line the scheduler
+    queues (`listen()`'s `bar` event, announced ahead of the audio; while
+    stopped, the bar ▶ starts on) and every file ends on the same frame, a
+    50 ms pad after the last sound in any of them. Dropped on bar 1 with the
+    project at the tempo in the name, they sit on the grid. If Ableton's
+    Auto-Warp guesses another tempo, turn Warp off on the clips: unwarped,
+    they play as recorded. A tempo change during the take (a ramp, tap) is in
+    the audio but not in the name.
+  - **Memory.** `audio/stems.js` encodes 24-bit stereo per stem, folded into
+    Blobs like a take, but only from the block where that layer first sounds:
+    the silence before is counted and written as zeros out of one shared
+    second at the end. **Capped at 10 min** (`STEMS_MAX_SECONDS`, ~1.5 GB
+    with all nine playing at 48 kHz); a device running the context faster
+    gets less (`stemsMaxSeconds`: ~6 min at 192 kHz), so the zip stays under
+    4 GB. The take only starts on a bar announced after the tap is connected:
+    the first tap in a context waits for the worklet module, and a bar queued
+    meanwhile would lose its start. On stop, `src/zip.js` packs the files stored (no
+    deflate: WAV barely shrinks, and the zip is then a Blob of the stems' own
+    Blobs); it reads each file once for its CRC-32 (~200 MB/s), which is the
+    "Packing the .zip…" wait. No ZIP64: the cap keeps it under 4 GB.
 - **Export / Import preset**: the workspace (snapshots included) + what plays,
   as JSON (`app: "psy-sampler"`). Importing replaces it entirely and plays its
   mix. Shared links carry only the sounds, not the snapshots. The snapshots

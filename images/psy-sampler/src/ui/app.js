@@ -25,17 +25,20 @@
 // rides that break into the style's range, and the plans from the drop on are
 // asked in the new style.
 // The signed-in user's samples (samples.js) load as the sounds using them
-// need them; until then those sounds play their own voice. The record button
-// drives recorder.js, which outlives remounts like the engine.
+// need them; until then those sounds play their own voice. The record buttons
+// (the mix, and every stem apart for a DAW) drive recorder.js, which outlives
+// remounts like the engine.
 import { CLOUDS, CLOUD_IDS, LMSTUDIO_URL, cleanEndpoint, cleanKey, isCloud, loadPrefs, savePrefs } from "../ai.js";
 import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
 import { KEYS, keyShift, scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
 import { LEVEL } from "../audio/params.js";
-import { MAX_SECONDS, createRecorder } from "../audio/recorder.js";
+import { STEMS } from "../audio/engine.js";
+import { MAX_SECONDS, createRecorder, createStemsRecorder } from "../audio/recorder.js";
 import { createMicMonitor, createMicRecorder, micAvailable } from "../audio/mic.js";
 import { encodeWav } from "../audio/wav.js";
+import { zipBlob } from "../zip.js";
 import {
   CHANGE_BARS,
   CLOSE_SECONDS,
@@ -269,6 +272,7 @@ export function mountApp(root, engine, opts = {}) {
     mediaKeys = null, // mediaKeys.js; same
     ai = null, // ai.js: the ✨ AI's models; same
     recorder = createRecorder(engine),
+    stemsRecorder = createStemsRecorder(engine),
     media = globalThis.navigator?.mediaDevices, // the microphone, for 🎵 Samples' 🎙
     loadButton, // tests stand in for the Google sign-in script
     resume = null,
@@ -437,6 +441,7 @@ export function mountApp(root, engine, opts = {}) {
   const snapBtn = el("button", { type: "button", class: "snap-btn", "data-action": "snapshot", text: tx.transport.snapshot });
   snapBtn.title = tx.transport.snapshotTitle;
   const recBtn = el("button", { type: "button", class: "rec", "data-action": "record" });
+  const stemsBtn = el("button", { type: "button", class: "rec", "data-action": "record-stems" });
   const dropBtn = el("button", { type: "button", class: "drop-btn", "data-action": "drop", "aria-pressed": "false", text: tx.transport.drop });
   dropBtn.title = tx.transport.dropTitle;
 
@@ -992,7 +997,7 @@ export function mountApp(root, engine, opts = {}) {
   const topbar = el(
     "nav",
     { class: "topbar" },
-    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn),
+    el("div", { class: "topbar-transport" }, snapBtn, cueBtn, stopBtn, recBtn, stemsBtn),
     el(
       "div",
       { class: "topbar-tempo" },
@@ -2686,6 +2691,64 @@ export function mountApp(root, engine, opts = {}) {
   }
   recorder.onFull(() => finishRecording(true));
 
+  // Stems: one WAV per layer that played, plus the effect returns, all
+  // starting on the same bar line, in a zip named after the tempo.
+  let stemsTimer = 0;
+  let stemsStopping = false;
+  function showStems() {
+    const now = stemsRecorder.state();
+    stemsBtn.textContent = stemsStopping
+      ? tx.stems.packing
+      : now === "recording"
+        ? tx.stems.recording(clock(stemsRecorder.seconds()))
+        : now === "waiting"
+          ? tx.stems.waiting
+          : tx.stems.idle;
+    stemsBtn.title =
+      now === "recording" ? tx.stems.recordingTitle(Math.floor(stemsRecorder.maxSeconds() / 60)) : now === "waiting" ? tx.stems.waitingTitle : tx.stems.idleTitle;
+    stemsBtn.classList.toggle("is-waiting", now === "waiting");
+    stemsBtn.classList.toggle("is-recording", now === "recording");
+    stemsBtn.setAttribute("aria-pressed", String(now !== "idle"));
+    stemsBtn.disabled = stemsStopping;
+    if (now === "idle") {
+      clearInterval(stemsTimer);
+      stemsTimer = 0;
+    } else if (!stemsTimer) stemsTimer = setInterval(showStems, 250);
+  }
+
+  async function finishStems(full = false) {
+    stemsStopping = true;
+    const take = stemsRecorder.stop();
+    showStems();
+    const done = await take;
+    if (!done) {
+      stemsStopping = false;
+      showStems();
+      status(tx.rec.empty);
+      return;
+    }
+    const base = `psy-layers-${stamp()}-${done.bpm}bpm`;
+    const name = `${base}.zip`;
+    try {
+      const files = done.stems.map(({ id, blob }) => ({
+        name: `${base}/${String(STEMS.indexOf(id) + 1).padStart(2, "0")}-${slug(id === "returns" ? tx.stems.returns : tx.layers[id].name)}.wav`,
+        blob,
+      }));
+      download(name, await zipBlob(files), "application/zip");
+    } catch {
+      status(tx.stems.failed);
+      return;
+    } finally {
+      stemsStopping = false;
+      showStems();
+    }
+    stats?.count("recordings");
+    stats?.count("recorded", done.seconds);
+    const saved = tx.stems.saved(name, done.stems.length, clock(done.seconds));
+    status(full ? `${tx.rec.full(Math.floor(stemsRecorder.maxSeconds() / 60))} ${saved}` : saved);
+  }
+  stemsRecorder.onFull(() => finishStems(true));
+
   /* ---- remount: language, import, share links, reset ---- */
   function destroy() {
     alive = false;
@@ -2694,6 +2757,8 @@ export function mountApp(root, engine, opts = {}) {
     closeEditor();
     clearInterval(recTimer);
     recorder.onFull(null);
+    clearInterval(stemsTimer);
+    stemsRecorder.onFull(null);
     mediaKeys?.bind(null);
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
@@ -2717,7 +2782,7 @@ export function mountApp(root, engine, opts = {}) {
     Object.assign(carried, { aiPrefs: state.aiPrefs, chrome: state.chrome });
     const next = { ws, ...carried, open: open?.id, ...changes };
     destroy();
-    return mountApp(root, engine, { ...opts, recorder, resume: next });
+    return mountApp(root, engine, { ...opts, recorder, stemsRecorder, resume: next });
   }
 
   async function loadShared({ seed, style: sharedStyle, bpm: sharedBpm, key, sounds, plans, opening }) {
@@ -4041,6 +4106,21 @@ export function mountApp(root, engine, opts = {}) {
     }
     showRec();
   });
+  stemsBtn.addEventListener("click", async () => {
+    if (stemsStopping) return;
+    if (stemsRecorder.state() !== "idle") {
+      finishStems();
+      return;
+    }
+    const starting = stemsRecorder.start(); // inside the click: it may create the AudioContext
+    showStems();
+    try {
+      await starting;
+    } catch {
+      status(tx.rec.unsupported);
+    }
+    showStems();
+  });
   wavBtn.addEventListener("click", () => exportWav(null));
   exportBtn.addEventListener("click", () => {
     const preset = toPreset({ ...ws, active: state.pending ?? state.active });
@@ -4129,6 +4209,7 @@ export function mountApp(root, engine, opts = {}) {
   showSection();
   showAi();
   showRec();
+  showStems();
   showRamp();
   setDj(state.dj);
   setVolume(Number(volumeInput.value));

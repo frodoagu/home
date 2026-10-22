@@ -112,7 +112,7 @@ function fakeMedia(fail) {
   };
 }
 const micTap = () => ctx.nodes.findLast((n) => n.kind === "worklet" && n.name === "psy-tap");
-const hear = (frames, v) => micTap().port.onmessage({ data: [new Float32Array(frames).fill(v), new Float32Array(frames).fill(v)] });
+const hear = (frames, v) => micTap().port.onmessage({ data: { frame: 0, channels: [new Float32Array(frames).fill(v), new Float32Array(frames).fill(v)] } });
 const recordBtn = () => $('[data-action="record-sample"]');
 async function stopRecording() {
   recordBtn().click();

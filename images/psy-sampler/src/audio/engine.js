@@ -1,9 +1,9 @@
 // Audio engine: owns the AudioContext, the output chain, the lookahead
 // scheduler and one gain "lane" per playing variant.
 //
-//   notes ─> lane input ─> insert ─> lane gain ─┬─> master (0.7) ─> DJ filter ─> sweep ─> mastering ─> brake ─> out ─> volume ─> destination
-//                                   fx gain  ───┤                      ▲
-//                                               ├─ delay send ─> delay 3/16 ─> return ─┤
+//   notes ─> lane input ─> insert ─> lane gain ─┬─> layer's stem (0.7) ─> DJ filter ─> sweep ─> mastering ─> brake ─> out ─> volume ─> destination
+//                                   fx gain  ───┤                               ▲
+//                                               ├─ delay send ─> delay 3/16 ─> return ─┬─> returns stem
 //                                               └─ reverb send ─> convolver ─> return ─┘
 //
 // The insert is the variant's own filter + distortion + pan (insert.js); FX
@@ -32,7 +32,9 @@
 //
 // tap() hands out what `out` sends to the volume, for recording: the
 // listener's volume knob (setVolume) never reaches a take or the visuals.
-// It taps a microphone the same way, for a sample.
+// It taps a microphone the same way, for a sample. tapStems() hands out every
+// stem at once instead: each layer's sum and the effect returns, before the
+// DJ filter, so together they add up to what enters it.
 //
 // listen() reports what the scheduler queues, with its audio time, for the
 // visuals: every lane's hits per step, bar lines, lane changes, FX shots, the
@@ -73,6 +75,8 @@ const MASTER_GAIN = 0.7;
 const FADE = 0.03;
 const START_DELAY = 0.06; // first step after start(): room for the first tick to land
 const LAYER_LEVEL = { kick: 0.9, bass: 0.45, perc: 0.85, lead: 0.3, pad: 0.35, glitch: 0.3, classic: 0.4, fx: 0.6 };
+/** What tapStems() hands out, in order: one stem per layer, then the delay and reverb returns. */
+export const STEMS = [...Object.keys(LAYER_LEVEL), "returns"];
 const BG_KICK_LEVEL = 0.6;
 // Sends per layer, after the lane gain (so they follow its fades). Kick and
 // bass stay dry: tails under them only muddy the low end.
@@ -86,7 +90,7 @@ const SENDS = {
 };
 const DELAY_STEPS = 3; // dotted 8th: the classic psy lead echo
 const DELAY_FEEDBACK = 0.38;
-// Returns join after the master gain (into the DJ filter), so they carry its level.
+// Returns skip the stems' gain, so they carry its level.
 const RETURN_LEVEL = MASTER_GAIN;
 const REVERB_SECONDS = 2.4;
 const AUDITION_SECONDS = 1.5;
@@ -140,9 +144,10 @@ function impulse(ctx, seconds) {
   return buf;
 }
 
-// Output chain: master -> DJ filter -> sweep -> mastering (master.js) ->
+// Output chain: stems -> DJ filter -> sweep -> mastering (master.js) ->
 // brake -> out -> volume -> destination, plus the shared delay and reverb buses (their
-// returns go through the DJ filter, the sweep and the mastering too). Built once per
+// returns go through the DJ filter, the sweep and the mastering too). A stem
+// is one layer's lanes and shots, at the master gain, or the returns. Built once per
 // context, live or offline; a render keeps the sweep open and never brakes.
 // The brake is a delay line at 0 and a gain at 1 until brake() slows the
 // whole mix down like a vinyl.
@@ -150,8 +155,6 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   const mastering = buildMaster(ctx);
   const out = ctx.createGain();
   const volume = ctx.createGain();
-  const master = ctx.createGain();
-  master.gain.value = MASTER_GAIN;
   const dj = { low: ctx.createBiquadFilter(), high: ctx.createBiquadFilter() };
   dj.low.type = "lowpass";
   dj.high.type = "highpass";
@@ -164,11 +167,17 @@ function buildChain(ctx, bpm, effects, djValue = 0) {
   sweep.type = "highpass";
   sweep.frequency.value = 0;
   sweep.Q.value = SWEEP_Q;
-  const bus = buildBus(ctx, dj.low, bpm, effects);
+  const stems = {};
+  for (const id of STEMS) {
+    stems[id] = ctx.createGain();
+    stems[id].gain.value = id === "returns" ? 1 : MASTER_GAIN;
+    stems[id].connect(dj.low);
+  }
+  const bus = buildBus(ctx, stems.returns, bpm, effects);
   const brake = { line: ctx.createDelay(BRAKE_MAX / 2 + 0.1), gain: ctx.createGain() };
-  master.connect(dj.low).connect(dj.high).connect(sweep).connect(mastering.input);
+  dj.low.connect(dj.high).connect(sweep).connect(mastering.input);
   mastering.output.connect(brake.line).connect(brake.gain).connect(out).connect(volume).connect(ctx.destination);
-  return { master, dj, sweep, brake, out, volume, bus, side: buildSidechain(ctx) };
+  return { stems, dj, sweep, brake, out, volume, bus, side: buildSidechain(ctx) };
 }
 
 // The kick lanes' sum in `input`, its envelope out of `env` (never heard).
@@ -222,12 +231,12 @@ function buildBus(ctx, into, bpm, effects) {
   return { delay, delaySend, delayReturn, reverbSend, reverbReturn };
 }
 
-// A lane or FX gain into the master, with its layer's effect sends. A kick
-// also feeds the sidechain.
-function connectGain(ctx, { master, bus, side }, level, layer) {
+// A lane or FX gain into its layer's stem, with the layer's effect sends. A
+// kick also feeds the sidechain.
+function connectGain(ctx, { stems, bus, side }, level, layer) {
   const gain = ctx.createGain();
   gain.gain.value = level;
-  gain.connect(master);
+  gain.connect(stems[layer]);
   if (layer === "kick") gain.connect(side.input);
   gain.sends = [];
   const sends = SENDS[layer];
@@ -283,7 +292,7 @@ export function createEngine({
   hidden = () => globalThis.document?.hidden ?? false,
 } = {}) {
   let ctx = null;
-  let master = null;
+  let stems = null; // stem id -> its gain (buildChain)
   let out = null; // the mix before the listener's volume
   let volumeGain = null;
   let volumeValue = 1;
@@ -342,7 +351,7 @@ export function createEngine({
   function ensureContext() {
     if (!ctx) {
       ctx = createContext();
-      ({ master, dj, sweep: sweepFilter, brake: brakeNodes, out, volume: volumeGain, bus, side } = buildChain(ctx, bpm, effects, djValue));
+      ({ stems, dj, sweep: sweepFilter, brake: brakeNodes, out, volume: volumeGain, bus, side } = buildChain(ctx, bpm, effects, djValue));
       volumeGain.gain.value = volumeValue ** 2;
     }
     if (ctx.state === "suspended") ctx.resume();
@@ -423,7 +432,7 @@ export function createEngine({
     stopAt = lanes.size === 0 ? s.time : null;
   }
 
-  const openGain = (level, layer) => connectGain(ctx, { master, bus, side }, level, layer);
+  const openGain = (level, layer) => connectGain(ctx, { stems, bus, side }, level, layer);
   const duckOf = (variant) =>
     layerOf(variant) === "kick" ? 0 : Math.max(dataOf(variant).duck ?? 0, pump[layerOf(variant)] ?? 0);
 
@@ -978,35 +987,49 @@ export function createEngine({
   }
 
   /**
-   * Feeds `onAudio([left, right])` with blocks of the output from now on,
-   * or of `source` (a node of ensureContext()'s, like a microphone).
-   * Resolves to untap(), which delivers the block in flight and then
-   * resolves; rejects where the browser has no AudioWorklet.
+   * Feeds `onAudio([left, right], frame)` with blocks of the output from now
+   * on, or of `source` (a node of ensureContext()'s, like a microphone); an
+   * array of nodes is tapped together, sample-aligned, as
+   * [left0, right0, left1, right1, ...]. `frame` is the context frame the
+   * block starts on (time × sample rate). Resolves to untap(), which
+   * delivers the block in flight and then resolves; rejects where the
+   * browser has no AudioWorklet.
    */
   async function tap(onAudio, source) {
     ensureContext();
     tapModule ??= ctx.audioWorklet.addModule(TAP_URL);
     await tapModule;
+    const from = [source ?? out].flat();
     // Explicit stereo: a mono signal comes in on both channels.
-    const node = createWorklet(ctx, "psy-tap", { channelCount: 2, channelCountMode: "explicit", numberOfOutputs: 1 });
+    const node = createWorklet(ctx, "psy-tap", {
+      numberOfInputs: from.length,
+      numberOfOutputs: 1,
+      channelCount: 2,
+      channelCountMode: "explicit",
+    });
     // Its output is silence; into the destination it keeps the node pulled.
     node.connect(ctx.destination);
-    const from = source ?? out;
-    from.connect(node);
+    from.forEach((f, i) => f.connect(node, 0, i));
     let closed = null;
     node.port.onmessage = ({ data }) => {
-      if (data) onAudio(data);
+      if (data) onAudio(data.channels, data.frame);
       else closed?.();
     };
     return () =>
       new Promise((resolve) => {
         closed = () => {
-          from.disconnect(node);
+          for (const f of from) f.disconnect(node);
           node.disconnect();
           resolve();
         };
         node.port.postMessage("flush");
       });
+  }
+
+  /** tap() on every stem, in STEMS order. */
+  function tapStems(onAudio) {
+    ensureContext();
+    return tap(onAudio, STEMS.map((id) => stems[id]));
   }
 
   /**
@@ -1096,6 +1119,7 @@ export function createEngine({
     render,
     sketch,
     tap,
+    tapStems,
     onBar: (fn) => {
       barHook = fn;
     },
