@@ -12,13 +12,29 @@ import { PAD_SECONDS, SILENCE, pcm24, wavHeader } from "./wav.js";
 const SEAL_BYTES = 16 << 20;
 const BYTES = 3;
 
+/** Encoded PCM as it comes, held as Blobs: add(bytes), then blob() of it all. */
+export function createPcmStore() {
+  const sealed = [];
+  let open = [];
+  let openBytes = 0;
+  return {
+    add(pcm) {
+      open.push(pcm);
+      openBytes += pcm.length;
+      if (openBytes < SEAL_BYTES) return;
+      sealed.push(new Blob(open));
+      open = [];
+      openBytes = 0;
+    },
+    blob: () => new Blob([...sealed, ...open]),
+  };
+}
+
 export function createTake({ sampleRate, channelCount = 2, maxSeconds, threshold = SILENCE, preroll = 0 }) {
   const maxFrames = Math.round(maxSeconds * sampleRate);
   const prerollFrames = Math.round(preroll * sampleRate);
   const loud = (block, i) => block.some((data) => Math.abs(data[i]) > threshold);
-  const sealed = []; // Blobs, in order
-  let open = []; // Uint8Arrays not sealed yet
-  let openBytes = 0;
+  const store = createPcmStore();
   let frames = 0;
   let lastLoud = -1; // frame index, within the take, of the last audible sample
   let started = false;
@@ -33,15 +49,8 @@ export function createTake({ sampleRate, channelCount = 2, maxSeconds, threshold
         break;
       }
     }
-    const pcm = pcm24(block, from, to);
-    open.push(pcm);
-    openBytes += pcm.length;
+    store.add(pcm24(block, from, to));
     frames += to - from;
-    if (openBytes >= SEAL_BYTES) {
-      sealed.push(new Blob(open));
-      open = [];
-      openBytes = 0;
-    }
   }
 
   function push(block) {
@@ -64,7 +73,7 @@ export function createTake({ sampleRate, channelCount = 2, maxSeconds, threshold
   function finish() {
     if (!started) return null;
     const end = Math.min(frames, lastLoud + 1 + Math.round(PAD_SECONDS * sampleRate));
-    const data = new Blob([...sealed, ...open]).slice(0, end * channelCount * BYTES);
+    const data = store.blob().slice(0, end * channelCount * BYTES);
     return {
       blob: new Blob([wavHeader(sampleRate, channelCount, end), data], { type: "audio/wav" }),
       seconds: end / sampleRate,

@@ -163,6 +163,7 @@ export default {
         title: "Recording and export",
         items: [
           ["● Record", "Records what comes out of the speakers and downloads it as WAV when you stop. Up to 15 minutes."],
+          ["● Stems", "Records each layer to its own WAV, plus the delay + reverb, without the DJ filter or the mastering. It starts right on a bar and every file is the same length: in Ableton, set the tempo in the name and drop them all on bar 1. Layers that never played are left out. Up to 10 minutes, in a .zip."],
           ["⬇ Mix audio", "Downloads a 2-bar loop of what's playing as WAV."],
           ["Export and Import preset", "A .json file with your sounds, snapshots and order, to keep or pass on."],
           ["Reset sounds", "Takes every sound and its melody back to factory and deselects them all; copies, snapshots and the layout stay (asks first)."],
@@ -250,6 +251,18 @@ export default {
     full: (max) => `Reached the ${max}-minute maximum: the recording stops there.`,
     empty: "Nothing played: no recording.",
     unsupported: "This browser cannot record.",
+  },
+  stems: {
+    idle: "● Stems",
+    idleTitle: "Records each layer to its own WAV (and the delay + reverb to another), from the next bar, and downloads a .zip for Ableton or any DAW when you stop",
+    waiting: "● Waiting for the bar…",
+    waitingTitle: "Starts on the next bar; if stopped, when you press ▶. Click to cancel",
+    recording: (time) => `■ Stems ${time}`,
+    recordingTitle: (max) => `Stops recording and downloads the stems in a .zip (${max} min max)`,
+    packing: "● Packing the .zip…",
+    saved: (file, n, time) => `${n === 1 ? "1 stem" : `${n} stems`} saved: ${file} (${time})`,
+    failed: "Could not pack the .zip.",
+    returns: "Delay + reverb",
   },
   sections: { intro: "Intro", groove: "Groove", build: "Build-up", peak: "Peak", breakdown: "Breakdown", outro: "Outro" },
   ai: {

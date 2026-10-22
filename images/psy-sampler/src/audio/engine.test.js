@@ -35,21 +35,21 @@ function run(seconds) {
   }
 }
 
-// master -> DJ lowpass -> DJ highpass -> sweep -> mastering; the master is
-// the first gain into the DJ filter (the effect returns join it there too).
+// stems -> DJ lowpass -> DJ highpass -> sweep -> mastering; the stems are
+// the gains into the DJ filter, one per layer and then the effect returns.
 // The mastering chain's input is the one gain held to stereo.
 const masteringInput = () => ctx.nodes.find((n) => n.kind === "gain" && n.channelCountMode === "explicit");
 const sweepFilter = () => ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === masteringInput());
-function masterGain() {
+function djLow() {
   const high = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === sweepFilter());
-  const low = ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === high);
-  return ctx.nodes.find((n) => n.kind === "gain" && n.outputs[0] === low);
+  return ctx.nodes.find((n) => n.kind === "filter" && n.outputs[0] === high);
 }
+const stemGains = () => ctx.nodes.filter((n) => n.kind === "gain" && n.outputs[0] === djLow());
 
-// Lane gains are the ones wired straight into the master gain.
+// Lane gains are the ones wired straight into a layer's stem.
 function laneGains() {
-  const master = masterGain();
-  return ctx.nodes.filter((n) => n.kind === "gain" && n.outputs[0] === master);
+  const layers = stemGains().slice(0, -1);
+  return ctx.nodes.filter((n) => n.kind === "gain" && layers.includes(n.outputs[0]));
 }
 const startTimes = (kind) =>
   ctx
@@ -66,16 +66,16 @@ describe("context lifecycle", () => {
     expect(engine.isRunning()).toBe(false);
   });
 
-  it("builds master gain -> DJ filter -> sweep -> mastering -> brake -> out -> volume -> destination once, and resumes a suspended context", () => {
+  it("builds stems -> DJ filter -> sweep -> mastering -> brake -> out -> volume -> destination once, and resumes a suspended context", () => {
     ctx.state = "suspended";
     const resume = vi.spyOn(ctx, "resume");
     engine.setLanes({ bass: "bass.offbeat" });
     engine.setLanes({ bass: "bass.rolling" });
     expect(createContext).toHaveBeenCalledTimes(1);
     expect(resume).toHaveBeenCalled();
-    const master = masterGain();
-    expect(master.gain.value).toBe(0.7);
-    const [low] = master.outputs;
+    const stems = stemGains();
+    expect(stems.map((g) => g.gain.value)).toEqual([0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 1]); // 8 layers at the master gain, then the returns
+    const low = djLow();
     const [high] = low.outputs;
     expect([low.type, low.frequency.value, high.type, high.frequency.value]).toEqual(["lowpass", 24000, "highpass", 0]);
     const [sweep] = high.outputs;
@@ -861,7 +861,7 @@ describe("DJ filter", () => {
   it("glides the master lowpass down or the highpass up, and renders with it", async () => {
     engine.setMasterFilter(-1);
     engine.setLanes({ kick: "kick.punchy" });
-    const low = masterGain().outputs[0];
+    const low = djLow();
     expect(low.frequency.value).toBeCloseTo(150, 6);
     engine.setMasterFilter(1);
     const high = low.outputs[0];
@@ -1024,13 +1024,13 @@ describe("tap", () => {
     expect(out().outputs).toContain(node);
 
     const block = [new Float32Array(4), new Float32Array(4)];
-    node.port.onmessage({ data: block });
+    node.port.onmessage({ data: { frame: 4096, channels: block } });
     expect(blocks).toEqual([block]);
 
     const closing = untap();
     expect(node.port.sent).toEqual(["flush"]);
     const last = [new Float32Array(2), new Float32Array(2)];
-    node.port.onmessage({ data: last });
+    node.port.onmessage({ data: { frame: 4100, channels: last } });
     node.port.onmessage({ data: null });
     await closing;
     expect(blocks).toEqual([block, last]);
@@ -1054,6 +1054,29 @@ describe("tap", () => {
     await engine.tap(() => {});
     await engine.tap(() => {});
     expect(ctx.modules).toHaveLength(1);
+  });
+
+  it("taps every stem in one node: each layer's lanes and shots, then the effect returns", async () => {
+    engine.setLanes({ bass: "bass.offbeat", "lead.arp": "lead.arp" });
+    engine.triggerFx("fx.crash");
+    const got = [];
+    const untap = await engine.tapStems((channels, frame) => got.push([channels.length, frame]));
+    const node = ctx.nodes.find((n) => n.kind === "worklet");
+    expect(node.options).toMatchObject({ numberOfInputs: 9, channelCount: 2, channelCountMode: "explicit" });
+    const stems = stemGains();
+    expect(stems.every((g) => g.outputs.includes(node))).toBe(true);
+    const [bass, lead, crash] = laneGains();
+    expect([bass, lead, crash].map((g) => stems.indexOf(g.outputs[0]))).toEqual([1, 3, 7]);
+    const delayReturn = ctx.nodes.find((n) => n.kind === "delay").outputs[0].outputs[1];
+    const reverbReturn = ctx.nodes.find((n) => n.kind === "convolver").outputs[0];
+    expect([delayReturn.outputs[0], reverbReturn.outputs[0]]).toEqual([stems[8], stems[8]]);
+
+    node.port.onmessage({ data: { frame: 128, channels: Array.from({ length: 18 }, () => new Float32Array(4)) } });
+    expect(got).toEqual([[18, 128]]);
+    const closing = untap();
+    node.port.onmessage({ data: null });
+    await closing;
+    expect(stems.some((g) => g.outputs.includes(node))).toBe(false);
   });
 });
 

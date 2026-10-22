@@ -166,6 +166,7 @@ export default {
         title: "Grabar y exportar",
         items: [
           ["● Grabar", "Graba lo que sale por los parlantes y al terminar lo baja en WAV. Hasta 15 minutos."],
+          ["● Pistas", "Graba cada capa en su propio WAV, más el delay + reverb, sin el filtro DJ ni el mastering. Arranca justo en un compás y todas duran lo mismo: en Ableton, poné el tempo del nombre y soltalas en el compás 1. Las capas que no sonaron no vienen. Hasta 10 minutos, en un .zip."],
           ["⬇ Audio del mix", "Baja en WAV un loop de 2 compases de lo que suena."],
           ["Exportar e Importar preset", "Un archivo .json con tus sonidos, snapshots y orden, para guardarlo o pasarlo."],
           ["Restaurar sonidos", "Vuelve cada sonido y su melodía a fábrica y los deselecciona todos; los duplicados, los snapshots y el orden quedan (pregunta antes)."],
@@ -253,6 +254,18 @@ export default {
     full: (max) => `Llegó al máximo de ${max} minutos: la grabación se cortó ahí.`,
     empty: "No sonó nada: no hay grabación.",
     unsupported: "Este navegador no puede grabar.",
+  },
+  stems: {
+    idle: "● Pistas",
+    idleTitle: "Graba cada capa en su propio WAV (y el delay + reverb en otro), desde el próximo compás, y al terminar baja un .zip para Ableton u otro DAW",
+    waiting: "● Esperando el compás…",
+    waitingTitle: "Arranca en el próximo compás; si está parado, al darle ▶. Clic para cancelar",
+    recording: (time) => `■ Pistas ${time}`,
+    recordingTitle: (max) => `Termina la grabación y baja las pistas en un .zip (máximo ${max} min)`,
+    packing: "● Armando el .zip…",
+    saved: (file, n, time) => `${n === 1 ? "1 pista guardada" : `${n} pistas guardadas`}: ${file} (${time})`,
+    failed: "No se pudo armar el .zip.",
+    returns: "Delay + reverb",
   },
   sections: { intro: "Intro", groove: "Groove", build: "Subida", peak: "Pico", breakdown: "Break", outro: "Outro" },
   ai: {
