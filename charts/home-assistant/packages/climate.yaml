@@ -469,9 +469,8 @@ script:
 #                                     "Living" en el registry, es el termómetro
 #                                     BTHome del living, no el aire)
 #   Temperatura Exterior - Afuera  -> sensor.temperatura_exterior (weather.yaml)
-#   home.state.HomePresence: HOME  -> zone.home > 0 (el estado de una zona es la
-#                                     cantidad de personas adentro; hay dos
-#                                     `person` con device_tracker del celular)
+#   home.state.HomePresence: HOME  -> binary_sensor.fede_en_casa on (el celular
+#                                     de Fede en Pi-hole, presencia.yaml)
 #
 # Google separa prender / fijar modo / fijar setpoint en tres comandos; acá va
 # un solo `climate.set_temperature` con `hvac_mode`, por el mismo motivo que las
@@ -524,9 +523,9 @@ automation:
                 id: finde
               - condition: time
                 weekday: [sat, sun]
-      - condition: numeric_state
-        entity_id: zone.home
-        above: 0
+      - condition: state
+        entity_id: binary_sensor.fede_en_casa
+        state: "on"
       # `lessThanOrEqualTo: 17C` en Google. `numeric_state: below` es estricto,
       # así que el <= va por template. El default 99 deja la condición en false
       # si el termómetro está caído: ante la duda no prende nada.
@@ -622,9 +621,9 @@ automation:
         entity_id: sensor.temperatura_exterior
         above: 30
     condition:
-      - condition: numeric_state
-        entity_id: zone.home
-        above: 0
+      - condition: state
+        entity_id: binary_sensor.fede_en_casa
+        state: "on"
       - condition: numeric_state
         entity_id: sensor.atc_29a8_temperatura
         above: 24
@@ -722,6 +721,73 @@ automation:
             notification_icon: mdi:air-conditioner
     mode: queued
 
+  # An arrival is the presence sensor's off -> on only, so the phone was gone
+  # from Pi-hole for 30 min; Pi-hole coming back from a restart is
+  # unavailable -> on and doesn't count. It never turns a unit off. Every unit
+  # of a zone out of range gets the command, because the IR state is assumed:
+  # one switched off by remote still reads as on. A unit already in that mode
+  # keeps its setpoint.
+  - id: aires_llegada
+    alias: Aires - Prender al llegar Fede
+    description: >-
+      Cuando Fede llega a casa (su celular vuelve a aparecer en Pi-hole después
+      de 30 min sin verse), prende los aires de las zonas que están fuera de
+      19-25 °C: calor 21 por debajo de 19, frío 24 por encima de 25. Cocina y
+      living miran el termómetro del living; dormitorio, el del dormitorio.
+      Chicos no se toca. Nunca apaga nada.
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.fede_en_casa
+        from: "off"
+        to: "on"
+    action:
+      - variables:
+          zonas:
+            - termometro: sensor.atc_29a8_temperatura
+              aires: [climate.aire_living, climate.aire_cocina]
+            - termometro: sensor.dormitorio_atc_b6d2_temperatura
+              aires: [climate.aire_dormitorio]
+          planes: >-
+            {%- set ns = namespace(planes=[]) %}
+            {%- for z in zonas if states(z.termometro) | is_number %}
+              {%- set adentro = states(z.termometro) | float %}
+              {%- if adentro < 19 or adentro > 25 %}
+                {%- set modo = 'heat' if adentro < 19 else 'cool' %}
+                {%- for a in z.aires %}
+                  {%- set temp = state_attr(a, 'temperature') | float(0) if is_state(a, modo) else 0 %}
+                  {%- set ns.planes = ns.planes + [{'aire': a, 'termometro': z.termometro, 'modo': modo,
+                        'temp': temp or (21 if modo == 'heat' else 24)}] %}
+                {%- endfor %}
+              {%- endif %}
+            {%- endfor %}
+            {{- ns.planes }}
+      - condition: template
+        value_template: "{{ planes | count > 0 }}"
+      - repeat:
+          for_each: "{{ planes }}"
+          sequence:
+            - action: climate.set_temperature
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item.aire }}"
+              data:
+                hvac_mode: "{{ repeat.item.modo }}"
+                temperature: "{{ repeat.item.temp }}"
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            {% set modos = {'heat': 'calor', 'cool': 'frío'} %}
+            Llegaste:
+            {% for t in planes | map(attribute='termometro') | unique %}{{ state_attr(t, 'friendly_name') | lower }}
+            a {{ states(t) | float | round(1) }} °C{{ ', ' if not loop.last }}{% endfor %}.
+            Prendí {% for p in planes %}{{ state_attr(p.aire, 'friendly_name') | replace('Aire ', '') | lower }}
+            en {{ modos[p.modo] }} {{ '%g' | format(p.temp) }} °C{{ ', ' if not loop.last }}{% endfor %}.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
+    mode: single
+
   # Catches a stray tap on the home-screen widget. A script run shares its
   # context with the state changes it causes, so `user_id` names who pressed the
   # button; automations never set one, so the pushes above are not doubled.
@@ -748,8 +814,8 @@ automation:
       - condition: not
         conditions:
           - condition: state
-            entity_id: person.federico_agu
-            state: home
+            entity_id: binary_sensor.fede_en_casa
+            state: "on"
     action:
       - delay: "00:00:05"
       - action: notify.mobile_app_motorola_edge_70
