@@ -27,8 +27,9 @@ metadata:
   labels:
     {{- include "psy-sampler.labels" . | nindent 4 }}
 data:
-  # SPA-tuned server, as in charts/agu-spa: index.html is never cached (a
-  # deploy is picked up on the next load), content-hashed assets are immutable.
+  # As in charts/agu-spa: pages are never cached (a deploy is picked up on the
+  # next load), content-hashed assets are immutable, and an unknown path is a
+  # real 404 rather than the page, so search engines never index a soft 404.
   default.conf: |
     server {
         listen       80;
@@ -46,15 +47,22 @@ data:
             return 200 "ok\n";
         }
 
-        location / {
-            try_files $uri $uri/ /index.html;
+        # The page has no routes of its own (share links live in the #), so
+        # nothing falls back to index.html. `/` reaches it through `index`.
+        location = / {
         }
 
-        # Every page load ends here (try_files falls back to index.html; the
-        # visuals' window asks for its own page by name), so the pages'
-        # security headers live in this block: nginx drops server-level
-        # add_header in any location that sets its own.
-        location ~ ^/(index|visuals)\.html$ {
+        location / {
+            try_files $uri =404;
+        }
+
+        error_page 404 /404.html;
+
+        # Every page load ends here (`/` via an internal redirect; the visuals'
+        # window asks for its own page by name), so the pages' security
+        # headers live in this block: nginx drops server-level add_header in
+        # any location that sets its own.
+        location ~ ^/(index|visuals|404)\.html$ {
             add_header Cache-Control "no-cache, no-store, must-revalidate";
             add_header Content-Security-Policy "{{ $csp }}" always;
             add_header X-Content-Type-Options nosniff always;

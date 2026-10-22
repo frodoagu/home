@@ -29,7 +29,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   psy-sampler/       nginx serving the psy.agu.com.ar psytrance layer sampler (images/psy-sampler → GHCR,
                      digest pinned by Image Updater). Public, no google-auth, no pull secret (the GHCR
                      package must be public). Also deploys its cloud-save API (images/psy-sync) as a
-                     separate Deployment + PVC behind /api/. See docs/psy-sampler.md + gotchas.
+                     separate Deployment + PVC behind /api/. No SPA fallback: unknown paths are real
+                     404s (public/404.html). See docs/psy-sampler.md + gotchas.
   psy-sampler-previews/  PR previews: an ApplicationSet (pull-request generator, label `psy-preview`)
                      rendering charts/psy-sampler from each PR's branch at pr-<n>-psy.agu.com.ar
                      (google-auth, no cloud save), plus its locked-down AppProject + shared
@@ -70,6 +71,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      links (`privateLinks`) gated by client-side Google sign-in (src/auth/).
                      Pure logic lives in plain .js modules next to each component (mandelbrot.js,
                      neutralCurrent.js, auth.js) and is unit-tested with Vitest (*.test.js[x]).
+                     Prerendered per route at build (scripts/prerender.js, metadata in src/seo.js):
+                     nginx serves app/<slug>.html and real 404s, no SPA fallback.
                      CI: .github/workflows/site-test.yml runs tests+build on PRs/pushes;
                      site.yml builds ghcr.io/frodoagu/home-site:latest (arm64); Argo CD Image
                      Updater then pins the digest into charts/agu-spa/values.yaml via git.

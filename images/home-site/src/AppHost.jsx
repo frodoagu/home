@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { getApp } from "./apps/registry";
 import LanguageToggle from "./components/LanguageToggle";
 import { localizeText, useLanguage } from "./i18n/LanguageProvider";
+import NotFound from "./NotFound";
+import { appTitle } from "./seo";
 
 // Wraps a registered app: a thin top bar with a back link, then the app itself.
 export default function AppHost() {
@@ -11,38 +14,17 @@ export default function AppHost() {
   const app = getApp(slug);
 
   const txt = {
-    es: {
-      notFound: "No encontre esa app.",
-      backHome: "Volver al inicio",
-      home: "Inicio",
-    },
-    en: {
-      notFound: "I could not find that app.",
-      backHome: "Back to home",
-      home: "Home",
-    },
-    pt: {
-      notFound: "Não encontrei esse app.",
-      backHome: "Voltar ao início",
-      home: "Início",
-    },
-    fr: {
-      notFound: "Je n'ai pas trouvé cette app.",
-      backHome: "Retour à l'accueil",
-      home: "Accueil",
-    },
+    es: { home: "Inicio" },
+    en: { home: "Home" },
+    pt: { home: "Início" },
+    fr: { home: "Accueil" },
   }[language];
 
-  if (!app) {
-    return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-slate-950 text-slate-100">
-        <p className="text-slate-400">{txt.notFound}</p>
-        <Link to="/" className="text-sm text-amber-400 hover:underline">
-          ← {txt.backHome}
-        </Link>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (app) document.title = appTitle(app, language);
+  }, [app, language]);
+
+  if (!app) return <NotFound />;
 
   const { Component } = app;
 

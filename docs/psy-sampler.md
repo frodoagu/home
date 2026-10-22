@@ -2799,6 +2799,19 @@ Same pipeline as `agu-spa`: a push to `main` touching `images/psy-sampler/` →
 `sha-<commit>`) → Image Updater pins `latest@sha256:…` into
 `charts/psy-sampler/values.yaml` → Argo CD syncs.
 
+### Search engines
+
+The page is one URL, so there's no prerender. Google runs the JS, and the head
+carries what it reads before: title, description, canonical
+`https://psy.agu.com.ar/`, Open Graph tags and a `WebApplication` JSON-LD
+(`index.html`; a data block, so the CSP doesn't apply to it). `public/` ships
+`robots.txt` and a one-URL `sitemap.xml`. `visuals.html` and `404.html` are
+`noindex`. nginx has no SPA fallback: share links live in the `#`, so any other
+path is a real 404 serving `404.html` (with the pages' headers), never a soft
+404. The `agu.com.ar` Domain property in Search Console covers this host too;
+submit `https://psy.agu.com.ar/sitemap.xml` there. Previews sit behind
+google-auth, so a crawler only ever sees the sign-in redirect.
+
 ### New-version notice
 
 A page left open learns about a deploy by itself. Each `vite build` gets an id
@@ -2893,8 +2906,8 @@ through Cloudflare.
 
 Cloud save is off in previews: Google's Authorized JavaScript origins take no
 wildcard, so its sign-in can't load on a preview host. With no `/api/` route,
-`/api/health` falls through to `index.html`, the reply isn't JSON, and the page
-hides the cloud UI as when psy-sync is down.
+`/api/health` is nginx's 404 page, the reply isn't JSON, and the page hides the
+cloud UI as when psy-sync is down.
 
 Timing: the label only goes on after the first image is pushed, so a new
 preview never waits on a missing image. On later pushes the ApplicationSet may
@@ -3002,8 +3015,8 @@ npm run build
   Google Sign-In (`accounts.google.com/gsi/…`: script, stylesheet, button
   iframe). A new third-party origin (a font, an analytics script, a CDN) is
   blocked until it's added there. Inline styles stay allowed because the
-  editors set `style` attributes. The headers sit in `location = /index.html`
-  itself: nginx drops server-level `add_header`s in any location that sets its
+  editors set `style` attributes. The headers sit in the pages' own location
+  (`index`, `visuals` and `404.html`): nginx drops server-level `add_header`s in any location that sets its
   own. `media-src` allows `blob:` for the media keys' silent track (next).
 - **Media keys need a media element.** Browsers route the keyboard's
   play/pause and stop keys (and the OS media overlay) to a page only while it

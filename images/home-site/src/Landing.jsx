@@ -1,15 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Linkedin, Mail } from "lucide-react";
 import { apps, CATEGORIES, getCategoryLabel, privateLinks } from "./apps/registry";
 import PrivateSection from "./PrivateSection";
 import LanguageToggle from "./components/LanguageToggle";
 import { localizeText, useLanguage } from "./i18n/LanguageProvider";
+import { homeTitle, LINKEDIN_URL } from "./seo";
 
 export default function Landing() {
   const { language } = useLanguage();
   // null = no filter (show everything). Clicking the active chip clears it.
   const [active, setActive] = useState(null);
+
+  useEffect(() => {
+    document.title = homeTitle(language);
+  }, [language]);
 
   const toggle = (cat) => setActive((cur) => (cur === cat ? null : cat));
 
@@ -131,7 +136,7 @@ export default function Landing() {
           <span>{txt.footer} 🍓</span>
           <div className="flex items-center gap-4">
             <a
-              href="https://www.linkedin.com/in/%E2%96%BAfederico-ag%C3%BA-75a85a60/"
+              href={LINKEDIN_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 transition-colors hover:text-slate-300"

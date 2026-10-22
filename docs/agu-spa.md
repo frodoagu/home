@@ -114,18 +114,36 @@ The choice is saved per browser; otherwise the browser's language wins, and
 anything that isn't es/pt/fr gets English. `registry.test.js` requires all four on
 every card.
 
-## SPA routing & caching
+## Routing, caching & search engines
 
-The bundled nginx config (`templates/configmap.yaml`) is tuned for SPAs:
+The site is prerendered at build time (`images/home-site/scripts/prerender.js`):
+`npm run build` bundles `src/entry-server.jsx` for Node and renders every route
+to its own HTML file, signed out and in Spanish, with that page's `<title>`,
+description, canonical URL, Open Graph tags and JSON-LD (`src/seo.js`). It also
+writes `sitemap.xml`; `robots.txt` is static in `public/`. In the browser
+`main.jsx` mounts with `createRoot` and replaces that markup, since language and
+session are per browser.
 
-- **Deep-link fallback:** `try_files $uri $uri/ /index.html` — unknown paths are
-  handed to `index.html` so client-side routers (React Router, Vue Router, …)
-  resolve them instead of returning 404 on refresh/deep-link.
-- **`index.html` is never cached** (`no-cache, no-store, must-revalidate`) so a
-  new deploy is picked up immediately.
+The nginx config (`templates/configmap.yaml`) serves those files as-is:
+
+- **One file per route:** `/` is `index.html` and `/app/<slug>` is
+  `app/<slug>.html` (`try_files $uri $uri.html`). There is no SPA fallback.
+- **Real 404s:** any other path (an unknown slug, a trailing slash, a typo)
+  gets `404.html` with a **404 status**, so Google never indexes a soft 404 and
+  `robots.txt`/`sitemap.xml` can't be answered with the SPA.
+- **Pages are never cached** (`no-cache, no-store, must-revalidate`) so a new
+  deploy is picked up immediately.
 - **Content-hashed assets** (`*.js`, `*.css`, fonts, images) are served
   `immutable` with a 1-year expiry.
 - **gzip** is enabled for text/JS/CSS/JSON/SVG.
+
+A new in-app tool in `registry.jsx` gets its page, sitemap entry and metadata
+with no other change. An `href` app (e.g. `psy.agu.com.ar`) lives on its own
+host and is only linked from here.
+
+Google Search Console: verify the `agu.com.ar` **domain** property with a DNS
+TXT record in Cloudflare (covers every subdomain) and submit
+`https://agu.com.ar/sitemap.xml`.
 
 ## Health checks
 

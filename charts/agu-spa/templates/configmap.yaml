@@ -5,11 +5,12 @@ metadata:
   labels:
     {{- include "agu-spa.labels" . | nindent 4 }}
 data:
-  # nginx server config tuned for a single-page application:
-  #  - try_files falls back to /index.html so client-side routes (deep links,
-  #    page refreshes) are served by the SPA instead of returning 404.
-  #  - hashed build assets are cached aggressively; index.html is never cached
-  #    so new deploys are picked up immediately.
+  # nginx server config for the prerendered SPA (images/home-site/scripts/prerender.js):
+  #  - every route is a real file (/app/<slug> -> app/<slug>.html), and any
+  #    other path is a real 404 serving 404.html, so crawlers never index a
+  #    soft 404 and robots.txt/sitemap.xml are never answered with the SPA.
+  #  - hashed build assets are cached aggressively; pages are never cached so
+  #    new deploys are picked up immediately.
   default.conf: |
     server {
         listen       80;
@@ -26,14 +27,21 @@ data:
             return 200 "ok\n";
         }
 
-        # SPA routing: serve the requested file if it exists, otherwise hand the
-        # request to index.html so the client-side router can resolve it.
-        location / {
-            try_files $uri $uri/ /index.html;
+        # Pages, robots.txt and sitemap.xml are never cached so deploys take
+        # effect immediately.
+        location = / {
+            try_files /index.html =404;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
         }
 
-        # Never cache the entry point so deploys take effect immediately.
-        location = /index.html {
+        location / {
+            try_files $uri $uri.html =404;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+        }
+
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
             add_header Cache-Control "no-cache, no-store, must-revalidate";
         }
 

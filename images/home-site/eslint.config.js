@@ -6,7 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 
 // Flat config (ESLint 9) for the Vite + React + Vitest SPA.
 export default [
-  { ignores: ["dist/**", "node_modules/**", "coverage/**"] },
+  { ignores: ["dist/**", "dist-server/**", "node_modules/**", "coverage/**"] },
   js.configs.recommended,
   {
     files: ["**/*.{js,jsx}"],
@@ -44,6 +44,11 @@ export default [
     rules: {
       "react-refresh/only-export-components": "off",
     },
+  },
+  {
+    // Build scripts run in Node.
+    files: ["scripts/**"],
+    languageOptions: { globals: { ...globals.node } },
   },
   {
     // Vitest runs with globals: true (see vite.config.js).
