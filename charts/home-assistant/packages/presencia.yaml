@@ -1,0 +1,39 @@
+# HA package: whether Fede is home, from his phone's DNS traffic. Pi-hole is
+# the LAN's DNS, so while the phone is on the home Wi-Fi it queries Pi-hole
+# every few minutes, asleep or not; away, it never does. `binary_sensor.fede_en_casa`
+# is on while the last query is under 30 min old. Every presence check in the
+# packages reads it, not `zone.home`.
+# See docs/home-assistant.md#presence.
+#
+# The phone is found by its reserved IP (charts/pihole/values.yaml `celu-fede`),
+# which only holds while it joins with its device MAC. Pi-hole's login is off,
+# so the API needs no password; HA and Pi-hole are both hostNetwork on the Pi.
+
+rest:
+  - resource: http://192.168.0.100:8080/api/queries?client_ip=192.168.0.80&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: Celu Fede - última consulta DNS
+        unique_id: celu_fede_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:cellphone-wireless
+        # No query in Pi-hole's 24 h window renders the epoch: away.
+        value_template: >-
+          {%- set q = value_json.queries | default([]) %}
+          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+
+template:
+  # Unavailable until the first poll and while Pi-hole doesn't answer, so
+  # neither an HA nor a Pi-hole restart is a departure or an arrival:
+  # consumers trigger on `off`/`on` only. The rest sensor doesn't restore its
+  # state, so a stale timestamp never comes back from before a restart.
+  - binary_sensor:
+      - name: Fede en casa
+        unique_id: fede_en_casa
+        default_entity_id: binary_sensor.fede_en_casa
+        device_class: presence
+        state: >-
+          {%- set t = states('sensor.celu_fede_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=30) }}
+        availability: "{{ has_value('sensor.celu_fede_ultima_consulta_dns') }}"

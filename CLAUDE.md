@@ -373,6 +373,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   from the SAME origin (no CORS, no mixed content, google-auth cookie just works).
   These devices have their own auth disabled (`auth_en:false`) — google-auth on
   `shelly.agu.com.ar` is the only gate in front of them from the outside.
+- **home-assistant — presence is Fede's phone on Pi-hole, not GPS.**
+  `binary_sensor.fede_en_casa` (`packages/presencia.yaml`) is `on` while
+  Pi-hole's last DNS query from `192.168.0.80` (the `celu-fede` reservation) is
+  under 30 min old; every package reads it, never `zone.home`/`person`. The
+  `person` GPS sat at `not_home` for a day at home, an idle Android doesn't
+  answer ping, and Pi-hole's ARP `lastSeen` lags its DNS queries by an hour. The
+  idle phone's longest DNS gap measured 12.5 min. Consumers trigger on
+  `off`/`on` only, so Pi-hole down (unavailable) is never an arrival. See
+  docs/home-assistant.md#presence.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
   could only reach a package as an **env var** read back with HA's `!env_var` tag,

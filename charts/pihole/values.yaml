@@ -233,6 +233,8 @@ dhcp:
     - { mac: "a8:e2:91:b8:67:1a", ip: "192.168.0.72", name: "pc-noah" }
     - { mac: "60:ff:9e:8d:f9:7a", ip: "192.168.0.73", name: "pc-julian" }
     # Phones, on their device MAC ("use device MAC" in each SSID's privacy setting).
+    # Home Assistant's presence reads this phone's DNS queries by this IP
+    # (charts/home-assistant/packages/presencia.yaml).
     - { mac: "28:12:d0:99:e5:e1", ip: "192.168.0.80", name: "celu-fede" }      # motorola edge 70
 
 # Resource requests/limits – tuned small for the RPi.
