@@ -1274,3 +1274,21 @@ upgrade.
 `/config` is a `ReadWriteOnce` PVC (default 5Gi). The deployment uses the
 `Recreate` strategy so a new pod doesn't fight the old one for the volume on a
 single-node cluster.
+
+## Upgrade downtime
+
+A rolling upgrade is not possible: two HA instances would share the SQLite
+recorder and `.storage`, run every automation twice, and both bind `:8123` on
+the host network. Every upgrade is therefore a stop-then-start, kept short by
+two settings:
+
+- **`prePull`** — a PreSync hook Job runs the new image (`/bin/true`) before
+  Argo CD changes the Deployment, so the pull happens while the old HA is still
+  serving. The gap is HA's boot alone (~30-90 s on the Pi), plus the recorder's
+  schema migration on some releases.
+- **`terminationGracePeriodSeconds: 120`** — gives HA time to flush the
+  recorder on the way out instead of being SIGKILLed at 30 s and repairing the
+  database on the next boot.
+
+Time-pattern triggers that fall inside the gap are not replayed, so bump the
+version outside a scheduled automation's window.

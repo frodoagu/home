@@ -217,6 +217,17 @@ securityContext:
       - NET_ADMIN
       - NET_RAW
 
+# Time HA gets to stop before the kubelet SIGKILLs it. The image's s6 waits up
+# to 240 s (S6_SERVICES_GRACETIME) and HA's recorder flushes SQLite on the way
+# out; the k8s default of 30 s can cut that short. A clean stop takes ~15 s, so
+# this only lengthens the Recreate gap when the shutdown itself is slow.
+terminationGracePeriodSeconds: 120
+
+# A PreSync Job pulls the new image onto the node before the Deployment
+# changes, keeping the pull out of the Recreate gap.
+prePull:
+  enabled: true
+
 # Node selector – useful to pin HA to a specific node
 nodeSelector: {}
 
