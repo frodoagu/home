@@ -12,7 +12,7 @@ image:
   # Updater pins `latest`'s digest into image.tag (like agu-spa), so what runs is
   # an immutable digest — do not hand-edit image.tag.
   repository: ghcr.io/frodoagu/origin-firewall
-  tag: "latest@sha256:9f52b7078511da2c2cbda1bac1b26a48706919189da4c4438c9c72a6b7697411"
+  tag: "latest@sha256:5502212a1cbf7a217518878419da6b7448081b650e8343e5fb53d3c3bb895c12"
   pullPolicy: IfNotPresent
 # Pull secret(s) for the private GHCR image. Create out-of-band in kube-system
 # (never commit), same token as agu-spa's ghcr-creds:
