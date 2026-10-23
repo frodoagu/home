@@ -39,12 +39,11 @@ export default function MandelbrotExplorer() {
   const sizeRef = useRef({ cw: 1, ch: 1 }); // resolución interna actual
   const renderToken = useRef(0); // cancela renders full obsoletos
   // Espejo de los parámetros para los handlers de puntero sin recrear listeners.
+  // Declarado antes que los efectos que renderizan, así corre primero.
   const stateRef = useRef({ view, maxIter, palIdx });
-  stateRef.current = { view, maxIter, palIdx };
-
-  if (!offRef.current && typeof document !== "undefined") {
-    offRef.current = document.createElement("canvas");
-  }
+  useEffect(() => {
+    stateRef.current = { view, maxIter, palIdx };
+  });
 
   // Preview de baja resolución, síncrono e instantáneo: da feedback inmediato.
   const renderPreview = useCallback(() => {
@@ -56,7 +55,7 @@ export default function MandelbrotExplorer() {
     const q = Math.min(1, PREVIEW_MAX / Math.max(cw, ch));
     const rw = Math.max(1, Math.round(cw * q));
     const rh = Math.max(1, Math.round(ch * q));
-    const off = offRef.current;
+    const off = (offRef.current ??= document.createElement("canvas"));
     off.width = rw;
     off.height = rh;
     const octx = off.getContext("2d");

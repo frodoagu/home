@@ -46,7 +46,7 @@ home-site's.
 
 ## Image
 
-Two stages: `node:24-alpine` builds `dist/`, `nginx:1.31-alpine` serves it. The
+Two stages: `node:26-alpine` builds `dist/`, `nginx:1.31-alpine` serves it. The
 chart mounts its own nginx `default.conf` (SPA fallback, caching, `/healthz`)
 and routes `/api/` to psy-sync.
 

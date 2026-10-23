@@ -120,7 +120,7 @@ export function createWaveform({ load, get, onDrag, onPlay, label }) {
   async function reload() {
     const mine = ++asked;
     node.dataset.state = "loading";
-    let next = null;
+    let next;
     try {
       next = await load();
     } catch {
