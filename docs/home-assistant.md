@@ -1222,9 +1222,10 @@ day ends at 13:50.
 - **Consumers use it as a condition, never as a trigger** for the ACs: while
   the kids are home their unit follows Fede's bedroom in every
   [script](#air-conditioners-smartir--broadlink) (sensor not `off`) and
-  [automation](#automatic-schedule-migrated-from-google-home) (sensor `on`);
-  otherwise none touches it. [`aires_se_van`](#turn-off-when-the-house-empties)
-  needs it `off`.
+  [automation](#automatic-schedule-migrated-from-google-home) (sensor `on`).
+  Otherwise nothing turns it on and no automation turns it off, but a button's
+  off frame and the scheduled shutdown still reach it.
+  [`aires_se_van`](#turn-off-when-the-house-empties) needs it `off`.
 
 ## Presence simulation
 
