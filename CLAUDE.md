@@ -385,7 +385,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   at `not_home` for a day at home, an idle Android doesn't answer ping, and
   Pi-hole's ARP `lastSeen` lags its DNS queries by an hour. Consumers trigger on
   `off`/`on` only, so Pi-hole down (unavailable) is never an arrival. The kids'
-  calendar (`packages/chicos.yaml`) is a condition only. See
+  calendar (`packages/chicos.yaml`) is a condition only; a marked day is a NIGHT
+  (home 18:00 that day → 13:50 the next), not a day. See
   docs/home-assistant.md#presence.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret

@@ -1,6 +1,8 @@
 # HA package: whether the kids are home, from the "Chicos" Google calendar. A
 # day with an event titled "Chicos" (all-day blocks, often several days long) is
-# a day with them, and on those days they are home except 13:50-18:00.
+# a NIGHT they sleep here: home from 18:00 that day to 13:50 the next. So the
+# first day of a block starts at 18:00, and the day after the last one ends at
+# 13:50.
 # `calendar.chicos` is a Remote Calendar config entry: UI-only, its iCal secret
 # address lives in .storage and never in git.
 # See docs/home-assistant.md#kids-calendar.
@@ -22,17 +24,31 @@ template:
         target:
           entity_id: calendar.chicos
         data:
-          start_date_time: "{{ today_at() }}"
+          start_date_time: "{{ today_at() - timedelta(days=1) }}"
           end_date_time: "{{ today_at() + timedelta(days=1) }}"
         response_variable: agenda
+      # Yesterday's and today's dates covered by a "Chicos" event. An all-day
+      # event's end date is exclusive; a timed one covers the days it touches.
+      - variables:
+          ayer: "{{ (today_at() - timedelta(days=1)).strftime('%Y-%m-%d') }}"
+          hoy: "{{ today_at().strftime('%Y-%m-%d') }}"
+          noches: >-
+            {%- set ns = namespace(dias=[]) %}
+            {%- for ev in agenda['calendar.chicos'].events if ev.summary | trim | lower == 'chicos' %}
+            {%- for d in [ayer, hoy] if ev.start[:10] <= d
+                  and (d < ev.end[:10] or ('T' in ev.end and d == ev.end[:10])) %}
+            {%- set ns.dias = ns.dias + [d] %}
+            {%- endfor %}
+            {%- endfor %}
+            {{- ns.dias | unique | list }}
     binary_sensor:
-      - name: Día con los chicos
-        unique_id: chicos_dia
-        default_entity_id: binary_sensor.chicos_dia
-        icon: mdi:calendar-account
-        state: >-
-          {{ agenda['calendar.chicos'].events | map(attribute='summary')
-             | map('trim') | map('lower') | select('eq', 'chicos') | list | count > 0 }}
+      - name: Chicos duermen acá
+        unique_id: chicos_noche
+        default_entity_id: binary_sensor.chicos_noche
+        icon: mdi:bed-clock
+        state: "{{ hoy in noches }}"
+        attributes:
+          anoche: "{{ ayer in noches }}"
 
   - binary_sensor:
       - name: Chicos en casa
@@ -40,6 +56,6 @@ template:
         default_entity_id: binary_sensor.chicos_en_casa
         device_class: occupancy
         state: >-
-          {{ is_state('binary_sensor.chicos_dia', 'on')
-             and not today_at('13:50') <= now() < today_at('18:00') }}
-        availability: "{{ has_value('binary_sensor.chicos_dia') }}"
+          {{ (now() < today_at('13:50') and state_attr('binary_sensor.chicos_noche', 'anoche') == true)
+             or (now() >= today_at('18:00') and is_state('binary_sensor.chicos_noche', 'on')) }}
+        availability: "{{ has_value('binary_sensor.chicos_noche') }}"

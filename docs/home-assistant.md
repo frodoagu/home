@@ -1176,15 +1176,23 @@ house empties, the simulation takes over.
 ## Kids calendar
 
 [`packages/chicos.yaml`](../charts/home-assistant/packages/chicos.yaml) tells
-whether Fede's kids are home, from the **"Chicos"** Google calendar: a day with
+whether Fede's kids are home, from the **"Chicos"** Google calendar. A day with
 an event titled exactly "Chicos" (all-day blocks, often several days long) is a
-day with them, and on those days they're home except **13:50-18:00**.
+**night they sleep here**: they're home from **18:00** that day to **13:50** the
+next. So at any moment:
+
+- before 13:50 they're home if **last night** was marked;
+- 13:50-18:00 they're out;
+- from 18:00 they're home if **tonight** is marked.
+
+The first day of a block therefore starts at 18:00, and the day after its last
+day ends at 13:50.
 
 | Entity | Meaning |
 |---|---|
 | `calendar.chicos` | The calendar, a **Remote Calendar** config entry |
-| `binary_sensor.chicos_dia` | Today has an event titled "Chicos" (trimmed, case-insensitive) |
-| `binary_sensor.chicos_en_casa` | `chicos_dia` and not 13:50-18:00; unavailable while `chicos_dia` has no value |
+| `binary_sensor.chicos_noche` | Tonight is marked; attribute `anoche`: last night was |
+| `binary_sensor.chicos_en_casa` | The rule above; unavailable while `chicos_noche` has no value |
 
 - **The calendar is UI state, not git.** Remote Calendar is config-flow only:
   it takes the calendar's **secret iCal address** (Google Calendar → the
@@ -1192,8 +1200,9 @@ day with them, and on those days they're home except **13:50-18:00**.
   in `.storage`. A fresh `/config` PVC needs it added again (Settings → Devices
   & services → Remote Calendar, name `Chicos`).
 - **Refreshed every 15 min.** Remote Calendar downloads the iCal once a day, so
-  the trigger-based `chicos_dia` calls `homeassistant.update_entity` on the
-  calendar before each `calendar.get_events` for today. A change in Google
+  the trigger-based `chicos_noche` calls `homeassistant.update_entity` on the
+  calendar before each `calendar.get_events` for yesterday and today (title
+  trimmed, case-insensitive; an all-day event's end date is exclusive). A change in Google
   lands within 15 min, and the 00:00 run rolls the day over.
 - **Consumers use it as a condition, never as a trigger** for the ACs:
   [`aires_modo_dormir`](#air-conditioners-smartir--broadlink) starts the kids'
