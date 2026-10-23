@@ -86,7 +86,7 @@ victoria-logs-single:
     # the cached copy when the download fails. See docs/monitoring.md#geoip.
     initContainers:
       - name: geoip
-        image: curlimages/curl:8.11.1
+        image: curlimages/curl:8.23.0
         securityContext:
           runAsUser: 0 # the hostPath data dir belongs to root, like Vector itself
         volumeMounts:

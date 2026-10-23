@@ -2,7 +2,7 @@
 
 # psy.agu.com.ar cloud save. No dependencies beyond Bun itself (bun:sqlite,
 # WebCrypto), so the image is the runtime plus src/.
-FROM oven/bun:1.3-alpine
+FROM oven/bun:1.4-alpine
 WORKDIR /app
 COPY package.json ./
 COPY src ./src

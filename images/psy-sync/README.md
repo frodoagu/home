@@ -55,7 +55,7 @@ Then run `npm run dev` in [`../psy-sampler`](../psy-sampler); Vite proxies
 
 ## Image and deploy
 
-`oven/bun:1.3-alpine` plus `src/`, running as `bun` with `/data` as the volume.
+`oven/bun:1.4-alpine` plus `src/`, running as `bun` with `/data` as the volume.
 [`psy-sync-test.yml`](../../.github/workflows/psy-sync-test.yml) runs
 `bun test`;
 [`psy-sync-image.yml`](../../.github/workflows/psy-sync-image.yml) builds

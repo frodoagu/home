@@ -1,7 +1,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 
-// Flat config (ESLint 9) for the vanilla-JS Vite SPA.
+// Flat config (ESLint 10) for the vanilla-JS Vite SPA.
 export default [
   { ignores: ["dist/**", "node_modules/**", "coverage/**"] },
   js.configs.recommended,

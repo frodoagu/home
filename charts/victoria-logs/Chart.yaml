@@ -9,7 +9,7 @@ description: >-
   The VictoriaLogs UI (vmui) is gated by the same google-auth ForwardAuth as the
   other private services.
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "v1.53.0"
 keywords:
   - logs

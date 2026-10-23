@@ -40,7 +40,7 @@ client for sign-in to work in dev.
 
 ## Image
 
-Two stages: `node:24-alpine` builds `dist/`, `nginx:1.31-alpine` serves it. The
+Two stages: `node:26-alpine` builds `dist/`, `nginx:1.31-alpine` serves it. The
 image ships only the files; the chart mounts its own nginx `default.conf` (one
 file per route, real 404s, caching, `/healthz`).
 
