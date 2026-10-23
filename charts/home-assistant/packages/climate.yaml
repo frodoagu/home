@@ -79,6 +79,13 @@ input_datetime:
 # `climate.set_temperature` call: every IR send carries the whole frame, so a
 # single blast leaves the unit in the wanted state.
 #
+# The kids' unit follows Fede's bedroom while `binary_sensor.chicos_en_casa`
+# (chicos.yaml) isn't `off`, so a broken calendar still starts it: every script
+# that turns the bedroom on turns it on too, and the whole-house ones include
+# it. While it is `off` no script turns it on, so a toggle counts only the
+# units left. Turning off is different: every off a script sends includes the
+# kids' unit whether they're home or not, so a tap is sure to switch it off.
+#
 # The toggles are idempotent — they only turn off when EVERY unit in the group is
 # on, so a mixed group is first driven to "all on" and the next tap turns it off.
 # HA reports the state it ASSUMED; IR is one-way, so a physical remote goes
@@ -129,8 +136,8 @@ script:
         target:
           entity_id:
             - climate.aire_living
-            - climate.aire_dormitorio
             - climate.aire_cocina
+            - climate.aire_dormitorio
             - climate.aire_chicos
     mode: single
 
@@ -139,13 +146,17 @@ script:
   aires_toggle_estacional:
     alias: Aires - Toggle todos (según la estación)
     icon: mdi:sun-snowflake-variant
+    variables:
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence:
+      - variables:
+          aires: >-
+            {{ ['climate.aire_living', 'climate.aire_cocina', 'climate.aire_dormitorio']
+               + (['climate.aire_chicos'] if chicos else []) }}
       - choose:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = ['climate.aire_living', 'climate.aire_cocina',
-                                  'climate.aire_dormitorio', 'climate.aire_chicos'] %}
                   {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
                      | list | count == aires | count }}
             sequence:
@@ -153,8 +164,8 @@ script:
                 target:
                   entity_id:
                     - climate.aire_living
-                    - climate.aire_dormitorio
                     - climate.aire_cocina
+                    - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
           - if:
@@ -164,21 +175,14 @@ script:
             then:
               - action: climate.set_temperature
                 target:
-                  entity_id:
-                    - climate.aire_living
-                    - climate.aire_dormitorio
-                    - climate.aire_cocina
-                    - climate.aire_chicos
+                  entity_id: "{{ aires }}"
                 data:
                   hvac_mode: cool
                   temperature: 24
             else:
               - action: climate.set_temperature
                 target:
-                  entity_id:
-                    - climate.aire_living
-                    - climate.aire_cocina
-                    - climate.aire_chicos
+                  entity_id: "{{ aires | reject('eq', 'climate.aire_dormitorio') | list }}"
                 data:
                   hvac_mode: heat
                   temperature: 21
@@ -191,9 +195,9 @@ script:
     mode: single
 
   # The seasonal toggle scoped to half the house: the day zone (kitchen + living)
-  # and the two bedrooms. Off only when BOTH units are on. The "on" side blasts
-  # both even if one is already on: every IR send carries the whole frame, so it
-  # re-asserts mode+setpoint instead of toggling.
+  # and the bedrooms. Off only when every unit of the zone is on. The "on" side
+  # blasts all of them even if one is already on: every IR send carries the
+  # whole frame, so it re-asserts mode+setpoint instead of toggling.
   aires_cocina_living_toggle:
     alias: Aires - Toggle cocina + living (según la estación)
     icon: mdi:sofa
@@ -227,12 +231,14 @@ script:
   aires_zona_noche_toggle:
     alias: Aires - Toggle piezas (según la estación)
     icon: mdi:bed-double
+    variables:
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence:
       - choose:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set aires = ['climate.aire_dormitorio', 'climate.aire_chicos'] %}
+                  {% set aires = ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) %}
                   {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
                      | list | count == aires | count }}
             sequence:
@@ -250,19 +256,19 @@ script:
             data:
               hvac_mode: "{{ 'cool' if frio else 'heat' }}"
               temperature: "{{ 24 if frio else 20 }}"
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_chicos
-            data:
-              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-              temperature: "{{ 24 if frio else 21 }}"
+          - if: "{{ chicos }}"
+            then:
+              - action: climate.set_temperature
+                target:
+                  entity_id: climate.aire_chicos
+                data:
+                  hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+                  temperature: "{{ 24 if frio else 21 }}"
     mode: single
 
   # Bedrooms on at the seasonal setpoint and the slowest fan each unit declares
-  # (`level1` on the 5140, `low` on the 3340); living areas off. The kids' room
-  # counts as a bedroom only while `binary_sensor.chicos_en_casa` isn't off
-  # (chicos.yaml): a broken calendar still starts it. The delay keeps the fan
-  # frame from stepping on the temperature frame on the same blaster.
+  # (`level1` on the 5140, `low` on the 3340); the rest off. The delay keeps the
+  # fan frame from stepping on the temperature frame on the same blaster.
   aires_modo_dormir:
     alias: Aires - Modo dormir (piezas suaves, resto apagado)
     icon: mdi:sleep
@@ -304,47 +310,67 @@ script:
               fan_mode: low
     mode: single
 
-  # Fede's bedroom alone: off only when it is the ONLY unit on (in any mode),
-  # otherwise bedroom on the slowest fan and the other three off. The off frame
-  # goes to all three even when HA has them off, so a unit started from its
-  # remote is caught too.
+  # Fede's bedroom (and so the kids', while they're home) as the only units on:
+  # off only when they are ALL on and kitchen and living are off (in any mode),
+  # otherwise them on the slowest fan and the rest off. The off frame goes to
+  # the rest even when HA has them off, so a unit started from its remote is
+  # caught too.
   aires_solo_dormitorio_toggle:
     alias: Aires - Toggle solo dormitorio (según la estación)
     icon: mdi:bed-king
+    variables:
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence:
+      - variables:
+          piezas: "{{ ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) }}"
+          otros: ["climate.aire_living", "climate.aire_cocina"]
       - choose:
           - conditions:
               - condition: template
                 value_template: >-
-                  {% set otros = ['climate.aire_living', 'climate.aire_cocina', 'climate.aire_chicos'] %}
-                  {{ states('climate.aire_dormitorio') not in ['off', 'unavailable', 'unknown']
+                  {{ piezas | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
+                         | list | count == piezas | count
                      and otros | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
                          | list | count == 0 }}
             sequence:
               - action: climate.turn_off
                 target:
-                  entity_id: climate.aire_dormitorio
+                  entity_id:
+                    - climate.aire_dormitorio
+                    - climate.aire_chicos
         default:
           - variables:
               frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           - action: climate.turn_off
             target:
-              entity_id:
-                - climate.aire_living
-                - climate.aire_cocina
-                - climate.aire_chicos
+              entity_id: "{{ otros + ([] if chicos else ['climate.aire_chicos']) }}"
           - action: climate.set_temperature
             target:
               entity_id: climate.aire_dormitorio
             data:
               hvac_mode: "{{ 'cool' if frio else 'heat' }}"
               temperature: "{{ 24 if frio else 20 }}"
+          - if: "{{ chicos }}"
+            then:
+              - action: climate.set_temperature
+                target:
+                  entity_id: climate.aire_chicos
+                data:
+                  hvac_mode: "{{ 'cool' if frio else 'heat' }}"
+                  temperature: "{{ 24 if frio else 21 }}"
           - delay: "00:00:01"
           - action: climate.set_fan_mode
             target:
               entity_id: climate.aire_dormitorio
             data:
               fan_mode: level1
+          - if: "{{ chicos }}"
+            then:
+              - action: climate.set_fan_mode
+                target:
+                  entity_id: climate.aire_chicos
+                data:
+                  fan_mode: low
     mode: single
 
   # ±1 °C on every unit that is ON, each clamped to its own min/max (they differ:
@@ -356,6 +382,7 @@ script:
     icon: mdi:thermometer-plus
     variables:
       delta: 1
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence:
       - repeat:
           for_each:
@@ -368,7 +395,8 @@ script:
                 - condition: template
                   value_template: >-
                     {{ states(repeat.item) not in ['off', 'unavailable', 'unknown']
-                       and state_attr(repeat.item, 'temperature') is not none }}
+                       and state_attr(repeat.item, 'temperature') is not none
+                       and (chicos or repeat.item != 'climate.aire_chicos') }}
               then:
                 - action: climate.set_temperature
                   target:
@@ -385,6 +413,7 @@ script:
     icon: mdi:thermometer-minus
     variables:
       delta: -1
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence:
       - repeat:
           for_each:
@@ -397,7 +426,8 @@ script:
                 - condition: template
                   value_template: >-
                     {{ states(repeat.item) not in ['off', 'unavailable', 'unknown']
-                       and state_attr(repeat.item, 'temperature') is not none }}
+                       and state_attr(repeat.item, 'temperature') is not none
+                       and (chicos or repeat.item != 'climate.aire_chicos') }}
               then:
                 - action: climate.set_temperature
                   target:
@@ -463,39 +493,31 @@ script:
     mode: single
 
 # ────────────────────────────────────────────────────────────────────────────
-# AUTOMATISMO DE LOS AIRES. Migrado 1:1 desde las automatizaciones de Google
-# Home (google-home/automations/*.yaml): mismos horarios, umbrales y guardas.
-# Si las de Google Home siguen activas en la app, BORRARLAS — si no, dos
-# planificadores mandan sobre los mismos equipos.
-#
-# Traducción de nombres: los YAML de Google hablan de dispositivos
-# `Nombre - Habitación`; acá van entity_id.
+# AC AUTOMATIONS. aires_calor_manana, aires_apagar_templado and
+# aires_frio_dia_caluroso are the Google Home schedules
+# (google-home/automations/*.yaml) with the same times, thresholds and guards;
+# if those are still active in the app, delete them, or two schedulers drive the
+# same units. Google's device names map to:
 #
 #   Aire Cocina/Living/Dormitorio  -> climate.aire_{cocina,living,dormitorio}
-#   Living - Salón                 -> sensor.atc_29a8_temperatura (renombrado
-#                                     "Living" en el registry, es el termómetro
-#                                     BTHome del living, no el aire)
+#   Living - Salón                 -> sensor.atc_29a8_temperatura (the living's
+#                                     BTHome thermometer, not the AC)
 #   Temperatura Exterior - Afuera  -> sensor.temperatura_exterior (weather.yaml)
-#   home.state.HomePresence: HOME  -> binary_sensor.casa_ocupada on (el celular
-#                                     de Fede o el de Irupé en Pi-hole,
-#                                     presencia.yaml)
+#   home.state.HomePresence: HOME  -> binary_sensor.casa_ocupada on (Fede's or
+#                                     Irupé's phone on Pi-hole, presencia.yaml)
 #
-# Google separa prender / fijar modo / fijar setpoint en tres comandos; acá va
-# un solo `climate.set_temperature` con `hvac_mode`, por el mismo motivo que las
-# escenas de arriba: con IR cada envío manda el frame completo, así que un blast
-# deja el equipo prendido, en modo y en temperatura.
+# Triggers fire on a threshold CROSSING and are not re-evaluated at HA start
+# (unlike luces_afuera.yaml): losing one AC cycle to a restart beats a deploy
+# starting the units by itself. A condition on a `climate.*` reads the state HA
+# ASSUMES: IR is one-way, so a unit switched by its remote goes unnoticed.
 #
-# Los triggers disparan por CRUCE de umbral y no se reevalúan al arrancar HA (a
-# diferencia de luces_afuera.yaml, que sí lleva un trigger `homeassistant.start`).
-# Es a propósito: perder un ciclo de aires por un reinicio es preferible a que un
-# deploy prenda los equipos solo.
-#
-# OJO con las condiciones sobre el estado de un `climate.*`: el IR es
-# unidireccional, así que HA reporta el estado que ASUME, no el del equipo. Si
-# alguien lo apagó con el control remoto, HA no se entera.
-#
-# `climate.aire_chicos` is in every group script but only in the turn-OFF
-# schedule: nothing here starts that unit on a timer, the room is driven by hand.
+# The kids' unit follows Fede's bedroom only while `binary_sensor.chicos_en_casa`
+# (chicos.yaml) is `on`: every automation that switches the bedroom, on or off,
+# switches it too, and the whole-house turn-offs include it. Otherwise no
+# automation touches it, so whoever uses the room drives it by hand; the one
+# exception is the scheduled shutdown, set by hand, which turns all four off. Their
+# coming home or leaving switches nothing by itself; it also keeps aires_se_van
+# from cutting the ACs while they're home.
 #
 # Every automation reports what it did with a push to Fede's phone, on the
 # "Aires" Android channel. The push is the LAST step, so a failed notify never
@@ -506,8 +528,8 @@ automation:
     alias: Aires - Calor a la mañana (cocina + living)
     description: >-
       Prende cocina y living en calor 21 a las 8:00 de lunes a viernes y a las
-      9:00 los fines de semana, sólo si hay alguien en casa y el living está a
-      17 °C o menos.
+      9:00 los fines de semana, sólo si hay alguien en casa (el celular de Fede
+      o el de Irupé en Pi-hole) y el living está a 17 °C o menos.
     trigger:
       - platform: time
         at: "08:00:00"
@@ -516,7 +538,7 @@ automation:
         at: "09:00:00"
         id: finde
     condition:
-      # El trigger sólo aporta la hora; qué días vale cada uno se filtra acá.
+      # The trigger only brings the time; which days each one counts is here.
       - condition: or
         conditions:
           - condition: and
@@ -534,9 +556,9 @@ automation:
       - condition: state
         entity_id: binary_sensor.casa_ocupada
         state: "on"
-      # `lessThanOrEqualTo: 17C` en Google. `numeric_state: below` es estricto,
-      # así que el <= va por template. El default 99 deja la condición en false
-      # si el termómetro está caído: ante la duda no prende nada.
+      # Google's `lessThanOrEqualTo: 17C`. `numeric_state: below` is strict, so
+      # the <= is a template. The 99 default leaves it false with the
+      # thermometer down: when in doubt, nothing turns on.
       - condition: template
         value_template: "{{ states('sensor.atc_29a8_temperatura') | float(99) <= 17 }}"
     action:
@@ -562,15 +584,15 @@ automation:
   - id: aires_apagar_templado
     alias: Aires - Apagar cuando afuera llega a 19 °C
     description: >-
-      Apaga los cuatro aires cuando la temperatura exterior llega a 19 °C, pero
-      sólo si están calefaccionando. Mirar el modo en vez de un rango de fechas
-      es lo que evita que toque los equipos en verano, cuando están en frío.
+      Apaga cocina, living y dormitorio (y el de los chicos si están según el
+      calendario) cuando la temperatura exterior llega a 19 °C, pero sólo si
+      están calefaccionando. Mirar el modo en vez de un rango de fechas es lo
+      que evita que toque los equipos en verano, cuando están en frío.
     trigger:
-      # `greaterThanOrEqualTo: 19C` en Google. Va como template trigger y no
-      # como `numeric_state: above: 19` porque `above` es estricto y el `met`
-      # suele reportar valores con un decimal: un 19.0 clavado nunca dispararía.
-      # Un template trigger dispara en la transición false -> true, que es la
-      # misma semántica de cruce.
+      # Google's `greaterThanOrEqualTo: 19C`. A template trigger and not
+      # `numeric_state: above: 19`, because `above` is strict and `met` reports
+      # one decimal: a flat 19.0 would never fire. A template trigger fires on
+      # the false -> true transition, the same crossing semantics.
       - platform: template
         value_template: "{{ states('sensor.temperatura_exterior') | float(-99) >= 19 }}"
     condition:
@@ -578,19 +600,20 @@ automation:
         entity_id: climate.aire_living
         state: heat
     action:
+      - variables:
+          aires: >-
+            {{ ['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
+               + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
       - action: climate.turn_off
         target:
-          entity_id:
-            - climate.aire_cocina
-            - climate.aire_living
-            - climate.aire_dormitorio
-            - climate.aire_chicos
+          entity_id: "{{ aires }}"
       - action: notify.mobile_app_motorola_edge_70
         data:
           title: Aires
           message: >-
             Afuera llegó a {{ states('sensor.temperatura_exterior') }} °C: apagué
-            los cuatro aires, que estaban en calor.
+            {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
+            | map('lower') | join(', ') }}, que estaban en calor.
           data:
             channel: Aires
             notification_icon: mdi:air-conditioner
@@ -599,8 +622,8 @@ automation:
   - id: aires_apagado_programado
     alias: Aires - Apagado programado
     description: >-
-      Apaga los cuatro aires cuando se termina el timer que arrancan los botones
-      de "apagar en unas horas" / "apagar a las". Dispara con el evento
+      Apaga los cuatro aires, estén o no los chicos, cuando se termina el timer
+      que arrancan los botones de "apagar en unas horas" / "apagar a las". Dispara con el evento
       `timer.finished`, que NO se emite cuando el timer se cancela — por eso
       cancelar el timer alcanza para desprogramar el apagado.
     trigger:
@@ -622,8 +645,10 @@ automation:
   - id: aires_frio_dia_caluroso
     alias: Aires - Frío 24 en día caluroso
     description: >-
-      Prende los tres aires en frío 24 cuando afuera pasa los 30 °C y adentro
-      el living ya pasó los 24 °C, sólo si hay alguien en casa.
+      Prende cocina, living y dormitorio (y el de los chicos si están según el
+      calendario) en frío 24 cuando afuera pasa los 30 °C y adentro el living
+      ya pasó los 24 °C, sólo si hay alguien en casa (el celular de Fede o el
+      de Irupé en Pi-hole).
     trigger:
       - platform: numeric_state
         entity_id: sensor.temperatura_exterior
@@ -636,12 +661,13 @@ automation:
         entity_id: sensor.atc_29a8_temperatura
         above: 24
     action:
+      - variables:
+          aires: >-
+            {{ ['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
+               + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
       - action: climate.set_temperature
         target:
-          entity_id:
-            - climate.aire_cocina
-            - climate.aire_living
-            - climate.aire_dormitorio
+          entity_id: "{{ aires }}"
         data:
           hvac_mode: cool
           temperature: 24
@@ -651,7 +677,8 @@ automation:
           message: >-
             Afuera hace {{ states('sensor.temperatura_exterior') }} °C y el living
             está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
-            prendí cocina, living y dormitorio en frío 24 °C.
+            prendí {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
+            | map('lower') | join(', ') }} en frío 24 °C.
           data:
             channel: Aires
             notification_icon: mdi:air-conditioner
@@ -665,7 +692,8 @@ automation:
     description: >-
       Apaga los aires que están en frío cuando afuera hace la misma temperatura
       o menos que adentro. Cocina y living miran el termómetro del living;
-      dormitorio y chicos, el del dormitorio. No actúa entre las 23 y las 9, y a
+      dormitorio, el del dormitorio, y con él el de los chicos si están según el
+      calendario. No actúa entre las 23 y las 9, y a
       las 9 revisa las dos zonas. Si falta un termómetro no apaga nada.
     trigger:
       - platform: template
@@ -693,7 +721,9 @@ automation:
               aires: [climate.aire_living, climate.aire_cocina]
             - id: piezas
               termometro: sensor.dormitorio_atc_b6d2_temperatura
-              aires: [climate.aire_dormitorio, climate.aire_chicos]
+              aires: >-
+                {{ ['climate.aire_dormitorio']
+                   + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
           exterior: "{{ states('sensor.temperatura_exterior') }}"
           # Zones where it is as cool or cooler outside AND something is in cool.
           frescas: >-
@@ -800,17 +830,17 @@ automation:
 
   # Fires when the house empties: neither Fede's nor Irupé's phone on Pi-hole
   # (`binary_sensor.casa_ocupada`), so it never cuts the ACs while she minds
-  # the house, and catches what she leaves on. The kids' calendar (chicos.yaml)
-  # is a condition and never turns anything off by itself. Only `on` -> `off`
-  # counts, and the kids must read `off`: an unavailable sensor turns nothing
-  # off. The off frame goes to all four whatever HA assumes, which catches a
-  # unit started from its remote.
+  # the house, and catches what she leaves on. Only `on` -> `off` counts, and
+  # the kids must read `off`: an unavailable sensor turns nothing off. So the
+  # kids' unit is never in it (the room may be someone else's). The off frame
+  # goes to the other three whatever HA assumes, which catches a unit started
+  # from its remote.
   - id: aires_se_van
     alias: Aires - Apagar cuando queda la casa vacía
     description: >-
       Cuando no queda nadie en casa (ni el celular de Fede ni el de Irupé en
-      Pi-hole) y los chicos no están según el calendario, apaga los cuatro
-      aires.
+      Pi-hole) y los chicos no están según el calendario, apaga cocina, living
+      y dormitorio. El de los chicos lo deja como está.
     trigger:
       - platform: state
         entity_id: binary_sensor.casa_ocupada
@@ -826,7 +856,6 @@ automation:
             - climate.aire_living
             - climate.aire_cocina
             - climate.aire_dormitorio
-            - climate.aire_chicos
           prendidos: "{{ aires | reject('is_state', ['off', 'unavailable', 'unknown']) | list }}"
       - action: climate.turn_off
         target:

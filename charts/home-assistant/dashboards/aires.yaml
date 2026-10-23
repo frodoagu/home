@@ -51,11 +51,15 @@ views:
       icon: mdi:air-conditioner
       heading_style: title
     - type: markdown
-      content: 'Un solo botón para toda la casa. **Apaga solamente cuando los cuatro
+      content: 'Un solo botón para toda la casa. **Apaga solamente cuando están
 
-        están prendidos** — si hay alguno apagado, primero prende los que
+        todos prendidos** — si hay alguno apagado, primero prende los que
 
-        faltan, y recién el toque siguiente apaga todo.
+        faltan, y recién el toque siguiente apaga todo. El de los chicos solo
+
+        lo prende (y lo cuenta) si están, según el calendario "Chicos"; apagarlo,
+
+        lo apaga siempre.
 
 
         Calor o frío lo decide la temperatura de afuera: con 26° o más, frío;
@@ -63,18 +67,29 @@ views:
         abajo de eso, calor.
 
 
-        {% set aires = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_dormitorio'',''climate.aire_chicos'']
-        -%}
+        {% set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
+
+        {%- set aires = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_dormitorio'']
+        + ([''climate.aire_chicos''] if con_chicos else []) -%}
+
+        {%- set n = aires | count -%}
 
         {%- set prendidos = aires | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
-        {%- set modo = ''frío 24°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else ''calor
-        (21° living, cocina y chicos, 20° el dormitorio)'' -%}
+        {%- set modo = ''frío 24°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else (''calor
+        (21° living, cocina y chicos, 20° el dormitorio)'' if con_chicos else ''calor (21° living y cocina,
+        20° el dormitorio)'') -%}
 
-        {%- if prendidos == 4 %}
+        {%- if not con_chicos %}
 
-        👉 Ahora mismo: los cuatro están prendidos, así que el próximo toque **los apaga**.
+        Los chicos no están: el botón prende living, cocina y dormitorio; al apagar, apaga también el de los chicos.
+
+        {% endif %}
+
+        {%- if prendidos == n %}
+
+        👉 Ahora mismo: los {{ ''cuatro'' if n == 4 else ''tres'' }} están prendidos, así que el próximo toque **los apaga**.
 
         {%- elif prendidos == 0 %}
 
@@ -82,7 +97,7 @@ views:
 
         {%- else %}
 
-        👉 Ahora mismo: hay {{ prendidos }} de 4 prendidos, así que el próximo toque **prende los que faltan**
+        👉 Ahora mismo: hay {{ prendidos }} de {{ n }} prendidos, así que el próximo toque **prende los que faltan**
         en {{ modo }}. El siguiente ya apaga todo.
 
         {%- endif %}
@@ -103,7 +118,9 @@ views:
 
         bajan un grado a los aires que ya están funcionando y no tocan los
 
-        apagados. Cada equipo respeta su propio tope.
+        apagados. Cada equipo respeta su propio tope. El de los chicos, solo
+
+        si están.
 
         '
       grid_options:
@@ -246,36 +263,47 @@ views:
       icon: mdi:home-floor-g
       heading_style: title
     - type: markdown
-      content: '**Día** = cocina + living. **Piezas** = dormitorio + chicos.
+      content: '**Día** = cocina + living. **Piezas** = dormitorio, y la de los chicos
+
+        si están (calendario "Chicos"); al apagar, apaga las dos siempre.
 
 
         Funcionan igual que el botón de arriba: eligen calor o frío según la
 
-        temperatura de afuera, y apagan la zona solo cuando los dos equipos
+        temperatura de afuera, y apagan la zona solo cuando todos sus equipos
 
         están prendidos.
 
 
         {% set frio = is_state(''sensor.aires_modo_estacional'', ''cool'') -%}
 
+        {%- set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
+
         {%- set dia = [''climate.aire_cocina'',''climate.aire_living''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
-        {%- set noche = [''climate.aire_dormitorio'',''climate.aire_chicos''] | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        {%- set noche = [''climate.aire_dormitorio''] + ([''climate.aire_chicos''] if con_chicos else [])
+        -%}
+
+        {%- set prendidas = noche | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
         {%- set m_dia = ''frío 24°'' if frio else ''calor 21°'' -%}
 
-        {%- set m_noche = ''frío 24°'' if frio else ''calor (20° el dormitorio, 21° chicos)'' %}
+        {%- set m_noche = ''frío 24°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
+        else ''calor 20°'') %}
 
         👉 **Día:** {% if dia == 2 %}los dos prendidos, el próximo toque los apaga.{% elif dia == 0 %}los
         dos apagados, el próximo toque los prende en {{ m_dia }}.{% else %}1 de 2 prendido, el próximo
         toque prende el que falta en {{ m_dia }}.{% endif %}
 
 
-        👉 **Piezas:** {% if noche == 2 %}las dos prendidas, el próximo toque las apaga.{% elif noche == 0 %}las
-        dos apagadas, el próximo toque las prende en {{ m_noche }}.{% else %}1 de 2 prendida, el próximo
-        toque prende la que falta en {{ m_noche }}.{% endif %}
+        👉 **Piezas:** {% if not con_chicos %}los chicos no están, así que es solo el dormitorio:
+        {% if prendidas %}prendido, el próximo toque lo apaga.{% else %}apagado, el próximo toque
+        lo prende en {{ m_noche }}.{% endif %}{% elif prendidas == 2 %}las dos prendidas, el próximo
+        toque las apaga.{% elif prendidas == 0 %}las dos apagadas, el próximo toque las prende en {{
+        m_noche }}.{% else %}1 de 2 prendida, el próximo toque prende la que falta en {{ m_noche
+        }}.{% endif %}
 
         '
       grid_options:
@@ -299,25 +327,37 @@ views:
     - type: markdown
       content: '{% set frio = is_state(''sensor.aires_modo_estacional'', ''cool'') -%}
 
-        {%- set m = ''frío 24°'' if frio else ''calor 20°'' -%}
+        {%- set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
 
-        {%- set m_piezas = ''frío 24°'' if frio else ''calor (20° el dormitorio, 21° chicos)'' -%}
+        {%- set m = ''frío 24°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
+        else ''calor 20°'') -%}
 
-        **Modo dormir** no es toggle, hace siempre lo mismo: deja las dos piezas
+        {%- set piezas = ''las dos piezas'' if con_chicos else ''el dormitorio'' -%}
 
-        en {{ m_piezas }} con el ventilador al mínimo, y apaga cocina y living.
-        La de los chicos solo prende si están (calendario "Chicos"); si no, se
-        apaga con el resto.
+        **Modo dormir** no es toggle, hace siempre lo mismo: deja {{ piezas }}
+
+        en {{ m }} con el ventilador al mínimo, y apaga el resto. Los dos botones
+
+        prenden la de los chicos solo si están (calendario "Chicos"); si no,
+
+        la apagan con el resto.
 
 
-        {% set otros = [''climate.aire_living'',''climate.aire_cocina'',''climate.aire_chicos''] | map(''states'')
-        | reject(''in'',[''off'',''unavailable'',''unknown'']) | list | count -%}
+        {% set mias = [''climate.aire_dormitorio''] + ([''climate.aire_chicos''] if con_chicos else [])
+        -%}
 
-        {%- set mio = states(''climate.aire_dormitorio'') not in [''off'',''unavailable'',''unknown''] %}
+        {%- set otros = [''climate.aire_living'',''climate.aire_cocina''] -%}
 
-        👉 **Solo dormitorio:** {% if mio and otros == 0 %}está prendido solo el dormitorio, el próximo
-        toque lo apaga.{% else %}el próximo toque deja solo el dormitorio en {{ m }} con el ventilador
-        al mínimo, y les manda apagar a los otros tres.{% endif %}
+        {%- set mias_on = mias | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        | list | count == mias | count -%}
+
+        {%- set otros_on = otros | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
+        | list | count %}
+
+        👉 **Solo dormitorio:** {% if mias_on and otros_on == 0 %}{{ ''están prendidas solo las dos piezas,
+        el próximo toque las apaga'' if con_chicos else ''está prendido solo el dormitorio, el próximo
+        toque lo apaga'' }}.{% else %}el próximo toque deja solo {{ piezas }} en {{ m }} con el ventilador
+        al mínimo, y le manda apagar al resto.{% endif %}
 
         '
       grid_options:
