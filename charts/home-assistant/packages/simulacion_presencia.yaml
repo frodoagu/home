@@ -34,15 +34,16 @@
 # until the next on time. Nothing else re-applies the schedule.
 #
 # ────────────────────────────────────────────────────────────────────────────
-# "NOBODY HOME" is `binary_sensor.fede_en_casa` off: his phone silent on
-# Pi-hole for 30 min (presencia.yaml). An ABSENCE is that sensor turning off,
+# "NOBODY HOME" is `binary_sensor.casa_ocupada` off: neither Fede's nor
+# Irupé's phone on Pi-hole (presencia.yaml), so nothing runs while she minds
+# the house. An ABSENCE is that sensor turning off,
 # recorded in `input_boolean.simulacion_presencia_ausencia` so it survives a
 # restart. A return is the sensor turning back on.
 #
 # With Fede home the same lamps follow luces_adentro.yaml instead; the two
 # never act at once.
 #
-# Anyone but Fede is invisible to it: kids with a babysitter, guests, or Fede
+# Anyone else is invisible to it: kids with a babysitter, guests, or someone
 # home with a dead phone. For that there's
 # `input_boolean.simulacion_presencia_pausa`: while it's on nothing here acts.
 # A return clears it, so a pause covers one outing and can't be forgotten on.
@@ -113,16 +114,16 @@ template:
 
 automation:
   # The sensor reads Pi-hole's history, so after a start it tells at once
-  # whether Fede left while HA was down. An absence already under way is
+  # whether the house emptied while HA was down. An absence already under way is
   # restored on.
   - id: simulacion_presencia_ausencia
     alias: Simulación de presencia - Casa vacía
     description: >-
-      Marca la casa como vacía cuando el celular de Fede lleva 30 min sin
-      aparecer en Pi-hole. Es lo que arranca la simulación.
+      Marca la casa como vacía cuando ni el celular de Fede ni el de Irupé
+      aparecen en Pi-hole. Es lo que arranca la simulación.
     trigger:
       - platform: state
-        entity_id: binary_sensor.fede_en_casa
+        entity_id: binary_sensor.casa_ocupada
         to: "off"
       - platform: homeassistant
         event: start
@@ -132,10 +133,10 @@ automation:
           - condition: trigger
             id: arranque
         then:
-          - wait_template: "{{ states('binary_sensor.fede_en_casa') in ['on', 'off'] }}"
+          - wait_template: "{{ states('binary_sensor.casa_ocupada') in ['on', 'off'] }}"
             timeout: "00:05:00"
       - condition: state
-        entity_id: binary_sensor.fede_en_casa
+        entity_id: binary_sensor.casa_ocupada
         state: "off"
       - action: input_boolean.turn_on
         target:
@@ -188,7 +189,7 @@ automation:
         entity_id: input_boolean.simulacion_presencia_ausencia
         state: "on"
       - condition: state
-        entity_id: binary_sensor.fede_en_casa
+        entity_id: binary_sensor.casa_ocupada
         state: "off"
       - variables:
           # 'on', 'off', or '' to leave the lamps alone. A time trigger says
@@ -253,15 +254,16 @@ automation:
 
   # A return without a recorded absence changes nothing: coming back sooner
   # never had anything turned on, nor clears a pause set for the outing. The
-  # start trigger covers Fede getting back while HA was down.
+  # start trigger covers someone getting back while HA was down.
   - id: simulacion_presencia_fin
     alias: Simulación de presencia - Volvió alguien
     description: >-
-      Cuando vuelve Fede después de que la casa quedó vacía, saca la pausa.
+      Cuando vuelve Fede o Irupé después de que la casa quedó vacía, saca la
+      pausa.
       Las lámparas quedan como están.
     trigger:
       - platform: state
-        entity_id: binary_sensor.fede_en_casa
+        entity_id: binary_sensor.casa_ocupada
         to: "on"
       - platform: homeassistant
         event: start
@@ -271,13 +273,13 @@ automation:
           - condition: trigger
             id: arranque
         then:
-          - wait_template: "{{ states('binary_sensor.fede_en_casa') in ['on', 'off'] }}"
+          - wait_template: "{{ states('binary_sensor.casa_ocupada') in ['on', 'off'] }}"
             timeout: "00:05:00"
       - condition: state
         entity_id: input_boolean.simulacion_presencia_ausencia
         state: "on"
       - condition: state
-        entity_id: binary_sensor.fede_en_casa
+        entity_id: binary_sensor.casa_ocupada
         state: "on"
       - action: input_boolean.turn_off
         target:

@@ -48,7 +48,7 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
+  (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
   `luces_adentro.yaml`, `luces_afuera.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
   `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
@@ -460,6 +460,9 @@ dashboard's *Detalle* view.
   resends all of it.
 - `aires_modo_dormir` — bedrooms at the seasonal setpoint on the slowest fan each
   unit declares (`level1` on the 5140, `low` on the 3340), living areas off. The
+  kids' room counts as a bedroom only while
+  [`binary_sensor.chicos_en_casa`](#kids-calendar) isn't `off`; otherwise it goes
+  off with the living areas, and a broken calendar still starts it. The
   fan frame is sent a second after the temperature frame so the two IR blasts
   don't step on each other.
 - `aires_solo_dormitorio_toggle` — Fede's bedroom alone. Off only when the
@@ -586,7 +589,9 @@ read the bedroom one (the kids' room and the kitchen have none of their own).
 `aires_llegada` turns units on when [`binary_sensor.fede_en_casa`](#presence)
 goes `off` → `on`, i.e. his phone reappears on Pi-hole after 30 min gone. It
 uses the same zones as above: kitchen + living read the living thermometer, the
-bedroom reads its own. The kids' room is left out, as everywhere else.
+bedroom reads its own, and the kids' room joins the bedroom's zone while
+[`binary_sensor.chicos_en_casa`](#kids-calendar) is `on`. The kids' calendar is
+only a condition here: their coming home never starts a unit.
 
 - **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat 21 °C**, above
   25 °C to **cool 24 °C**, the setpoints of the schedule above. A zone inside
@@ -601,9 +606,19 @@ bedroom reads its own. The kids' room is left out, as everywhere else.
   30 min while home (the longest gap measured was 12.5 min); a phone switched
   off overnight and back on in the morning is one, and Fede is home for it.
 
+### Turn off when the house empties
+
+`aires_se_van` turns **all four units off** when
+[`binary_sensor.casa_ocupada`](#presence) goes `on` → `off` (neither Fede's nor
+Irupé's phone on Pi-hole) and [`binary_sensor.chicos_en_casa`](#kids-calendar)
+reads `off`. So it never cuts the ACs while Irupé minds the house, and it
+catches what she leaves on. The kids leaving at 13:50 changes nothing, and an
+unavailable sensor turns nothing off. The off frame goes to all four whatever HA
+assumes; the push lists only the units HA had on.
+
 ### Push notifications
 
-Every AC automation (the five above plus `aires_apagado_programado`) ends with a
+Every AC automation (the six above plus `aires_apagado_programado`) ends with a
 push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
 target as the washer's cycle-done alert — on an Android channel called `Aires`,
 so its sound and priority are set per channel on the phone. The push is always the
@@ -624,9 +639,10 @@ that switches four units sends one push with the end state of all of them.
 
 Notes that matter when editing them:
 
-- **Presence** is [`binary_sensor.fede_en_casa`](#presence) `on`, which stands
-  in for Google's `home.state.HomePresence: HOME`. `zone.home` and the `person`s'
-  GPS are not used.
+- **"Someone home"** in the schedules is [`binary_sensor.casa_ocupada`](#presence)
+  `on` (Fede or Irupé), which stands in for Google's
+  `home.state.HomePresence: HOME`; arrival is Fede's alone. `zone.home` and the
+  `person`s' GPS are not used.
 - **The living-room temperature is `sensor.atc_29a8_temperatura`**, the BTHome
   thermometer (renamed "Living" in the registry) — not the AC entity. Google's
   `Living - Salón` device is that thermometer.
@@ -1086,29 +1102,37 @@ or the lamp shows up twice.
 ## Presence
 
 [`packages/presencia.yaml`](../charts/home-assistant/packages/presencia.yaml)
-defines **`binary_sensor.fede_en_casa`**, the one presence signal every package
-reads (AC automations, presence simulation). It is **Fede's phone only**, and it
-comes from Pi-hole, not from GPS.
+tells who is home from the phones' DNS traffic on Pi-hole, not from GPS:
+
+| Entity | Phone | Found by | Home while the last query is under | Used for |
+|---|---|---|---|---|
+| `binary_sensor.fede_en_casa` | Fede's | IP `192.168.0.80` (`client_ip`) | 30 min | **The only presence that triggers anything**: AC arrival, evening lamps |
+| `binary_sensor.irupe_en_casa` | Irupé's | DHCP hostname `S22-de-Irupe.lan` (`client_name`) | 90 min | Only through `casa_ocupada` |
+| `binary_sensor.casa_ocupada` | either | — | — | "Somebody home": presence simulation, AC schedules, empty-house AC off |
 
 Pi-hole is the LAN's DNS server, so a phone on the home Wi-Fi keeps querying it,
-asleep or not, and a phone away never does. A `rest` sensor polls
-`/api/queries?client_ip=192.168.0.80&length=1` every minute
-(`sensor.celu_fede_ultima_consulta_dns`, the time of the last query), and the
-binary sensor is `on` while that query is under **30 min** old.
+asleep or not, and a phone away never does. One `rest` sensor per phone polls
+`/api/queries?…&length=1` every minute (`sensor.celu_*_ultima_consulta_dns`,
+the time of the last query). `casa_ocupada` exists for when Irupé minds the
+house: with her there the simulation stays off and the ACs aren't cut.
 
-- **Why 30 min.** Over a day with the phone idle at home, overnight included, its
-  longest silence on Pi-hole was 12.5 min (two gaps over 10 min out of ~4000
-  queries). So arriving is detected at the first query, about the moment the
-  phone joins the Wi-Fi, and leaving 30 min after the last one.
+- **Why 30 and 90 min.** Over a day with Fede's phone idle at home, overnight
+  included, its longest silence on Pi-hole was 12.5 min (two gaps over 10 min
+  out of ~4000 queries). Irupé's Samsung sleeps deeper: up to 56 min overnight.
+  Arriving is detected at the first query, about the moment the phone joins the
+  Wi-Fi; leaving, 30 or 90 min after the last one.
 - **Unavailable until the first poll and while Pi-hole doesn't answer.** Every
   consumer triggers on `off` or `on` only, so neither an HA nor a Pi-hole
   restart is a departure or an arrival. The `rest` sensor doesn't restore its
   state, so a stale timestamp never survives a restart. With no query in
   Pi-hole's 24 h window it reads the epoch: away.
-- **The phone is found by IP**, the `celu-fede` reservation in
+- **Fede's phone is found by IP**, the `celu-fede` reservation in
   [`charts/pihole/values.yaml`](../charts/pihole/values.yaml). That holds only
   while it joins with its device MAC; a randomized MAC gets a pool address and
-  the sensor reads away. Pi-hole's login is off, so the API needs no password.
+  the sensor reads away. **Irupé's randomizes its MAC** (a new one per network),
+  so it's found by the hostname it sends over DHCP, which Pi-hole files its
+  queries under. Renaming the phone breaks it. Pi-hole's login is off, so the
+  API needs no password.
 - **What breaks it on the phone:** a Private DNS hostname (DNS over TLS to
   someone else skips Pi-hole), an always-on VPN, or Wi-Fi off at home. Private
   DNS **Automatic** is fine: Pi-hole doesn't serve DNS over TLS, so the phone
@@ -1142,11 +1166,40 @@ runs the bedroom and office lamps' evening while Fede is home
   tomorrow's sunset, a minute or two apart).
 
 **It never overlaps the [presence simulation](#presence-simulation)**, which
-drives the same lamps while Fede is away: one needs `fede_en_casa` `on`, the
-other `off`. When he gets back, the lamps the simulation left on are at or
+drives the same lamps while the house is empty: one needs `fede_en_casa` `on`,
+the other `casa_ocupada` (Fede or Irupé) `off`. With Irupé minding the house
+neither acts. When he gets back, the lamps the simulation left on are at or
 below this ramp (the simulation's reaches 10 % at 23:00, not 23:30), so they
-hold until the ramp comes down to them and follow it from there. When he
-leaves, the sensor turns `off` 30 min later and the simulation takes over.
+hold until the ramp comes down to them and follow it from there. When the
+house empties, the simulation takes over.
+
+## Kids calendar
+
+[`packages/chicos.yaml`](../charts/home-assistant/packages/chicos.yaml) tells
+whether Fede's kids are home, from the **"Chicos"** Google calendar: a day with
+an event titled exactly "Chicos" (all-day blocks, often several days long) is a
+day with them, and on those days they're home except **13:50-18:00**.
+
+| Entity | Meaning |
+|---|---|
+| `calendar.chicos` | The calendar, a **Remote Calendar** config entry |
+| `binary_sensor.chicos_dia` | Today has an event titled "Chicos" (trimmed, case-insensitive) |
+| `binary_sensor.chicos_en_casa` | `chicos_dia` and not 13:50-18:00; unavailable while `chicos_dia` has no value |
+
+- **The calendar is UI state, not git.** Remote Calendar is config-flow only:
+  it takes the calendar's **secret iCal address** (Google Calendar → the
+  calendar's settings → *Integrate calendar*), which is a credential and lives
+  in `.storage`. A fresh `/config` PVC needs it added again (Settings → Devices
+  & services → Remote Calendar, name `Chicos`).
+- **Refreshed every 15 min.** Remote Calendar downloads the iCal once a day, so
+  the trigger-based `chicos_dia` calls `homeassistant.update_entity` on the
+  calendar before each `calendar.get_events` for today. A change in Google
+  lands within 15 min, and the 00:00 run rolls the day over.
+- **Consumers use it as a condition, never as a trigger** for the ACs:
+  [`aires_modo_dormir`](#air-conditioners-smartir--broadlink) starts the kids'
+  unit only while it isn't `off`, [`aires_llegada`](#turn-on-when-fede-gets-home)
+  includes the kids' room, and [`aires_se_van`](#turn-off-when-the-house-empties)
+  needs it `off`.
 
 ## Presence simulation
 
@@ -1179,15 +1232,16 @@ by. Only a stale schedule (HA down at noon) is drawn again. They're trigger-base
 template sensors: the state comes back from the restore cache, nothing in
 `.storage` is needed.
 
-**An absence** is [`binary_sensor.fede_en_casa`](#presence) turning `off`
-(30 min of silence already debounces it). `automation.simulacion_de_presencia_casa_vacia`
+**An absence** is [`binary_sensor.casa_ocupada`](#presence) turning `off`:
+neither Fede's nor Irupé's phone on Pi-hole (their 30/90 min of silence already
+debounce it). `automation.simulacion_de_presencia_casa_vacia`
 records it in **`input_boolean.simulacion_presencia_ausencia`**, which survives
 a restart. After an HA start it waits for the sensor's first value: the sensor
-reads Pi-hole's history, so it already knows whether Fede left while HA was
-down.
+reads Pi-hole's history, so it already knows whether the house emptied while
+HA was down.
 
 **What drives the lamps** (`automation.simulacion_de_presencia_lamparas`),
-only while an absence is recorded, `binary_sensor.fede_en_casa` is `off` and the pause is off:
+only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the pause is off:
 
 | Trigger | Effect |
 |---|---|
@@ -1212,16 +1266,18 @@ on: one switched off remotely while away stays off until the next on time.
 On 2026.9, `homeassistant: start` fires at `EVENT_HOMEASSISTANT_STARTED`, after
 startup has finished, so the start delays don't hold up the boot.
 
-**"Nobody home"** is [`binary_sensor.fede_en_casa`](#presence) `off`; with
-Fede home the same lamps follow [Evening lamps](#evening-lamps) instead. Only
-Fede's phone counts: kids with a babysitter, guests, or Fede home with a dead
-phone are invisible to it. For
+**"Nobody home"** is [`binary_sensor.casa_ocupada`](#presence) `off`; with
+Fede home the same lamps follow [Evening lamps](#evening-lamps) instead, and
+with Irupé minding the house nothing drives them. Only those two phones count:
+kids with a babysitter, guests, or someone home with a dead phone are invisible
+to it. For
 those there's **`input_boolean.simulacion_presencia_pausa`** (*Pausar simulación
 de presencia*). While it's on, nothing in the package acts. Pausing doesn't turn
 off what is already on.
 
 **Coming back** (`automation.simulacion_de_presencia_volvio_alguien`) is the
-sensor turning `on`: one DNS query from the phone on the home Wi-Fi. With an absence
+sensor turning `on`: one DNS query from Fede's or Irupé's phone on the home
+Wi-Fi. With an absence
 recorded, it clears the absence and the pause. A pause covers one outing and
 can't be left on by mistake. The lamps stay as they are. A return before the
 absence was recorded changes nothing. The same check runs 5 min after an HA start, for someone who got back

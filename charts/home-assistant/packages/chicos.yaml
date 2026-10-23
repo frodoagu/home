@@ -1,0 +1,45 @@
+# HA package: whether the kids are home, from the "Chicos" Google calendar. A
+# day with an event titled "Chicos" (all-day blocks, often several days long) is
+# a day with them, and on those days they are home except 13:50-18:00.
+# `calendar.chicos` is a Remote Calendar config entry: UI-only, its iCal secret
+# address lives in .storage and never in git.
+# See docs/home-assistant.md#kids-calendar.
+
+template:
+  # Remote Calendar downloads the iCal once a day, so every run refreshes it
+  # first: a change made in Google lands within 15 min.
+  - trigger:
+      - platform: time_pattern
+        minutes: "/15"
+      - platform: homeassistant
+        event: start
+    action:
+      - action: homeassistant.update_entity
+        continue_on_error: true
+        target:
+          entity_id: calendar.chicos
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.chicos
+        data:
+          start_date_time: "{{ today_at() }}"
+          end_date_time: "{{ today_at() + timedelta(days=1) }}"
+        response_variable: agenda
+    binary_sensor:
+      - name: Día con los chicos
+        unique_id: chicos_dia
+        default_entity_id: binary_sensor.chicos_dia
+        icon: mdi:calendar-account
+        state: >-
+          {{ agenda['calendar.chicos'].events | map(attribute='summary')
+             | map('trim') | map('lower') | select('eq', 'chicos') | list | count > 0 }}
+
+  - binary_sensor:
+      - name: Chicos en casa
+        unique_id: chicos_en_casa
+        default_entity_id: binary_sensor.chicos_en_casa
+        device_class: occupancy
+        state: >-
+          {{ is_state('binary_sensor.chicos_dia', 'on')
+             and not today_at('13:50') <= now() < today_at('18:00') }}
+        availability: "{{ has_value('binary_sensor.chicos_dia') }}"

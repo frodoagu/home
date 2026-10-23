@@ -1,13 +1,21 @@
-# HA package: whether Fede is home, from his phone's DNS traffic. Pi-hole is
-# the LAN's DNS, so while the phone is on the home Wi-Fi it queries Pi-hole
-# every few minutes, asleep or not; away, it never does. `binary_sensor.fede_en_casa`
-# is on while the last query is under 30 min old. Every presence check in the
-# packages reads it, not `zone.home`.
+# HA package: who is home, from the phones' DNS traffic. Pi-hole is the LAN's
+# DNS, so while a phone is on the home Wi-Fi it queries Pi-hole every few
+# minutes, asleep or not; away, it never does. A phone is home while its last
+# query is recent enough: 30 min for Fede's, 90 min for Irupé's, whose Samsung
+# goes up to ~56 min silent overnight.
+#
+#   binary_sensor.fede_en_casa   Fede's phone. The only presence that triggers
+#                                anything (arrival, departure).
+#   binary_sensor.irupe_en_casa  Irupé's phone, for when she minds the house.
+#   binary_sensor.casa_ocupada   Either of them: what "somebody home" means for
+#                                the presence simulation and the AC schedules.
 # See docs/home-assistant.md#presence.
 #
-# The phone is found by its reserved IP (charts/pihole/values.yaml `celu-fede`),
-# which only holds while it joins with its device MAC. Pi-hole's login is off,
-# so the API needs no password; HA and Pi-hole are both hostNetwork on the Pi.
+# Fede's phone is found by its reserved IP (charts/pihole/values.yaml
+# `celu-fede`), which holds while it joins with its device MAC. Irupé's
+# randomizes its MAC, so it's found by the hostname it sends over DHCP. Pi-hole's
+# login is off, so the API needs no password; HA and Pi-hole are both
+# hostNetwork on the Pi.
 
 rest:
   - resource: http://192.168.0.100:8080/api/queries?client_ip=192.168.0.80&length=1
@@ -19,9 +27,18 @@ rest:
         device_class: timestamp
         icon: mdi:cellphone-wireless
         # No query in Pi-hole's 24 h window renders the epoch: away.
-        value_template: >-
+        value_template: &ultima >-
           {%- set q = value_json.queries | default([]) %}
           {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+  - resource: http://192.168.0.100:8080/api/queries?client_name=S22-de-Irupe.lan&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: Celu Irupé - última consulta DNS
+        unique_id: celu_irupe_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:cellphone-wireless
+        value_template: *ultima
 
 template:
   # Unavailable until the first poll and while Pi-hole doesn't answer, so
@@ -37,3 +54,23 @@ template:
           {%- set t = states('sensor.celu_fede_ultima_consulta_dns') | as_datetime(none) %}
           {{- t is not none and now() - t < timedelta(minutes=30) }}
         availability: "{{ has_value('sensor.celu_fede_ultima_consulta_dns') }}"
+
+      - name: Irupé en casa
+        unique_id: irupe_en_casa
+        default_entity_id: binary_sensor.irupe_en_casa
+        device_class: presence
+        state: >-
+          {%- set t = states('sensor.celu_irupe_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=90) }}
+        availability: "{{ has_value('sensor.celu_irupe_ultima_consulta_dns') }}"
+
+      - name: Casa ocupada
+        unique_id: casa_ocupada
+        default_entity_id: binary_sensor.casa_ocupada
+        device_class: occupancy
+        state: >-
+          {{ is_state('binary_sensor.fede_en_casa', 'on')
+             or is_state('binary_sensor.irupe_en_casa', 'on') }}
+        availability: >-
+          {{ has_value('binary_sensor.fede_en_casa')
+             and has_value('binary_sensor.irupe_en_casa') }}
