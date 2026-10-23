@@ -442,36 +442,47 @@ Every "on" side picks heat or cool from `sensor.aires_modo_estacional`; nothing
 here forces a season. To force one, use a unit's thermostat card on the
 dashboard's *Detalle* view.
 
+**The kids' unit follows Fede's bedroom while they're home.** While
+[`binary_sensor.chicos_en_casa`](#kids-calendar) isn't `off` (so a broken
+calendar still starts it), every script that turns the bedroom on turns the
+kids' unit on too, and the whole-house ones include it. While it is `off`
+someone else may be using the room, so no script turns that unit on and a
+toggle counts only the units left. **Turning off is not gated:** every off a
+button sends includes the kids' unit whether they're home or not, so a tap is
+sure to switch it off. The [automations](#automatic-schedule-migrated-from-google-home)
+are stricter: they touch it only while the sensor is `on`, off included,
+except the scheduled shutdown below, which turns all four off.
+
 - `aires_todos_apagar` — all four **off**.
 - `aires_toggle_estacional` — one-button toggle for the whole house. Only turns
-  **off** when **all four** ACs are on; in any other state (mixed, or all off) it
+  **off** when **all** ACs are on (three of them while the kids are out); in any other state (mixed, or all off) it
   turns all on in the seasonal mode. So a mixed state is first driven to "all on"
   and only the next tap turns everything off. This is the dashboard's main button
   and the one to put on a home-screen widget / iOS Shortcut.
 - `aires_cocina_living_toggle` — the seasonal toggle scoped to the **day zone**
   (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
   to heat 21 °C / cool 24 °C.
-- `aires_zona_noche_toggle` — the night mirror: the **two bedrooms** together,
-  heat 20 °C in Fede's and 21 °C in the kids', cool 24 °C in both.
+- `aires_zona_noche_toggle` — the night mirror: the **bedrooms** together,
+  heat 20 °C in Fede's and 21 °C in the kids', cool 24 °C in both. With the kids
+  out it turns Fede's bedroom alone on, and its off side still sends both.
 - `aires_reenviar` — re-blasts what HA believes each unit holds, `off`
   included, and changes nothing HA shows. It exists for a unit that missed an IR
   frame. SmartIR builds every frame from the entity's whole state (mode, fan,
   swing, setpoint), so a `set_temperature` with the current mode and setpoint
   resends all of it.
 - `aires_modo_dormir` — bedrooms at the seasonal setpoint on the slowest fan each
-  unit declares (`level1` on the 5140, `low` on the 3340), living areas off. The
-  kids' room counts as a bedroom only while
-  [`binary_sensor.chicos_en_casa`](#kids-calendar) isn't `off`; otherwise it goes
-  off with the living areas, and a broken calendar still starts it. The
-  fan frame is sent a second after the temperature frame so the two IR blasts
-  don't step on each other.
-- `aires_solo_dormitorio_toggle` — Fede's bedroom alone. Off only when the
-  bedroom is the **only** unit on (in any mode); otherwise the bedroom goes to the
-  seasonal setpoint on `level1` and the other three get an off frame, sent even
+  unit declares (`level1` on the 5140, `low` on the 3340), the rest off (the
+  kids' unit too while they're out). The fan frame is sent a second after
+  the temperature frame so the two IR blasts don't step on each other.
+- `aires_solo_dormitorio_toggle` — Fede's bedroom, plus the kids' while they're
+  home (then it does what sleep mode does, as a toggle). Off only when those are
+  all on and kitchen and living are off (in any mode); otherwise they go to the
+  seasonal setpoint on the slowest fan and the rest get an off frame, sent even
   to units HA already has off so one started from its remote is caught too.
 - `aires_subir_grado` / `aires_bajar_grado` — ±1 °C on every unit that is **on**,
   each clamped to its own limits (they differ: 17-30 on the 1382, 16-31 on the
-  5140, 16-32 on the 3340). Units that are off stay off. They are one `repeat`
+  5140, 16-32 on the 3340). Units that are off stay off, and so does the kids'
+  setpoint while they're out. They are one `repeat`
   over the four entities, guarded with `if` and not a `condition` step — inside a
   repeat a failed condition aborts the whole script instead of skipping the item.
 
@@ -548,28 +559,31 @@ the tallest one and short sections leave a hole.
 
 ### Automatic schedule (migrated from Google Home)
 
-The same package ships three `automation:`s, migrated 1:1 from the Google Home
+Three of the package's `automation:`s are migrated 1:1 from the Google Home
 app (same times, thresholds and guards — see
 [google-home/README.md](../google-home/README.md)):
 
 - `aires_calor_manana` — kitchen + living to **heat 21 °C** at 08:00 on
   weekdays / 09:00 on weekends, if someone's home and the living room is ≤ 17 °C.
-- `aires_apagar_templado` — all four **off** once it hits 19 °C outside, but
+- `aires_apagar_templado` — kitchen + living + bedroom (+ kids) **off** once it hits 19 °C outside, but
   only while the living AC is in `heat`. Checking the mode instead of a date
   range is what keeps it from firing in summer.
-- `aires_frio_dia_caluroso` — kitchen + living + bedroom to **cool 24 °C** when
+- `aires_frio_dia_caluroso` — kitchen + living + bedroom (+ kids) to **cool 24 °C** when
   it's over 30 °C outside and over 24 °C in the living room, if someone's home.
 
-**The kids' room is in every group script but only in the turn-OFF schedule.**
-Nothing here starts that unit on a timer — the room is driven by hand, from the
-dashboard or Google Home. It joins `aires_apagar_templado` because leaving one AC
-running while the rest of the house shuts down is a leak, not a policy.
+**"+ kids" means while [`binary_sensor.chicos_en_casa`](#kids-calendar) is
+`on`.** Every automation that switches Fede's bedroom, on or off, switches the
+kids' unit with it while they're home. Otherwise no automation touches that
+unit, so whoever uses the room drives it by hand and nothing overrides them; an
+unavailable calendar counts as out here. The exception is
+`aires_apagado_programado`: a shutdown set by hand turns all four off. Their
+coming home or leaving switches nothing by itself.
 
 ### Cool off when it's cooler outside
 
 `aires_apagar_frio_afuera_fresco` has no Google Home original. It turns off the
 units that are in `cool` once the outdoor temperature is at or below the indoor
-one, in two zones: kitchen + living read the living thermometer, bedroom + kids
+one, in two zones: kitchen + living read the living thermometer, bedroom (+ kids)
 read the bedroom one (the kids' room and the kitchen have none of their own).
 
 - **Crossing trigger, one per zone.** A template trigger per thermometer fires on
@@ -608,13 +622,14 @@ only a condition here: their coming home never starts a unit.
 
 ### Turn off when the house empties
 
-`aires_se_van` turns **all four units off** when
+`aires_se_van` turns **kitchen, living and bedroom off** when
 [`binary_sensor.casa_ocupada`](#presence) goes `on` → `off` (neither Fede's nor
 Irupé's phone on Pi-hole) and [`binary_sensor.chicos_en_casa`](#kids-calendar)
 reads `off`. So it never cuts the ACs while Irupé minds the house, and it
-catches what she leaves on. The kids leaving at 13:50 changes nothing, and an
-unavailable sensor turns nothing off. The off frame goes to all four whatever HA
-assumes; the push lists only the units HA had on.
+catches what she leaves on. The kids' unit is never in it: it only fires with
+them out, when that room may be someone else's. The kids leaving at 13:50
+changes nothing, and an unavailable sensor turns nothing off. The off frame goes
+to all three whatever HA assumes; the push lists only the units HA had on.
 
 ### Push notifications
 
@@ -1204,11 +1219,13 @@ day ends at 13:50.
   calendar before each `calendar.get_events` for yesterday and today (title
   trimmed, case-insensitive; an all-day event's end date is exclusive). A change in Google
   lands within 15 min, and the 00:00 run rolls the day over.
-- **Consumers use it as a condition, never as a trigger** for the ACs:
-  [`aires_modo_dormir`](#air-conditioners-smartir--broadlink) starts the kids'
-  unit only while it isn't `off`, [`aires_llegada`](#turn-on-when-fede-gets-home)
-  includes the kids' room, and [`aires_se_van`](#turn-off-when-the-house-empties)
-  needs it `off`.
+- **Consumers use it as a condition, never as a trigger** for the ACs: while
+  the kids are home their unit follows Fede's bedroom in every
+  [script](#air-conditioners-smartir--broadlink) (sensor not `off`) and
+  [automation](#automatic-schedule-migrated-from-google-home) (sensor `on`).
+  Otherwise nothing turns it on and no automation turns it off, but a button's
+  off frame and the scheduled shutdown still reach it.
+  [`aires_se_van`](#turn-off-when-the-house-empties) needs it `off`.
 
 ## Presence simulation
 
