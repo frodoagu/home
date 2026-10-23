@@ -19,6 +19,8 @@ jobs:
   test:
     name: Test & build the SPA
     runs-on: ubuntu-26.04
+    permissions:
+      contents: read # to checkout the (private) repo
     defaults:
       run:
         working-directory: images/home-site
