@@ -2,7 +2,8 @@
 # the WiZ app turns the bathroom lamps on and off; when it turns them on, this
 # sets their brightness and colour for the time of day:
 #
-#   07:00-22:59  100 %, neutral white
+#   07:00-21:59  100 %, cool white
+#   22:00-22:59  100 %, neutral white
 #   23:00-23:59   70 %
 #   00:00-00:59   40 %
 #   01:00-01:59   10 %
@@ -18,8 +19,8 @@ automation:
     alias: Luces baño - Brillo según la hora
     description: >-
       Cuando el sensor de movimiento prende las luces del baño, las pone al
-      100 % hasta las 23, 70 % hasta las 0, 40 % hasta la 1, 10 % hasta las 7,
-      y de 2 a 7 en ámbar.
+      100 % hasta las 23, 70 % hasta las 0, 40 % hasta la 1, 10 % hasta las 7;
+      en luz fría de 7 a 22 y en ámbar de 2 a 7.
     trigger:
       - platform: template
         value_template: >-
@@ -50,5 +51,5 @@ automation:
               area_id: bano
             data:
               brightness_pct: "{{ brillo }}"
-              color_temp_kelvin: 4000
+              color_temp_kelvin: "{{ 6500 if 7 <= hora < 22 else 4000 }}"
     mode: queued
