@@ -388,6 +388,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   calendar (`packages/chicos.yaml`) is a condition only; a marked day is a NIGHT
   (home 18:00 that day → 13:50 the next), not a day. See
   docs/home-assistant.md#presence.
+- **home-assistant — the WiZ motion sensor only exists through a lamp, and only
+  while the WiZ app switches it.** The battery sensor has no Wi-Fi: it pairs to
+  WiZ lamps in its WiZ app room, and the wiz integration's `occupancy` entity is
+  the LAMP's on/off when the change came from the sensor (`src: pir`), created on
+  the first such push. So the app rule must keep turning the lamps on and off;
+  `packages/luces_bano.yaml` only re-dresses them (brightness/colour by the hour)
+  once they're on. It finds lamps and sensor by HA area `bano`, never by entity
+  id. See docs/home-assistant.md#bathroom-light.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
   could only reach a package as an **env var** read back with HA's `!env_var` tag,

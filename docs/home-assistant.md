@@ -49,7 +49,7 @@ How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
   (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
-  `luces_adentro.yaml`, `luces_afuera.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
+  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
   `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
@@ -1187,6 +1187,51 @@ neither acts. When he gets back, the lamps the simulation left on are at or
 below this ramp (the simulation's reaches 10 % at 23:00, not 23:30), so they
 hold until the ramp comes down to them and follow it from there. When the
 house empties, the simulation takes over.
+
+## Bathroom light
+
+The bathroom has WiZ lamps and a **WiZ motion sensor** (battery, no Wi-Fi of its
+own). The sensor is paired to the lamps in the WiZ app and talks to them
+directly; they relay each motion change to HA over the same local push as any
+other WiZ state change. With no WiZ lamp in its WiZ app room and in range, HA
+never hears from it.
+
+**The WiZ app rule does the switching.** HA's wiz occupancy entity (device
+class `occupancy`, named after the lamp's device, e.g.
+`binary_sensor.oficina_lampara_oficina_ocupacion`) is not a motion
+reading: it mirrors the lamp's on/off whenever the change came from the sensor
+(`src: pir`). So it is `on` only while the sensor's rule has turned the lamp on,
+and `off` once the rule's timeout turns it off. With the rule set to do nothing
+there's nothing for HA to see. The entity is created on the lamp's first `pir`
+push, not when the lamp is added.
+
+[`packages/luces_bano.yaml`](../charts/home-assistant/packages/luces_bano.yaml)
+fires when any occupancy entity in the area **`bano`** (Baño, ground floor)
+turns on, and sets every light in that area by the hour:
+
+| Time | Brightness | Colour |
+|---|---|---|
+| 07:00-22:59 | 100 % | 4000 K |
+| 23:00-23:59 | 70 % | 4000 K |
+| 00:00-00:59 | 40 % | 4000 K |
+| 01:00-01:59 | 10 % | 4000 K |
+| 02:00-06:59 | 10 % | amber, `rgb(255, 110, 0)` |
+
+- **Lamps and sensor are matched by area, not entity id.** Assign the new WiZ
+  devices to Baño in HA and the package picks them up; the occupancy entity
+  inherits the area from its lamp. Each lamp the sensor talks to gets its own
+  occupancy entity, and the first one to turn on fires the automation.
+- **The lamp comes on in the app rule's mode first**, then HA corrects it
+  ~150 ms later (measured: `pir` push → HA's `udp` command). Set the rule's
+  light mode to warm and dim (the 02:00 look) so the step is invisible at
+  night; by day it only gets brighter.
+- **The WiZ app still wins over HA.** A change from the app (or the rule) after
+  HA's correction stays until the sensor turns the lamps on again.
+- **The app rule's timeout turns the lamps off.** Nothing here turns them off.
+- Amber has no blue channel at all; on a tunable-white lamp without RGB, HA
+  turns it into its warmest colour temperature (2200 K on WiZ).
+- A level is set once, when the lamps come on: a visit that spans 23:00 keeps
+  the earlier level until the next time the sensor turns them on.
 
 ## Kids calendar
 

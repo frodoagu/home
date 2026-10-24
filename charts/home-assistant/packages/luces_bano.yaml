@@ -1,0 +1,54 @@
+# HA package: the bathroom light by the hour. The WiZ motion sensor's rule in
+# the WiZ app turns the bathroom lamps on and off; when it turns them on, this
+# sets their brightness and colour for the time of day:
+#
+#   07:00-22:59  100 %, neutral white
+#   23:00-23:59   70 %
+#   00:00-00:59   40 %
+#   01:00-01:59   10 %
+#   02:00-06:59   10 %, amber (no blue, to spare sleep)
+#
+# The wiz occupancy entity mirrors the lamp's state when the sensor changed it,
+# so it only exists, and only fires, while the app rule does the switching.
+# Lamps and sensor are found by area (`bano`), not by entity id.
+# See docs/home-assistant.md#bathroom-light.
+
+automation:
+  - id: luces_bano
+    alias: Luces baño - Brillo según la hora
+    description: >-
+      Cuando el sensor de movimiento prende las luces del baño, las pone al
+      100 % hasta las 23, 70 % hasta las 0, 40 % hasta la 1, 10 % hasta las 7,
+      y de 2 a 7 en ámbar.
+    trigger:
+      - platform: template
+        value_template: >-
+          {{ states.binary_sensor
+             | selectattr('attributes.device_class', 'defined')
+             | selectattr('attributes.device_class', 'eq', 'occupancy')
+             | map(attribute='entity_id')
+             | select('in', area_entities('bano'))
+             | select('is_state', 'on')
+             | list | count > 0 }}
+    action:
+      - variables:
+          hora: "{{ now().hour }}"
+          brillo: "{{ 70 if hora == 23 else 40 if hora == 0 else 10 if hora < 7 else 100 }}"
+      - if: "{{ 2 <= hora < 7 }}"
+        then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              area_id: bano
+            data:
+              brightness_pct: "{{ brillo }}"
+              rgb_color: [255, 110, 0]
+        else:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              area_id: bano
+            data:
+              brightness_pct: "{{ brillo }}"
+              color_temp_kelvin: 4000
+    mode: queued
