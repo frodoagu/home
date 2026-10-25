@@ -2,6 +2,7 @@
 # the bedroom and office lamps come on at 100 % in warm white and dim in a
 # straight line to 10 % at 23:30, where they stay until 01:30, when both go
 # off while anyone is home (an empty house keeps the simulation's off time).
+# With PC-Fede on, they go off when it does, if that's before dawn.
 # Getting home inside the ramp's window turns on the lamps that are off at the
 # ramp's current level.
 # See docs/home-assistant.md#evening-lamps.
@@ -194,11 +195,27 @@ automation:
     alias: Luces adentro - Apagar a la 01:30
     description: >-
       Apaga las lámparas del dormitorio y la oficina a la 01:30 si hay alguien
-      en casa, esté como esté la PC.
+      en casa. Con la PC de Fede prendida espera a que se apague, si es antes
+      del amanecer.
     trigger:
       - platform: time
         at: "01:30:00"
+      - platform: state
+        entity_id: binary_sensor.pc_fede_prendida
+        from: "on"
+        to: "off"
     condition:
+      - condition: time
+        after: "01:30:00"
+        before: "12:00:00"
+      - condition: state
+        entity_id: sun.sun
+        state: below_horizon
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: binary_sensor.pc_fede_prendida
+            state: "on"
       - condition: not
         conditions:
           - condition: state

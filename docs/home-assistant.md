@@ -1169,7 +1169,8 @@ runs the bedroom and office lamps' evening while Fede is home
 | Sunset + 10 min | Both lamps on at **100 %**, warm white (2700 K) |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, warm white |
-| 01:30 | Both lamps **off** while anyone is home, Fede or not, PC on or not (own automation, `luces_adentro_apagar`) |
+| 01:30 | Both lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
+| PC-Fede goes off between 01:30 and dawn | Both lamps **off**: with the PC on at 01:30, the turn-off waits for it |
 
 - **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
   below the ramp; one turned up by hand sits above where the ramp was 30 min
