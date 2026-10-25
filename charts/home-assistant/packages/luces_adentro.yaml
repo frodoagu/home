@@ -14,6 +14,36 @@
 # simulation needs `binary_sensor.casa_ocupada` (Fede or Irupé) off. Lamps the simulation left on are at or below this ramp (its own reaches
 # 10 % at 23:00), so after a return they hold until the ramp comes down to
 # them and follow it from there.
+#
+# While PC-Fede is on, the office lamp is out of all of this: it goes to violet
+# at 100 % when the PC comes on, at any hour, and the ramp leaves it alone.
+# When the PC goes off it returns to warm white at the ramp's level (10 % after
+# 23:30 and before dawn, off in daytime). The PC is on while it has queried
+# Pi-hole in the last 5 min (it queries every 1-2 min while on, never when off).
+
+rest:
+  - resource: http://192.168.0.100:8080/api/queries?client_ip=192.168.0.70&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: PC Fede - última consulta DNS
+        unique_id: pc_fede_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:desktop-tower
+        value_template: >-
+          {%- set q = value_json.queries | default([]) %}
+          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+
+template:
+  - binary_sensor:
+      - name: PC Fede prendida
+        unique_id: pc_fede_prendida
+        default_entity_id: binary_sensor.pc_fede_prendida
+        device_class: power
+        state: >-
+          {%- set t = states('sensor.pc_fede_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=5) }}
+        availability: "{{ has_value('sensor.pc_fede_ultima_consulta_dns') }}"
 
 automation:
   - id: luces_adentro
@@ -23,7 +53,8 @@ automation:
       después del atardecer al 100 % en blanco cálido y las baja en línea recta
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
-      a mano.
+      a mano. Con la PC de Fede prendida la lámpara de la oficina va violeta
+      al 100 % y la rampa no la toca; al apagarse vuelve al blanco cálido.
     trigger:
       - platform: sun
         event: sunset
@@ -37,16 +68,32 @@ automation:
       - platform: time_pattern
         minutes: "/5"
         id: rampa
+      - platform: state
+        entity_id: binary_sensor.pc_fede_prendida
+        from: "off"
+        to: "on"
+        id: pc_prendida
+      - platform: state
+        entity_id: binary_sensor.pc_fede_prendida
+        from: "on"
+        to: "off"
+        id: pc_apagada
     condition:
-      - condition: state
-        entity_id: binary_sensor.fede_en_casa
-        state: "on"
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: pc_prendida
+          - condition: state
+            entity_id: binary_sensor.fede_en_casa
+            state: "on"
     action:
       - variables:
-          lamparas:
-            - light.lampara_dormitorio_grupo
-            - light.lampara_oficina
+          # Unavailable counts as on, so a Pi-hole outage never repaints it.
+          lamparas: >-
+            {{ ['light.lampara_dormitorio_grupo']
+               + (['light.lampara_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           kelvin: 2700
+          color_pc: [7, 0, 255, 0]
           # `next_setting` is today's or tomorrow's sunset, a minute or two
           # apart, so only its time of day is used.
           inicio: >-
@@ -80,7 +127,38 @@ automation:
             {%- endfor %}
             {{- ns.lista }}
           apagadas: "{{ lamparas | select('is_state', 'off') | list }}"
+          # Where the office lamp goes when the PC goes off; 0 is off.
+          nivel_oficina: >-
+            {%- set i = inicio | as_datetime(none) %}
+            {%- if i is not none and now() >= i %}{{ brillo }}
+            {%- elif now() < today_at('12:00') and is_state('sun.sun', 'below_horizon') %}10
+            {%- else %}0
+            {%- endif %}
       - choose:
+          - conditions: "{{ trigger.id == 'pc_prendida' }}"
+            sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: light.lampara_oficina
+                data:
+                  brightness_pct: 100
+                  rgbw_color: "{{ color_pc }}"
+          - conditions: "{{ trigger.id == 'pc_apagada' and nivel_oficina | int > 0 }}"
+            sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: light.lampara_oficina
+                data:
+                  brightness_pct: "{{ nivel_oficina }}"
+                  color_temp_kelvin: "{{ kelvin }}"
+          - conditions: "{{ trigger.id == 'pc_apagada' }}"
+            sequence:
+              - action: light.turn_off
+                continue_on_error: true
+                target:
+                  entity_id: light.lampara_oficina
           - conditions: "{{ trigger.id == 'encender' }}"
             sequence:
               - action: light.turn_on
