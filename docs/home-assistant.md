@@ -1188,6 +1188,24 @@ below this ramp (the simulation's reaches 10 % at 23:00, not 23:30), so they
 hold until the ramp comes down to them and follow it from there. When the
 house empties, the simulation takes over.
 
+### Office lamp while PC-Fede is on
+
+`binary_sensor.pc_fede_prendida` is `on` while `pc-fede` (`192.168.0.70`, a
+Pi-hole reservation) has queried Pi-hole in the last 5 min, the same DNS trick
+as [presence](#presence). While on, it queries every few seconds and never goes
+quiet for more than ~2 min. Off, it is silent for hours, so the PC turning off
+shows up 5-6 min later.
+
+| PC | Office lamp |
+|---|---|
+| Comes on (any hour, Fede detected or not) | Violet (`rgbw [7, 0, 255, 0]`) at **100 %** |
+| Is on | Left out of the sunset turn-on, the arrival and the ramp |
+| Goes off, Fede home | Warm white at the ramp's level now: the ramp inside the window, **10 %** after 23:30 or before dawn, **off** in daytime |
+
+`unavailable` (Pi-hole down, HA starting) counts as on, so the ramp never
+repaints a violet lamp. If Pi-hole stays down, the office lamp stays out of the
+ramp until it comes back.
+
 ## Kids calendar
 
 [`packages/chicos.yaml`](../charts/home-assistant/packages/chicos.yaml) tells
