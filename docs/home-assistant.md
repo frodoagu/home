@@ -1169,12 +1169,15 @@ runs the bedroom and office lamps' evening while Fede is home
 | Sunset + 10 min | Both lamps on at **100 %**, warm white (2700 K) |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, warm white |
+| 01:30 | Both lamps **off** while anyone is home, Fede or not, PC on or not (own automation, `luces_adentro_apagar`) |
 
 - **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
   below the ramp; one turned up by hand sits above where the ramp was 30 min
   ago. Both are left alone for the rest of the night. The ramp sends brightness
   only, so a colour or scene picked in the evening stays.
-- **Nothing after 23:30**, and nothing turns the lamps off.
+- **Nothing between 23:30 and 01:30**: the lamps hold at 10 % until the 01:30
+  turn-off. That one only skips an empty house (`casa_ocupada` `off`), where
+  the [presence simulation](#presence-simulation) keeps its own off time.
 - **No HA-start catch-up.** A restart past sunset + 10 doesn't turn them on;
   the next 5-min tick resumes the ramp on lamps that are on.
 - The window starts from `sun.sun`'s `next_setting` time of day (today's or
@@ -1200,7 +1203,7 @@ shows up 5-6 min later.
 |---|---|
 | Comes on (any hour, Fede detected or not) | Violet (`rgbw [7, 0, 255, 0]`) at **100 %** |
 | Is on | Left out of the sunset turn-on, the arrival and the ramp |
-| Goes off, Fede home | Warm white at the ramp's level now: the ramp inside the window, **10 %** after 23:30 or before dawn, **off** in daytime |
+| Goes off, Fede home | Warm white at the ramp's level now: the ramp inside the window, **10 %** from 23:30 to 01:30, **off** after that and in daytime |
 
 `unavailable` (Pi-hole down, HA starting) counts as on, so the ramp never
 repaints a violet lamp. If Pi-hole stays down, the office lamp stays out of the
