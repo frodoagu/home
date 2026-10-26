@@ -1161,16 +1161,16 @@ idle Android phone doesn't answer; and the ARP cache Pi-hole parses, whose
 ## Evening lamps
 
 [`packages/luces_adentro.yaml`](../charts/home-assistant/packages/luces_adentro.yaml)
-runs the bedroom and office lamps' evening while Fede is home
+runs the bedroom, office and living-room lamps' evening while Fede is home
 ([`binary_sensor.fede_en_casa`](#presence) `on`):
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | Both lamps on at **100 %**, warm white (2700 K) |
+| Sunset + 10 min | The three lamps on at **100 %**, warm white (2700 K) |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, warm white |
-| 01:30 | Both lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
-| PC-Fede goes off between 01:30 and dawn | Both lamps **off**: with the PC on at 01:30, the turn-off waits for it |
+| 01:30 | The three lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
+| PC-Fede goes off between 01:30 and dawn | The three lamps **off**: with the PC on at 01:30, the turn-off waits for it |
 
 - **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
   below the ramp; one turned up by hand sits above where the ramp was 30 min
@@ -1187,9 +1187,10 @@ runs the bedroom and office lamps' evening while Fede is home
 **It never overlaps the [presence simulation](#presence-simulation)**, which
 drives the same lamps while the house is empty: one needs `fede_en_casa` `on`,
 the other `casa_ocupada` (Fede or Irupé) `off`. With Irupé minding the house
-neither acts. When he gets back, the lamps the simulation left on are at or
-below this ramp (the simulation's reaches 10 % at 23:00, not 23:30), so they
-hold until the ramp comes down to them and follow it from there. When the
+neither acts. When he gets back, the lamps the simulation left on are below
+this ramp or less than 30 min ahead of it (the simulation's bedroom/office
+ramp reaches 10 % at 23:00, not 23:30; the living room holds 30 % from 22:30),
+so they hold until the ramp comes down to them, or follow it at once. When the
 house empties, the simulation takes over.
 
 ### Office lamp while PC-Fede is on
@@ -1306,12 +1307,12 @@ day ends at 13:50.
 ## Presence simulation
 
 [`packages/simulacion_presencia.yaml`](../charts/home-assistant/packages/simulacion_presencia.yaml)
-runs an evening routine on the bedroom and office lamps while nobody is home, at
-different times every night. The outdoor lights already follow
+runs an evening routine on the bedroom, office and living-room lamps while
+nobody is home, at different times every night. The outdoor lights already follow
 dusk/dawn on their own ([luces_afuera.yaml](#duskdawn-schedule)); this adds a
 room that changes during the evening.
 
-**Tonight's schedule** is two timestamp sensors, drawn at 12:00 (a "night"
+**Tonight's schedule** is four timestamp sensors, drawn at 12:00 (a "night"
 runs noon to noon, so an off time past midnight belongs to the evening before,
 weekday included):
 
@@ -1319,6 +1320,8 @@ weekday included):
 |---|---|---|
 | `sensor.simulacion_presencia_lampara_prender` | sunset − 15 min, kept within 19:30-20:00, + 0-44 min | — |
 | `sensor.simulacion_presencia_lampara_apagar` | 00:15 + 0-44 min | +60 min |
+| `sensor.simulacion_presencia_salon_prender` | sunset − 30 min, kept within 19:00-19:30, + 0-44 min | — |
+| `sensor.simulacion_presencia_salon_apagar` | 22:40 + 0-39 min | — |
 
 The off window follows Argentine habits, not the house's own history (the lamps
 have too little of it so far): an average bedtime around 01:00
@@ -1347,15 +1350,19 @@ only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the
 
 | Trigger | Effect |
 |---|---|
-| One of the two times | Lamps on or off |
+| One of the four times | That pair's lamps on or off |
 | The absence is recorded | Lamps reconciled with their window: on inside it, off outside |
 | Pause switched off while away | Same reconcile |
 | HA start | Same reconcile, after 1 min for the presence sensor's first poll |
 | Every 5 min, inside the lamps' window | Ramp: re-dims the lamps that are on |
 
-**The lamps move together**, in warm white (2700 K). Their brightness falls in a
-straight line from 100 % at tonight's on time to 10 % at 23:00 (WiZ's floor),
-then holds at 10 % until they go off. A turn-on, a reconcile or the ramp sends a
+**Bedroom and office move together**, in warm white (2700 K). Their brightness
+falls in a straight line from 100 % at tonight's on time to 10 % at 23:00
+(WiZ's floor), then holds at 10 % until they go off. **The living room has its
+own night**, so the house doesn't change all at once: on a little earlier,
+3000 K, from 100 % down to **30 % at 22:30**, held there until it goes off
+around 23:00. Each group is one pass of a `repeat` in the automation, with its
+own pair of sensors, colour temperature and ramp end. A turn-on, a reconcile or the ramp sends a
 lamp the brightness for that moment, so a lamp turned on by a reconcile at 22:00
 comes on at about 40 %.
 
@@ -1393,10 +1400,12 @@ Entities it drives:
   entity becomes zone A.
 - **The office lamp is `light.lampara_oficina`**, the wiz entity of the WiZ
   RGBW Tunable at `lampara-oficina` (`192.168.0.61`).
+- **The living-room lamp is `light.lampara_salon`**, the wiz entity of the WiZ
+  RGBW Tunable at `lampara-salon` (`192.168.0.63`).
 
 The helpers are **not on the saved Overview** (a storage-mode dashboard
 doesn't pick up new entities; see the bedroom lamp section above). Add the pause
-there by hand, next to the two schedule sensors if you want tonight's times in
+there by hand, next to the schedule sensors if you want tonight's times in
 view. The absence is an internal flag.
 
 ## Probes
