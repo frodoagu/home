@@ -1260,6 +1260,30 @@ context), and sets it by the hour:
 - A level is set once, when the lamp comes on: a visit that spans 23:00 keeps
   the earlier level until the next time it comes on.
 
+## Living-room lamp
+
+The living room has a WiZ RGBW Tunable lamp (`light.lampara_salon`, reserved as
+`lampara-salon` → `192.168.0.63`).
+[`packages/luces_salon.yaml`](../charts/home-assistant/packages/luces_salon.yaml)
+sets its white by the sun:
+
+| From | To | Colour |
+|---|---|---|
+| Sunrise | Sunset | 6500 K (cool) |
+| Sunset | Sunset + 2 h | 4000 K (neutral) |
+| Sunset + 2 h | Sunrise | 2700 K (warm) |
+
+- **Colour temperature only.** It fires when the lamp comes on, at each of the
+  three changes while it's on, and on HA start. It never turns the lamp on or
+  off and never touches its brightness.
+- **A colour or a WiZ scene is left alone**: it only acts while the lamp's
+  `color_mode` is `color_temp` with no effect. Back to white from the app, it
+  picks the sun's colour up at the next change or the next turn-on.
+- A white picked by hand lasts until the next change.
+- At a sun trigger the colour comes from the trigger itself, since `sun.sun`
+  may not have moved on yet at that instant. Otherwise it's `sun.sun`'s state,
+  plus today's sunset time of day for the neutral window.
+
 ## Kids calendar
 
 [`packages/chicos.yaml`](../charts/home-assistant/packages/chicos.yaml) tells
