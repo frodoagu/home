@@ -61,7 +61,8 @@ npm run build    # bundle de producción
 ```
 
 La lógica pura de cada app vive en un módulo `.js` al lado de su componente
-(`src/apps/mandelbrot.js`, `src/apps/neutralCurrent.js`, `src/auth/auth.js`) y se
+(`src/apps/mandelbrot.js`, `src/apps/neutralCurrent.js`, `src/apps/balancedAudio.js`,
+`src/auth/auth.js`) y se
 testea con Vitest + Testing Library (`*.test.js[x]`). Los componentes quedan
 finos (orquestan render/interacción) y el cálculo queda cubierto. Convención al
 agregar una app: extraé la matemática a un `.js` y sumá su `*.test.js`.
