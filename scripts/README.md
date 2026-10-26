@@ -204,15 +204,31 @@ Exit codes: `0` on success, `1` if `--inspect` finds no track, `2` if
 
 ### First run: pick the right `--kind-map`
 
-rekordbox stores a hot cue's slot as `djmdCue.Kind`, and how those numbers map
-to the letters A-H isn't documented. The script ships two candidates:
+> [!WARNING]
+> **The `Kind` → letter mapping is unconfirmed.** Check it before importing
+> anything, or the import can move your existing hot cues and overwrite them.
+
+In `master.db`, every cue is a row of the `djmdCue` table, and its `Kind`
+column says what it is: `0` is a memory cue, any other number is a hot cue and
+names its slot. Which number is which letter isn't documented anywhere. The
+script ships two candidates:
 
 | Map | Kind → slot |
 |---|---|
-| `skip4` | 1,2,3 → A,B,C; 5,6,7,8,9 → D,E,F,G,H (4 unused) |
+| `skip4` (default) | 1,2,3 → A,B,C; 5,6,7,8,9 → D,E,F,G,H (4 unused). The variant found in reverse-engineering notes. |
 | `linear` | 1-8 → A-H |
 
-A wrong map would put new cues on top of your existing ones, so confirm it once:
+The mapping matters because the XML import replaces a track's cues with the
+ones in the XML. The script copies your existing cues into the XML under the
+letter the map gives them, and puts new cues only in the letters it believes
+are free. With the wrong map:
+
+- an existing hot cue lands in the XML under another letter, so after the
+  import it has moved (e.g. your D shows up on E);
+- a new phrase cue goes into a letter the map thinks is free but that holds
+  one of yours, and replaces it.
+
+Confirm it once:
 
 1. In rekordbox, pick a track and set hot cues on known slots, e.g. A, D and H.
 2. Run `--inspect` on it and compare the `Kind` numbers with those letters.
