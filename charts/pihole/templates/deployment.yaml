@@ -66,6 +66,10 @@ spec:
             # terminates TLS upstream.
             - name: FTLCONF_webserver_port
               value: {{ .Values.webPort | quote }}
+            # FTL answers 403 to any Host other than this domain, localhost or an
+            # IP, so it must be the public hostname Traefik forwards.
+            - name: FTLCONF_webserver_domain
+              value: {{ .Values.ingress.host | quote }}
             - name: FTLCONF_dns_upstreams
               value: {{ .Values.dns.upstreams | quote }}
             - name: FTLCONF_dns_listeningMode
