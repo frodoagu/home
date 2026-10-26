@@ -11,6 +11,11 @@
 # sits where the curve was, so a white picked by hand stays until the next
 # turn-on. Colour temperature only: brightness and on/off stay with whoever
 # switched it, and a lamp showing a colour or a WiZ scene is left alone.
+#
+# Except after a power cut: the lamp also hangs off a wall switch, and back
+# from `unavailable` it boots in its last state. Then it gets the white and the
+# lamps' brightness for the hour (`sensor.brillo_segun_la_hora`, luces_llave.yaml,
+# the same line as the evening ramp), whatever it was showing.
 # See docs/home-assistant.md#living-room-lamp.
 
 template:
@@ -56,7 +61,9 @@ automation:
       a neutra en las 2 horas después del atardecer y a cálida a las 23:30, y
       vuelve a fría en la hora después del amanecer. Lo pone al prenderse y lo
       sigue mientras está prendida, salvo que alguien haya elegido otro blanco.
-      No toca el brillo ni una lámpara con color o escena.
+      No toca el brillo ni una lámpara con color o escena, salvo cuando vuelve
+      la corriente (la llave de la pared): ahí le pone el blanco y el brillo de
+      la hora.
     trigger:
       - platform: state
         entity_id: light.lampara_salon
@@ -69,14 +76,36 @@ automation:
       - platform: state
         entity_id: sensor.lampara_salon_blanco
         id: curva
+      - platform: state
+        entity_id: light.lampara_salon
+        from: unavailable
+        to: "on"
+        id: corriente
     condition:
       - condition: state
         entity_id: light.lampara_salon
         state: "on"
-      - "{{ state_attr('light.lampara_salon', 'color_mode') == 'color_temp' }}"
-      - "{{ state_attr('light.lampara_salon', 'effect') in [none, 'off'] }}"
       - "{{ is_number(states('sensor.lampara_salon_blanco')) }}"
     action:
+      # An HA start restores the lamp as `unavailable` before the wiz
+      # integration loads it; that isn't the power coming back.
+      - if: >-
+          {{- trigger.id == 'corriente'
+              and (trigger.from_state.attributes.restored is not defined
+                   or now() - trigger.from_state.last_changed > timedelta(minutes=1)) }}
+        then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: light.lampara_salon
+            data:
+              brightness_pct: "{{ states('sensor.brillo_segun_la_hora') | int(100) }}"
+              color_temp_kelvin: "{{ states('sensor.lampara_salon_blanco') | int }}"
+          - stop: Back from a power cut.
+      - condition: template
+        value_template: >-
+          {{- state_attr('light.lampara_salon', 'color_mode') == 'color_temp'
+              and state_attr('light.lampara_salon', 'effect') in [none, 'off'] }}
       - variables:
           kelvin: "{{ states('sensor.lampara_salon_blanco') | int }}"
           actual: "{{ state_attr('light.lampara_salon', 'color_temp_kelvin') | int(0) }}"

@@ -134,11 +134,12 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
 | `192.168.0.40` | `lavarropas` | Candy simply-Fi washer-dryer | |
 | `192.168.0.50` | `tv-sala` | LG webOS TV | living |
 | `192.168.0.51` | `tv-dormitorio` | LG webOS TV | bedroom |
-| `192.168.0.60` | `lampara-dormitorio` | WiZ Squire lamp | bedroom |
+| `192.168.0.60` | `velador-dormitorio` | WiZ Squire lamp (table lamp) | bedroom |
 | `192.168.0.61` | `velador-oficina` | WiZ RGBW Tunable lamp (table lamp) | office |
 | `192.168.0.62` | `lampara-bano` | WiZ RGBW Tunable lamp | bathroom |
 | `192.168.0.63` | `lampara-salon` | WiZ RGBW Tunable lamp | living |
 | `192.168.0.64` | `lampara-oficina` | WiZ RGBW Tunable lamp, on a plain wall switch | office |
+| `192.168.0.65` | `lampara-dormitorio` | WiZ RGBW Tunable lamp, on a plain wall switch | bedroom |
 | `192.168.0.70` | `pc-fede` | Fede's gaming PC | |
 | `192.168.0.71` | `think` | Fede's work laptop | |
 | `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |

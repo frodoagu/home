@@ -48,9 +48,10 @@ way to add config-as-code alongside it (a previous attempt to own the whole
 How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
-  (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lampara_dormitorio.yaml`, `lavarropas.yaml`,
-  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`,
-  `tv.yaml`, `weather.yaml`) are globbed into a ConfigMap
+  (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lavarropas.yaml`,
+  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `luces_llave.yaml`, `luces_salon.yaml`,
+  `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`, `tv.yaml`, `velador_dormitorio.yaml`,
+  `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
   and mounted **read-only** at `/config/packages/`.
 - The init container ensures `homeassistant: packages: !include_dir_named packages`
@@ -969,13 +970,13 @@ local midnight, the off-side only during the day.
 > other (and to the on-side's sun trigger), or dusk — the very window the
 > catch-up exists to cover — becomes the overlap.
 
-## Bedroom lamp (WiZ Squire)
+## Bedroom table lamp (WiZ Squire)
 
-The bedroom lamp is a **WiZ Squire** (`ESP20_DHRGB_01B`), a portable RGB table
+The bedroom table lamp (*Velador dormitorio*) is a **WiZ Squire** (`ESP20_DHRGB_01B`), a portable RGB table
 lamp with two light zones. HA's core `wiz` integration drives it **locally**
 over UDP `38899`, with no WiZ cloud in the path. `wiz` is a config-flow
 integration, so git doesn't hold the entry. Git only holds the address it points
-at: the reservation `lampara-dormitorio` → `192.168.0.60` in
+at: the reservation `velador-dormitorio` → `192.168.0.60` in
 [charts/pihole/values.yaml](../charts/pihole/values.yaml) (decade `.6x`, WiZ
 lights).
 
@@ -988,12 +989,12 @@ Setup, in order:
    `wiz_<last 6 hex of the MAC>`) into the reservation, then power-cycle the lamp
    so it takes `.60`.
 3. **Add it to HA.** Add **WiZ** under Settings → Devices & services with host
-   `192.168.0.60`. Put the device in the *Dormitorio* area as *Lámpara
-   dormitorio* and rename its entities to `light.lampara_dormitorio` and
-   `*.lampara_dormitorio_*`.
+   `192.168.0.60`. Put the device in the *Dormitorio* area as *Velador
+   dormitorio* and rename its entities to `light.velador_dormitorio` and
+   `*.velador_dormitorio_*`.
 4. **Update the firmware** from the WiZ app. Per-zone control works on
    `1.38.0`, with the zone index described under
-   [Per-zone control](#per-zone-control-lampara_dormitorioyaml). The lamp shipped on `1.24.2`, which **ignores the zone index**: a
+   [Per-zone control](#per-zone-control-velador_dormitorioyaml). The lamp shipped on `1.24.2`, which **ignores the zone index**: a
    `setPilot` with `"devices": 2` repaints both zones, and `getPilot` answers the
    same for either index, with no `devices` field in the reply. On that firmware
    the package below leaves both zone lights `unavailable`.
@@ -1002,17 +1003,17 @@ Setup, in order:
 
    ```bash
    echo -n '{"method":"setPilot","params":{"devices":2,"state":true,"r":120,"g":0,"b":255}}' \
-     | nc -u -w1 lampara-dormitorio.lan 38899
+     | nc -u -w1 velador-dormitorio.lan 38899
    ```
 
    Zone 1 (`devices: 1`) is the **top** head and zone 2 the **bottom** one; the
    template lights are named after them.
 
-### Per-zone control (`lampara_dormitorio.yaml`)
+### Per-zone control (`velador_dormitorio.yaml`)
 
 The current `wiz` integration exposes the lamp as **one** `light`, so both zones
 always share a state and colour. Its dual-head balance,
-`number.lampara_dormitorio_relacion_de_cabezal_doble`, is `unavailable` on
+`number.velador_dormitorio_relacion_de_cabezal_doble`, is `unavailable` on
 `1.38.0`: the lamp no longer reports `ratio`. The WiZ local API can address
 each zone, though, with an index that is **not symmetric** on `1.38.0`:
 
@@ -1024,17 +1025,17 @@ each zone, though, with an index that is **not symmetric** on `1.38.0`:
 
 `getPilot` with no `devices` answers for zone 1 and leaves the field out.
 `getModelConfig` reports `devTotal: 2`.
-[`packages/lampara_dormitorio.yaml`](../charts/home-assistant/packages/lampara_dormitorio.yaml)
+[`packages/velador_dormitorio.yaml`](../charts/home-assistant/packages/velador_dormitorio.yaml)
 builds two lights on top of it:
 
-- `sensor.lampara_dormitorio_zonas` polls `getPilot` for both zones every 15 s
+- `sensor.velador_dormitorio_zonas` polls `getPilot` for both zones every 15 s
   and keeps each raw result in the `zona_a`/`zona_b` attributes. A reply only
   counts for the zone named in its own `devices` field.
-- `light.lampara_dormitorio_zona_a` (*Lámpara dormitorio arriba*) /
-  `_zona_b` (*Lámpara dormitorio abajo*) are template lights. They read
+- `light.velador_dormitorio_zona_a` (*Velador dormitorio arriba*) /
+  `_zona_b` (*Velador dormitorio abajo*) are template lights. They read
   state, brightness, RGB and colour temperature from those attributes, and their
-  actions call `script.lampara_dormitorio_zona`. That script sends a `setPilot`
-  through `shell_command.lampara_dormitorio_enviar` and refreshes the sensor
+  actions call `script.velador_dormitorio_zona`. That script sends a `setPilot`
+  through `shell_command.velador_dormitorio_enviar` and refreshes the sensor
   right away.
 - If the lamp doesn't answer, both lights go `unavailable`. They don't keep a
   stale state.
@@ -1049,14 +1050,14 @@ builds two lights on top of it:
   then shows no brightness in HA, until a plain colour or white is set on it.
 
 A change made from the WiZ app shows up in HA within one poll. The integration's
-own `light.lampara_dormitorio` still drives both zones together. It's hidden
+own `light.velador_dormitorio` still drives both zones together. It's hidden
 from Google (see below), but it stays in HA for whole-lamp automations.
 
 **One lamp in the HA UI.** The package also defines a light group,
-`light.lampara_dormitorio_grupo` (*Lámpara dormitorio*), over the two zone lights.
+`light.velador_dormitorio_grupo` (*Velador dormitorio*), over the two zone lights.
 It's the lamp's single tile: on/off and brightness drive both zones, and its
 more-info dialog lists each zone with its own controls (HA ≥ 2025.8). It lands as
-`light.lampara_dormitorio_2`, because the wiz entity already holds the plain id,
+`light.velador_dormitorio_2`, because the wiz entity already holds the plain id,
 and is renamed to `_grupo` in the registry.
 
 The group's dialog only lists members that **aren't hidden**, and the
@@ -1068,14 +1069,17 @@ dashboard doesn't pick up new devices on its own; add them by hand, or delete it
 config (`lovelace/config/delete` over the WebSocket API) to go back to
 auto-generated.
 
-The rest is entity-registry state in `.storage`, not git: `light.lampara_dormitorio`
-(the wiz entity), `sensor.lampara_dormitorio_zonas` and
-`script.lampara_dormitorio_zona` are `hidden_by: user`, the zone lights carry the
+The rest is entity-registry state in `.storage`, not git: `light.velador_dormitorio`
+(the wiz entity), `sensor.velador_dormitorio_zonas` and
+`script.velador_dormitorio_zona` are `hidden_by: user`, the zone lights carry the
 *Dormitorio* area (template entities have no device to inherit it from), and the
 dead dual-head ratio entity is `disabled_by: user`. Hidden entities keep working.
 The zone lights' names (*arriba* / *abajo*) are also set in the registry: a
 template light keeps the name it first registered with, so renaming it in the
-package alone changes nothing in the UI or in Google. On a fresh PVC the package
+package alone changes nothing in the UI or in Google. The package's `unique_id`s still
+read `lampara_dormitorio_*`, the lamp's name before the wall-switch
+[bedroom lamp](#wall-switch-lamps) took it: changing them would mint new
+entities and lose all of this. On a fresh PVC the package
 names apply as they are; elsewhere, redo these in the UI (entity → settings).
 
 ### When the integration gets zones
@@ -1088,13 +1092,13 @@ keeps them updated with the lamp's push updates instead of a poll. That isn't
 automatic here. Once an HA release with it is pinned in
 [values.yaml](../charts/home-assistant/values.yaml):
 
-1. The existing `light.lampara_dormitorio` becomes Zone A (same id) and Zone B
-   appears as a new entity. Rename it to `light.lampara_dormitorio_zona_b`.
-2. Delete `packages/lampara_dormitorio.yaml`, then remove the `restored: true`
+1. The existing `light.velador_dormitorio` becomes Zone A (same id) and Zone B
+   appears as a new entity. Rename it to `light.velador_dormitorio_zona_b`.
+2. Delete `packages/velador_dormitorio.yaml`, then remove the `restored: true`
    orphans its entities leave behind
    (`config/entity_registry/remove` over the WebSocket API).
-3. Re-point whatever used `light.lampara_dormitorio_zona_a` to
-   `light.lampara_dormitorio`, and swap the Google `entity_config` override:
+3. Re-point whatever used `light.velador_dormitorio_zona_a` to
+   `light.velador_dormitorio`, and swap the Google `entity_config` override:
    the integration's two entities become the exposed ones.
 
 Read that PR's final release notes before doing this: the entity names or the
@@ -1160,8 +1164,9 @@ idle Android phone doesn't answer; and the ARP cache Pi-hole parses, whose
 ## Evening lamps
 
 [`packages/luces_adentro.yaml`](../charts/home-assistant/packages/luces_adentro.yaml)
-runs the evening of the bedroom lamp, the office table lamp (*Velador oficina*,
-not the [office lamp](#office-lamp)) and the living-room lamp while Fede is home
+runs the evening of the bedroom and office table lamps (*Velador dormitorio*,
+*Velador oficina*; not the [wall-switch lamps](#wall-switch-lamps)) and the
+living-room lamp while Fede is home
 ([`binary_sensor.fede_en_casa`](#presence) `on`):
 
 | Trigger | Effect |
@@ -1298,20 +1303,30 @@ steps.
 - **A colour or a WiZ scene is left alone**: it only acts while the lamp's
   `color_mode` is `color_temp` with no effect. Back to white from the app, it
   picks the curve up at the next turn-on.
+- **Except after a power cut.** The lamp also hangs off a wall switch, and back
+  from `unavailable` it boots in its last state. Then it gets the curve's white
+  and the [wall-switch lamps'](#wall-switch-lamps) brightness for the hour
+  (`sensor.brillo_segun_la_hora`, the evening ramp's line), whatever it was
+  showing. The restored `unavailable` of an HA start doesn't count for the
+  first minute.
 - Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
   of day (today's or tomorrow's, a minute or two apart).
 
-## Office lamp
+## Wall-switch lamps
 
-The office has two WiZ RGBW Tunables: the table lamp (*Velador oficina*,
-`light.velador_oficina`, `velador-oficina` → `192.168.0.61`), which the
-[evening lamps](#evening-lamps) and the [presence simulation](#presence-simulation)
-drive, and the **office lamp** (*Lámpara oficina*, `light.lampara_oficina`,
-`lampara-oficina` → `192.168.0.64`) on a **plain wall switch**. Off at the wall
-means no power: HA sees it go `unavailable`, and switched back on it boots in
-its last state.
-[`packages/luces_oficina.yaml`](../charts/home-assistant/packages/luces_oficina.yaml)
-keeps it in warm white (2700 K) at the bedroom lamp's brightness curve, in
+The office and the bedroom each have a table lamp (*Velador*, driven by the
+[evening lamps](#evening-lamps) and the [presence simulation](#presence-simulation))
+and a WiZ RGBW Tunable on a **plain wall switch**:
+
+| Lamp | Entity | Reservation |
+|---|---|---|
+| *Lámpara oficina* | `light.lampara_oficina` | `lampara-oficina` → `192.168.0.64` |
+| *Lámpara dormitorio* | `light.lampara_dormitorio` | `lampara-dormitorio` → `192.168.0.65` |
+
+Off at the wall means no power: HA sees the lamp go `unavailable`, and switched
+back on it boots in its last state.
+[`packages/luces_llave.yaml`](../charts/home-assistant/packages/luces_llave.yaml)
+keeps both in warm white (2700 K) at the table lamps' brightness curve, in
 straight lines:
 
 | From | To | Brightness |
@@ -1321,19 +1336,20 @@ straight lines:
 | Sunset + 10 min | 23:30 | 100 % down to 10 % |
 | 23:30 | Sunrise | 10 % |
 
-The curve is `sensor.lampara_oficina_brillo`, recomputed every minute.
+The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
 
-- **Switched on at the wall** (`unavailable` → `on`), it goes to the curve's
+- **Switched on at the wall** (`unavailable` → `on`), a lamp goes to the curve's
   level in warm white at once. It boots in its last state first, so it shows
   that for the moment HA takes to see it back.
 - **While on, it follows the curve** as long as it still sits where the curve
   was (±2 %). A level set by hand stays until it's next switched on at the
   wall. An `off` from HA or the app isn't a power cut: the next `on` from there
   is left alone.
-- An HA start isn't a turn-on: the restored `unavailable` it begins with is
-  skipped for the first minute.
-- Nothing else drives it: not the evening lamps, not the presence simulation
-  (without power it can't come on anyway).
+- **An HA start isn't a turn-on**: the restored `unavailable` it begins with is
+  skipped for the first minute. A lamp that was off the curve when HA started
+  stays off it until it's next switched on at the wall.
+- A new lamp on a wall switch joins by its entity in both `lamparas` and the
+  `prendida` trigger.
 
 ## Kids calendar
 
@@ -1431,7 +1447,7 @@ only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the
 | HA start | Same reconcile, after 1 min for the presence sensor's first poll |
 | Every 5 min, inside the lamps' window | Ramp: re-dims the lamps that are on |
 
-**The bedroom lamp and the office table lamp move together**, in warm white (2700 K). Their brightness
+**The bedroom and office table lamps move together**, in warm white (2700 K). Their brightness
 falls in a straight line from 100 % at tonight's on time to 10 % at 23:00
 (WiZ's floor), then holds at 10 % until they go off. **The living room has its
 own night**, so the house doesn't change all at once: on a little earlier,
@@ -1469,18 +1485,18 @@ while HA was down.
 
 Entities it drives:
 
-- **The bedroom lamp goes through `light.lampara_dormitorio_grupo`**, not the wiz
+- **The bedroom table lamp goes through `light.velador_dormitorio_grupo`**, not the wiz
   entity. The group keeps its meaning after the upstream zone split (see
   [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
   entity becomes zone A.
 - **The office table lamp is `light.velador_oficina`** (*Velador oficina*), the
   wiz entity of the WiZ RGBW Tunable at `velador-oficina` (`192.168.0.61`). The
-  [office lamp](#office-lamp) on the wall switch is not part of the simulation.
+  [wall-switch lamps](#wall-switch-lamps) are not part of the simulation.
 - **The living-room lamp is `light.lampara_salon`**, the wiz entity of the WiZ
   RGBW Tunable at `lampara-salon` (`192.168.0.63`).
 
 The helpers are **not on the saved Overview** (a storage-mode dashboard
-doesn't pick up new entities; see the bedroom lamp section above). Add the pause
+doesn't pick up new entities; see the bedroom table lamp section above). Add the pause
 there by hand, next to the schedule sensors if you want tonight's times in
 view. The absence is an internal flag.
 

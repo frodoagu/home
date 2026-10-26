@@ -1,6 +1,7 @@
-# HA package: the office lamp's brightness by the hour, always in warm white
-# (2700 K). It hangs off a plain wall switch, so off means no power: HA sees it
-# go `unavailable`, and switched back on it boots in its last state.
+# HA package: the lamps on a plain wall switch (office and bedroom), their
+# brightness by the hour, always in warm white (2700 K). Off at the wall means
+# no power: HA sees them go `unavailable`, and switched back on they boot in
+# their last state.
 #
 #   sunrise          -> sunrise + 1 h     10 % up to 100 %
 #   sunrise + 1 h    -> sunset + 10 min   100 %
@@ -8,11 +9,11 @@
 #   23:30            -> sunrise           10 %
 #
 # Every change is a straight line, and nothing gets brighter before sunrise.
-# `sensor.lampara_oficina_brillo` is that curve. Back from `unavailable` the
-# lamp goes to it at once; while it's on it follows each step of the curve as
-# long as it still sits where the curve was, so a level set by hand stays until
-# the next time it's switched on at the wall.
-# See docs/home-assistant.md#office-lamp.
+# `sensor.brillo_segun_la_hora` is that curve. Back from `unavailable` a lamp
+# goes to it at once; while it's on it follows each step of the curve as long
+# as it still sits where the curve was, so a level set by hand stays until the
+# next time it's switched on at the wall.
+# See docs/home-assistant.md#wall-switch-lamps.
 
 template:
   - trigger:
@@ -41,69 +42,78 @@ template:
             {%- endfor %}
             {{- (ns.a[1] + (ns.b[1] - ns.a[1]) * ns.f) | round(0) | int }}
     sensor:
-      - name: Lámpara oficina - Brillo según la hora
-        unique_id: lampara_oficina_brillo
-        default_entity_id: sensor.lampara_oficina_brillo
+      - name: Brillo según la hora
+        unique_id: brillo_segun_la_hora
+        default_entity_id: sensor.brillo_segun_la_hora
         unit_of_measurement: "%"
         icon: mdi:brightness-6
         state: "{{ curva }}"
 
 automation:
-  - id: luces_oficina
-    alias: Lámpara oficina - Brillo según la hora
+  - id: luces_llave
+    alias: Lámparas de llave - Brillo según la hora
     description: >-
-      Al prender la lámpara de la oficina con la llave la pone en blanco cálido
-      al brillo que corresponde a la hora, y mientras está prendida lo va
-      siguiendo: 100 % de día, baja en línea recta hasta 10 % entre el
-      atardecer y las 23:30, queda en 10 % hasta el amanecer y sube a 100 % en
-      la hora siguiente. Si alguien le cambia el brillo, lo deja hasta la
-      próxima vez que se prenda.
+      Al prender con la llave la lámpara de la oficina o la del dormitorio la
+      pone en blanco cálido al brillo que corresponde a la hora, y mientras
+      está prendida lo va siguiendo: 100 % de día, baja en línea recta hasta
+      10 % entre el atardecer y las 23:30, queda en 10 % hasta el amanecer y
+      sube a 100 % en la hora siguiente. Si alguien le cambia el brillo, lo
+      deja hasta la próxima vez que se prenda.
     trigger:
       - platform: state
-        entity_id: light.lampara_oficina
+        entity_id:
+          - light.lampara_oficina
+          - light.lampara_dormitorio
         from: unavailable
         to: "on"
         id: prendida
       - platform: state
-        entity_id: sensor.lampara_oficina_brillo
+        entity_id: sensor.brillo_segun_la_hora
         id: curva
     condition:
-      - condition: state
-        entity_id: light.lampara_oficina
-        state: "on"
-      - "{{ is_number(states('sensor.lampara_oficina_brillo')) }}"
+      - "{{ is_number(states('sensor.brillo_segun_la_hora')) }}"
     action:
       - variables:
-          brillo: "{{ states('sensor.lampara_oficina_brillo') | int }}"
-          pct: "{{ (state_attr('light.lampara_oficina', 'brightness') | int(0) * 100 / 255) | round(0) | int }}"
-          # Still where the curve was before this step; 1-2 % of slack for the
-          # 0-255 round trip.
-          sigue: >-
-            {{- trigger.id == 'curva' and trigger.from_state is not none
-                and is_number(trigger.from_state.state)
-                and (pct - trigger.from_state.state | int) | abs <= 2 }}
+          lamparas:
+            - light.lampara_oficina
+            - light.lampara_dormitorio
+          brillo: "{{ states('sensor.brillo_segun_la_hora') | int }}"
           # An HA start restores the lamp as `unavailable` before the wiz
           # integration loads it; that isn't a turn-on at the wall.
           encendida: >-
             {{- trigger.id == 'prendida'
                 and (trigger.from_state.attributes.restored is not defined
                      or now() - trigger.from_state.last_changed > timedelta(minutes=1)) }}
+          # The lamps still where the curve was before this step; 1-2 % of
+          # slack for the 0-255 round trip.
+          siguen: >-
+            {%- set ns = namespace(lista=[]) %}
+            {%- if trigger.id == 'curva' and trigger.from_state is not none
+                   and is_number(trigger.from_state.state) %}
+            {%- for e in lamparas if is_state(e, 'on') %}
+            {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
+            {%- if (pct - trigger.from_state.state | int) | abs <= 2 and pct != brillo %}
+            {%- set ns.lista = ns.lista + [e] %}
+            {%- endif %}
+            {%- endfor %}
+            {%- endif %}
+            {{- ns.lista }}
       - choose:
           - conditions: "{{ encendida }}"
             sequence:
               - action: light.turn_on
                 continue_on_error: true
                 target:
-                  entity_id: light.lampara_oficina
+                  entity_id: "{{ trigger.entity_id }}"
                 data:
                   brightness_pct: "{{ brillo }}"
                   color_temp_kelvin: 2700
-          - conditions: "{{ sigue and pct != brillo }}"
+          - conditions: "{{ siguen | count > 0 }}"
             sequence:
               - action: light.turn_on
                 continue_on_error: true
                 target:
-                  entity_id: light.lampara_oficina
+                  entity_id: "{{ siguen }}"
                 data:
                   brightness_pct: "{{ brillo }}"
     mode: queued

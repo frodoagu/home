@@ -1,5 +1,5 @@
 # HA package: the indoor lamps' evening while Fede is home. 10 min after sunset
-# the bedroom lamp, the office table lamp and the living-room lamp come on at
+# the bedroom and office table lamps and the living-room lamp come on at
 # 100 % in warm white (the living room in its own white, luces_salon.yaml) and
 # dim in a straight line to 10 % at 23:30, where they stay until 01:30, when
 # they go off while anyone is home (an empty house keeps the simulation's off time).
@@ -55,8 +55,8 @@ automation:
   - id: luces_adentro
     alias: Luces adentro - Atardecer con Fede en casa
     description: >-
-      Con Fede en casa, prende la lámpara del dormitorio, el velador de la
-      oficina y la lámpara del salón 10 min después del atardecer al 100 % en
+      Con Fede en casa, prende los veladores del dormitorio y la oficina y
+      la lámpara del salón 10 min después del atardecer al 100 % en
       blanco cálido (el salón en su propio blanco) y las baja en línea recta
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
@@ -97,7 +97,7 @@ automation:
       - variables:
           # Unavailable counts as on, so a Pi-hole outage never repaints it.
           lamparas: >-
-            {{ ['light.lampara_dormitorio_grupo', 'light.lampara_salon']
+            {{ ['light.velador_dormitorio_grupo', 'light.lampara_salon']
                + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           kelvin: 2700
           # The living room comes on in its own white, so it doesn't flash warm
@@ -207,7 +207,7 @@ automation:
   - id: luces_adentro_apagar
     alias: Luces adentro - Apagar a la 01:30
     description: >-
-      Apaga las lámparas del dormitorio y el salón y el velador de la oficina a la 01:30 si hay alguien
+      Apaga los veladores del dormitorio y la oficina y la lámpara del salón a la 01:30 si hay alguien
       en casa. Con la PC de Fede prendida espera a que se apague, si es antes
       del amanecer.
     trigger:
@@ -239,7 +239,7 @@ automation:
         continue_on_error: true
         target:
           entity_id:
-            - light.lampara_dormitorio_grupo
+            - light.velador_dormitorio_grupo
             - light.velador_oficina
             - light.lampara_salon
     mode: single

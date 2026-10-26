@@ -224,11 +224,12 @@ dhcp:
     - { mac: "4c:ba:d7:11:bb:12", ip: "192.168.0.50", name: "tv-sala" }
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
     # WiZ lights — Home Assistant's wiz config entry addresses each one by IP.
-    - { mac: "d8:a0:11:b2:6b:45", ip: "192.168.0.60", name: "lampara-dormitorio" }  # WiZ Squire
+    - { mac: "d8:a0:11:b2:6b:45", ip: "192.168.0.60", name: "velador-dormitorio" }  # WiZ Squire
     - { mac: "98:77:d5:f2:14:8c", ip: "192.168.0.61", name: "velador-oficina" }     # WiZ RGBW Tunable
     - { mac: "98:77:d5:b8:aa:68", ip: "192.168.0.62", name: "lampara-bano" }        # WiZ RGBW Tunable
     - { mac: "98:77:d5:bb:1e:48", ip: "192.168.0.63", name: "lampara-salon" }       # WiZ RGBW Tunable
     - { mac: "98:77:d5:bb:9a:a8", ip: "192.168.0.64", name: "lampara-oficina" }     # WiZ RGBW Tunable, wall switch
+    - { mac: "98:77:d5:b8:ae:f8", ip: "192.168.0.65", name: "lampara-dormitorio" }  # WiZ RGBW Tunable, wall switch
     # Computers. Pinned by their real (burned-in) MAC; anything that randomizes
     # it per connection can't hold a reservation (docs/pihole.md).
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }        # gaming
