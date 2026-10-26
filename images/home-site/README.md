@@ -21,7 +21,7 @@ the Dockerfile that bakes it into an nginx image. Deployed by
   [docs/agu-spa.md](../../docs/agu-spa.md#routing-caching--search-engines).
 
 Pure logic lives in a plain `.js` module next to its component
-(`mandelbrot.js`, `neutralCurrent.js`, `auth/auth.js`) with a `*.test.js`
+(`mandelbrot.js`, `neutralCurrent.js`, `balancedAudio.js`, `auth/auth.js`) with a `*.test.js`
 beside it; components stay thin.
 
 ## Develop

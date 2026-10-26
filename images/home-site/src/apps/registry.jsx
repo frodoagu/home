@@ -1,6 +1,7 @@
-import { Activity, AudioWaveform, BellRing, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, AudioWaveform, BellRing, Cable, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
+import BalancedAudio from "./BalancedAudio";
 
 /* -------------------------------------------------------------------------
  * Filter categories — the identity facets shown as chips on the landing.
@@ -81,6 +82,21 @@ export const apps = [
     tag: { es: "Psytrance", en: "Psytrance", pt: "Psytrance", fr: "Psytrance" },
     icon: AudioWaveform,
     accent: "#a855f7",
+  },
+  {
+    slug: "audio-balanceado",
+    title: { es: "Audio balanceado", en: "Balanced Audio", pt: "Áudio balanceado", fr: "Audio symétrique" },
+    description: {
+      es: "Por qué un cable balanceado rechaza el ruido: sumá hum, dimmers y lazos de masa, comparalo con uno no balanceado y escuchá la diferencia.",
+      en: "Why a balanced cable rejects noise: add hum, dimmers and ground loops, compare it with an unbalanced one and hear the difference.",
+      pt: "Por que um cabo balanceado rejeita o ruído: some hum, dimmers e loops de terra, compare com um não balanceado e ouça a diferença.",
+      fr: "Pourquoi un câble symétrique rejette le bruit : ajoute du ronflement, des variateurs et des boucles de masse, compare avec un câble asymétrique et écoute la différence.",
+    },
+    categories: ["music", "trades"],
+    tag: { es: "Audio", en: "Audio", pt: "Áudio", fr: "Audio" },
+    icon: Cable,
+    accent: "#22d3ee",
+    Component: BalancedAudio,
   },
 ];
 
