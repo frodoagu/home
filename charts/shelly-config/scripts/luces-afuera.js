@@ -18,7 +18,7 @@
 // "both on" and the next flip turns them off.
 //
 // Home Assistant and Google Home do not take part: they still see two
-// independent `switch` entities and can drive each light separately. That is why
+// independent lights and can drive each one separately. That is why
 // this survives HA being down -- the whole point of running it here.
 
 // The two devices in the gang. MAC as returned by Shelly.GetDeviceInfo

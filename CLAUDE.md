@@ -57,7 +57,7 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      → GHCR, digest pinned by Image Updater). See docs/origin-firewall.md + gotchas.
   shelly-config/     Declarative config for the LAN Shelly relays, reconciled onto them over their
                      local RPC by a CronJob (self-heal) + PostSync hook Job (apply a git change now).
-                     Deploys NO device: it ships switch settings (values.yaml) and mJS scripts
+                     Deploys NO device: it ships sys + switch settings (values.yaml) and mJS scripts
                      (scripts/*.js, incl. the outdoor-lights gang). See docs/shelly.md + gotchas.
   shelly-proxy/      External access to the Shelly relays at shelly.agu.com.ar (google-auth). An nginx
                      pod serves a small self-hosted control panel AND reverse-proxies one PathPrefix

@@ -7,21 +7,30 @@ their local RPC.
 
 ## Inventory
 
-| Light | `switch.*` (Home Assistant) | Input (wall switch) | IP | Model |
+| Light | `light.*` (Home Assistant) | Input (wall switch) | IP | Model |
 |---|---|---|---|---|
-| Puerta Principal | `switch.afuera_interruptor_puerta_principal` | `binary_sensor.afuera_interruptor_puerta_principal_entrada_0` | `shelly-puerta-principal.lan` (`.21`) | Shelly 1 Mini Gen4 |
-| Puerta Escalera | `switch.afuera_interruptor_puerta_escalera` | `binary_sensor.afuera_interruptor_puerta_escalera_entrada_0` | `shelly-escalera.lan` (`.20`) | Shelly 1 Mini Gen4 |
+| Puerta Principal | `light.afuera_interruptor_puerta_principal` | `binary_sensor.afuera_interruptor_puerta_principal_entrada_0` | `shelly-puerta-principal.lan` (`.21`) | Shelly 1 Mini Gen4 |
+| Puerta Escalera | `light.afuera_interruptor_puerta_escalera` | `binary_sensor.afuera_interruptor_puerta_escalera_entrada_0` | `shelly-escalera.lan` (`.20`) | Shelly 1 Mini Gen4 |
 
 IPs are DHCP reservations in [`charts/pihole`](../charts/pihole). Both devices are
 also commissioned into a Matter fabric (Google Home) and picked up by Home
 Assistant's Shelly integration.
+
+**Lights, not switches.** A relay knows nothing about its load, so the Shelly
+integration exposes it as `switch.*` unless the device's consumption type says
+`lights` (`Sys` config `ui_data.consumption_types`, the "Consumption type" setting
+in the Shelly app). Then it creates a `light.*` (on/off only) on the same unique id
+and drops the switch, and the light counts in the dashboard's **Luces** summary.
+`charts/shelly-config` enforces it (`devices[].sys`). Changing the type changes the
+entity id's domain: every `switch.*` reference has to move with it, and the
+registry tweaks below (names, hidden, mirror) start over on the new entity.
 
 ## Outdoor lights — wall switches ganged, app independent
 
 The behaviour is **deliberately asymmetric**:
 
 - **App / Google Home / Home Assistant**: each light is a plain, independent
-  `switch`. Turning on just one is a normal thing to do.
+  light. Turning on just one is a normal thing to do.
 - **Either wall switch**: drives **both** lights, as an idempotent toggle — if
   either light is off, a flip turns **both on**; only with both already on does a
   flip turn them off. A mixed state left by the app is first normalised to "both
@@ -44,7 +53,7 @@ inputs works, but it dies with HA: `detached` leaves the relay with no local pat
 so every HA restart — including the pod roll that *any* change to a HA package
 triggers — leaves the wall switches dead. On the device it keeps working with HA
 down, and it is faster (no round trip). HA and Google Home still see two ordinary
-switches and drive them independently.
+lights and drive them independently.
 
 **Degraded mode.** If the peer does not answer (powered off, rebooting, no
 network) the script falls back to toggling its own light. Worst case equals a
@@ -60,11 +69,11 @@ the arrangement lives entirely in HA's registries (`.storage`, not git):
 | What | Value |
 |---|---|
 | Device `Interruptor Puerta Principal` | renamed (`name_by_user`) to **`Luces`** — it doubles as the group |
-| `switch.afuera_interruptor_puerta_principal` | renamed to **`Puerta Principal`** |
-| `switch.luz_escalera_espejo` | template **switch helper** named **`Escalera`**, attached to the `Luces` device, mirroring the other relay |
-| `switch.afuera_interruptor_puerta_escalera` | **hidden** — with it hidden its device has no non-diagnostic entity left, so the strategy renders no second group |
+| `light.afuera_interruptor_puerta_principal` | renamed to **`Puerta Principal`** |
+| `light.luz_escalera_espejo` | template **light helper** named **`Escalera`**, attached to the `Luces` device, mirroring the other relay |
+| `light.afuera_interruptor_puerta_escalera` | **hidden** — with it hidden its device has no non-diagnostic entity left, so the strategy renders no second group |
 
-The mirror forwards `switch.turn_on`/`turn_off` to the real entity and reads its
+The mirror forwards `light.turn_on`/`turn_off` to the real entity and reads its
 state back (plus an `availability` on it). Verified end to end: flipping the
 mirror drives the Escalera relay and leaves Puerta Principal alone.
 
@@ -73,7 +82,7 @@ wall switch — is about reacting to `input:0`; the mirror never looks at the
 inputs, it only relays a service call an operator already made. The on-device
 script stays the only thing that turns a wall-switch flip into relay changes.
 
-A YAML template switch in a HA package could not do this: package entities
+A YAML template light in a HA package could not do this: package entities
 cannot be attached to a device at all (`device_id` exists only in the template
 integration's config-entry schema, and `entity_platform` rewrites the registry
 with `device_id=None` on every start). The long version, with the frontend code

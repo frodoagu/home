@@ -13,8 +13,9 @@ every few minutes as self-heal (a factory-reset or hand-fiddled device comes
 back on its own, same spirit as ArgoCD selfHeal).
 
 What it reconciles, per device:
-  1. `Switch.SetConfig` keys (in_mode, initial_state, ...) from values.yaml.
-  2. The mJS scripts from charts/shelly-config/scripts/: created if missing,
+  1. `Sys.SetConfig` keys (ui_data.consumption_types, ...) from values.yaml.
+  2. `Switch.SetConfig` keys (in_mode, initial_state, ...) from values.yaml.
+  3. The mJS scripts from charts/shelly-config/scripts/: created if missing,
      re-uploaded when the code differs, left alone when it matches, then
      enabled (autostart on boot) and started.
 
@@ -98,6 +99,30 @@ def reconcile_switch(host, desired, changes):
     )
 
 
+def reconcile_sys(host, desired, changes):
+    """Apply the desired Sys.SetConfig keys, per section, writing only on drift.
+
+    Each drifted section is written back merged into its live value, so a
+    write never drops keys the device keeps there (ui_data holds
+    device_revision next to consumption_types).
+    """
+    if not desired:
+        return
+    live = rpc(host, "Sys.GetConfig")
+    config = {}
+    for section, keys in desired.items():
+        current = live.get(section) or {}
+        drift = {k: v for k, v in keys.items() if current.get(k) != v}
+        if not drift:
+            continue
+        config[section] = dict(current, **keys)
+        changes.append(
+            "sys.%s %s" % (section, ", ".join("%s %s->%s" % (k, current.get(k), v) for k, v in drift.items()))
+        )
+    if config:
+        rpc(host, "Sys.SetConfig", {"config": config})
+
+
 def script_id(host, name):
     for script in rpc(host, "Script.List")["scripts"]:
         if script["name"] == name:
@@ -161,6 +186,7 @@ def reconcile(device):
     info = rpc(host, "Shelly.GetDeviceInfo")
     changes = []
 
+    reconcile_sys(host, device.get("sys"), changes)
     reconcile_switch(host, device.get("switch"), changes)
     for name in device.get("scripts", []):
         with open(os.path.join(SCRIPTS_DIR, name + ".js"), encoding="ascii") as handle:
