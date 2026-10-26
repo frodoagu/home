@@ -152,9 +152,10 @@ dhcp:
     - { mac: "44:cb:8b:e4:44:c8", ip: "192.168.0.51", name: "tv-dormitorio" }
     # .60-.69  WiZ lights
     - { mac: "d8:a0:11:b2:6b:45", ip: "192.168.0.60", name: "lampara-dormitorio" }  # WiZ Squire
-    - { mac: "98:77:d5:f2:14:8c", ip: "192.168.0.61", name: "lampara-oficina" }     # WiZ RGBW Tunable
+    - { mac: "98:77:d5:f2:14:8c", ip: "192.168.0.61", name: "velador-oficina" }     # WiZ RGBW Tunable
     - { mac: "98:77:d5:b8:aa:68", ip: "192.168.0.62", name: "lampara-bano" }        # WiZ RGBW Tunable
     - { mac: "98:77:d5:bb:1e:48", ip: "192.168.0.63", name: "lampara-salon" }       # WiZ RGBW Tunable
+    - { mac: "98:77:d5:bb:9a:a8", ip: "192.168.0.64", name: "lampara-oficina" }     # WiZ RGBW Tunable, wall switch
     # .70-.79  computers
     - { mac: "3c:7c:3f:50:dd:03", ip: "192.168.0.70", name: "pc-fede" }   # gaming
     - { mac: "f4:4e:e3:98:c9:4d", ip: "192.168.0.71", name: "think" }     # work laptop

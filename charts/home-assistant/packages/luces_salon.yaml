@@ -1,63 +1,96 @@
-# HA package: the living-room lamp's white follows the sun.
+# HA package: the living-room lamp's white follows the sun, in straight lines.
 #
-#   sunrise          -> sunset          6500 K (cool)
-#   sunset           -> sunset + 2 h    4000 K (neutral)
-#   sunset + 2 h     -> sunrise         2700 K (warm)
+#   sunrise          -> sunrise + 1 h     2700 K up to 6500 K
+#   sunrise + 1 h    -> sunset            6500 K (cool)
+#   sunset           -> sunset + 2 h      6500 K down to 4000 K (neutral)
+#   sunset + 2 h     -> 23:30             4000 K down to 2700 K (warm)
+#   23:30            -> sunrise           2700 K
 #
-# It sets the colour temperature when the lamp comes on and at each change while
-# it's on, and only that: brightness and on/off stay with whoever switched it. A
-# lamp showing a colour or a WiZ scene is left alone.
+# `sensor.lampara_salon_blanco` is that curve. The lamp takes it when it comes
+# on and on HA start, and follows each step while it's on as long as it still
+# sits where the curve was, so a white picked by hand stays until the next
+# turn-on. Colour temperature only: brightness and on/off stay with whoever
+# switched it, and a lamp showing a colour or a WiZ scene is left alone.
 # See docs/home-assistant.md#living-room-lamp.
+
+template:
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+    action:
+      - variables:
+          # Minutes since noon, so the night is one stretch: 23:30 is 690.
+          # `next_rising` / `next_setting` are today's or tomorrow's, a minute
+          # or two apart, so only their time of day is used.
+          curva: >-
+            {%- macro hora(attr, extra=0) %}
+            {%- set t = state_attr('sun.sun', attr) | as_datetime | as_local %}
+            {{- (t.hour * 60 + t.minute + extra - 720) % 1440 }}
+            {%- endmacro %}
+            {%- set amanecer = hora('next_rising') | int %}
+            {%- set ocaso = hora('next_setting') | int %}
+            {%- set p = [[ocaso, 6500], [ocaso + 120, 4000], [690, 2700], [amanecer, 2700], [amanecer + 60, 6500]] %}
+            {%- set m = (now().hour * 60 + now().minute - 720) % 1440 %}
+            {%- set ns = namespace(a=p[0], b=p[0], f=0) %}
+            {%- for i in range(p | count - 1) if p[i][0] <= m %}
+            {%- set ns.a = p[i] %}
+            {%- set ns.b = p[i + 1] %}
+            {%- set ns.f = [(m - ns.a[0]) / (ns.b[0] - ns.a[0]) if ns.b[0] > ns.a[0] else 1, 1] | min %}
+            {%- endfor %}
+            {{- ((ns.a[1] + (ns.b[1] - ns.a[1]) * ns.f) / 50) | round(0) | int * 50 }}
+    sensor:
+      - name: Lámpara salón - Blanco según el sol
+        unique_id: lampara_salon_blanco
+        default_entity_id: sensor.lampara_salon_blanco
+        unit_of_measurement: K
+        icon: mdi:white-balance-sunny
+        state: "{{ curva }}"
 
 automation:
   - id: luces_salon
     alias: Luces salón - Blanco según el sol
     description: >-
-      Pone la lámpara del salón en luz fría de día, neutra las 2 horas después
-      del atardecer y cálida desde ahí hasta el amanecer, al prenderse y en
-      cada cambio. No toca el brillo ni una lámpara con color o escena.
+      Lleva el blanco de la lámpara del salón en línea recta: fría de día, baja
+      a neutra en las 2 horas después del atardecer y a cálida a las 23:30, y
+      vuelve a fría en la hora después del amanecer. Lo pone al prenderse y lo
+      sigue mientras está prendida, salvo que alguien haya elegido otro blanco.
+      No toca el brillo ni una lámpara con color o escena.
     trigger:
       - platform: state
         entity_id: light.lampara_salon
         from: "off"
         to: "on"
-      - platform: sun
-        event: sunrise
-        id: frio
-      - platform: sun
-        event: sunset
-        id: neutro
-      - platform: sun
-        event: sunset
-        offset: "02:00:00"
-        id: calido
+        id: prendida
       - platform: homeassistant
         event: start
+        id: prendida
+      - platform: state
+        entity_id: sensor.lampara_salon_blanco
+        id: curva
     condition:
       - condition: state
         entity_id: light.lampara_salon
         state: "on"
       - "{{ state_attr('light.lampara_salon', 'color_mode') == 'color_temp' }}"
       - "{{ state_attr('light.lampara_salon', 'effect') in [none, 'off'] }}"
+      - "{{ is_number(states('sensor.lampara_salon_blanco')) }}"
     action:
       - variables:
-          # A sun trigger names its own phase: at that instant `sun.sun` may
-          # not have moved on yet. `next_setting` is today's or tomorrow's
-          # sunset, a minute or two apart, so only its time of day is used.
-          kelvin: >-
-            {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
-            {%- set ocaso = today_at((ocaso | as_local).strftime('%H:%M')) if ocaso else none %}
-            {%- if trigger.id == 'frio' %}6500
-            {%- elif trigger.id == 'neutro' %}4000
-            {%- elif trigger.id == 'calido' %}2700
-            {%- elif is_state('sun.sun', 'above_horizon') %}6500
-            {%- elif ocaso is not none and ocaso <= now() < ocaso + timedelta(hours=2) %}4000
-            {%- else %}2700
-            {%- endif %}
-      - action: light.turn_on
-        continue_on_error: true
-        target:
-          entity_id: light.lampara_salon
-        data:
-          color_temp_kelvin: "{{ kelvin }}"
+          kelvin: "{{ states('sensor.lampara_salon_blanco') | int }}"
+          actual: "{{ state_attr('light.lampara_salon', 'color_temp_kelvin') | int(0) }}"
+          # Still where the curve was before this step.
+          sigue: >-
+            {{- trigger.id == 'curva' and trigger.from_state is not none
+                and is_number(trigger.from_state.state)
+                and (actual - trigger.from_state.state | int) | abs <= 50 }}
+      - if: "{{ (trigger.id == 'prendida' or sigue) and actual != kelvin }}"
+        then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: light.lampara_salon
+            data:
+              color_temp_kelvin: "{{ kelvin }}"
     mode: queued

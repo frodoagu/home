@@ -1,55 +1,125 @@
 # HA package: the bathroom light by the hour. The WiZ motion sensor's rule in
 # the WiZ app turns the bathroom lamp on and off; whenever it comes on from
 # outside HA (the sensor or the WiZ app), this sets its brightness and colour
-# for the time of day:
+# for the time of day, and follows them while it stays on. Every change is a
+# straight line between these points:
 #
-#   07:00-21:59  100 %, cool white
-#   22:00-22:59  100 %, neutral white
-#   23:00-23:59   70 %
-#   00:00-00:59   40 %
-#   01:00-01:59   10 %
-#   02:00-06:59   10 %, amber (no blue, to spare sleep)
+#   21:00             100 %  6500 K (cool, all day until here)
+#   22:00             100 %  4000 K
+#   23:00              70 %  4000 K
+#   00:00              40 %  4000 K
+#   01:00              10 %  4000 K
+#   02:00 -> sunrise   10 %  amber (no blue, to spare sleep); 2200 K right before
+#   sunrise + 1 h     100 %  6500 K
+#
+# Nothing gets brighter before sunrise. Amber is RGB, so it can't be a point on
+# a white line: the lamp crosses into it at 02:00 and out of it at sunrise,
+# both times at its warmest white (2200 K), where the step is smallest.
+# `sensor.lampara_bano_brillo` is that curve (colour in its attributes).
 #
 # It doesn't watch the wiz occupancy entity: that one only follows changes the
 # sensor makes, so after an off from HA or the app it stays `on` and never fires
 # again. A turn-on from HA (UI, Google, a script) is left alone.
 # See docs/home-assistant.md#bathroom-light.
 
+template:
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+    action:
+      - variables:
+          # Minutes since noon, so the night is one stretch: 21:00 is 540,
+          # 02:00 is 840. `next_rising` is today's or tomorrow's, a minute or
+          # two apart, so only its time of day is used.
+          curva: >-
+            {%- set t = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
+            {%- set amanecer = (t.hour * 60 + t.minute - 720) % 1440 %}
+            {%- set p = [[540, 100, 6500], [600, 100, 4000], [660, 70, 4000], [720, 40, 4000],
+                         [780, 10, 4000], [840, 10, 2200], [amanecer, 10, 2200], [amanecer + 60, 100, 6500]] %}
+            {%- set m = (now().hour * 60 + now().minute - 720) % 1440 %}
+            {%- set ns = namespace(a=p[0], b=p[0], f=0) %}
+            {%- for i in range(p | count - 1) if p[i][0] <= m %}
+            {%- set ns.a = p[i] %}
+            {%- set ns.b = p[i + 1] %}
+            {%- set ns.f = [(m - ns.a[0]) / (ns.b[0] - ns.a[0]) if ns.b[0] > ns.a[0] else 1, 1] | min %}
+            {%- endfor %}
+            {{- {'brillo': (ns.a[1] + (ns.b[1] - ns.a[1]) * ns.f) | round(0) | int,
+                 'kelvin': ((ns.a[2] + (ns.b[2] - ns.a[2]) * ns.f) / 50) | round(0) | int * 50,
+                 'ambar': 840 <= m < amanecer} }}
+    sensor:
+      - name: Lámpara baño - Brillo según la hora
+        unique_id: lampara_bano_brillo
+        default_entity_id: sensor.lampara_bano_brillo
+        unit_of_measurement: "%"
+        icon: mdi:brightness-6
+        state: "{{ curva.brillo }}"
+        attributes:
+          kelvin: "{{ curva.kelvin }}"
+          ambar: "{{ curva.ambar }}"
+
 automation:
   - id: luces_bano
     alias: Luces baño - Brillo según la hora
     description: >-
       Cuando la luz del baño se prende desde afuera de HA (el sensor de
-      movimiento o la app WiZ), la pone al 100 % hasta las 23, 70 % hasta las
-      0, 40 % hasta la 1, 10 % hasta las 7; en luz fría de 7 a 22 y en ámbar
-      de 2 a 7.
+      movimiento o la app WiZ), le pone el brillo y el color de la hora, y los
+      sigue mientras está prendida, todo en línea recta: fría y al 100 % hasta
+      las 21, neutra a las 22, baja a 70 % a las 23, 40 % a las 0 y 10 % a la
+      1, ámbar de las 2 al amanecer y vuelve a fría al 100 % en la hora
+      siguiente. Si alguien la cambia, la deja hasta que se vuelva a prender.
     trigger:
       - platform: state
         entity_id: light.lampara_bano
         from: "off"
         to: "on"
-    # A change made through HA carries the user or the calling automation.
+        id: prendida
+      - platform: state
+        entity_id: sensor.lampara_bano_brillo
+        id: curva
     condition:
-      - "{{ trigger.to_state.context.user_id is none and trigger.to_state.context.parent_id is none }}"
+      - condition: state
+        entity_id: light.lampara_bano
+        state: "on"
+      - "{{ is_number(states('sensor.lampara_bano_brillo')) }}"
     action:
       - variables:
-          hora: "{{ now().hour }}"
-          brillo: "{{ 70 if hora == 23 else 40 if hora == 0 else 10 if hora < 7 else 100 }}"
-      - if: "{{ 2 <= hora < 7 }}"
+          brillo: "{{ states('sensor.lampara_bano_brillo') | int }}"
+          kelvin: "{{ state_attr('sensor.lampara_bano_brillo', 'kelvin') | int }}"
+          ambar: "{{ state_attr('sensor.lampara_bano_brillo', 'ambar') | bool }}"
+          # A change made through HA carries the user or the calling automation.
+          desde_afuera: >-
+            {{- trigger.id == 'prendida' and trigger.to_state.context.user_id is none
+                and trigger.to_state.context.parent_id is none }}
+          # Still where the curve was before this step: same brightness (1-2 %
+          # of slack for the 0-255 round trip) and same colour.
+          sigue: >-
+            {%- set antes = trigger.from_state if trigger.id == 'curva' else none %}
+            {%- set l = states.light.lampara_bano %}
+            {%- set pct = (l.attributes.brightness | int(0) * 100 / 255) | round(0) | int %}
+            {{- antes is not none and is_number(antes.state)
+                and (pct - antes.state | int) | abs <= 2
+                and (l.attributes.color_mode == 'rgbw' if antes.attributes.ambar
+                     else l.attributes.color_mode == 'color_temp'
+                          and (l.attributes.color_temp_kelvin | int(0) - antes.attributes.kelvin | int(0)) | abs <= 50) }}
+      - if: "{{ desde_afuera or sigue }}"
         then:
-          - action: light.turn_on
-            continue_on_error: true
-            target:
-              entity_id: light.lampara_bano
-            data:
-              brightness_pct: "{{ brillo }}"
-              rgb_color: [255, 110, 0]
-        else:
-          - action: light.turn_on
-            continue_on_error: true
-            target:
-              entity_id: light.lampara_bano
-            data:
-              brightness_pct: "{{ brillo }}"
-              color_temp_kelvin: "{{ 6500 if 7 <= hora < 22 else 4000 }}"
+          - if: "{{ ambar }}"
+            then:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: light.lampara_bano
+                data:
+                  brightness_pct: "{{ brillo }}"
+                  rgb_color: [255, 110, 0]
+            else:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: light.lampara_bano
+                data:
+                  brightness_pct: "{{ brillo }}"
+                  color_temp_kelvin: "{{ kelvin }}"
     mode: queued
