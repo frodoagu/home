@@ -22,8 +22,10 @@ integration exposes it as `switch.*` unless the device's consumption type says
 in the Shelly app). Then it creates a `light.*` (on/off only) on the same unique id
 and drops the switch, and the light counts in the dashboard's **Luces** summary.
 `charts/shelly-config` enforces it (`devices[].sys`). Changing the type changes the
-entity id's domain: every `switch.*` reference has to move with it, and the
-registry tweaks below (names, hidden, mirror) start over on the new entity.
+entity id's domain: every `switch.*` reference has to move with it. The new
+entity keeps none of the old one's registry state (id, name, hidden). Its id is
+generated again from the device name: Puerta Principal, whose device was then
+named `Luces`, came out as `light.afuera_luces` and had to be renamed back by hand.
 
 ## Outdoor lights — wall switches ganged, app independent
 
@@ -59,35 +61,27 @@ lights and drive them independently.
 network) the script falls back to toggling its own light. Worst case equals a
 plain wall switch, never a dead one.
 
-## How they show up in Home Assistant (one "Luces" group)
+## How they show up in Home Assistant
 
-The auto-generated dashboard (**home** strategy) builds one group **per device**,
-titled with the device name — so two relays meant two headings, and nothing about
-areas or labels changes that. To get a single **Luces** group with two tiles,
-the arrangement lives entirely in HA's registries (`.storage`, not git):
+Two devices in the `afuera` area, one light each, both visible. The auto-generated
+dashboard (**home** strategy) builds one group **per device**, titled with the
+device name, so they render as two groups. The names live in HA's registries
+(`.storage`, not git):
 
-| What | Value |
+| Device (`name_by_user`) | Light |
 |---|---|
-| Device `Interruptor Puerta Principal` | renamed (`name_by_user`) to **`Luces`** — it doubles as the group |
-| `light.afuera_interruptor_puerta_principal` | renamed to **`Puerta Principal`** |
-| `light.luz_escalera_espejo` | template **light helper** named **`Escalera`**, attached to the `Luces` device, mirroring the other relay |
-| `light.afuera_interruptor_puerta_escalera` | **hidden** — with it hidden its device has no non-diagnostic entity left, so the strategy renders no second group |
+| **Luz principal** | `light.afuera_interruptor_puerta_principal` |
+| **Luz escalera** | `light.afuera_interruptor_puerta_escalera` |
 
-The mirror forwards `light.turn_on`/`turn_off` to the real entity and reads its
-state back (plus an `availability` on it). Verified end to end: flipping the
-mirror drives the Escalera relay and leaves Puerta Principal alone.
+The `switch.…_luces_afuera` entity on each device is the Shelly integration's
+switch for the `luces-afuera` script (running or stopped), not a light. Turning
+it off only lasts until the next reconcile, which starts the script again.
 
-**It is not a second controller.** The rule below — exactly one controller per
-wall switch — is about reacting to `input:0`; the mirror never looks at the
-inputs, it only relays a service call an operator already made. The on-device
-script stays the only thing that turns a wall-switch flip into relay changes.
-
-A YAML template light in a HA package could not do this: package entities
-cannot be attached to a device at all (`device_id` exists only in the template
-integration's config-entry schema, and `entity_platform` rewrites the registry
-with `device_id=None` on every start). The long version, with the frontend code
-that decides the grouping, is in
-[gas-mopeka.md §2.1](gas-mopeka.md#21-cómo-queda-agrupado-en-el-dashboard-gas-no-otras).
+A single **Luces** group with two tiles used to come from a template helper
+attached to one device that mirrored the other relay, with the real relay hidden
+(why a package entity can't do that:
+[gas-mopeka.md §2.1](gas-mopeka.md#21-cómo-queda-agrupado-en-el-dashboard-gas-no-otras)).
+It went away with the switch→light change and isn't coming back.
 
 ## Gotchas (hard-won — don't re-investigate)
 

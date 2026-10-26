@@ -10,10 +10,6 @@
 # same as an operator from the app, and that raises NO input event. Both relays
 # are driven explicitly here, so we don't depend on the script's gang either.
 #
-# Do NOT target `light.luz_escalera_espejo`: that's the UI helper grouping both
-# lights on the dashboard, it lives in `.storage` (outside git) and mirrors the
-# stairs relay. The real entity ids go here.
-#
 # ────────────────────────────────────────────────────────────────────────────
 # WHY THE `homeassistant.start` TRIGGER. A sun trigger fires once: if HA is down
 # at that instant (an OOMKill, a deploy, a Pi reboot) the event is lost and there
