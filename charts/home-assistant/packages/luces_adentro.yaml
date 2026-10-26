@@ -1,7 +1,7 @@
 # HA package: the indoor lamps' evening while Fede is home. 10 min after sunset
-# the bedroom and office lamps come on at 100 % in warm white and dim in a
-# straight line to 10 % at 23:30, where they stay until 01:30, when both go
-# off while anyone is home (an empty house keeps the simulation's off time).
+# the bedroom, office and living-room lamps come on at 100 % in warm white and
+# dim in a straight line to 10 % at 23:30, where they stay until 01:30, when
+# they go off while anyone is home (an empty house keeps the simulation's off time).
 # With PC-Fede on, they go off when it does, if that's before dawn.
 # Getting home inside the ramp's window turns on the lamps that are off at the
 # ramp's current level.
@@ -14,9 +14,10 @@
 #
 # With the house empty, simulacion_presencia.yaml drives the same lamps. They
 # never act at once: this one needs `binary_sensor.fede_en_casa` on, the
-# simulation needs `binary_sensor.casa_ocupada` (Fede or Irupé) off. Lamps the simulation left on are at or below this ramp (its own reaches
-# 10 % at 23:00), so after a return they hold until the ramp comes down to
-# them and follow it from there.
+# simulation needs `binary_sensor.casa_ocupada` (Fede or Irupé) off. Lamps the
+# simulation left on are below this ramp or less than 30 min ahead of it, so
+# after a return they hold until the ramp comes down to them, or follow it at
+# once.
 #
 # While PC-Fede is on, the office lamp is out of all of this: it goes to violet
 # at 100 % when the PC comes on, at any hour, and the ramp leaves it alone.
@@ -53,8 +54,8 @@ automation:
   - id: luces_adentro
     alias: Luces adentro - Atardecer con Fede en casa
     description: >-
-      Con Fede en casa, prende las lámparas del dormitorio y la oficina 10 min
-      después del atardecer al 100 % en blanco cálido y las baja en línea recta
+      Con Fede en casa, prende las lámparas del dormitorio, la oficina y el
+      salón 10 min después del atardecer al 100 % en blanco cálido y las baja en línea recta
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
       a mano. Con la PC de Fede prendida la lámpara de la oficina va violeta
@@ -94,7 +95,7 @@ automation:
       - variables:
           # Unavailable counts as on, so a Pi-hole outage never repaints it.
           lamparas: >-
-            {{ ['light.lampara_dormitorio_grupo']
+            {{ ['light.lampara_dormitorio_grupo', 'light.lampara_salon']
                + (['light.lampara_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           kelvin: 2700
           color_pc: [7, 0, 255, 0]
@@ -194,7 +195,7 @@ automation:
   - id: luces_adentro_apagar
     alias: Luces adentro - Apagar a la 01:30
     description: >-
-      Apaga las lámparas del dormitorio y la oficina a la 01:30 si hay alguien
+      Apaga las lámparas del dormitorio, la oficina y el salón a la 01:30 si hay alguien
       en casa. Con la PC de Fede prendida espera a que se apague, si es antes
       del amanecer.
     trigger:
@@ -228,4 +229,5 @@ automation:
           entity_id:
             - light.lampara_dormitorio_grupo
             - light.lampara_oficina
+            - light.lampara_salon
     mode: single

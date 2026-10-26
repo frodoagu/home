@@ -1,16 +1,18 @@
-# HA package: presence simulation. While nobody is home, the bedroom and office
-# lamps follow an evening routine, at different times every night, so the house
+# HA package: presence simulation. While nobody is home, the bedroom, office and
+# living-room lamps follow an evening routine, at different times every night, so the house
 # doesn't look empty from the street.
 # See docs/home-assistant.md#presence-simulation.
 #
 # ────────────────────────────────────────────────────────────────────────────
-# THE NIGHT'S SCHEDULE is the two timestamp sensors below. A "night" runs from
-# noon to noon, so an off time past midnight still belongs to the evening that
-# started it (and to that evening's weekday). Each sensor draws a random minute
-# inside its window:
+# THE NIGHT'S SCHEDULE is the four timestamp sensors below. A "night" runs
+# from noon to noon, so an off time past midnight still belongs to the evening
+# that started it (and to that evening's weekday). Each sensor draws a random
+# minute inside its window:
 #
-#   lamps on   sunset - 15 min, kept within 19:30-20:00, + 0-44 min
-#   lamps off  00:15 + 0-44 min   (+60 min on Friday and Saturday nights)
+#   lamps on        sunset - 15 min, kept within 19:30-20:00, + 0-44 min
+#   lamps off       00:15 + 0-44 min   (+60 min on Friday and Saturday nights)
+#   living room on  sunset - 30 min, kept within 19:00-19:30, + 0-44 min
+#   living room off 22:40 + 0-39 min
 #
 # The windows follow Argentine habits rather than the house's own history (too
 # little of it so far): an average bedtime around 01:00. The lamps wait for dusk
@@ -21,17 +23,19 @@
 # is drawn again. So a restart never moves a time that already went by.
 #
 # ────────────────────────────────────────────────────────────────────────────
-# WHO DRIVES WHAT. The two times turn the lamps on or off. The other triggers
+# WHO DRIVES WHAT. Each pair of times turns its lamps on or off. The other triggers
 # (the absence starting, un-pausing, an HA start) reconcile them with where the
 # schedule says they should be right now, which is the catch-up for a time that
 # went by with HA down (same reason as luces_afuera.yaml). A reconcile also
 # turns OFF a lamp that is on outside the window: with nobody home, a lamp left
 # on at 10:00 goes off when the absence starts.
 #
-# The two lamps move together, in warm white (2700 K), dimming from 100 % when
-# they come on down to 10 % at 23:00, where they stay until they go off. Every
-# 5 min the ramp re-dims the lamps that are on; one switched off remotely holds
-# until the next on time. Nothing else re-applies the schedule.
+# The bedroom and office lamps move together, in warm white (2700 K), dimming
+# from 100 % when they come on down to 10 % at 23:00, where they stay until they
+# go off. The living room has its own: 3000 K, 100 % down to 30 % at 22:30, then
+# held until it goes off around 23:00. Every 5 min the ramp re-dims the lamps
+# that are on; one switched off remotely holds until the next on time. Nothing
+# else re-applies the schedule.
 #
 # ────────────────────────────────────────────────────────────────────────────
 # "NOBODY HOME" is `binary_sensor.casa_ocupada` off: neither Fede's nor
@@ -112,6 +116,31 @@ template:
           finde: 60
         state: *horario
 
+      - name: "Simulación presencia - prende salón"
+        unique_id: simulacion_presencia_salon_prender
+        default_entity_id: sensor.simulacion_presencia_salon_prender
+        device_class: timestamp
+        icon: mdi:sofa
+        variables:
+          desde: >-
+            {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
+            {%- set hora = (ocaso | as_local - timedelta(minutes=30)).strftime('%H:%M') if ocaso else '19:00' %}
+            {{- [[hora, '19:00'] | max, '19:30'] | min }}
+          minutos: 45
+          finde: 0
+        state: *horario
+
+      - name: "Simulación presencia - apaga salón"
+        unique_id: simulacion_presencia_salon_apagar
+        default_entity_id: sensor.simulacion_presencia_salon_apagar
+        device_class: timestamp
+        icon: mdi:sofa-outline
+        variables:
+          desde: "22:40"
+          minutos: 40
+          finde: 0
+        state: *horario
+
 automation:
   # The sensor reads Pi-hole's history, so after a start it tells at once
   # whether the house emptied while HA was down. An absence already under way is
@@ -146,10 +175,11 @@ automation:
   - id: simulacion_presencia_lamparas
     alias: Simulación de presencia - Lámparas
     description: >-
-      Con la casa vacía prende y apaga las lámparas del dormitorio y la oficina
-      a los horarios de los sensores "Simulación presencia", que cambian cada
-      noche. Van en blanco cálido y bajan de 100 % al prender a 10 % a las
-      23:00. Al vaciarse la casa, al sacar la pausa y al arrancar HA las deja
+      Con la casa vacía prende y apaga las lámparas del dormitorio, la oficina
+      y el salón a los horarios de los sensores "Simulación presencia", que
+      cambian cada noche. Dormitorio y oficina van en blanco cálido y bajan de
+      100 % al prender a 10 % a las 23:00; el salón va en 3000 K, baja a 30 %
+      a las 22:30 y se apaga cerca de las 23:00. Al vaciarse la casa, al sacar la pausa y al arrancar HA las deja
       como tendrían que estar a esa hora.
     trigger:
       - platform: time
@@ -158,6 +188,12 @@ automation:
       - platform: time
         at: sensor.simulacion_presencia_lampara_apagar
         id: lampara_apagar
+      - platform: time
+        at: sensor.simulacion_presencia_salon_prender
+        id: salon_prender
+      - platform: time
+        at: sensor.simulacion_presencia_salon_apagar
+        id: salon_apagar
       - platform: state
         entity_id: input_boolean.simulacion_presencia_ausencia
         from: "off"
@@ -191,64 +227,85 @@ automation:
       - condition: state
         entity_id: binary_sensor.casa_ocupada
         state: "off"
-      - variables:
-          # 'on', 'off', or '' to leave the lamps alone. A time trigger says
-          # it outright; a reconcile reads the window, and so does the ramp,
-          # which never turns anything off. Without a valid schedule nothing is
-          # touched.
-          lampara: >-
-            {%- set desde = states('sensor.simulacion_presencia_lampara_prender') | as_datetime(none) %}
-            {%- set hasta = states('sensor.simulacion_presencia_lampara_apagar') | as_datetime(none) %}
-            {%- if trigger.id == 'lampara_prender' %}on
-            {%- elif trigger.id == 'lampara_apagar' %}off
-            {%- elif trigger.id in ['conciliar', 'arranque'] and desde and hasta %}
-            {{- 'on' if desde <= now() < hasta else 'off' }}
-            {%- elif trigger.id == 'rampa' and desde and hasta and desde <= now() < hasta %}on
-            {%- endif %}
-          lamparas:
-            - light.lampara_dormitorio_grupo
-            - light.lampara_oficina
-          kelvin: 2700
-          # 100 % at tonight's on time down to 10 % (WiZ's floor) at 23:00, in
-          # a straight line, then held.
-          brillo: >-
-            {%- set desde = states('sensor.simulacion_presencia_lampara_prender') | as_datetime(none) %}
-            {%- if desde %}
-            {%- set fin = (desde | as_local).replace(hour=23, minute=0, second=0, microsecond=0) %}
-            {%- set avance = (now() - desde).total_seconds() / (fin - desde).total_seconds() %}
-            {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
-            {%- else %}100{%- endif %}
-          # The lamps to send the warm white and `brillo` to: all of them, or
-          # only those already on for the ramp, leaving out any already there
-          # (1 % of slack for the 0-255 round trip).
-          destino: >-
-            {%- set ns = namespace(lista=[]) %}
-            {%- for e in lamparas %}
-            {%- set prendida = is_state(e, 'on') %}
-            {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-            {%- set listo = prendida and (pct - brillo) | abs <= 1
-                  and (state_attr(e, 'color_temp_kelvin') | int(0) - kelvin) | abs <= 50 %}
-            {%- if (prendida or trigger.id != 'rampa') and not listo %}
-            {%- set ns.lista = ns.lista + [e] %}
-            {%- endif %}
-            {%- endfor %}
-            {{- ns.lista }}
-      # A lamp is touched only when it isn't already where it should be.
-      - if: "{{ lampara == 'on' and destino | count > 0 }}"
-        then:
-          - action: light.turn_on
-            continue_on_error: true
-            target:
-              entity_id: "{{ destino }}"
-            data:
-              brightness_pct: "{{ brillo }}"
-              color_temp_kelvin: "{{ kelvin }}"
-      - if: "{{ lampara == 'off' and lamparas | select('is_state', 'on') | list | count > 0 }}"
-        then:
-          - action: light.turn_off
-            continue_on_error: true
-            target:
-              entity_id: "{{ lamparas | select('is_state', 'on') | list }}"
+      # One pass per group of lamps, each with its own pair of schedule
+      # sensors (`sensor.simulacion_presencia_<id>_prender` / `_apagar`, whose
+      # time triggers carry the ids `<id>_prender` / `<id>_apagar`) and its
+      # own ramp: 100 % at the on time down to `piso` at `fin`, then held.
+      - repeat:
+          for_each:
+            - id: lampara
+              lamparas:
+                - light.lampara_dormitorio_grupo
+                - light.lampara_oficina
+              kelvin: 2700
+              fin: [23, 0]
+              piso: 10
+            - id: salon
+              lamparas:
+                - light.lampara_salon
+              kelvin: 3000
+              fin: [22, 30]
+              piso: 30
+          sequence:
+            - variables:
+                prender: "sensor.simulacion_presencia_{{ repeat.item.id }}_prender"
+                apagar: "sensor.simulacion_presencia_{{ repeat.item.id }}_apagar"
+                lamparas: "{{ repeat.item.lamparas }}"
+                kelvin: "{{ repeat.item.kelvin }}"
+                # 'on', 'off', or '' to leave the lamps alone. Its own time
+                # trigger says it outright; a reconcile reads the window, and
+                # so does the ramp, which never turns anything off. Without a
+                # valid schedule nothing is touched.
+                lampara: >-
+                  {%- set desde = states(prender) | as_datetime(none) %}
+                  {%- set hasta = states(apagar) | as_datetime(none) %}
+                  {%- if trigger.id == repeat.item.id ~ '_prender' %}on
+                  {%- elif trigger.id == repeat.item.id ~ '_apagar' %}off
+                  {%- elif trigger.id in ['conciliar', 'arranque'] and desde and hasta %}
+                  {{- 'on' if desde <= now() < hasta else 'off' }}
+                  {%- elif trigger.id == 'rampa' and desde and hasta and desde <= now() < hasta %}on
+                  {%- endif %}
+                # 100 % at tonight's on time down to `piso` at `fin`, in a
+                # straight line, then held. WiZ's floor is 10 %.
+                brillo: >-
+                  {%- set desde = states(prender) | as_datetime(none) %}
+                  {%- set piso = repeat.item.piso %}
+                  {%- if desde %}
+                  {%- set fin = (desde | as_local).replace(hour=repeat.item.fin[0], minute=repeat.item.fin[1], second=0, microsecond=0) %}
+                  {%- set avance = (now() - desde).total_seconds() / (fin - desde).total_seconds() %}
+                  {{- [[100 - (100 - piso) * avance, piso] | max, 100] | min | round(0) | int }}
+                  {%- else %}100{%- endif %}
+                # The lamps to send the colour and `brillo` to: all of them, or
+                # only those already on for the ramp, leaving out any already
+                # there (1 % of slack for the 0-255 round trip).
+                destino: >-
+                  {%- set ns = namespace(lista=[]) %}
+                  {%- for e in lamparas %}
+                  {%- set prendida = is_state(e, 'on') %}
+                  {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
+                  {%- set listo = prendida and (pct - brillo) | abs <= 1
+                        and (state_attr(e, 'color_temp_kelvin') | int(0) - kelvin) | abs <= 50 %}
+                  {%- if (prendida or trigger.id != 'rampa') and not listo %}
+                  {%- set ns.lista = ns.lista + [e] %}
+                  {%- endif %}
+                  {%- endfor %}
+                  {{- ns.lista }}
+            # A lamp is touched only when it isn't already where it should be.
+            - if: "{{ lampara == 'on' and destino | count > 0 }}"
+              then:
+                - action: light.turn_on
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ destino }}"
+                  data:
+                    brightness_pct: "{{ brillo }}"
+                    color_temp_kelvin: "{{ kelvin }}"
+            - if: "{{ lampara == 'off' and lamparas | select('is_state', 'on') | list | count > 0 }}"
+              then:
+                - action: light.turn_off
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ lamparas | select('is_state', 'on') | list }}"
     # queued: an HA start and a time trigger can overlap.
     mode: queued
 

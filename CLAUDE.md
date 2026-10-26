@@ -396,9 +396,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   WiZ lamps in its WiZ app room, and the wiz integration's `occupancy` entity is
   the LAMP's on/off when the change came from the sensor (`src: pir`), created on
   the first such push. So the app rule must keep turning the lamps on and off;
-  `packages/luces_bano.yaml` only re-dresses them (brightness/colour by the hour)
-  once they're on. It finds lamps and sensor by HA area `bano`, never by entity
-  id. See docs/home-assistant.md#bathroom-light.
+  `packages/luces_bano.yaml` only re-dresses `light.lampara_bano` (brightness/
+  colour by the hour) when it turns on from outside HA (no user/parent context).
+  Never trigger on that occupancy entity: an off from HA or the app leaves it
+  `on`, so it can't fire again until the sensor's timeout. See
+  docs/home-assistant.md#bathroom-light.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
   could only reach a package as an **env var** read back with HA's `!env_var` tag,
