@@ -1,5 +1,6 @@
 # HA package: the indoor lamps' evening while Fede is home. 10 min after sunset
-# the bedroom, office and living-room lamps come on at 100 % in warm white and
+# the bedroom lamp, the office table lamp and the living-room lamp come on at
+# 100 % in warm white (the living room in its own white, luces_salon.yaml) and
 # dim in a straight line to 10 % at 23:30, where they stay until 01:30, when
 # they go off while anyone is home (an empty house keeps the simulation's off time).
 # With PC-Fede on, they go off when it does, if that's before dawn.
@@ -19,7 +20,7 @@
 # after a return they hold until the ramp comes down to them, or follow it at
 # once.
 #
-# While PC-Fede is on, the office lamp is out of all of this: it goes to violet
+# While PC-Fede is on, the office table lamp is out of all of this: it goes to violet
 # at 100 % when the PC comes on, at any hour, and the ramp leaves it alone.
 # When the PC goes off it returns to warm white at the ramp's level (10 % from
 # 23:30 to 01:30, off after that and in daytime). The PC is on while it has
@@ -54,11 +55,12 @@ automation:
   - id: luces_adentro
     alias: Luces adentro - Atardecer con Fede en casa
     description: >-
-      Con Fede en casa, prende las lámparas del dormitorio, la oficina y el
-      salón 10 min después del atardecer al 100 % en blanco cálido y las baja en línea recta
+      Con Fede en casa, prende la lámpara del dormitorio, el velador de la
+      oficina y la lámpara del salón 10 min después del atardecer al 100 % en
+      blanco cálido (el salón en su propio blanco) y las baja en línea recta
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
-      a mano. Con la PC de Fede prendida la lámpara de la oficina va violeta
+      a mano. Con la PC de Fede prendida el velador de la oficina va violeta
       al 100 % y la rampa no la toca; al apagarse vuelve al blanco cálido.
     trigger:
       - platform: sun
@@ -96,8 +98,12 @@ automation:
           # Unavailable counts as on, so a Pi-hole outage never repaints it.
           lamparas: >-
             {{ ['light.lampara_dormitorio_grupo', 'light.lampara_salon']
-               + (['light.lampara_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
+               + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           kelvin: 2700
+          # The living room comes on in its own white, so it doesn't flash warm
+          # before luces_salon.yaml repaints it.
+          blancos:
+            light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(kelvin) }}"
           color_pc: [7, 0, 255, 0]
           # `next_setting` is today's or tomorrow's sunset, a minute or two
           # apart, so only its time of day is used.
@@ -132,7 +138,7 @@ automation:
             {%- endfor %}
             {{- ns.lista }}
           apagadas: "{{ lamparas | select('is_state', 'off') | list }}"
-          # Where the office lamp goes when the PC goes off; 0 is off.
+          # Where the office table lamp goes when the PC goes off; 0 is off.
           nivel_oficina: >-
             {%- set i = inicio | as_datetime(none) %}
             {%- if i is not none and now() >= i %}{{ brillo }}
@@ -145,7 +151,7 @@ automation:
               - action: light.turn_on
                 continue_on_error: true
                 target:
-                  entity_id: light.lampara_oficina
+                  entity_id: light.velador_oficina
                 data:
                   brightness_pct: 100
                   rgbw_color: "{{ color_pc }}"
@@ -154,7 +160,7 @@ automation:
               - action: light.turn_on
                 continue_on_error: true
                 target:
-                  entity_id: light.lampara_oficina
+                  entity_id: light.velador_oficina
                 data:
                   brightness_pct: "{{ nivel_oficina }}"
                   color_temp_kelvin: "{{ kelvin }}"
@@ -163,25 +169,31 @@ automation:
               - action: light.turn_off
                 continue_on_error: true
                 target:
-                  entity_id: light.lampara_oficina
+                  entity_id: light.velador_oficina
           - conditions: "{{ trigger.id == 'encender' }}"
             sequence:
-              - action: light.turn_on
-                continue_on_error: true
-                target:
-                  entity_id: "{{ lamparas }}"
-                data:
-                  brightness_pct: 100
-                  color_temp_kelvin: "{{ kelvin }}"
+              - repeat:
+                  for_each: "{{ lamparas }}"
+                  sequence:
+                    - action: light.turn_on
+                      continue_on_error: true
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: 100
+                        color_temp_kelvin: "{{ blancos.get(repeat.item, kelvin) }}"
           - conditions: "{{ trigger.id == 'llegada' and dentro and apagadas | count > 0 }}"
             sequence:
-              - action: light.turn_on
-                continue_on_error: true
-                target:
-                  entity_id: "{{ apagadas }}"
-                data:
-                  brightness_pct: "{{ brillo }}"
-                  color_temp_kelvin: "{{ kelvin }}"
+              - repeat:
+                  for_each: "{{ apagadas }}"
+                  sequence:
+                    - action: light.turn_on
+                      continue_on_error: true
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: "{{ brillo }}"
+                        color_temp_kelvin: "{{ blancos.get(repeat.item, kelvin) }}"
           - conditions: "{{ trigger.id == 'rampa' and dentro and bajar | count > 0 }}"
             sequence:
               - action: light.turn_on
@@ -195,7 +207,7 @@ automation:
   - id: luces_adentro_apagar
     alias: Luces adentro - Apagar a la 01:30
     description: >-
-      Apaga las lámparas del dormitorio, la oficina y el salón a la 01:30 si hay alguien
+      Apaga las lámparas del dormitorio y el salón y el velador de la oficina a la 01:30 si hay alguien
       en casa. Con la PC de Fede prendida espera a que se apague, si es antes
       del amanecer.
     trigger:
@@ -228,6 +240,6 @@ automation:
         target:
           entity_id:
             - light.lampara_dormitorio_grupo
-            - light.lampara_oficina
+            - light.velador_oficina
             - light.lampara_salon
     mode: single

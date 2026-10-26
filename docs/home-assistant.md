@@ -1160,14 +1160,15 @@ idle Android phone doesn't answer; and the ARP cache Pi-hole parses, whose
 ## Evening lamps
 
 [`packages/luces_adentro.yaml`](../charts/home-assistant/packages/luces_adentro.yaml)
-runs the bedroom, office and living-room lamps' evening while Fede is home
+runs the evening of the bedroom lamp, the office table lamp (*Velador oficina*,
+not the [office lamp](#office-lamp)) and the living-room lamp while Fede is home
 ([`binary_sensor.fede_en_casa`](#presence) `on`):
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | The three lamps on at **100 %**, warm white (2700 K) |
+| Sunset + 10 min | The three lamps on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp) |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
-| Fede gets home inside that window | Lamps that are off come on at the ramp's current level, warm white |
+| Fede gets home inside that window | Lamps that are off come on at the ramp's current level, in the same whites |
 | 01:30 | The three lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
 | PC-Fede goes off between 01:30 and dawn | The three lamps **off**: with the PC on at 01:30, the turn-off waits for it |
 
@@ -1192,7 +1193,7 @@ ramp reaches 10 % at 23:00, not 23:30; the living room holds 30 % from 22:30),
 so they hold until the ramp comes down to them, or follow it at once. When the
 house empties, the simulation takes over.
 
-### Office lamp while PC-Fede is on
+### Office table lamp while PC-Fede is on
 
 `binary_sensor.pc_fede_prendida` is `on` while `pc-fede` (`192.168.0.70`, a
 Pi-hole reservation) has queried Pi-hole in the last 5 min, the same DNS trick
@@ -1200,14 +1201,14 @@ as [presence](#presence). While on, it queries every few seconds and never goes
 quiet for more than ~2 min. Off, it is silent for hours, so the PC turning off
 shows up 5-6 min later.
 
-| PC | Office lamp |
+| PC | Office table lamp |
 |---|---|
 | Comes on (any hour, Fede detected or not) | Violet (`rgbw [7, 0, 255, 0]`) at **100 %** |
 | Is on | Left out of the sunset turn-on, the arrival and the ramp |
 | Goes off, Fede home | Warm white at the ramp's level now: the ramp inside the window, **10 %** from 23:30 to 01:30, **off** after that and in daytime |
 
 `unavailable` (Pi-hole down, HA starting) counts as on, so the ramp never
-repaints a violet lamp. If Pi-hole stays down, the office lamp stays out of the
+repaints a violet lamp. If Pi-hole stays down, the table lamp stays out of the
 ramp until it comes back.
 
 ## Bathroom light
@@ -1219,21 +1220,36 @@ to them directly; they relay each motion change to HA over the same local
 push as any other WiZ state change. With no WiZ lamp in its WiZ app room and
 in range, HA never hears from it.
 
-**The WiZ app rule does the switching.** HA only re-dresses the lamp:
+**The WiZ app rule does the switching.** HA only dresses the lamp:
 [`packages/luces_bano.yaml`](../charts/home-assistant/packages/luces_bano.yaml)
 fires when `light.lampara_bano` goes from `off` to `on` from **outside HA**
 (the sensor's rule or the WiZ app: a state change with no user and no parent
-context), and sets it by the hour:
+context), sets its brightness and colour by the hour, and follows them while it
+stays on. Every change is a straight line between these points:
 
 | Time | Brightness | Colour |
 |---|---|---|
-| 07:00-21:59 | 100 % | 6500 K (cool) |
-| 22:00-22:59 | 100 % | 4000 K |
-| 23:00-23:59 | 70 % | 4000 K |
-| 00:00-00:59 | 40 % | 4000 K |
-| 01:00-01:59 | 10 % | 4000 K |
-| 02:00-06:59 | 10 % | amber, `rgb(255, 110, 0)` |
+| Until 21:00 (from sunrise + 1 h) | 100 % | 6500 K (cool) |
+| 22:00 | 100 % | 4000 K |
+| 23:00 | 70 % | 4000 K |
+| 00:00 | 40 % | 4000 K |
+| 01:00 | 10 % | 4000 K |
+| 02:00 → sunrise | 10 % | amber, `rgb(255, 110, 0)` |
+| Sunrise + 1 h | 100 % | 6500 K |
 
+So 21:30 is 100 % at 5250 K, 22:30 is 85 %, 01:30 is 10 % at 3100 K. The curve
+is `sensor.lampara_bano_brillo` (colour in its `kelvin` / `ambar` attributes),
+recomputed every minute.
+
+- **Nothing gets brighter before sunrise.** The night level holds until the sun
+  is up and then rises over an hour, whatever the date; a fixed 07:00 would be
+  in the dark half the year.
+- **Amber is the one step.** It is RGB, so it can't sit on a white line: the
+  lamp crosses into it at 02:00 and out at sunrise, both times at its warmest
+  white (2200 K), where the change is smallest.
+- **It follows the curve only while the lamp is still on it** (same brightness
+  ±2 %, same white ±50 K or still amber). Anything set by hand, from HA or the
+  app, stays until the lamp next comes on.
 - **Not the wiz occupancy entity.** HA's `binary_sensor.bano_lampara_bano_ocupacion`
   is not a motion reading: it mirrors the lamp's on/off only when the change
   came from the sensor (`src: pir`), and ignores every other change. So after
@@ -1244,44 +1260,80 @@ context), and sets it by the hour:
 - **A turn-on from HA is left alone** (UI, Google Assistant, a script or
   automation: the state change carries a user or a parent context), so a light
   set by hand keeps what was asked for. A turn-on from the WiZ app is
-  re-dressed like the sensor's: HA can't tell them apart.
+  dressed like the sensor's: HA can't tell them apart.
 - **Coming back from `unavailable` doesn't count** (power cut, Wi-Fi drop): the
   lamp may already be at a level someone chose.
 - **The lamp comes on in the app rule's mode first**, then HA corrects it
   ~150 ms later (measured: `pir` push → HA's `udp` command). Set the rule's
   light mode to warm and dim (the 02:00 look) so the step is invisible at
   night; by day it only gets brighter.
-- **The WiZ app can still change it afterwards.** A change from the app while
-  the lamp is on stays until it next comes on.
 - **The app rule's timeout turns the lamp off.** Nothing here turns it off.
 - Amber has no blue channel at all; on a tunable-white lamp without RGB, HA
   turns it into its warmest colour temperature (2200 K on WiZ).
-- A level is set once, when the lamp comes on: a visit that spans 23:00 keeps
-  the earlier level until the next time it comes on.
 
 ## Living-room lamp
 
 The living room has a WiZ RGBW Tunable lamp (`light.lampara_salon`, reserved as
 `lampara-salon` → `192.168.0.63`).
 [`packages/luces_salon.yaml`](../charts/home-assistant/packages/luces_salon.yaml)
-sets its white by the sun:
+moves its white with the sun, in straight lines:
 
 | From | To | Colour |
 |---|---|---|
-| Sunrise | Sunset | 6500 K (cool) |
-| Sunset | Sunset + 2 h | 4000 K (neutral) |
-| Sunset + 2 h | Sunrise | 2700 K (warm) |
+| Sunrise | Sunrise + 1 h | 2700 K up to 6500 K |
+| Sunrise + 1 h | Sunset | 6500 K (cool) |
+| Sunset | Sunset + 2 h | 6500 K down to 4000 K (neutral) |
+| Sunset + 2 h | 23:30 | 4000 K down to 2700 K (warm) |
+| 23:30 | Sunrise | 2700 K |
 
-- **Colour temperature only.** It fires when the lamp comes on, at each of the
-  three changes while it's on, and on HA start. It never turns the lamp on or
-  off and never touches its brightness.
+The curve is `sensor.lampara_salon_blanco`, recomputed every minute in 50 K
+steps.
+
+- **Colour temperature only.** The lamp takes the curve when it comes on and on
+  HA start, and follows it while it's on. It never turns the lamp on or off and
+  never touches its brightness. The [evening lamps](#evening-lamps) turn it on
+  straight into the curve's white, so it doesn't flash warm first.
+- **It follows the curve only while the lamp is still on it** (±50 K of where
+  the curve was). A white picked by hand stays until the next turn-on.
 - **A colour or a WiZ scene is left alone**: it only acts while the lamp's
   `color_mode` is `color_temp` with no effect. Back to white from the app, it
-  picks the sun's colour up at the next change or the next turn-on.
-- A white picked by hand lasts until the next change.
-- At a sun trigger the colour comes from the trigger itself, since `sun.sun`
-  may not have moved on yet at that instant. Otherwise it's `sun.sun`'s state,
-  plus today's sunset time of day for the neutral window.
+  picks the curve up at the next turn-on.
+- Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
+  of day (today's or tomorrow's, a minute or two apart).
+
+## Office lamp
+
+The office has two WiZ RGBW Tunables: the table lamp (*Velador oficina*,
+`light.velador_oficina`, `velador-oficina` → `192.168.0.61`), which the
+[evening lamps](#evening-lamps) and the [presence simulation](#presence-simulation)
+drive, and the **office lamp** (*Lámpara oficina*, `light.lampara_oficina`,
+`lampara-oficina` → `192.168.0.64`) on a **plain wall switch**. Off at the wall
+means no power: HA sees it go `unavailable`, and switched back on it boots in
+its last state.
+[`packages/luces_oficina.yaml`](../charts/home-assistant/packages/luces_oficina.yaml)
+keeps it in warm white (2700 K) at the bedroom lamp's brightness curve, in
+straight lines:
+
+| From | To | Brightness |
+|---|---|---|
+| Sunrise | Sunrise + 1 h | 10 % up to 100 % |
+| Sunrise + 1 h | Sunset + 10 min | 100 % |
+| Sunset + 10 min | 23:30 | 100 % down to 10 % |
+| 23:30 | Sunrise | 10 % |
+
+The curve is `sensor.lampara_oficina_brillo`, recomputed every minute.
+
+- **Switched on at the wall** (`unavailable` → `on`), it goes to the curve's
+  level in warm white at once. It boots in its last state first, so it shows
+  that for the moment HA takes to see it back.
+- **While on, it follows the curve** as long as it still sits where the curve
+  was (±2 %). A level set by hand stays until it's next switched on at the
+  wall. An `off` from HA or the app isn't a power cut: the next `on` from there
+  is left alone.
+- An HA start isn't a turn-on: the restored `unavailable` it begins with is
+  skipped for the first minute.
+- Nothing else drives it: not the evening lamps, not the presence simulation
+  (without power it can't come on anyway).
 
 ## Kids calendar
 
@@ -1379,7 +1431,7 @@ only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the
 | HA start | Same reconcile, after 1 min for the presence sensor's first poll |
 | Every 5 min, inside the lamps' window | Ramp: re-dims the lamps that are on |
 
-**Bedroom and office move together**, in warm white (2700 K). Their brightness
+**The bedroom lamp and the office table lamp move together**, in warm white (2700 K). Their brightness
 falls in a straight line from 100 % at tonight's on time to 10 % at 23:00
 (WiZ's floor), then holds at 10 % until they go off. **The living room has its
 own night**, so the house doesn't change all at once: on a little earlier,
@@ -1421,8 +1473,9 @@ Entities it drives:
   entity. The group keeps its meaning after the upstream zone split (see
   [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
   entity becomes zone A.
-- **The office lamp is `light.lampara_oficina`**, the wiz entity of the WiZ
-  RGBW Tunable at `lampara-oficina` (`192.168.0.61`).
+- **The office table lamp is `light.velador_oficina`** (*Velador oficina*), the
+  wiz entity of the WiZ RGBW Tunable at `velador-oficina` (`192.168.0.61`). The
+  [office lamp](#office-lamp) on the wall switch is not part of the simulation.
 - **The living-room lamp is `light.lampara_salon`**, the wiz entity of the WiZ
   RGBW Tunable at `lampara-salon` (`192.168.0.63`).
 
