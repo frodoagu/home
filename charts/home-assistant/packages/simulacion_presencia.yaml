@@ -1,4 +1,4 @@
-# HA package: presence simulation. While nobody is home, the bedroom, office-table and
+# HA package: presence simulation. While nobody is home, the bedroom-table, office-table and
 # living-room lamps follow an evening routine, at different times every night, so the house
 # doesn't look empty from the street.
 # See docs/home-assistant.md#presence-simulation.
@@ -30,7 +30,7 @@
 # turns OFF a lamp that is on outside the window: with nobody home, a lamp left
 # on at 10:00 goes off when the absence starts.
 #
-# The bedroom lamp and the office table lamp move together, in warm white (2700 K), dimming
+# The bedroom and office table lamps move together, in warm white (2700 K), dimming
 # from 100 % when they come on down to 10 % at 23:00, where they stay until they
 # go off. The living room has its own: 3000 K, 100 % down to 30 % at 22:30, then
 # held until it goes off around 23:00. Every 5 min the ramp re-dims the lamps
@@ -53,9 +53,9 @@
 # A return clears it, so a pause covers one outing and can't be forgotten on.
 # Pausing does not turn off what is already on.
 #
-# The bedroom lamp is driven through its group, `light.lampara_dormitorio_grupo`,
+# The bedroom table lamp is driven through its group, `light.velador_dormitorio_grupo`,
 # not the wiz entity: the group survives the upstream zone split unchanged (see
-# lampara_dormitorio.yaml), the wiz entity becomes zone A.
+# velador_dormitorio.yaml), the wiz entity becomes zone A.
 # ────────────────────────────────────────────────────────────────────────────
 
 # No `initial` on any of them: the state is restored across restarts, and a
@@ -235,7 +235,7 @@ automation:
           for_each:
             - id: lampara
               lamparas:
-                - light.lampara_dormitorio_grupo
+                - light.velador_dormitorio_grupo
                 - light.velador_oficina
               kelvin: 2700
               fin: [23, 0]

@@ -1,11 +1,12 @@
-# HA package: the bedroom WiZ Squire as two independent lights, one per zone.
+# HA package: the bedroom table lamp (WiZ Squire) as two independent lights, one
+# per zone.
 # The core `wiz` integration exposes the lamp as a single light; until it splits
 # the zones (home-assistant/core#177502) this package drives each zone over the
 # WiZ local UDP API itself. On firmware 1.38.0 the zone index is NOT symmetric:
 # `setPilot` takes `"devices": 1|2`, `getPilot` takes `"devices": 0|1` (2 is
 # `Invalid params`) and labels its reply `"devices": 1|2`. Delete this package
 # once the integration ships per-zone entities.
-# See docs/home-assistant.md#bedroom-lamp-wiz-squire.
+# See docs/home-assistant.md#bedroom-table-lamp-wiz-squire.
 
 command_line:
   - sensor:
@@ -13,7 +14,7 @@ command_line:
       # raw getPilot result, or null when the lamp doesn't answer. A reply is
       # only accepted for the zone it carries in `devices`, so a late answer to
       # a retry can't land on the other zone.
-      name: "Lámpara dormitorio zonas"
+      name: "Velador dormitorio zonas"
       unique_id: lampara_dormitorio_zonas
       command: |-
         python3 -c "
@@ -24,7 +25,7 @@ command_line:
         for z in (1, 2):
             out[z] = None
             for _ in range(3):
-                s.sendto(json.dumps({'method': 'getPilot', 'params': {'devices': z - 1}}).encode(), ('lampara-dormitorio.lan', 38899))
+                s.sendto(json.dumps({'method': 'getPilot', 'params': {'devices': z - 1}}).encode(), ('velador-dormitorio.lan', 38899))
                 end = time.monotonic() + 1
                 while out[z] is None and time.monotonic() < end:
                     try:
@@ -48,14 +49,14 @@ shell_command:
   # `pilot` is the setPilot params, as JSON or as a mapping. A template in the
   # command makes HA exec it without a shell, splitting it with shlex, so the
   # code stays inside double quotes and the JSON inside single quotes.
-  lampara_dormitorio_enviar: |-
+  velador_dormitorio_enviar: |-
     python3 -c "
     import json, socket, sys
     m = json.dumps({'id': 1, 'method': 'setPilot', 'params': json.loads(sys.argv[1])}).encode()
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(1)
     for _ in range(3):
-        s.sendto(m, ('lampara-dormitorio.lan', 38899))
+        s.sendto(m, ('velador-dormitorio.lan', 38899))
         try:
             if (json.loads(s.recv(2048)).get('result') or {}).get('success'):
                 sys.exit(0)
@@ -65,8 +66,8 @@ shell_command:
     " '{{ pilot if pilot is string else pilot | to_json }}'
 
 script:
-  lampara_dormitorio_zona:
-    alias: Lámpara dormitorio - Enviar a una zona
+  velador_dormitorio_zona:
+    alias: Velador dormitorio - Enviar a una zona
     description: >-
       Manda un setPilot a una sola zona de la lámpara y refresca el sensor de
       estado. Los campos que vienen vacíos no se tocan.
@@ -100,7 +101,7 @@ script:
         selector:
           number: { min: 1, max: 35 }
     sequence:
-      - action: shell_command.lampara_dormitorio_enviar
+      - action: shell_command.velador_dormitorio_enviar
         continue_on_error: true
         data:
           # WiZ ignores dimming below 10.
@@ -123,13 +124,13 @@ script:
             {{- p | to_json }}
       - action: homeassistant.update_entity
         target:
-          entity_id: sensor.lampara_dormitorio_zonas
+          entity_id: sensor.velador_dormitorio_zonas
 
 # The two zones are identical apart from the index and the attribute they read,
 # so both lights share these blocks through YAML anchors.
 template:
   - light:
-      - name: "Lámpara dormitorio arriba"
+      - name: "Velador dormitorio arriba"
         unique_id: lampara_dormitorio_zona_a
         variables:
           zona: 1
@@ -172,65 +173,65 @@ template:
             34: Blanco
             35: Alarma
         availability: &availability >-
-          {{ state_attr('sensor.lampara_dormitorio_zonas', attr) is mapping }}
+          {{ state_attr('sensor.velador_dormitorio_zonas', attr) is mapping }}
         state: &state >-
-          {{ (state_attr('sensor.lampara_dormitorio_zonas', attr) or {}).get('state', false) }}
+          {{ (state_attr('sensor.velador_dormitorio_zonas', attr) or {}).get('state', false) }}
         level: &level >-
-          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
           {{ ((z.dimming | default(100) | int) * 255 / 100) | round(0) | int }}
         rgb: &rgb >-
-          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
           {{ (z.r, z.g, z.b) if z.r is defined and z.temp is not defined else none }}
         temperature: &temperature >-
-          {% set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
           {{ (1000000 / z.temp) | round(0) | int if z.temp is defined else none }}
         effect_list: &effect_list "{{ escenas.values() | list }}"
         effect: &effect >-
-          {%- set z = state_attr('sensor.lampara_dormitorio_zonas', attr) or {} %}
+          {%- set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
           {%- set id = z.sceneId | default(0) | int %}
           {{- escenas.get(id, escenas.get(id | string)) }}
         # Mireds: 6500 K .. 2200 K.
         min_mireds: &min_mireds "154"
         max_mireds: &max_mireds "455"
         turn_on: &turn_on
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: true
         turn_off: &turn_off
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: false
         set_level: &set_level
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: true
               brillo: "{{ brightness_pct }}"
         set_rgb: &set_rgb
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: true
               brillo: "{{ brightness_pct | default(none) }}"
               rgb: "{{ [r, g, b] }}"
         set_temperature: &set_temperature
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: true
               brillo: "{{ brightness_pct | default(none) }}"
               kelvin: "{{ color_temp_kelvin }}"
         set_effect: &set_effect
-          - action: script.lampara_dormitorio_zona
+          - action: script.velador_dormitorio_zona
             data:
               zona: "{{ zona }}"
               encender: true
               escena: >-
                 {% for id, nombre in escenas.items() if nombre == effect %}{{ id }}{% endfor %}
 
-      - name: "Lámpara dormitorio abajo"
+      - name: "Velador dormitorio abajo"
         unique_id: lampara_dormitorio_zona_b
         variables:
           zona: 2
@@ -253,12 +254,15 @@ template:
         set_effect: *set_effect
 
 # One tile for the whole lamp; its more-info dialog lists both zones. Lands as
-# light.lampara_dormitorio_2 (the wiz entity holds the plain id) and is renamed
-# to light.lampara_dormitorio_grupo in the registry.
+# light.velador_dormitorio_2 (the wiz entity holds the plain id) and is renamed
+# to light.velador_dormitorio_grupo in the registry.
+#
+# The unique_ids keep the lamp's old name (lampara_dormitorio_*): changing them
+# would mint new entities and drop the registry's names, areas and hiding.
 light:
   - platform: group
-    name: "Lámpara dormitorio"
+    name: "Velador dormitorio"
     unique_id: lampara_dormitorio_grupo
     entities:
-      - light.lampara_dormitorio_zona_a
-      - light.lampara_dormitorio_zona_b
+      - light.velador_dormitorio_zona_a
+      - light.velador_dormitorio_zona_b
