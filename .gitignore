@@ -15,3 +15,6 @@ sealed-secrets-key*.yaml
 *.env
 .env
 esphome/secrets.yaml
+
+# Python bytecode
+__pycache__/
