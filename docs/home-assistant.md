@@ -1208,9 +1208,10 @@ ramp until it comes back.
 
 ## Bathroom light
 
-The bathroom has WiZ lamps and a **WiZ motion sensor** (battery, no Wi-Fi of its
-own). The sensor is paired to the lamps in the WiZ app and talks to them
-directly; they relay each motion change to HA over the same local push as any
+The bathroom has a WiZ RGBW Tunable lamp (`light.lampara_bano`, reserved as
+`lampara-bano` → `192.168.0.62`) and a **WiZ motion sensor** (battery, no
+Wi-Fi of its own). The sensor is paired to the lamps in the WiZ app and talks
+to them directly; they relay each motion change to HA over the same local push as any
 other WiZ state change. With no WiZ lamp in its WiZ app room and in range, HA
 never hears from it.
 
