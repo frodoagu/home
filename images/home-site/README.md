@@ -19,6 +19,9 @@ the Dockerfile that bakes it into an nginx image. Deployed by
   (`scripts/prerender.js`, metadata in [`src/seo.js`](src/seo.js)) and writes
   `sitemap.xml`, so crawlers get content without running JS. See
   [docs/agu-spa.md](../../docs/agu-spa.md#routing-caching--search-engines).
+- **Sliders**: the mouse wheel nudges any `<input type="range">` under the
+  pointer, in every app ([`src/wheelRange.js`](src/wheelRange.js), installed in
+  `main.jsx`). New sliders get it for free.
 
 Pure logic lives in a plain `.js` module next to its component
 (`mandelbrot.js`, `neutralCurrent.js`, `balancedAudio.js`, `auth/auth.js`) with a `*.test.js`
