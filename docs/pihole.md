@@ -283,6 +283,7 @@ Everything is driven by `FTLCONF_*` env vars rendered from `values.yaml`:
 | `dns.blockTTL` | `FTLCONF_dns_blockTTL` | `300` (FTL's default is 2, so blocked trackers are re-queried on every retry; an unblock takes up to this long to reach clients) |
 | `dns.localRecords` | `FTLCONF_dns_hosts` | see below |
 | `webPort` | `FTLCONF_webserver_port` | `8080` |
+| `ingress.host` | `FTLCONF_webserver_domain` | `pihole.agu.com.ar` (FTL 403s any other `Host` except `localhost`/IPs) |
 | `dhcp.{start,end,router,leaseTime}` | `FTLCONF_dhcp_*` | `.150 / .250 / .1 / 24h` |
 | `dhcp.reservations` | `FTLCONF_dhcp_hosts` | see above |
 
