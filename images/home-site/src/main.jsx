@@ -5,8 +5,11 @@ import "./index.css";
 import { routes } from "./routes";
 import { AuthProvider } from "./auth/AuthProvider";
 import { LanguageProvider } from "./i18n/LanguageProvider";
+import { installWheelRanges } from "./wheelRange";
 
 const router = createBrowserRouter(routes);
+
+installWheelRanges();
 
 // createRoot, not hydrateRoot: the prerendered markup is Spanish and signed
 // out, while language and session are per browser, so it is replaced on mount.
