@@ -1303,6 +1303,12 @@ steps.
 - **A colour or a WiZ scene is left alone**: it only acts while the lamp's
   `color_mode` is `color_temp` with no effect. Back to white from the app, it
   picks the curve up at the next turn-on.
+- **Except after a power cut.** The lamp also hangs off a wall switch, and back
+  from `unavailable` it boots in its last state. Then it gets the curve's white
+  and the [wall-switch lamps'](#wall-switch-lamps) brightness for the hour
+  (`sensor.brillo_segun_la_hora`, the evening ramp's line), whatever it was
+  showing. The restored `unavailable` of an HA start doesn't count for the
+  first minute.
 - Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
   of day (today's or tomorrow's, a minute or two apart).
 
