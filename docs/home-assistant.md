@@ -951,8 +951,7 @@ app, delete it, otherwise two schedulers drive the same relays.
 It does not violate the one-controller rule above: that rule is about reacting to
 `input:0`, and these automations only call `light.turn_on`/`turn_off` on the
 relays — the same thing an operator does from the app, which raises no input
-event. They target the two real entity ids, not the `light.luz_escalera_espejo`
-dashboard mirror (that helper lives in `.storage`, outside git).
+event.
 
 Both automations also trigger on `homeassistant.start`. A sun trigger fires once
 and is not replayed, so an HA restart across the sunset moment (an OOMKill, a
