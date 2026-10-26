@@ -1219,18 +1219,11 @@ to them directly; they relay each motion change to HA over the same local
 push as any other WiZ state change. With no WiZ lamp in its WiZ app room and
 in range, HA never hears from it.
 
-**The WiZ app rule does the switching.** HA's wiz occupancy entity (device
-class `occupancy`, named after the lamp's device, e.g.
-`binary_sensor.oficina_lampara_oficina_ocupacion`) is not a motion
-reading: it mirrors the lamp's on/off whenever the change came from the sensor
-(`src: pir`). So it is `on` only while the sensor's rule has turned the lamp on,
-and `off` once the rule's timeout turns it off. With the rule set to do nothing
-there's nothing for HA to see. The entity is created on the lamp's first `pir`
-push, not when the lamp is added.
-
+**The WiZ app rule does the switching.** HA only re-dresses the lamp:
 [`packages/luces_bano.yaml`](../charts/home-assistant/packages/luces_bano.yaml)
-fires when any occupancy entity in the area **`bano`** (Baño, ground floor)
-turns on, and sets every light in that area by the hour:
+fires when `light.lampara_bano` goes from `off` to `on` from **outside HA**
+(the sensor's rule or the WiZ app: a state change with no user and no parent
+context), and sets it by the hour:
 
 | Time | Brightness | Colour |
 |---|---|---|
@@ -1241,21 +1234,30 @@ turns on, and sets every light in that area by the hour:
 | 01:00-01:59 | 10 % | 4000 K |
 | 02:00-06:59 | 10 % | amber, `rgb(255, 110, 0)` |
 
-- **Lamps and sensor are matched by area, not entity id.** Assign the new WiZ
-  devices to Baño in HA and the package picks them up; the occupancy entity
-  inherits the area from its lamp. Each lamp the sensor talks to gets its own
-  occupancy entity, and the first one to turn on fires the automation.
+- **Not the wiz occupancy entity.** HA's `binary_sensor.bano_lampara_bano_ocupacion`
+  is not a motion reading: it mirrors the lamp's on/off only when the change
+  came from the sensor (`src: pir`), and ignores every other change. So after
+  the sensor turns the lamp on and HA or the app turns it off, it stays `on`
+  until the sensor's own timeout turns the lamp off, and a trigger on it never
+  fires in between (seen on 2026-10-26: stuck `on` while the lamp went off and
+  back on four times). The entity is created on the lamp's first `pir` push.
+- **A turn-on from HA is left alone** (UI, Google Assistant, a script or
+  automation: the state change carries a user or a parent context), so a light
+  set by hand keeps what was asked for. A turn-on from the WiZ app is
+  re-dressed like the sensor's: HA can't tell them apart.
+- **Coming back from `unavailable` doesn't count** (power cut, Wi-Fi drop): the
+  lamp may already be at a level someone chose.
 - **The lamp comes on in the app rule's mode first**, then HA corrects it
   ~150 ms later (measured: `pir` push → HA's `udp` command). Set the rule's
   light mode to warm and dim (the 02:00 look) so the step is invisible at
   night; by day it only gets brighter.
-- **The WiZ app still wins over HA.** A change from the app (or the rule) after
-  HA's correction stays until the sensor turns the lamps on again.
-- **The app rule's timeout turns the lamps off.** Nothing here turns them off.
+- **The WiZ app can still change it afterwards.** A change from the app while
+  the lamp is on stays until it next comes on.
+- **The app rule's timeout turns the lamp off.** Nothing here turns it off.
 - Amber has no blue channel at all; on a tunable-white lamp without RGB, HA
   turns it into its warmest colour temperature (2200 K on WiZ).
-- A level is set once, when the lamps come on: a visit that spans 23:00 keeps
-  the earlier level until the next time the sensor turns them on.
+- A level is set once, when the lamp comes on: a visit that spans 23:00 keeps
+  the earlier level until the next time it comes on.
 
 ## Kids calendar
 

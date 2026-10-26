@@ -1,6 +1,7 @@
 # HA package: the bathroom light by the hour. The WiZ motion sensor's rule in
-# the WiZ app turns the bathroom lamps on and off; when it turns them on, this
-# sets their brightness and colour for the time of day:
+# the WiZ app turns the bathroom lamp on and off; whenever it comes on from
+# outside HA (the sensor or the WiZ app), this sets its brightness and colour
+# for the time of day:
 #
 #   07:00-21:59  100 %, cool white
 #   22:00-22:59  100 %, neutral white
@@ -9,28 +10,27 @@
 #   01:00-01:59   10 %
 #   02:00-06:59   10 %, amber (no blue, to spare sleep)
 #
-# The wiz occupancy entity mirrors the lamp's state when the sensor changed it,
-# so it only exists, and only fires, while the app rule does the switching.
-# Lamps and sensor are found by area (`bano`), not by entity id.
+# It doesn't watch the wiz occupancy entity: that one only follows changes the
+# sensor makes, so after an off from HA or the app it stays `on` and never fires
+# again. A turn-on from HA (UI, Google, a script) is left alone.
 # See docs/home-assistant.md#bathroom-light.
 
 automation:
   - id: luces_bano
     alias: Luces baño - Brillo según la hora
     description: >-
-      Cuando el sensor de movimiento prende las luces del baño, las pone al
-      100 % hasta las 23, 70 % hasta las 0, 40 % hasta la 1, 10 % hasta las 7;
-      en luz fría de 7 a 22 y en ámbar de 2 a 7.
+      Cuando la luz del baño se prende desde afuera de HA (el sensor de
+      movimiento o la app WiZ), la pone al 100 % hasta las 23, 70 % hasta las
+      0, 40 % hasta la 1, 10 % hasta las 7; en luz fría de 7 a 22 y en ámbar
+      de 2 a 7.
     trigger:
-      - platform: template
-        value_template: >-
-          {{ states.binary_sensor
-             | selectattr('attributes.device_class', 'defined')
-             | selectattr('attributes.device_class', 'eq', 'occupancy')
-             | map(attribute='entity_id')
-             | select('in', area_entities('bano'))
-             | select('is_state', 'on')
-             | list | count > 0 }}
+      - platform: state
+        entity_id: light.lampara_bano
+        from: "off"
+        to: "on"
+    # A change made through HA carries the user or the calling automation.
+    condition:
+      - "{{ trigger.to_state.context.user_id is none and trigger.to_state.context.parent_id is none }}"
     action:
       - variables:
           hora: "{{ now().hour }}"
@@ -40,7 +40,7 @@ automation:
           - action: light.turn_on
             continue_on_error: true
             target:
-              area_id: bano
+              entity_id: light.lampara_bano
             data:
               brightness_pct: "{{ brillo }}"
               rgb_color: [255, 110, 0]
@@ -48,7 +48,7 @@ automation:
           - action: light.turn_on
             continue_on_error: true
             target:
-              area_id: bano
+              entity_id: light.lampara_bano
             data:
               brightness_pct: "{{ brillo }}"
               color_temp_kelvin: "{{ 6500 if 7 <= hora < 22 else 4000 }}"
