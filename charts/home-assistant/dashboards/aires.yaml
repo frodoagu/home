@@ -43,6 +43,13 @@ views:
       name: Chicos
       grid_options:
         columns: 6
+    - type: entities
+      entities:
+      - entity: input_boolean.visitas
+        name: Visitas
+      state_color: true
+      grid_options:
+        columns: 12
     column_span: 2
   - type: grid
     cards:
@@ -57,7 +64,7 @@ views:
 
         faltan, y recién el toque siguiente apaga todo. El de los chicos solo
 
-        lo prende (y lo cuenta) si están, según el calendario "Chicos"; apagarlo,
+        lo prende (y lo cuenta) si están, según el calendario "Chicos" o Visitas; apagarlo,
 
         lo apaga siempre.
 
@@ -338,7 +345,7 @@ views:
 
         en {{ m }} con el ventilador al mínimo, y apaga el resto. Los dos botones
 
-        prenden la de los chicos solo si están (calendario "Chicos"); si no,
+        prenden la de los chicos solo si están (calendario "Chicos" o Visitas); si no,
 
         la apagan con el resto.
 

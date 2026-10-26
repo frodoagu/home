@@ -5,7 +5,15 @@
 # 13:50.
 # `calendar.chicos` is a Remote Calendar config entry: UI-only, its iCal secret
 # address lives in .storage and never in git.
+# `input_boolean.visitas` (the "Aires" dashboard) overrides the calendar: while
+# it's on the kids count as home, for guests sleeping in their room.
 # See docs/home-assistant.md#kids-calendar.
+
+# No `initial`: the state is restored across restarts.
+input_boolean:
+  visitas:
+    name: Visitas
+    icon: mdi:account-multiple
 
 template:
   # Remote Calendar downloads the iCal once a day, so every run refreshes it
@@ -56,6 +64,7 @@ template:
         default_entity_id: binary_sensor.chicos_en_casa
         device_class: occupancy
         state: >-
-          {{ (now() < today_at('13:50') and state_attr('binary_sensor.chicos_noche', 'anoche') == true)
+          {{ is_state('input_boolean.visitas', 'on')
+             or (now() < today_at('13:50') and state_attr('binary_sensor.chicos_noche', 'anoche') == true)
              or (now() >= today_at('18:00') and is_state('binary_sensor.chicos_noche', 'on')) }}
-        availability: "{{ has_value('binary_sensor.chicos_noche') }}"
+        availability: "{{ is_state('input_boolean.visitas', 'on') or has_value('binary_sensor.chicos_noche') }}"

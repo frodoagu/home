@@ -1229,7 +1229,8 @@ day ends at 13:50.
 |---|---|
 | `calendar.chicos` | The calendar, a **Remote Calendar** config entry |
 | `binary_sensor.chicos_noche` | Tonight is marked; attribute `anoche`: last night was |
-| `binary_sensor.chicos_en_casa` | The rule above; unavailable while `chicos_noche` has no value |
+| `input_boolean.visitas` | Override: while on, the kids count as home whatever the calendar says |
+| `binary_sensor.chicos_en_casa` | The rule above, or `visitas` on; unavailable while `chicos_noche` has no value and `visitas` is off |
 
 - **The calendar is UI state, not git.** Remote Calendar is config-flow only:
   it takes the calendar's **secret iCal address** (Google Calendar → the
@@ -1241,6 +1242,10 @@ day ends at 13:50.
   calendar before each `calendar.get_events` for yesterday and today (title
   trimmed, case-insensitive; an all-day event's end date is exclusive). A change in Google
   lands within 15 min, and the 00:00 run rolls the day over.
+- **`Visitas` overrides the calendar.** A checkbox in the first section of the
+  [Aires dashboard](#the-aires-dashboard) for guests sleeping in the kids' room:
+  while it's on, `chicos_en_casa` is `on` and the kids' unit follows Fede's
+  bedroom exactly as on a marked night. It never turns itself off.
 - **Consumers use it as a condition, never as a trigger** for the ACs: while
   the kids are home their unit follows Fede's bedroom in every
   [script](#air-conditioners-smartir--broadlink) (sensor not `off`) and
