@@ -215,7 +215,7 @@ export default function BalancedAudio() {
           <Card title={t("Fuentes de ruido", "Noise sources", "Fontes de ruído", "Sources de bruit")} icon={<Activity size={15} />}>
             <NoiseControls noise={noise} onChange={setNoise} language={language} />
           </Card>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <Card title={t("Escuchar la salida", "Listen to the output", "Ouvir a saída", "Écouter la sortie")} icon={<Headphones size={15} />}>
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button onClick={monitor.playing ? monitor.stop : monitor.start}
@@ -271,6 +271,9 @@ export default function BalancedAudio() {
                   "Le bruit qui s'infiltre fait les mêmes quelques millivolts : face aux millivolts d'un micro, il pèse 50 dB de plus que face à un signal ligne.")}
               </p>
             </Card>
+            <Card className="flex-1" title={t("Fallas del cable", "Cable faults", "Falhas do cabo", "Défauts du câble")} icon={<Unplug size={15} />}>
+              <FaultControls faults={faults} onChange={setFaults} enabled={diff} language={language} />
+            </Card>
           </div>
         </div>
 
@@ -310,10 +313,6 @@ export default function BalancedAudio() {
           </Card>
         </div>
 
-        <Card title={t("Fallas del cable", "Cable faults", "Falhas do cabo", "Défauts du câble")} icon={<Unplug size={15} />}>
-          <FaultControls faults={faults} onChange={setFaults} enabled={diff} language={language} />
-        </Card>
-
         <Guide language={language} />
       </div>
     </div>
@@ -324,7 +323,7 @@ export default function BalancedAudio() {
 
 function Card({ title, icon, children, className = "" }) {
   return (
-    <div className={`min-w-0 rounded-xl border border-slate-800 bg-slate-900 p-4 ${className}`}>
+    <div className={`flex min-w-0 flex-col rounded-xl border border-slate-800 bg-slate-900 p-4 ${className}`}>
       <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
         {icon}<span className="uppercase tracking-wide">{title}</span>
       </div>
@@ -609,7 +608,7 @@ function Comparison({ rows, mode, onPick, faulty, snr, language }) {
   const unbalanced = rows.find((r) => r.key === "unbalanced").snr;
   const bar = (db) => `${Math.max(2, Math.min(100, (Math.min(db, 120) / 120) * 100))}%`;
   return (
-    <div className="pt-3 space-y-2.5">
+    <div className="flex flex-1 flex-col justify-between gap-2.5 pt-3">
       {rows.map((r) => {
         const active = r.key === mode;
         const gain = r.snr - unbalanced;
