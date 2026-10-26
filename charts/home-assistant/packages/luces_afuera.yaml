@@ -6,11 +6,11 @@
 # WHY THIS DOESN'T FIGHT THE DEVICE SCRIPT. The docs/shelly.md rule ("exactly ONE
 # controller per wall switch") is about `input:0`: the `luces-afuera.js` mJS
 # script is the only thing reacting to the wall-switch event. These automations
-# don't look at the inputs — they call `switch.turn_on/off` on the relays, the
+# don't look at the inputs — they call `light.turn_on/off` on the relays, the
 # same as an operator from the app, and that raises NO input event. Both relays
 # are driven explicitly here, so we don't depend on the script's gang either.
 #
-# Do NOT target `switch.luz_escalera_espejo`: that's the UI helper grouping both
+# Do NOT target `light.luz_escalera_espejo`: that's the UI helper grouping both
 # lights on the dashboard, it lives in `.storage` (outside git) and mirrors the
 # stairs relay. The real entity ids go here.
 #
@@ -51,11 +51,11 @@ automation:
       - condition: sun
         after: sunset
     action:
-      - action: switch.turn_on
+      - action: light.turn_on
         target:
           entity_id:
-            - switch.afuera_interruptor_puerta_principal
-            - switch.afuera_interruptor_puerta_escalera
+            - light.afuera_interruptor_puerta_principal
+            - light.afuera_interruptor_puerta_escalera
     mode: single
 
   - id: luces_afuera_apagar_amanecer
@@ -76,9 +76,9 @@ automation:
         after: sunrise
         before: sunset
     action:
-      - action: switch.turn_off
+      - action: light.turn_off
         target:
           entity_id:
-            - switch.afuera_interruptor_puerta_principal
-            - switch.afuera_interruptor_puerta_escalera
+            - light.afuera_interruptor_puerta_principal
+            - light.afuera_interruptor_puerta_escalera
     mode: single

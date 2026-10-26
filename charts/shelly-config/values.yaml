@@ -48,6 +48,9 @@ rpcRetryDelay: 5
 #              change there and nothing here has to move. Resolvable from a
 #              pod thanks to dns.clusterForwarding in charts/pihole.
 #   name     - label for the logs only.
+#   sys      - Sys.SetConfig keys to enforce, per section (ui_data, ...). Only
+#              the listed keys are compared; a drifted section is written
+#              back merged into what the device already has there.
 #   switch   - Switch.SetConfig keys to enforce on channel 0. Only the listed
 #              keys are compared/written; anything else is left as the device
 #              has it.
@@ -59,6 +62,12 @@ devices:
   # both lights while the app and Google Home keep them independent.
   - name: luz-puerta-escalera
     host: shelly-escalera.lan
+    sys:
+      # Consumption type "lights" makes Home Assistant's Shelly integration
+      # expose the relay as `light.*` instead of `switch.*`, so it counts in
+      # the dashboard's lights summary.
+      ui_data:
+        consumption_types: ["lights"]
     switch:
       # detached: the relay is driven only by the script (and by HA/Google).
       in_mode: detached
@@ -70,6 +79,9 @@ devices:
       - luces-afuera
   - name: luz-puerta-principal
     host: shelly-puerta-principal.lan
+    sys:
+      ui_data:
+        consumption_types: ["lights"]
     switch:
       in_mode: detached
       initial_state: restore_last

@@ -929,9 +929,9 @@ Gotchas:
 
 ## Outdoor lights (Shelly) — see [docs/shelly.md](shelly.md)
 
-The two outdoor lights (`switch.afuera_interruptor_puerta_principal` /
+The two outdoor lights (`light.afuera_interruptor_puerta_principal` /
 `…_escalera`) are Shelly 1 Mini Gen4 relays. Home Assistant sees them as two
-ordinary, independent switches and drives them that way — but **either wall
+ordinary, independent lights and drives them that way — but **either wall
 switch drives both lights**, and that logic runs **on the devices**, not here.
 
 Do **not** add an HA automation on their inputs
@@ -949,9 +949,9 @@ Home automation** (Google's cloud, nothing in git — see
 app, delete it, otherwise two schedulers drive the same relays.
 
 It does not violate the one-controller rule above: that rule is about reacting to
-`input:0`, and these automations only call `switch.turn_on`/`turn_off` on the
+`input:0`, and these automations only call `light.turn_on`/`turn_off` on the
 relays — the same thing an operator does from the app, which raises no input
-event. They target the two real entity ids, not the `switch.luz_escalera_espejo`
+event. They target the two real entity ids, not the `light.luz_escalera_espejo`
 dashboard mirror (that helper lives in `.storage`, outside git).
 
 Both automations also trigger on `homeassistant.start`. A sun trigger fires once
