@@ -140,6 +140,7 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
 | `192.168.0.63` | `lampara-salon` | WiZ RGBW Tunable lamp | living |
 | `192.168.0.64` | `lampara-oficina` | WiZ RGBW Tunable lamp, on a plain wall switch | office |
 | `192.168.0.65` | `lampara-dormitorio` | WiZ RGBW Tunable lamp, on a plain wall switch | bedroom |
+| `192.168.0.66` | `lampara-escalera` | WiZ RGBW Tunable lamp, on a plain wall switch | stairs to the kids' room |
 | `192.168.0.70` | `pc-fede` | Fede's gaming PC | |
 | `192.168.0.71` | `think` | Fede's work laptop | |
 | `192.168.0.72` | `pc-noah` | Noah's PC (Wi-Fi) | |
