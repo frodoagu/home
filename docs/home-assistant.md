@@ -1165,17 +1165,22 @@ idle Android phone doesn't answer; and the ARP cache Pi-hole parses, whose
 
 [`packages/luces_adentro.yaml`](../charts/home-assistant/packages/luces_adentro.yaml)
 runs the evening of the bedroom and office table lamps (*Velador dormitorio*,
-*Velador oficina*; not the [wall-switch lamps](#wall-switch-lamps)) and the
-living-room lamp while Fede is home
+*Velador oficina*), the stairs lamp to the kids' room (*Lámpara escalera*) and
+the living-room lamp while Fede is home
 ([`binary_sensor.fede_en_casa`](#presence) `on`):
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | The three lamps on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp) |
+| Sunset + 10 min | The four lamps on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp) |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, in the same whites |
-| 01:30 | The three lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
-| PC-Fede goes off between 01:30 and dawn | The three lamps **off**: with the PC on at 01:30, the turn-off waits for it |
+| 01:30 | The four lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
+| PC-Fede goes off between 01:30 and dawn | The four lamps **off**: with the PC on at 01:30, the turn-off waits for it |
+
+The stairs lamp is a [wall-switch lamp](#wall-switch-lamps): this only reaches
+it while its switch is left on (off at the wall it's `unavailable`). The
+office and bedroom wall-switch lamps aren't part of it. The ramp is the same
+line as the wall-switch curve, so the two agree.
 
 - **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
   below the ramp; one turned up by hand sits above where the ramp was 30 min
@@ -1351,6 +1356,11 @@ The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
 - **An HA start isn't a turn-on**: the restored `unavailable` it begins with is
   skipped for the first minute. A lamp that was off the curve when HA started
   stays off it until it's next switched on at the wall.
+- **Not while the [presence simulation](#presence-simulation) runs** (absence
+  recorded, not paused): the curve isn't followed then, since the simulation
+  dims the stairs lamp on its own ramp (10 % at 23:00, not 23:30) and the two
+  would pull it back and forth where the lines cross. A turn-on at the wall
+  still gets the curve; the simulation's next 5-min tick takes it from there.
 - A new lamp on a wall switch joins by its entity in both `lamparas` and the
   `prendida` trigger.
 
@@ -1401,7 +1411,7 @@ day ends at 13:50.
 ## Presence simulation
 
 [`packages/simulacion_presencia.yaml`](../charts/home-assistant/packages/simulacion_presencia.yaml)
-runs an evening routine on the bedroom, office and living-room lamps while
+runs an evening routine on the bedroom, office, stairs and living-room lamps while
 nobody is home, at different times every night. The outdoor lights already follow
 dusk/dawn on their own ([luces_afuera.yaml](#duskdawn-schedule)); this adds a
 room that changes during the evening.
@@ -1450,7 +1460,7 @@ only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the
 | HA start | Same reconcile, after 1 min for the presence sensor's first poll |
 | Every 5 min, inside the lamps' window | Ramp: re-dims the lamps that are on |
 
-**The bedroom and office table lamps move together**, in warm white (2700 K). Their brightness
+**The bedroom and office table lamps and the stairs lamp move together**, in warm white (2700 K). Their brightness
 falls in a straight line from 100 % at tonight's on time to 10 % at 23:00
 (WiZ's floor), then holds at 10 % until they go off. **The living room has its
 own night**, so the house doesn't change all at once: on a little earlier,
@@ -1493,8 +1503,11 @@ Entities it drives:
   [When the integration gets zones](#when-the-integration-gets-zones)); the wiz
   entity becomes zone A.
 - **The office table lamp is `light.velador_oficina`** (*Velador oficina*), the
-  wiz entity of the WiZ RGBW Tunable at `velador-oficina` (`192.168.0.61`). The
-  [wall-switch lamps](#wall-switch-lamps) are not part of the simulation.
+  wiz entity of the WiZ RGBW Tunable at `velador-oficina` (`192.168.0.61`).
+- **The stairs lamp is `light.lampara_escalera`** (*Lámpara escalera*), the
+  [wall-switch lamp](#wall-switch-lamps) at `lampara-escalera`
+  (`192.168.0.66`). It only answers while its switch is left on. The office and
+  bedroom wall-switch lamps are not part of the simulation.
 - **The living-room lamp is `light.lampara_salon`**, the wiz entity of the WiZ
   RGBW Tunable at `lampara-salon` (`192.168.0.63`).
 
