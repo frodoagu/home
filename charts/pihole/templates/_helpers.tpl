@@ -96,5 +96,8 @@ per localRecords host.
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- range .Values.dns.blockDomains -}}
+{{- $entries = append $entries (printf "local=/%s/" .) -}}
+{{- end -}}
 {{- join ";" $entries -}}
 {{- end }}

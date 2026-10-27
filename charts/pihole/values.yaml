@@ -154,6 +154,32 @@ dns:
   # actually serves and drops ech/ipv4hint/ipv6hint. Hex RDATA of
   # `1 . alpn="h3,h2"`, as dnsmasq's dns-rr expects. Empty disables it.
   localHttpsRecord: "00010000010006026833026832"
+  # Domains to hard-block at dnsmasq (rendered as `local=/<domain>/` lines, so
+  # the domain AND every subdomain return NXDOMAIN and are never forwarded).
+  # These are declarative and git-tracked, unlike gravity.db adlists on the PVC.
+  # The list below is the LG webOS TVs' ads/telemetry endpoints (tv-sala .50,
+  # tv-dormitorio .51 — see docs/pihole.md) that the loaded gravity adlists do
+  # NOT already cover: checked live before committing, so this complements the
+  # adlists instead of duplicating them (lgsmartad.com, yumenetworks.com and
+  # smartclip.net were already NULL-blocked, so they're intentionally absent).
+  # Deliberately NOT blocked: the LG firmware/update hosts (snu.lge.com,
+  # ngfts.lge.com) and the App Store/recommends hosts (*.lgappstv.com) — blocking
+  # those makes the TV think it is offline and can stall OTA updates. Retest after
+  # every TV firmware bump: LG moves these domains and the adlists may lag.
+  blockDomains:
+    # Smart-delivery / telemetry platform. The adlists block rdx2.lgtvsdp.com but
+    # NOT us.lgtvsdp.com (resolves to a live AWS IP) — this closes that gap.
+    - lgtvsdp.com
+    # ThinQ / IoT telemetry — resolves to a real LG IP and is NOT on the adlists.
+    # Safe to block: these TVs are driven over the LAN `webostv` integration, not
+    # the ThinQ cloud.
+    - lgthinq.com
+    # LG ad/telemetry platform hosts the adlists miss. NXDOMAIN today, so blocking
+    # is a no-op for now; kept so a geo/subdomain LG turns on later is pre-blocked.
+    - lgad.cjpowercast.com
+    - nextlgsdp.com
+    - lgtvcommon.com
+    - lgtviot.com
 
 # DHCP server. The router's own DHCP is OFF and the Pi has a static IP, so Pi-hole
 # owns DHCP and advertises itself as the resolver. (Keep this in sync with the

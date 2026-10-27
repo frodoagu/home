@@ -368,6 +368,56 @@ State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 `/etc/pihole`. Image is pinned in `values.yaml` (`pihole/pihole`, keep `Chart.yaml`
 `appVersion` in sync).
 
+## Blocked domains (git-tracked, not gravity.db)
+
+Pi-hole's own adlists and regex live in `gravity.db` on the PVC — not in git, so a
+fresh `/etc/pihole` loses them. For domains we want blocked **declaratively**,
+`dns.blockDomains` renders one dnsmasq `local=/<domain>/` line each into
+`FTLCONF_misc_dnsmasq_lines` (alongside the HTTPS records above). `local=` makes
+dnsmasq authoritative for the domain, so the domain **and every subdomain** return
+`NXDOMAIN` and are never forwarded upstream.
+
+```bash
+dig @192.168.0.100 lgsmartad.com +short            # (empty — NXDOMAIN)
+dig @192.168.0.100 us.ad.lgsmartad.com +short      # (empty — subdomain too)
+```
+
+Today the list is the **LG webOS TVs' ads/telemetry endpoints** (`tv-sala` .50,
+`tv-dormitorio` .51) that the **loaded gravity adlists don't already cover** —
+checked live (`dig @192.168.0.100 …`) before committing, so this complements the
+adlists rather than duplicating them. This is the no-root, fully reversible
+"debloat": it kills the home-screen ads and ACR/telemetry callbacks without
+touching the TV.
+
+- `lgtvsdp.com` — the adlists NULL-block `rdx2.lgtvsdp.com` but leave
+  `us.lgtvsdp.com` (a live AWS IP) open; the apex `local=` covers both.
+- `lgthinq.com` — resolves to a real LG IP and is not on the adlists. Safe here
+  only because the TVs run over the LAN `webostv` integration, not the ThinQ cloud.
+- `lgad.cjpowercast.com`, `nextlgsdp.com`, `lgtvcommon.com`, `lgtviot.com` — LG
+  ad/telemetry platform hosts the adlists miss. `NXDOMAIN` today (blocking them is
+  a no-op for now), kept so a later geo/subdomain LG enables is pre-blocked.
+
+Already covered by the adlists and therefore **not** repeated here:
+`lgsmartad.com` (+ `us.*`/`us.ad.*`/`us.info.*`), `yumenetworks.com`,
+`smartclip.net` — all already `0.0.0.0`.
+
+Deliberately **left open**:
+
+- **Firmware / OTA** — `snu.lge.com`, `ngfts.lge.com`. Blocking these can stall
+  updates.
+- **App Store / recommends** — `*.lgappstv.com`. Blocking the store makes the TV
+  decide it is offline (spinner on launch, "no connection" banners), even though
+  everything else works. The `lgrecommends.lgappstv.com` host in particular is
+  what a blanket `*.lgappstv.com` block trips over.
+
+LG moves these domains between firmware releases (the community list that covers
+`tv-sala`'s fw `03.53.45` may miss an endpoint a later build adds), so **recheck
+the Pi-hole query log for `*.lge.com` / `*.lgappstv.com` / `*lgsmartad*` after every
+TV firmware bump** and extend the list if a new ad host appears. The ThinQ/IoT
+entries are safe to block only because these TVs are driven over the LAN `webostv`
+integration (see [home-assistant.md](home-assistant.md#lg-webos-tvs--wake-on-lan-turn-on)),
+not the ThinQ cloud.
+
 ## Admin password (optional)
 
 Pi-hole's **own login is disabled by default** (`admin.disablePassword: true` → empty
