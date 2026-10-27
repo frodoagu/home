@@ -1317,17 +1317,19 @@ steps.
 
 The office and the bedroom each have a table lamp (*Velador*, driven by the
 [evening lamps](#evening-lamps) and the [presence simulation](#presence-simulation))
-and a WiZ RGBW Tunable on a **plain wall switch**:
+and a WiZ RGBW Tunable on a **plain wall switch**. The stairs to the kids' room
+have one too, with no table lamp:
 
 | Lamp | Entity | Reservation |
 |---|---|---|
 | *Lámpara oficina* | `light.lampara_oficina` | `lampara-oficina` → `192.168.0.64` |
 | *Lámpara dormitorio* | `light.lampara_dormitorio` | `lampara-dormitorio` → `192.168.0.65` |
+| *Lámpara escalera* | `light.lampara_escalera` | `lampara-escalera` → `192.168.0.66` |
 
 Off at the wall means no power: HA sees the lamp go `unavailable`, and switched
 back on it boots in its last state.
 [`packages/luces_llave.yaml`](../charts/home-assistant/packages/luces_llave.yaml)
-keeps both in warm white (2700 K) at the table lamps' brightness curve, in
+keeps them all in warm white (2700 K) at the table lamps' brightness curve, in
 straight lines:
 
 | From | To | Brightness |

@@ -1,7 +1,7 @@
-# HA package: the lamps on a plain wall switch (office and bedroom), their
-# brightness by the hour, always in warm white (2700 K). Off at the wall means
-# no power: HA sees them go `unavailable`, and switched back on they boot in
-# their last state.
+# HA package: the lamps on a plain wall switch (office, bedroom and the stairs
+# to the kids' room), their brightness by the hour, always in warm white
+# (2700 K). Off at the wall means no power: HA sees them go `unavailable`, and
+# switched back on they boot in their last state.
 #
 #   sunrise          -> sunrise + 1 h     10 % up to 100 %
 #   sunrise + 1 h    -> sunset + 10 min   100 %
@@ -53,17 +53,18 @@ automation:
   - id: luces_llave
     alias: Lámparas de llave - Brillo según la hora
     description: >-
-      Al prender con la llave la lámpara de la oficina o la del dormitorio la
-      pone en blanco cálido al brillo que corresponde a la hora, y mientras
-      está prendida lo va siguiendo: 100 % de día, baja en línea recta hasta
-      10 % entre el atardecer y las 23:30, queda en 10 % hasta el amanecer y
-      sube a 100 % en la hora siguiente. Si alguien le cambia el brillo, lo
-      deja hasta la próxima vez que se prenda.
+      Al prender con la llave la lámpara de la oficina, la del dormitorio o la
+      de la escalera de los chicos la pone en blanco cálido al brillo que
+      corresponde a la hora, y mientras está prendida lo va siguiendo: 100 %
+      de día, baja en línea recta hasta 10 % entre el atardecer y las 23:30,
+      queda en 10 % hasta el amanecer y sube a 100 % en la hora siguiente. Si
+      alguien le cambia el brillo, lo deja hasta la próxima vez que se prenda.
     trigger:
       - platform: state
         entity_id:
           - light.lampara_oficina
           - light.lampara_dormitorio
+          - light.lampara_escalera
         from: unavailable
         to: "on"
         id: prendida
@@ -77,6 +78,7 @@ automation:
           lamparas:
             - light.lampara_oficina
             - light.lampara_dormitorio
+            - light.lampara_escalera
           brillo: "{{ states('sensor.brillo_segun_la_hora') | int }}"
           # An HA start restores the lamp as `unavailable` before the wiz
           # integration loads it; that isn't a turn-on at the wall.
