@@ -12,7 +12,9 @@
 # `sensor.brillo_segun_la_hora` is that curve. Back from `unavailable` a lamp
 # goes to it at once; while it's on it follows each step of the curve as long
 # as it still sits where the curve was, so a level set by hand stays until the
-# next time it's switched on at the wall.
+# next time it's switched on at the wall. While the presence simulation runs
+# (simulacion_presencia.yaml) the curve isn't followed: the simulation dims the
+# stairs lamp on its own ramp, which ends earlier.
 # See docs/home-assistant.md#wall-switch-lamps.
 
 template:
@@ -86,11 +88,14 @@ automation:
             {{- trigger.id == 'prendida'
                 and (trigger.from_state.attributes.restored is not defined
                      or now() - trigger.from_state.last_changed > timedelta(minutes=1)) }}
+          simulacion: >-
+            {{- is_state('input_boolean.simulacion_presencia_ausencia', 'on')
+                and is_state('input_boolean.simulacion_presencia_pausa', 'off') }}
           # The lamps still where the curve was before this step; 1-2 % of
           # slack for the 0-255 round trip.
           siguen: >-
             {%- set ns = namespace(lista=[]) %}
-            {%- if trigger.id == 'curva' and trigger.from_state is not none
+            {%- if trigger.id == 'curva' and not simulacion and trigger.from_state is not none
                    and is_number(trigger.from_state.state) %}
             {%- for e in lamparas if is_state(e, 'on') %}
             {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}

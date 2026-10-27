@@ -1,5 +1,5 @@
-# HA package: presence simulation. While nobody is home, the bedroom-table, office-table and
-# living-room lamps follow an evening routine, at different times every night, so the house
+# HA package: presence simulation. While nobody is home, the bedroom-table, office-table,
+# stairs and living-room lamps follow an evening routine, at different times every night, so the house
 # doesn't look empty from the street.
 # See docs/home-assistant.md#presence-simulation.
 #
@@ -30,7 +30,7 @@
 # turns OFF a lamp that is on outside the window: with nobody home, a lamp left
 # on at 10:00 goes off when the absence starts.
 #
-# The bedroom and office table lamps move together, in warm white (2700 K), dimming
+# The bedroom and office table lamps and the stairs lamp move together, in warm white (2700 K), dimming
 # from 100 % when they come on down to 10 % at 23:00, where they stay until they
 # go off. The living room has its own: 3000 K, 100 % down to 30 % at 22:30, then
 # held until it goes off around 23:00. Every 5 min the ramp re-dims the lamps
@@ -56,6 +56,9 @@
 # The bedroom table lamp is driven through its group, `light.velador_dormitorio_grupo`,
 # not the wiz entity: the group survives the upstream zone split unchanged (see
 # velador_dormitorio.yaml), the wiz entity becomes zone A.
+#
+# The stairs lamp is on a wall switch: off at the wall it's `unavailable` and
+# out of reach. While this runs, luces_llave.yaml leaves its brightness alone.
 # ────────────────────────────────────────────────────────────────────────────
 
 # No `initial` on any of them: the state is restored across restarts, and a
@@ -175,9 +178,9 @@ automation:
   - id: simulacion_presencia_lamparas
     alias: Simulación de presencia - Lámparas
     description: >-
-      Con la casa vacía prende y apaga las lámparas del dormitorio, la oficina
-      y el salón a los horarios de los sensores "Simulación presencia", que
-      cambian cada noche. Dormitorio y oficina van en blanco cálido y bajan de
+      Con la casa vacía prende y apaga las lámparas del dormitorio, la oficina,
+      la escalera y el salón a los horarios de los sensores "Simulación presencia", que
+      cambian cada noche. Dormitorio, oficina y escalera van en blanco cálido y bajan de
       100 % al prender a 10 % a las 23:00; el salón va en 3000 K, baja a 30 %
       a las 22:30 y se apaga cerca de las 23:00. Al vaciarse la casa, al sacar la pausa y al arrancar HA las deja
       como tendrían que estar a esa hora.
@@ -237,6 +240,7 @@ automation:
               lamparas:
                 - light.velador_dormitorio_grupo
                 - light.velador_oficina
+                - light.lampara_escalera
               kelvin: 2700
               fin: [23, 0]
               piso: 10
