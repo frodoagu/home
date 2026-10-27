@@ -5,7 +5,8 @@
 # straight line between these points:
 #
 #   21:00             100 %  6500 K (cool, all day until here)
-#   22:00             100 %  4000 K
+#   21:30             100 %  5250 K (starts dimming)
+#   22:00              90 %  4000 K
 #   23:00              70 %  4000 K
 #   00:00              40 %  4000 K
 #   01:00              10 %  4000 K
@@ -36,7 +37,7 @@ template:
           curva: >-
             {%- set t = state_attr('sun.sun', 'next_rising') | as_datetime | as_local %}
             {%- set amanecer = (t.hour * 60 + t.minute - 720) % 1440 %}
-            {%- set p = [[540, 100, 6500], [600, 100, 4000], [660, 70, 4000], [720, 40, 4000],
+            {%- set p = [[540, 100, 6500], [570, 100, 5250], [600, 90, 4000], [660, 70, 4000], [720, 40, 4000],
                          [780, 10, 4000], [840, 10, 2200], [amanecer, 10, 2200], [amanecer + 60, 100, 6500]] %}
             {%- set m = (now().hour * 60 + now().minute - 720) % 1440 %}
             {%- set ns = namespace(a=p[0], b=p[0], f=0) %}
@@ -66,9 +67,9 @@ automation:
       Cuando la luz del baño se prende desde afuera de HA (el sensor de
       movimiento o la app WiZ), le pone el brillo y el color de la hora, y los
       sigue mientras está prendida, todo en línea recta: fría y al 100 % hasta
-      las 21, neutra a las 22, baja a 70 % a las 23, 40 % a las 0 y 10 % a la
-      1, ámbar de las 2 al amanecer y vuelve a fría al 100 % en la hora
-      siguiente. Si alguien la cambia, la deja hasta que se vuelva a prender.
+      las 21, empieza a bajar a las 21:30, neutra y al 90 % a las 22, 70 % a
+      las 23, 40 % a las 0 y 10 % a la 1, ámbar de las 2 al amanecer y vuelve
+      a fría al 100 % en la hora siguiente. Si alguien la cambia, la deja hasta que se vuelva a prender.
     trigger:
       - platform: state
         entity_id: light.lampara_bano

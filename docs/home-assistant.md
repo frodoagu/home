@@ -1235,14 +1235,15 @@ stays on. Every change is a straight line between these points:
 | Time | Brightness | Colour |
 |---|---|---|
 | Until 21:00 (from sunrise + 1 h) | 100 % | 6500 K (cool) |
-| 22:00 | 100 % | 4000 K |
+| 21:30 | 100 % | 5250 K |
+| 22:00 | 90 % | 4000 K |
 | 23:00 | 70 % | 4000 K |
 | 00:00 | 40 % | 4000 K |
 | 01:00 | 10 % | 4000 K |
 | 02:00 → sunrise | 10 % | amber, `rgb(255, 110, 0)` |
 | Sunrise + 1 h | 100 % | 6500 K |
 
-So 21:30 is 100 % at 5250 K, 22:30 is 85 %, 01:30 is 10 % at 3100 K. The curve
+So 22:30 is 80 %, 01:30 is 10 % at 3100 K. The curve
 is `sensor.lampara_bano_brillo` (colour in its `kelvin` / `ambar` attributes),
 recomputed every minute.
 
