@@ -638,10 +638,23 @@ to all three whatever HA assumes; the push lists only the units HA had on.
 ### Display off at midnight
 
 `aires_display_medianoche` darkens the display of every unit HA assumes is on
-at 00:00, so it doesn't light the room at night. SmartIR has no display command,
-so it sends the frames itself with `remote.send_command` (`b64:`). On every unit
-the display is a **toggle**: a display already dark at midnight lights up, and
-any later command from HA lights it again (confirmed on the bedroom unit).
+at 00:00, so it doesn't light the room at night. Both automations call
+`script.aires_display_apagar`, which holds the frames (SmartIR has no display
+command) and sends them with `remote.send_command` (`b64:`) to the units in its
+`aires` field, or to every unit that is on. On every unit the display is a
+**toggle**: a display already dark at midnight lights up, and any later command
+from HA lights it again (confirmed on the bedroom unit). Because the script is in
+the `script` domain it also shows up in Google Home as a scene.
+
+Since a command lights it again, `aires_display_reapagar` darkens it once more
+from **00:00 to 08:00**: when HA turns a unit on or changes its mode, setpoint,
+fan or swing, that unit's display goes dark **30 s after the last change**. Each
+change starts a run that waits (`wait_template`, 30 s timeout) for the unit to
+leave the state that fired it; if it does, that run ends and the newer one
+takes over, so a burst of taps sends one toggle. Only changes HA makes count: a new
+thermometer reading (`current_temperature`) doesn't, a physical remote goes
+unseen, and a unit coming back from `unavailable` after a restart sent no IR, so
+it doesn't count either. 08:00 is when the morning heat starts the units.
 
 - **Living and kitchen (`1382`)** speak **Coolix**, whose LED command is the
   constant `B5 F5 A5` (each byte followed by its complement, the frame sent
@@ -672,7 +685,7 @@ any later command from HA lights it again (confirmed on the bedroom unit).
 
 ### Push notifications
 
-Every AC automation (the six above, not the midnight display, plus
+Every AC automation (the six above, not the display ones, plus
 `aires_apagado_programado`) ends with a
 push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
 target as the washer's cycle-done alert — on an Android channel called `Aires`,
