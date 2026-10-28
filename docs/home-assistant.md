@@ -672,7 +672,8 @@ any later command from HA lights it again (confirmed on the bedroom unit).
 
 ### Push notifications
 
-Every AC automation (the seven above plus `aires_apagado_programado`) ends with a
+Every AC automation (the six above, not the midnight display, plus
+`aires_apagado_programado`) ends with a
 push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
 target as the washer's cycle-done alert — on an Android channel called `Aires`,
 so its sound and priority are set per channel on the phone. The push is always the

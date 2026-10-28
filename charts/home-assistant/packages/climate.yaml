@@ -519,9 +519,9 @@ script:
 # coming home or leaving switches nothing by itself; it also keeps aires_se_van
 # from cutting the ACs while they're home.
 #
-# Every automation reports what it did with a push to Fede's phone, on the
-# "Aires" Android channel. The push is the LAST step, so a failed notify never
-# keeps a unit from switching.
+# Every automation but the midnight display one reports what it did with a push
+# to Fede's phone, on the "Aires" Android channel. The push is the LAST step, so
+# a failed notify never keeps a unit from switching.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: aires_calor_manana
@@ -702,8 +702,6 @@ automation:
               codigo: "{{ dormitorio_led }}"
           prendidos: >-
             {{ displays | rejectattr('aire', 'is_state', ['off', 'unavailable', 'unknown']) | list }}
-      - condition: template
-        value_template: "{{ prendidos | count > 0 }}"
       - repeat:
           for_each: "{{ prendidos }}"
           sequence:
@@ -713,16 +711,6 @@ automation:
                 entity_id: "{{ repeat.item.remote }}"
               data:
                 command: "{{ repeat.item.codigo }}"
-      - action: notify.mobile_app_motorola_edge_70
-        data:
-          title: Aires
-          message: >-
-            Medianoche: apagué el display de {{ prendidos | map(attribute='aire')
-            | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
-            | map('lower') | join(', ') }}.
-          data:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
     mode: single
 
   - id: aires_frio_dia_caluroso
