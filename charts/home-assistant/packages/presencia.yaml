@@ -1,8 +1,10 @@
 # HA package: who is home, from the phones' DNS traffic. Pi-hole is the LAN's
 # DNS, so while a phone is on the home Wi-Fi it queries Pi-hole every few
 # minutes, asleep or not; away, it never does. A phone is home while its last
-# query is recent enough: 30 min for Fede's, 90 min for Irupé's, whose Samsung
-# goes up to ~56 min silent overnight.
+# query is recent enough: 30 min for Fede's (45 min when that query was between
+# 00:00 and 08:00 or the battery is at 15 % or less, when it goes up to ~32 min
+# silent; never away at 4 % or less, so a phone that dies isn't a departure),
+# 90 min for Irupé's, whose Samsung goes up to ~56 min silent overnight.
 #
 #   binary_sensor.fede_en_casa   Fede's phone. The only presence that triggers
 #                                anything (arrival, departure).
@@ -52,7 +54,10 @@ template:
         device_class: presence
         state: >-
           {%- set t = states('sensor.celu_fede_ultima_consulta_dns') | as_datetime(none) %}
-          {{- t is not none and now() - t < timedelta(minutes=30) }}
+          {%- set bateria = states('sensor.motorola_edge_70_battery_level') | float(100) %}
+          {%- set de_noche = t is not none and (t | as_local).hour < 8 %}
+          {%- set tope = 45 if de_noche or bateria < 16 else 30 %}
+          {{- bateria < 5 or t is not none and now() - t < timedelta(minutes=tope) }}
         availability: "{{ has_value('sensor.celu_fede_ultima_consulta_dns') }}"
 
       - name: Irupé en casa

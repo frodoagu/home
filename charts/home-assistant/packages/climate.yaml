@@ -760,8 +760,9 @@ automation:
     mode: queued
 
   # An arrival is the presence sensor's off -> on only, so the phone was gone
-  # from Pi-hole for 30 min; Pi-hole coming back from a restart is
-  # unavailable -> on and doesn't count. It never turns a unit off. Every unit
+  # from Pi-hole for 30 min (45 overnight or on low battery); Pi-hole coming back from a restart
+  # is unavailable -> on and doesn't count. From 01:00 to 07:00 only the
+  # bedroom's unit is in play. It never turns a unit off. Every unit
   # of a zone out of range gets the command, because the IR state is assumed:
   # one switched off by remote still reads as on. A unit already in that mode
   # keeps its setpoint.
@@ -772,7 +773,8 @@ automation:
       de 30 min sin verse), prende los aires de las zonas que están fuera de
       19-25 °C: calor 21 por debajo de 19, frío 24 por encima de 25. Cocina y
       living miran el termómetro del living; dormitorio, el del dormitorio, y
-      con él el de los chicos si están según el calendario. Nunca apaga nada.
+      con él el de los chicos si están según el calendario. Entre la 1 y las 7
+      solo el del dormitorio. Nunca apaga nada.
     trigger:
       - platform: state
         entity_id: binary_sensor.fede_en_casa
@@ -780,13 +782,15 @@ automation:
         to: "on"
     action:
       - variables:
+          de_noche: "{{ 1 <= now().hour < 7 }}"
+      - variables:
           zonas:
             - termometro: sensor.atc_29a8_temperatura
-              aires: [climate.aire_living, climate.aire_cocina]
+              aires: "{{ [] if de_noche else ['climate.aire_living', 'climate.aire_cocina'] }}"
             - termometro: sensor.dormitorio_atc_b6d2_temperatura
               aires: >-
                 {{ ['climate.aire_dormitorio']
-                   + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
+                   + (['climate.aire_chicos'] if not de_noche and is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
           planes: >-
             {%- set ns = namespace(planes=[]) %}
             {%- for z in zonas if states(z.termometro) | is_number %}
