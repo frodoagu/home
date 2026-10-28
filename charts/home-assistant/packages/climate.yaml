@@ -642,6 +642,89 @@ automation:
             notification_icon: mdi:air-conditioner
     mode: single
 
+  # SmartIR has no display command, so the frames go straight to the blasters.
+  # On every unit it is a TOGGLE, and any later command from HA lights the
+  # display again. The 1382 units speak Coolix, whose LED frame is the constant
+  # B5 F5 A5 (each byte followed by its complement, sent twice), on the 1382
+  # code's own timings. The bedroom's Mitsubishi112 has no separate command:
+  # the remote's display button sends the full state frame plus 0x40 in byte 5
+  # and 0x80 in byte 12, so `dormitorio_led` builds that frame from the state
+  # HA assumes (byte 7 is 31 - T, fixed at 7 in dry; byte 8 swing * 8 + fan;
+  # byte 13 the sum), LSB first, as a Broadlink packet in base64. The kids'
+  # unit is not learned yet.
+  - id: aires_display_medianoche
+    alias: Aires - Apagar el display a la medianoche
+    description: >-
+      A las 00:00 apaga la luz del display de los aires que están prendidos,
+      para que no molesten de noche. El comando del display es un toggle: si
+      ya estaba apagado, se prende.
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - variables:
+          coolix_led: >-
+            b64:JgDKAJGOEzQTEBM0FDQUEBQ0ExAUNBQQFDQUEBQQFDQUEBQ0FBAUNBQ0FDQUNBQQFDQUEBQ0FBAUEBMQFBAUNBQQFDQUEBQ0FBAUNBQQFBAUNBQQFDQUEBQ0FBATNBQ0FBAUNBQQFKmSjRQ0FBAUNBQ0FBAUNBQQFDQUEBQ0FBAUEBM0FBAUNBQQFDQUNBQ0FDQUEBQ0FBAUNBQQFBAUEBQQFDQUEBQ0FBAUNBQQFDQVEBQQFDQUEBQ0FBAUNBQQFDQUNBQQFDQUEBQADQUAAAAAAAAAAAAAAAAAAA==
+          dormitorio_led: >-
+            {%- set a = 'climate.aire_dormitorio' %}
+            {%- set modo = states(a) %}
+            {%- set modos = {'heat': 1, 'dry': 2, 'cool': 3} %}
+            {%- set fans = {'auto': 0, 'level1': 2, 'level2': 3, 'level3': 5} %}
+            {%- set swings = {'auto': 0, 'top': 1, 'high': 2, 'mid': 3, 'low': 4, 'bottom': 5, 'swing': 7} %}
+            {%- set y = [35, 203, 38, 1, 0, 36 + 64, modos.get(modo, 1),
+                         7 if modo == 'dry' else 31 - state_attr(a, 'temperature') | int(20),
+                         swings.get(state_attr(a, 'swing_mode'), 0) * 8 + fans.get(state_attr(a, 'fan_mode'), 0),
+                         0, 0, 0, 128] %}
+            {%- set y = y + [y | sum % 256] %}
+            {%- set ns = namespace(t=[114, 56], s='b64:') %}
+            {%- for b in y %}{% for i in range(8) %}
+            {%- set ns.t = ns.t + [15, 41 if (b // 2 ** i) % 2 else 13] %}
+            {%- endfor %}{% endfor %}
+            {%- set p = [38, 0, ns.t | count + 4, 0] + ns.t + [15, 0, 13, 5] %}
+            {%- set abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' %}
+            {%- for i in range(0, p | count, 3) %}
+            {%- set c = p[i:i + 3] + [0, 0] %}
+            {%- set n = c[0] * 65536 + c[1] * 256 + c[2] %}
+            {%- set ns.s = ns.s ~ abc[n // 262144] ~ abc[n // 4096 % 64]
+                 ~ (abc[n // 64 % 64] if p | count > i + 1 else '=')
+                 ~ (abc[n % 64] if p | count > i + 2 else '=') %}
+            {%- endfor %}
+            {{- ns.s -}}
+          displays:
+            - aire: climate.aire_living
+              remote: remote.control_living
+              codigo: "{{ coolix_led }}"
+            - aire: climate.aire_cocina
+              remote: remote.broadlink_cocina
+              codigo: "{{ coolix_led }}"
+            - aire: climate.aire_dormitorio
+              remote: remote.control_dormitorio
+              codigo: "{{ dormitorio_led }}"
+          prendidos: >-
+            {{ displays | rejectattr('aire', 'is_state', ['off', 'unavailable', 'unknown']) | list }}
+      - condition: template
+        value_template: "{{ prendidos | count > 0 }}"
+      - repeat:
+          for_each: "{{ prendidos }}"
+          sequence:
+            - action: remote.send_command
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item.remote }}"
+              data:
+                command: "{{ repeat.item.codigo }}"
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: Aires
+          message: >-
+            Medianoche: apagué el display de {{ prendidos | map(attribute='aire')
+            | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
+            | map('lower') | join(', ') }}.
+          data:
+            channel: Aires
+            notification_icon: mdi:air-conditioner
+    mode: single
+
   - id: aires_frio_dia_caluroso
     alias: Aires - Frío 24 en día caluroso
     description: >-
