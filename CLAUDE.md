@@ -379,7 +379,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 - **home-assistant — presence is phones on Pi-hole, not GPS.**
   `packages/presencia.yaml`: `binary_sensor.fede_en_casa` is `on` while
   Pi-hole's last DNS query from `192.168.0.80` (the `celu-fede` reservation) is
-  under 30 min old, and it is the ONLY presence that triggers anything (AC
+  under 30 min old (45 when that query was 00:00-08:00 or the battery is
+  5-15 %: asleep or low the phone goes 30+ min silent; never away at 0-4 %, so a
+  dead phone isn't a departure), and it is the ONLY presence that triggers anything (AC
   arrival, evening lamps). `binary_sensor.irupe_en_casa` (DHCP hostname
   `S22-de-Irupe.lan`, since her phone randomizes its MAC; 90 min, her Samsung
   goes ~56 min silent overnight) only feeds `binary_sensor.casa_ocupada`, the

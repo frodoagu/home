@@ -602,7 +602,8 @@ read the bedroom one (the kids' room and the kitchen have none of their own).
 ### Turn on when Fede gets home
 
 `aires_llegada` turns units on when [`binary_sensor.fede_en_casa`](#presence)
-goes `off` → `on`, i.e. his phone reappears on Pi-hole after 30 min gone. It
+goes `off` → `on`, i.e. his phone reappears on Pi-hole after 30 min gone (45
+overnight or on low battery). It
 uses the same zones as above: kitchen + living read the living thermometer, the
 bedroom reads its own, and the kids' room joins the bedroom's zone while
 [`binary_sensor.chicos_en_casa`](#kids-calendar) is `on`. The kids' calendar is
@@ -617,9 +618,11 @@ only a condition here: their coming home never starts a unit.
   state is: IR is one-way, so a unit switched off by remote still reads as on.
   A unit HA already has in that mode keeps its setpoint, so the re-send doesn't
   overwrite a choice made from HA or Google.
-- **No time window.** A false arrival needs the phone silent on Pi-hole for
-  30 min while home (the longest gap measured was 12.5 min); a phone switched
-  off overnight and back on in the morning is one, and Fede is home for it.
+- **From 01:00 to 07:00, only the bedroom.** Kitchen, living and the kids'
+  unit stay out of an arrival in the small hours, so one comes home to a warm
+  (or cool) bedroom and nothing else runs all night. A phone switched off
+  overnight and back on in the morning is a false arrival, and Fede is home
+  for it.
 
 ### Turn off when the house empties
 
@@ -1124,7 +1127,7 @@ tells who is home from the phones' DNS traffic on Pi-hole, not from GPS:
 
 | Entity | Phone | Found by | Home while the last query is under | Used for |
 |---|---|---|---|---|
-| `binary_sensor.fede_en_casa` | Fede's | IP `192.168.0.80` (`client_ip`) | 30 min | **The only presence that triggers anything**: AC arrival, evening lamps |
+| `binary_sensor.fede_en_casa` | Fede's | IP `192.168.0.80` (`client_ip`) | 30 min; 45 if that query was 00:00-08:00 or the battery is 5-15 %; never at 0-4 % | **The only presence that triggers anything**: AC arrival, evening lamps |
 | `binary_sensor.irupe_en_casa` | Irupé's | DHCP hostname `S22-de-Irupe.lan` (`client_name`) | 90 min | Only through `casa_ocupada` |
 | `binary_sensor.casa_ocupada` | either | — | — | "Somebody home": presence simulation, AC schedules, empty-house AC off |
 
@@ -1134,11 +1137,29 @@ asleep or not, and a phone away never does. One `rest` sensor per phone polls
 the time of the last query). `casa_ocupada` exists for when Irupé minds the
 house: with her there the simulation stays off and the ACs aren't cut.
 
-- **Why 30 and 90 min.** Over a day with Fede's phone idle at home, overnight
-  included, its longest silence on Pi-hole was 12.5 min (two gaps over 10 min
-  out of ~4000 queries). Irupé's Samsung sleeps deeper: up to 56 min overnight.
-  Arriving is detected at the first query, about the moment the phone joins the
-  Wi-Fi; leaving, 30 or 90 min after the last one.
+- **Why 30, 45 and 90 min.** By day Fede's phone, idle at home, stays under 20 min
+  of silence on Pi-hole, so 30 min still catches a short outing (a 42-min one
+  on 2026-10-27). Overnight it sleeps deeper: on 2026-10-28 it went 32 and
+  28 min silent between 02:55 and 04:27, and the 32 was a false departure and
+  arrival at 03:27 that turned the living and kitchen ACs on. So a last query
+  between 00:00 and 08:00 gets 45 min. The window is on the query's time, not
+  on `now()`, so the limit doesn't drop to 30 at 08:00 under a phone that is
+  still asleep. Irupé's Samsung sleeps deeper still: up to 56 min overnight, so
+  hers is 90 all day. Arriving is detected at the first query, about the moment
+  the phone joins the Wi-Fi; leaving, 30, 45 or 90 min after the last one.
+- **Fede's battery moves the limit too**
+  (`sensor.motorola_edge_70_battery_level`, from the companion app):
+
+  | Battery | Away after |
+  |---|---|
+  | 16-100 % | 30 min (45 overnight) |
+  | 5-15 % | 45 min: a low phone saves power and queries less |
+  | 0-4 % | never: the phone is about to die or dead, and a dead phone isn't a departure |
+
+  At 0-4 % he stays home until the phone queries again or reports a higher
+  level, so leaving with a dying phone reads as home (no empty-house AC off, no
+  presence simulation) until it's charged. With the battery sensor unavailable
+  it counts as full.
 - **Unavailable until the first poll and while Pi-hole doesn't answer.** Every
   consumer triggers on `off` or `on` only, so neither an HA nor a Pi-hole
   restart is a departure or an arrival. The `rest` sensor doesn't restore its
