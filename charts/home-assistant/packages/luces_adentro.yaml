@@ -23,7 +23,8 @@
 # While PC-Fede is on, the office table lamp is out of all of this: it goes to violet
 # at 100 % when the PC comes on, at any hour, and the ramp leaves it alone.
 # When the PC goes off it returns to warm white at the ramp's level (10 % from
-# 23:30 to 01:30, off after that and in daytime). The PC is on while it has
+# 23:30 to 01:30, off after that and in daytime), if it is still on: one
+# switched off by hand stays off. The PC is on while it has
 # queried Pi-hole in the last 5 min (it queries every 1-2 min while on, never
 # when off).
 #
@@ -65,7 +66,8 @@ automation:
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
       a mano. Con la PC de Fede prendida el velador de la oficina va violeta
-      al 100 % y la rampa no la toca; al apagarse vuelve al blanco cálido.
+      al 100 % y la rampa no la toca; al apagarse vuelve al blanco cálido si
+      el velador sigue prendido.
     trigger:
       - platform: sun
         event: sunset
@@ -159,7 +161,9 @@ automation:
                 data:
                   brightness_pct: 100
                   rgbw_color: "{{ color_pc }}"
-          - conditions: "{{ trigger.id == 'pc_apagada' and nivel_oficina | int > 0 }}"
+          - conditions: >-
+              {{ trigger.id == 'pc_apagada' and nivel_oficina | int > 0
+                 and is_state('light.velador_oficina', 'on') }}
             sequence:
               - action: light.turn_on
                 continue_on_error: true

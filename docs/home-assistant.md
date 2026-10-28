@@ -1236,7 +1236,8 @@ shows up 5-6 min later.
 |---|---|
 | Comes on (any hour, Fede detected or not) | Violet (`rgbw [7, 0, 255, 0]`) at **100 %** |
 | Is on | Left out of the sunset turn-on, the arrival and the ramp |
-| Goes off, Fede home | Warm white at the ramp's level now: the ramp inside the window, **10 %** from 23:30 to 01:30, **off** after that and in daytime |
+| Goes off, Fede home, lamp on | Warm white at the ramp's level now: the ramp inside the window, **10 %** from 23:30 to 01:30, **off** after that and in daytime |
+| Goes off, lamp already off | Stays off: switched off by hand before the PC, it isn't brought back |
 
 `unavailable` (Pi-hole down, HA starting) counts as on, so the ramp never
 repaints a violet lamp. If Pi-hole stays down, the table lamp stays out of the
