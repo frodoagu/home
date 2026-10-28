@@ -635,9 +635,58 @@ them out, when that room may be someone else's. The kids leaving at 13:50
 changes nothing, and an unavailable sensor turns nothing off. The off frame goes
 to all three whatever HA assumes; the push lists only the units HA had on.
 
+### Display off at midnight
+
+`aires_display_medianoche` darkens the display of every unit HA assumes is on
+at 00:00, so it doesn't light the room at night. Both automations call
+`script.aires_display_apagar`, which holds the frames (SmartIR has no display
+command) and sends them with `remote.send_command` (`b64:`) to the units in its
+`aires` field, or to every unit that is on. On every unit the display is a
+**toggle**: a display already dark at midnight lights up, and any later command
+from HA lights it again (confirmed on the bedroom unit). Because the script is in
+the `script` domain it also shows up in Google Home as a scene.
+
+Since a command lights it again, `aires_display_reapagar` darkens it once more
+from **00:00 to 08:00**: when HA turns a unit on or changes its mode, setpoint,
+fan or swing, that unit's display goes dark **30 s after the last change**. Each
+change starts a run that waits (`wait_template`, 30 s timeout) for the unit to
+leave the state that fired it; if it does, that run ends and the newer one
+takes over, so a burst of taps sends one toggle. Only changes HA makes count: a new
+thermometer reading (`current_temperature`) doesn't, a physical remote goes
+unseen, and a unit coming back from `unavailable` after a restart sent no IR, so
+it doesn't count either. 08:00 is when the morning heat starts the units.
+
+- **Living and kitchen (`1382`)** speak **Coolix**, whose LED command is the
+  constant `B5 F5 A5` (each byte followed by its complement, the frame sent
+  twice). The packet in the package is built on the `1382` code's own timings
+  and decodes back to `B5 4A F5 0A A5 5A` ×2.
+- **Bedroom (`5140`, Mitsubishi112)** has no separate command. Learned off the
+  remote, the display button sends a short frame (byte 3 `0x02`, which does
+  nothing on its own) and then the **full state frame** with `0x40` added to
+  byte 5 and `0x80` to byte 12. So `dormitorio_led` rebuilds that state frame
+  from what HA assumes, LSB first, and encodes the Broadlink packet in Jinja:
+
+  | Byte | Meaning |
+  |---|---|
+  | 0-4 | `23 CB 26 01 00` |
+  | 5 | `0x24` on, `+0x40` display toggle |
+  | 6 | mode: `1` heat, `2` dry, `3` cool |
+  | 7 | `31 − T`; always `7` in dry |
+  | 8 | swing × 8 + fan (fan `auto` 0, `level1` 2, `level2` 3, `level3` 5; swing `auto` 0, `top` 1 … `bottom` 5, `swing` 7) |
+  | 12 | `0x80` display toggle |
+  | 13 | sum of bytes 0-12 |
+
+  The layout matches the 878 clean frames of SmartIR's `5140`; the rest of that
+  table has temperatures or fans shifted by one (bad captures), and there the
+  display frame leaves the unit at what HA shows.
+- **Kids' room (`3340`)** is not in it until its remote's display button is
+  learned ([above](#reading-the-protocol-off-the-remote)) and added to the
+  `displays` list with its blaster.
+
 ### Push notifications
 
-Every AC automation (the six above plus `aires_apagado_programado`) ends with a
+Every AC automation (the six above, not the display ones, plus
+`aires_apagado_programado`) ends with a
 push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
 target as the washer's cycle-done alert — on an Android channel called `Aires`,
 so its sound and priority are set per channel on the phone. The push is always the

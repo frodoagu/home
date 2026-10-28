@@ -492,6 +492,83 @@ script:
           entity_id: timer.aires_apagado
     mode: single
 
+  # SmartIR has no display command, so the frames go straight to the blasters.
+  # On every unit it is a TOGGLE, and any later command from HA lights the
+  # display again. The 1382 units speak Coolix, whose LED frame is the constant
+  # B5 F5 A5 (each byte followed by its complement, sent twice), on the 1382
+  # code's own timings. The bedroom's Mitsubishi112 has no separate command:
+  # the remote's display button sends the full state frame plus 0x40 in byte 5
+  # and 0x80 in byte 12, so `dormitorio_led` builds that frame from the state
+  # HA assumes (byte 7 is 31 - T, fixed at 7 in dry; byte 8 swing * 8 + fan;
+  # byte 13 the sum), LSB first, as a Broadlink packet in base64. The kids'
+  # unit is not learned yet. With no `aires`, every unit that is on.
+  aires_display_apagar:
+    alias: Aires - Apagar el display
+    icon: mdi:monitor-off
+    fields:
+      aires:
+        name: Aires
+        description: Los aires a los que alternar el display; sin nada, todos los prendidos.
+        selector:
+          entity:
+            domain: climate
+            multiple: true
+    sequence:
+      - variables:
+          coolix_led: >-
+            b64:JgDKAJGOEzQTEBM0FDQUEBQ0ExAUNBQQFDQUEBQQFDQUEBQ0FBAUNBQ0FDQUNBQQFDQUEBQ0FBAUEBMQFBAUNBQQFDQUEBQ0FBAUNBQQFBAUNBQQFDQUEBQ0FBATNBQ0FBAUNBQQFKmSjRQ0FBAUNBQ0FBAUNBQQFDQUEBQ0FBAUEBM0FBAUNBQQFDQUNBQ0FDQUEBQ0FBAUNBQQFBAUEBQQFDQUEBQ0FBAUNBQQFDQVEBQQFDQUEBQ0FBAUNBQQFDQUNBQQFDQUEBQADQUAAAAAAAAAAAAAAAAAAA==
+          dormitorio_led: >-
+            {%- set a = 'climate.aire_dormitorio' %}
+            {%- set modo = states(a) %}
+            {%- set modos = {'heat': 1, 'dry': 2, 'cool': 3} %}
+            {%- set fans = {'auto': 0, 'level1': 2, 'level2': 3, 'level3': 5} %}
+            {%- set swings = {'auto': 0, 'top': 1, 'high': 2, 'mid': 3, 'low': 4, 'bottom': 5, 'swing': 7} %}
+            {%- set y = [35, 203, 38, 1, 0, 36 + 64, modos.get(modo, 1),
+                         7 if modo == 'dry' else 31 - state_attr(a, 'temperature') | int(20),
+                         swings.get(state_attr(a, 'swing_mode'), 0) * 8 + fans.get(state_attr(a, 'fan_mode'), 0),
+                         0, 0, 0, 128] %}
+            {%- set y = y + [y | sum % 256] %}
+            {%- set ns = namespace(t=[114, 56], s='b64:') %}
+            {%- for b in y %}{% for i in range(8) %}
+            {%- set ns.t = ns.t + [15, 41 if (b // 2 ** i) % 2 else 13] %}
+            {%- endfor %}{% endfor %}
+            {%- set p = [38, 0, ns.t | count + 4, 0] + ns.t + [15, 0, 13, 5] %}
+            {%- set abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' %}
+            {%- for i in range(0, p | count, 3) %}
+            {%- set c = p[i:i + 3] + [0, 0] %}
+            {%- set n = c[0] * 65536 + c[1] * 256 + c[2] %}
+            {%- set ns.s = ns.s ~ abc[n // 262144] ~ abc[n // 4096 % 64]
+                 ~ (abc[n // 64 % 64] if p | count > i + 1 else '=')
+                 ~ (abc[n % 64] if p | count > i + 2 else '=') %}
+            {%- endfor %}
+            {{- ns.s -}}
+          displays:
+            - aire: climate.aire_living
+              remote: remote.control_living
+              codigo: "{{ coolix_led }}"
+            - aire: climate.aire_cocina
+              remote: remote.broadlink_cocina
+              codigo: "{{ coolix_led }}"
+            - aire: climate.aire_dormitorio
+              remote: remote.control_dormitorio
+              codigo: "{{ dormitorio_led }}"
+          pedidos: >-
+            {% set a = aires | default(displays | map(attribute='aire') | list) %}
+            {{ [a] if a is string else a }}
+          prendidos: >-
+            {{ displays | selectattr('aire', 'in', pedidos)
+               | rejectattr('aire', 'is_state', ['off', 'unavailable', 'unknown']) | list }}
+      - repeat:
+          for_each: "{{ prendidos }}"
+          sequence:
+            - action: remote.send_command
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item.remote }}"
+              data:
+                command: "{{ repeat.item.codigo }}"
+    mode: parallel
+
 # ────────────────────────────────────────────────────────────────────────────
 # AC AUTOMATIONS. aires_calor_manana, aires_apagar_templado and
 # aires_frio_dia_caluroso are the Google Home schedules
@@ -519,9 +596,9 @@ script:
 # coming home or leaving switches nothing by itself; it also keeps aires_se_van
 # from cutting the ACs while they're home.
 #
-# Every automation reports what it did with a push to Fede's phone, on the
-# "Aires" Android channel. The push is the LAST step, so a failed notify never
-# keeps a unit from switching.
+# Every automation but the display ones reports what it did with a push
+# to Fede's phone, on the "Aires" Android channel. The push is the LAST step, so
+# a failed notify never keeps a unit from switching.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: aires_calor_manana
@@ -641,6 +718,68 @@ automation:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
+
+  - id: aires_display_medianoche
+    alias: Aires - Apagar el display a la medianoche
+    description: >-
+      A las 00:00 apaga la luz del display de los aires que están prendidos,
+      para que no molesten de noche. El comando del display es un toggle: si
+      ya estaba apagado, se prende.
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - action: script.aires_display_apagar
+    mode: single
+
+  # Any command from HA lights a display again, so from 00:00 to 08:00 a change
+  # of mode, setpoint, fan or swing darkens that unit's display 30 s after the
+  # LAST change: each run waits for the unit to diverge from the state that
+  # fired it, and gives way to the run that change starts. Only what HA sets is
+  # seen (IR is one-way), and a unit coming back from unavailable after a restart
+  # sent no IR, so it doesn't count.
+  - id: aires_display_reapagar
+    alias: Aires - Volver a apagar el display de noche
+    description: >-
+      Entre las 00:00 y las 08:00, si se prende un aire o se le cambia el modo,
+      la temperatura, el ventilador o el swing desde HA, a los 30 segundos del
+      último cambio le vuelve a apagar el display.
+    trigger:
+      - platform: state
+        entity_id:
+          - climate.aire_living
+          - climate.aire_cocina
+          - climate.aire_dormitorio
+    condition:
+      - condition: time
+        after: "00:00:00"
+        before: "08:00:00"
+      - condition: template
+        value_template: >-
+          {% set f, t = trigger.from_state, trigger.to_state %}
+          {{ f is not none
+             and f.state not in ['unavailable', 'unknown']
+             and t.state not in ['off', 'unavailable', 'unknown']
+             and [f.state, f.attributes.temperature, f.attributes.fan_mode, f.attributes.swing_mode]
+                 != [t.state, t.attributes.temperature, t.attributes.fan_mode, t.attributes.swing_mode] }}
+    action:
+      - variables:
+          aire: "{{ trigger.entity_id }}"
+          estado: >-
+            {% set t = trigger.to_state %}
+            {{ [t.state, t.attributes.temperature, t.attributes.fan_mode, t.attributes.swing_mode] }}
+      - wait_template: >-
+          {{ [states(aire), state_attr(aire, 'temperature'), state_attr(aire, 'fan_mode'),
+              state_attr(aire, 'swing_mode')] != estado }}
+        timeout: "00:00:30"
+        continue_on_timeout: true
+      - condition: template
+        value_template: "{{ not wait.completed }}"
+      - action: script.aires_display_apagar
+        data:
+          aires: ["{{ aire }}"]
+    mode: parallel
+    max: 20
 
   - id: aires_frio_dia_caluroso
     alias: Aires - Frío 24 en día caluroso
