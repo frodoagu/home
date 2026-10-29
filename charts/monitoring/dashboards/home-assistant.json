@@ -1441,7 +1441,7 @@
     {
       "type": "bargauge",
       "title": "Horas por modo",
-      "description": "Horas de cada modo en el rango elegido, sumando todos los aires: cada aire aporta las horas del rango. Sólo aparecen los modos que se usaron.",
+      "description": "Horas de cada modo en el rango elegido, promedio de los cuatro aires: entre todos los modos suman el rango. Sólo aparecen los modos que se usaron.",
       "fieldConfig": {
         "defaults": {
           "unit": "suffix: h",
@@ -1570,7 +1570,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode[$__range], 1)) / 60 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\"), \"mode\", \"Apagado\", \"mode\", \"off\")",
+          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode[$__range], 1)) / 60 / 4 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\"), \"mode\", \"Apagado\", \"mode\", \"off\")",
           "legendFormat": "{{mode}}",
           "refId": "A",
           "instant": true,
