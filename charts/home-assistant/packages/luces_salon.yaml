@@ -26,25 +26,13 @@ template:
         event: start
     action:
       - variables:
-          # Minutes since noon, so the night is one stretch: 23:30 is 690.
-          # `next_rising` / `next_setting` are today's or tomorrow's, a minute
-          # or two apart, so only their time of day is used.
+          # Minutes since noon (custom_templates/curva.jinja): 23:30 is 690.
           curva: >-
-            {%- macro hora(attr, extra=0) %}
-            {%- set t = state_attr('sun.sun', attr) | as_datetime | as_local %}
-            {{- (t.hour * 60 + t.minute + extra - 720) % 1440 }}
-            {%- endmacro %}
-            {%- set amanecer = hora('next_rising') | int %}
-            {%- set ocaso = hora('next_setting') | int %}
+            {%- from 'curva.jinja' import curva, sol %}
+            {%- set amanecer = sol('next_rising') | int %}
+            {%- set ocaso = sol('next_setting') | int %}
             {%- set p = [[ocaso, 6500], [ocaso + 120, 4000], [690, 2700], [amanecer, 2700], [amanecer + 60, 6500]] %}
-            {%- set m = (now().hour * 60 + now().minute - 720) % 1440 %}
-            {%- set ns = namespace(a=p[0], b=p[0], f=0) %}
-            {%- for i in range(p | count - 1) if p[i][0] <= m %}
-            {%- set ns.a = p[i] %}
-            {%- set ns.b = p[i + 1] %}
-            {%- set ns.f = [(m - ns.a[0]) / (ns.b[0] - ns.a[0]) if ns.b[0] > ns.a[0] else 1, 1] | min %}
-            {%- endfor %}
-            {{- ((ns.a[1] + (ns.b[1] - ns.a[1]) * ns.f) / 50) | round(0) | int * 50 }}
+            {{- (curva(p) | float / 50) | round(0) | int * 50 }}
     sensor:
       - name: Lámpara salón - Blanco según el sol
         unique_id: lampara_salon_blanco

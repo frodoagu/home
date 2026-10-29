@@ -687,11 +687,10 @@ it doesn't count either. 08:00 is when the morning heat starts the units.
 
 Every AC automation (the six above, not the display ones, plus
 `aires_apagado_programado`) ends with a
-push to Fede's phone through `notify.mobile_app_motorola_edge_70` — the same
-target as the washer's cycle-done alert — on an Android channel called `Aires`,
+push to Fede's phone through `script.avisar_celu` (see [Notifications](#notifications)),
+the same as the washer's cycle-done alert, on an Android channel called `Aires`,
 so its sound and priority are set per channel on the phone. The push is always the
-last step: a failed notify never keeps a unit from switching. If the companion
-app is re-registered the service name changes, and every one of these steps fails.
+last step: a failed notify never keeps a unit from switching.
 
 Manual changes get their own push, but only while Fede is **out**:
 `aires_avisar_afuera` exists to catch a stray tap on the home-screen widget that
@@ -729,10 +728,54 @@ Notes that matter when editing them:
 
 [`packages/prometheus.yaml`](../charts/home-assistant/packages/prometheus.yaml)
 turns on HA's `prometheus` integration (token required). VictoriaMetrics scrapes
-it, and the Grafana dashboard *Home Assistant — Insights*
-(`grafana.agu.com.ar/d/home-assistant`) shows automation runs, gas use, AC
-and light hours, and presence. How the scrape and token work and how to read the
-metrics: [monitoring.md](monitoring.md#home-assistant-metrics).
+it, and the Grafana dashboard *Home Assistant — Estadísticas*
+(`grafana.agu.com.ar/d/home-assistant`, in Spanish) shows automation runs, gas
+use, AC, light and computer hours, and presence. How the scrape and token work
+and how to read the metrics: [monitoring.md](monitoring.md#home-assistant-metrics).
+
+## Computers
+
+[`packages/computadoras.yaml`](../charts/home-assistant/packages/computadoras.yaml)
+has one `binary_sensor.<pc>_prendida` per computer: PC Fede, PC Noah, PC Juli and
+the Think. Each is `on` while that computer has queried Pi-hole in the last
+5 min. Measured over 3 days: on, each one queries at least every 100 s; off, it
+doesn't query at all. A REST sensor per computer asks Pi-hole for its last query
+**by client name** (`pc-noah.lan`…), not by IP. The Think randomizes its Wi-Fi
+MAC, so it misses its `.71` reservation and comes back on a new pool IP every
+few days, while its DHCP hostname `think` stays put. `unavailable` until the
+first poll and while Pi-hole is down.
+
+PC Fede drives the office table lamp ([below](#office-table-lamp-while-pc-fede-is-on));
+the other three only feed the hours in Grafana.
+
+## Notifications
+
+[`packages/avisos.yaml`](../charts/home-assistant/packages/avisos.yaml) is the
+one place that names where notifications go:
+
+- `script.avisar_telegram` (`mensaje`): the alerts (gas, sensor health), through
+  `notify.afuera_telegram_gateway_fede_a`. That entity id is assembled by
+  Telegram (bot name + chat name); if the bot is re-created, check it in HA and
+  change it here.
+- `script.avisar_celu` (`titulo`, `mensaje`, `extras` = the companion app's
+  `data`: channel, icon, tag…): the pushes to Fede's phone (ACs, washer-dryer),
+  through `notify.mobile_app_motorola_edge_70`. If the app is re-registered the
+  service name changes: change it here.
+
+Both run in `parallel` mode, so two alerts at once don't drop one. The caller
+renders the message, so it can use the automation's own variables.
+
+## Lamp curves (`custom_templates/curva.jinja`)
+
+The bathroom, wall-switch and living-room lamps each follow a curve over the
+day: brightness or white in straight lines between points in time. The shared
+part is [`custom_templates/curva.jinja`](../charts/home-assistant/custom_templates/curva.jinja),
+which the chart mounts read-only at `/config/custom_templates`. It has three
+macros: `minutos` (minutes since noon), `sol` (a `sun.sun` time in those minutes)
+and `curva` (the value now). Each package imports them with
+`{% from 'curva.jinja' import curva, sol %}` and keeps only its own points.
+Macros return text, so pipe the result through `| int` or `| float`. The file
+shares a ConfigMap template with the packages, so changing it rolls HA as well.
 
 ## Sensor health alerts (`salud.yaml`)
 
@@ -1284,9 +1327,9 @@ house empties, the simulation takes over.
 
 ### Office table lamp while PC-Fede is on
 
-`binary_sensor.pc_fede_prendida` is `on` while `pc-fede` (`192.168.0.70`, a
-Pi-hole reservation) has queried Pi-hole in the last 5 min, the same DNS trick
-as [presence](#presence). While on, it queries every few seconds and never goes
+`binary_sensor.pc_fede_prendida` ([Computers](#computers)) is `on` while
+`pc-fede.lan` has queried Pi-hole in the last 5 min, the same DNS trick as
+[presence](#presence). While on, it queries every few seconds and never goes
 quiet for more than ~2 min. Off, it is silent for hours, so the PC turning off
 shows up 5-6 min later.
 

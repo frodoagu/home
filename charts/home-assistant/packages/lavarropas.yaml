@@ -278,19 +278,19 @@ automation:
         from: "off"
         to: "on"
     action:
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Lavasecarropas
+          titulo: Lavasecarropas
           # NO citar temperatura ni centrifugado: justo al terminar el ciclo el
           # equipo los pone en 255, asi que el aviso saldria "a 255 grados". Pr
           # sigue siendo valido en ese momento, pero el sensor puede estar
           # momentaneamente no disponible si el fetch colisiono, y entonces el
           # mensaje diria "(unavailable)": de ahi el guardia.
-          message: >-
+          mensaje: >-
             {% set prog = states('sensor.lavasecarropas_programa') %}
             Termino el ciclo{{ ' (' ~ prog ~ ')' if prog not in ['unknown', 'unavailable'] else '' }}.
             Hay que sacar la ropa.
-          data:
+          extras:
             channel: Lavasecarropas
             importance: high
             notification_icon: mdi:washing-machine

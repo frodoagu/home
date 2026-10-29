@@ -376,14 +376,15 @@ script:
   # ±1 °C on every unit that is ON, each clamped to its own min/max (they differ:
   # 17-30 on the 1382, 16-31 on the 5140, 16-32 on the 3340). An `if` and not a
   # `condition` step: inside a repeat a failed condition aborts the whole script
-  # instead of skipping the item. The pair is identical except for `delta`.
+  # instead of skipping the item. The pair shares one sequence (`&ajustar_grado`)
+  # and differs only in `delta`.
   aires_subir_grado:
     alias: Aires - Subir un grado
     icon: mdi:thermometer-plus
     variables:
       delta: 1
       chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
-    sequence:
+    sequence: &ajustar_grado
       - repeat:
           for_each:
             - climate.aire_living
@@ -414,29 +415,7 @@ script:
     variables:
       delta: -1
       chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
-    sequence:
-      - repeat:
-          for_each:
-            - climate.aire_living
-            - climate.aire_cocina
-            - climate.aire_dormitorio
-            - climate.aire_chicos
-          sequence:
-            - if:
-                - condition: template
-                  value_template: >-
-                    {{ states(repeat.item) not in ['off', 'unavailable', 'unknown']
-                       and state_attr(repeat.item, 'temperature') is not none
-                       and (chicos or repeat.item != 'climate.aire_chicos') }}
-              then:
-                - action: climate.set_temperature
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    temperature: >-
-                      {{ [[ state_attr(repeat.item, 'temperature') | float + delta,
-                            state_attr(repeat.item, 'max_temp') | float(30) ] | min,
-                          state_attr(repeat.item, 'min_temp') | float(16) ] | max }}
+    sequence: *ajustar_grado
     mode: single
 
   # Both entry points to the scheduled shutdown. The timer is what actually
@@ -647,13 +626,13 @@ automation:
         data:
           hvac_mode: heat
           temperature: 21
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             El living está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
             prendí cocina y living en calor 21 °C.
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
@@ -684,14 +663,14 @@ automation:
       - action: climate.turn_off
         target:
           entity_id: "{{ aires }}"
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             Afuera llegó a {{ states('sensor.temperatura_exterior') }} °C: apagué
             {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
             | map('lower') | join(', ') }}, que estaban en calor.
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
@@ -710,11 +689,11 @@ automation:
           entity_id: timer.aires_apagado
     action:
       - action: script.aires_todos_apagar
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: "Terminó el apagado programado: apagué los cuatro aires."
-          data:
+          titulo: Aires
+          mensaje: "Terminó el apagado programado: apagué los cuatro aires."
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
@@ -810,15 +789,15 @@ automation:
         data:
           hvac_mode: cool
           temperature: 24
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             Afuera hace {{ states('sensor.temperatura_exterior') }} °C y el living
             está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
             prendí {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
             | map('lower') | join(', ') }} en frío 24 °C.
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
@@ -884,16 +863,16 @@ automation:
       - action: climate.turn_off
         target:
           entity_id: "{{ apagar }}"
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             Afuera hace {{ exterior }} °C y adentro
             {% for z in frescas %}{{ states(z.termometro) | float | round(1) }} °C
             ({{ state_attr(z.termometro, 'friendly_name') | lower }}){{ ', ' if not loop.last }}{% endfor %}.
             Apagué {{ apagar | map('state_attr', 'friendly_name') | join(', ') }}.
             Abrí las ventanas.
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: queued
@@ -956,17 +935,17 @@ automation:
               data:
                 hvac_mode: "{{ repeat.item.modo }}"
                 temperature: "{{ repeat.item.temp }}"
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             {% set modos = {'heat': 'calor', 'cool': 'frío'} %}
             Llegaste:
             {% for t in planes | map(attribute='termometro') | unique %}{{ state_attr(t, 'friendly_name') | lower }}
             a {{ states(t) | float | round(1) }} °C{{ ', ' if not loop.last }}{% endfor %}.
             Prendí {% for p in planes %}{{ state_attr(p.aire, 'friendly_name') | replace('Aire ', '') | lower }}
             en {{ modos[p.modo] }} {{ '%g' | format(p.temp) }} °C{{ ', ' if not loop.last }}{% endfor %}.
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
     mode: single
@@ -1005,13 +984,13 @@ automation:
           entity_id: "{{ aires }}"
       - if: "{{ prendidos | count > 0 }}"
         then:
-          - action: notify.mobile_app_motorola_edge_70
+          - action: script.avisar_celu
             data:
-              title: Aires
-              message: >-
+              titulo: Aires
+              mensaje: >-
                 No queda nadie en casa: apagué {{ prendidos | map('state_attr', 'friendly_name')
                 | map('replace', 'Aire ', '') | map('lower') | join(', ') }}.
-              data:
+              extras:
                 channel: Aires
                 notification_icon: mdi:air-conditioner
     mode: single
@@ -1046,10 +1025,10 @@ automation:
             state: "on"
     action:
       - delay: "00:00:05"
-      - action: notify.mobile_app_motorola_edge_70
+      - action: script.avisar_celu
         data:
-          title: Aires
-          message: >-
+          titulo: Aires
+          mensaje: >-
             {% set modos = {'heat': 'calor', 'cool': 'frío', 'dry': 'seco',
                             'fan_only': 'ventilador', 'heat_cool': 'auto'} %}
             {% set aires = ['climate.aire_living', 'climate.aire_cocina',
@@ -1064,7 +1043,7 @@ automation:
             {% else %}
             Quedaron todos apagados.
             {% endif %}
-          data:
+          extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
             tag: aires_afuera

@@ -1,0 +1,53 @@
+# HA package: where notifications go, named once. Telegram carries the alerts
+# (gas, sensor health); the phone gets the companion-app pushes (ACs,
+# washer-dryer). Callers render their own message, so it can use their
+# variables. `parallel` so two alerts at once don't drop one.
+# See docs/home-assistant.md#notifications.
+script:
+  avisar_telegram:
+    alias: Avisar por Telegram
+    icon: mdi:send
+    mode: parallel
+    fields:
+      mensaje:
+        description: Texto del aviso.
+        required: true
+        selector:
+          text:
+            multiline: true
+    sequence:
+      # Assembled by Telegram (bot name + chat name), not chosen here: if the
+      # bot is re-created, check the real entity id in HA. It takes only
+      # `message` (no title), so a title goes inside the text.
+      - action: notify.send_message
+        target:
+          entity_id: notify.afuera_telegram_gateway_fede_a
+        data:
+          message: "{{ mensaje }}"
+
+  avisar_celu:
+    alias: Avisar al celu de Fede
+    icon: mdi:cellphone-message
+    mode: parallel
+    fields:
+      titulo:
+        description: Título de la notificación.
+        required: true
+        selector:
+          text:
+      mensaje:
+        description: Texto de la notificación.
+        required: true
+        selector:
+          text:
+            multiline: true
+      extras:
+        description: Opciones de la app (channel, notification_icon, tag, importance…).
+        selector:
+          object:
+    sequence:
+      - action: notify.mobile_app_motorola_edge_70
+        data:
+          title: "{{ titulo }}"
+          message: "{{ mensaje }}"
+          data: "{{ extras | default({}) }}"

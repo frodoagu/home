@@ -14,7 +14,7 @@ sin ESP32 ni ESPHome de por medio.
   (montado en el tubo)                                (esphome/ble-proxy.yaml)          integración nativa `mopeka`
                                                        reenvía, no decodifica            packages/gas.yaml
                                                                                                    │
-                                                                    notify.afuera_telegram_gateway_fede_a
+                                                                    script.avisar_telegram (avisos.yaml)
 ```
 
 ---
@@ -387,7 +387,8 @@ estimada y lo único que mueve es el piso de vapor.
 
 ## 6. Alertas por Telegram
 
-Cuatro automations en `packages/gas.yaml`, todas contra
+Cuatro automations en `packages/gas.yaml`, todas por `script.avisar_telegram`
+(`packages/avisos.yaml`), que es el único lugar que nombra
 `notify.afuera_telegram_gateway_fede_a`:
 
 | Automation | Dispara |

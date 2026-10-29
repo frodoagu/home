@@ -140,25 +140,7 @@ sensor:
         window_size: "03:00:00"
         precision: 0
 
-# ────────────────────────────────────────────────────────────────────────────
-# CÓMO SE MANDA A TELEGRAM. NO por `notify.telegram` ni por un `telegram_bot:`
-# en YAML: desde 2026.7 la integración es `config_flow: true` (un bloque
-# `telegram_bot:` en un package falla con "cannot be merged, expected a dict")
-# y el servicio `notify.telegram` quedó deprecado — se rompe en 2026.8.0.
-#
-# La forma actual es una ENTIDAD notify por chat id, creada como *subentry*
-# (`allowed_chat_ids`) del config entry de Telegram desde la UI, disparada con
-# `notify.send_message`. El entity_id NO es un título que uno elige: sale de
-# `<nombre del device del bot>_<nombre del chat>`, los dos autocompletados por
-# Telegram (el nombre propio del bot vía `getMe()`, y el nombre del contacto al
-# agregarlo como chat permitido) — confirmado a mano en esta instancia, dio
-# `notify.afuera_telegram_gateway_fede_a` sin haber tipeado ninguna de las dos
-# partes. Si el bot se re-crea o se agrega otro chat, VERIFICAR el entity_id
-# real en HA en vez de asumirlo — no hay forma de fijarlo desde git.
-#
-# OJO: `notify.send_message` NO acepta `title` (sólo `message`), por eso el
-# título va plegado dentro del mensaje.
-# ────────────────────────────────────────────────────────────────────────────
+# Los avisos salen por `script.avisar_telegram` (avisos.yaml).
 automation:
   - id: gas_aviso_bajo
     alias: Gas - Aviso de nivel bajo
@@ -172,11 +154,9 @@ automation:
         from: "off"
         to: "on"
     action:
-      - action: notify.send_message
-        target:
-          entity_id: notify.afuera_telegram_gateway_fede_a
+      - action: script.avisar_telegram
         data:
-          message: >-
+          mensaje: >-
             Gas bajo: el tubo está al {{ states('sensor.gas_nivel') }}%
             (~{{ states('sensor.gas_restante') }} kg). Ir pidiendo el recambio.
     mode: single
@@ -195,11 +175,9 @@ automation:
         below: 6
         for: "02:00:00"
     action:
-      - action: notify.send_message
-        target:
-          entity_id: notify.afuera_telegram_gateway_fede_a
+      - action: script.avisar_telegram
         data:
-          message: >-
+          mensaje: >-
             Gas crítico: el tubo está al {{ states('sensor.gas_nivel') }}%
             (~{{ states('sensor.gas_restante') }} kg). Se acaba.
     mode: single
@@ -215,11 +193,9 @@ automation:
         below: 15
         for: "01:00:00"
     action:
-      - action: notify.send_message
-        target:
-          entity_id: notify.afuera_telegram_gateway_fede_a
+      - action: script.avisar_telegram
         data:
-          message: >-
+          mensaje: >-
             Sensor de gas: la batería del Mopeka está al
             {{ states('sensor.pro_check_universal_5343_battery') }}%. Cambiar la CR2032.
     mode: single
@@ -241,11 +217,9 @@ automation:
           - "unknown"
         for: "12:00:00"
     action:
-      - action: notify.send_message
-        target:
-          entity_id: notify.afuera_telegram_gateway_fede_a
+      - action: script.avisar_telegram
         data:
-          message: >-
+          mensaje: >-
             Sensor de gas: hace 12 h que no llegan lecturas del tubo (Mopeka Pro
             Check Universal). Revisar el emparejamiento Bluetooth en HA o la
             batería del sensor.

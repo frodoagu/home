@@ -41,7 +41,7 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes,
                      Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard),
                      Home Assistant entity state (HA's `prometheus` package, scraped with a
-                     token SealedSecret → "Home Assistant — Insights" dashboard).
+                     token SealedSecret → "Home Assistant — Estadísticas" dashboard, in Spanish).
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.
@@ -416,7 +416,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
   could only reach a package as an **env var** read back with HA's `!env_var` tag,
   and that tag always needs a default — without one a missing var fails the parse
-  of HA's *entire* config, not just that block.
+  of HA's *entire* config, not just that block. Jinja shared between packages lives in
+  `charts/home-assistant/custom_templates/*.jinja`, mounted at
+  `/config/custom_templates` (`{% from 'curva.jinja' import ... %}`); a macro
+  returns text, so pipe it through `| int`/`| float`.
 - **HA `http:` is UI-only now** — same story as Telegram below. Since 2026.8 the
   `http` integration is a config flow: HA imports an existing `http:` block into
   `/config/.storage/http` (`yaml_migration_done: true`) and then raises a
@@ -441,10 +444,11 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `notify.afuera_telegram_gateway_fede_a` with nothing typed for either half. So
   any package calling it shares a contract with Telegram-side naming that git
   can't enforce *and* can't predict in advance — check the real entity_id in HA
-  after setup instead of assuming a name. See `packages/gas.yaml` +
-  `docs/gas-mopeka.md` for the one consumer that exists today (Alertmanager's
+  after setup instead of assuming a name. `script.avisar_telegram` in
+  `packages/avisos.yaml` is the one place that names it (callers: gas.yaml,
+  salud.yaml; see `docs/gas-mopeka.md`). Alertmanager's
   Telegram alerts from `charts/monitoring` go through its own bot API call, not
-  through this HA entity).
+  through this HA entity.
 - **gas Mopeka — near the bottom the sensor reports DOUBLE the real height.**
   With a short liquid column the direct echo is weak and the peak detector latches
   onto the second bounce (surface → tank floor → surface), so `tank_level` reads
