@@ -1207,21 +1207,45 @@
     },
     {
       "type": "timeseries",
-      "title": "Altura del líquido",
-      "description": "La lectura cruda del Mopeka y los dos filtros de packages/gas.yaml.",
+      "title": "Nivel del tubo",
+      "description": "Gas restante sobre los 45 kg del tubo (sensor.gas_nivel). Con 0 mm de líquido quedan ~1,6 kg de vapor, así que no baja de ~3,9 %. Líneas punteadas: los avisos de nivel bajo (10 kg = 22,2 %) y crítico (6 kg = 13,3 %).",
       "fieldConfig": {
         "defaults": {
-          "unit": "lengthmm",
+          "unit": "percent",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
-            "fillOpacity": 10,
+            "fillOpacity": 15,
             "showPoints": "never",
             "spanNulls": false,
-            "lineInterpolation": "stepAfter"
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
           },
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 13.33
+              },
+              {
+                "color": "transparent",
+                "value": 22.22
+              }
+            ]
           }
         },
         "overrides": []
@@ -1243,27 +1267,9 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.pro_check_universal_5343_tank_level\"})",
-          "legendFormat": "cruda",
+          "expr": "max(homeassistant_sensor_unit_percent{entity=\"sensor.gas_nivel\"})",
+          "legendFormat": "%",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.gas_altura\"})",
-          "legendFormat": "sin eco doble",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.gas_altura_suave\"})",
-          "legendFormat": "promedio 3 h",
-          "refId": "C"
         }
       ],
       "datasource": {
