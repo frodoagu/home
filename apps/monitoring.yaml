@@ -56,3 +56,18 @@ spec:
       kind: VMRule
       jqPathExpressions:
         - '.spec.groups[].rules[] | select(.record == "") | .record'
+    # The operator chart mints its webhook cert with genCA on every render, so
+    # without these any commit to the repo, whatever it touches, makes the app
+    # OutOfSync and selfHeal syncs it (a "Deploy: monitoring" line on every
+    # dashboard). A real sync applies the Secret and the caBundle from the same
+    # render, so the pair stays matched.
+    - kind: Secret
+      name: monitoring-victoria-metrics-operator-validation
+      namespace: monitoring
+      jsonPointers:
+        - /data
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: monitoring-victoria-metrics-operator-admission
+      jqPathExpressions:
+        - '.webhooks[].clientConfig.caBundle'

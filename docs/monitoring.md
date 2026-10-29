@@ -97,7 +97,10 @@ the commit message. That needs a Grafana PVC (its SQLite writes often, on the
 SD card) and a Grafana credential sealed into the `argocd` namespace.
 
 The counter starts at each controller start, so the first sync of an app
-after one may not draw a line. `victoria-logs.json` has no `DS_PROM` variable,
+after one may not draw a line. Each commit draws one line per app it changes:
+`apps/monitoring.yaml` ignores the operator webhook's cert, which is
+regenerated on every render and would otherwise sync `monitoring` on every
+commit too. `victoria-logs.json` has no `DS_PROM` variable,
 so its annotation names the datasource uid (`VictoriaMetrics`). A new dashboard
 gets the annotation by copying the entry from another one.
 

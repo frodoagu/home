@@ -247,7 +247,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   re-renders on every new git revision, so ANY commit to the repo restarted the
   ephemeral Grafana. `grafana.admin.existingSecret: grafana-admin` (SealedSecret)
   fixes it. Check with two `helm template` runs + `diff`: the only remaining churn
-  is the vm-operator webhook's `genCA` cert, which rolls no pod.
+  is the vm-operator webhook's `genCA` cert, which rolls no pod. It would still
+  sync the app on every commit (an extra "Deploy: monitoring" line on the
+  dashboards), so `apps/monitoring.yaml` ignores the Secret's `data` and the
+  webhooks' `caBundle`.
 - **monitoring — Grafana datasources/plugins.** The VM k8s-stack provisions
   datasources via `victoria-metrics-k8s-stack.defaultDatasources` (it renders a
   `grafana_datasource`-labelled ConfigMap that the Grafana sidecar imports), NOT
