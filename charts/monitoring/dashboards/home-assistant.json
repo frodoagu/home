@@ -1073,6 +1073,218 @@
     },
     {
       "type": "timeseries",
+      "title": "Nivel y temperatura",
+      "description": "Nivel del tubo (sensor.gas_nivel, kg sobre 45) y temperatura del Mopeka. Con 0 mm de líquido quedan ~1,6 kg de vapor, así que el nivel no baja de ~3,9 %.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "lineInterpolation": "smooth"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "temperatura"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "celsius"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(homeassistant_sensor_unit_percent{entity=\"sensor.gas_nivel\"})",
+          "legendFormat": "nivel",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max(homeassistant_sensor_temperature_celsius{entity=\"sensor.pro_check_universal_5343_temperature\"})",
+          "legendFormat": "temperatura",
+          "refId": "B"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumo de los últimos 7 días",
+      "description": "Ventana móvil: cada punto es lo consumido en los 7 días anteriores. A ~0,75 kg/día son ~5 kg por semana, así que el eje arranca en 0-10 kg.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "masskg",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "lineInterpolation": "stepAfter"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "min": 0,
+          "softMax": 10,
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[7d]), 0)",
+          "legendFormat": "kg en 7 días",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumo de las últimas 24 h",
+      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores. El tubo de 45 kg dura ~2 meses (~0,75 kg/día), así que el eje arranca en 0-2 kg y sólo crece si un día se consume más.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "masskg",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "lineInterpolation": "stepAfter"
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "min": 0,
+          "softMax": 2,
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
+          "legendFormat": "kg en 24 h",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      }
+    },
+    {
+      "type": "timeseries",
       "title": "Gas restante",
       "description": "Líneas punteadas: los avisos de nivel bajo (10 kg) y crítico (6 kg).",
       "fieldConfig": {
@@ -1139,229 +1351,6 @@
         "uid": "${DS_PROM}"
       },
       "id": 20,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Consumo de las últimas 24 h",
-      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores. El tubo de 45 kg dura ~2 meses (~0,75 kg/día), así que el eje arranca en 0-2 kg y sólo crece si un día se consume más.",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "masskg",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "lineInterpolation": "stepAfter"
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          },
-          "min": 0,
-          "softMax": 2,
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
-          "legendFormat": "kg en 24 h",
-          "refId": "A"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROM}"
-      },
-      "id": 21,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Nivel del tubo",
-      "description": "Gas restante sobre los 45 kg del tubo (sensor.gas_nivel). Con 0 mm de líquido quedan ~1,6 kg de vapor, así que no baja de ~3,9 %. Líneas punteadas: los avisos de nivel bajo (10 kg = 22,2 %) y crítico (6 kg = 13,3 %).",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "showPoints": "never",
-            "spanNulls": false,
-            "lineInterpolation": "smooth",
-            "thresholdsStyle": {
-              "mode": "dashed"
-            }
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "orange"
-          },
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 13.33
-              },
-              {
-                "color": "transparent",
-                "value": 22.22
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "max(homeassistant_sensor_unit_percent{entity=\"sensor.gas_nivel\"})",
-          "legendFormat": "%",
-          "refId": "A"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROM}"
-      },
-      "id": 22,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 48
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Sensor del tubo",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "celsius",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "lineInterpolation": "stepAfter"
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "calidad de lectura"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "points"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "max(homeassistant_sensor_temperature_celsius{entity=\"sensor.pro_check_universal_5343_temperature\"})",
-          "legendFormat": "temperatura",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "max(homeassistant_sensor_unit_percent{entity=\"sensor.pro_check_universal_5343_reading_quality\"})",
-          "legendFormat": "calidad de lectura",
-          "refId": "B"
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROM}"
-      },
-      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 12,
