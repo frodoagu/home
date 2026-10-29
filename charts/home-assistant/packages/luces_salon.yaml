@@ -12,10 +12,12 @@
 # turn-on. Colour temperature only: brightness and on/off stay with whoever
 # switched it, and a lamp showing a colour or a WiZ scene is left alone.
 #
-# Except after a power cut: the lamp also hangs off a wall switch, and back
-# from `unavailable` it boots in its last state. Then it gets the white and the
-# lamps' brightness for the hour (`sensor.brillo_segun_la_hora`, luces_llave.yaml,
-# the same line as the evening ramp), whatever it was showing.
+# Except after a power cut or an HA start: the lamp also hangs off a wall
+# switch, and back from `unavailable` it boots in its last state. Then it gets
+# the white and the lamps' brightness for the hour (`sensor.brillo_segun_la_hora`,
+# luces_llave.yaml, the same line as the evening ramp), whatever it was showing.
+# An HA start restores it as `unavailable` too, so it gets the same, except
+# while the presence simulation (which drives this lamp) runs.
 # See docs/home-assistant.md#living-room-lamp.
 
 template:
@@ -76,11 +78,14 @@ automation:
       - "{{ is_number(states('sensor.lampara_salon_blanco')) }}"
     action:
       # An HA start restores the lamp as `unavailable` before the wiz
-      # integration loads it; that isn't the power coming back.
+      # integration loads it, so it comes back through here too.
       - if: >-
-          {{- trigger.id == 'corriente'
-              and (trigger.from_state.attributes.restored is not defined
-                   or now() - trigger.from_state.last_changed > timedelta(minutes=1)) }}
+          {%- set arranque = trigger.id == 'corriente'
+                and trigger.from_state.attributes.restored is defined
+                and now() - trigger.from_state.last_changed <= timedelta(minutes=1) %}
+          {%- set simulacion = is_state('input_boolean.simulacion_presencia_ausencia', 'on')
+                and is_state('input_boolean.simulacion_presencia_pausa', 'off') %}
+          {{- trigger.id == 'corriente' and not (arranque and simulacion) }}
         then:
           - action: light.turn_on
             continue_on_error: true
@@ -89,7 +94,7 @@ automation:
             data:
               brightness_pct: "{{ states('sensor.brillo_segun_la_hora') | int(100) }}"
               color_temp_kelvin: "{{ states('sensor.lampara_salon_blanco') | int }}"
-          - stop: Back from a power cut.
+          - stop: Back from a power cut or an HA start.
       - condition: template
         value_template: >-
           {{- state_attr('light.lampara_salon', 'color_mode') == 'color_temp'

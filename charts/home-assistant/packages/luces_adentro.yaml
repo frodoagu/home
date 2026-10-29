@@ -61,6 +61,13 @@ automation:
         from: "off"
         to: "on"
         id: pc_prendida
+      # Switched on at the wall (or back after an HA start): violet again if
+      # the PC is on; with the PC off, luces_llave.yaml gives it the curve.
+      - platform: state
+        entity_id: light.velador_oficina
+        from: unavailable
+        to: "on"
+        id: velador_vuelve
       - platform: state
         entity_id: binary_sensor.pc_fede_prendida
         from: "on"
@@ -70,7 +77,9 @@ automation:
       - condition: or
         conditions:
           - condition: trigger
-            id: pc_prendida
+            id:
+              - pc_prendida
+              - velador_vuelve
           - condition: state
             entity_id: binary_sensor.fede_en_casa
             state: "on"
@@ -127,7 +136,9 @@ automation:
             {%- else %}0
             {%- endif %}
       - choose:
-          - conditions: "{{ trigger.id == 'pc_prendida' }}"
+          - conditions: >-
+              {{ trigger.id == 'pc_prendida'
+                 or trigger.id == 'velador_vuelve' and is_state('binary_sensor.pc_fede_prendida', 'on') }}
             sequence:
               - action: light.turn_on
                 continue_on_error: true
