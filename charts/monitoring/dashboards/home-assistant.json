@@ -1104,6 +1104,14 @@
                 "value": "celsius"
               },
               {
+                "id": "min",
+                "value": -10
+              },
+              {
+                "id": "max",
+                "value": 40
+              },
+              {
                 "id": "custom.axisPlacement",
                 "value": "right"
               },
