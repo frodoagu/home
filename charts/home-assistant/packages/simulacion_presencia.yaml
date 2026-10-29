@@ -213,8 +213,17 @@ automation:
       - platform: time_pattern
         minutes: "/5"
         id: rampa
-    # The conditions live in the action, after the start's delay: a top-level
-    # condition would read the presence sensor before its first Pi-hole poll.
+    # The presence check lives in the action, after the start's delay: a
+    # top-level condition would read the presence sensor before its first
+    # Pi-hole poll. Up here only the recorded absence gates the rest, so the
+    # ramp's every-5-minutes trigger doesn't count as a run with someone home.
+    condition:
+      - or:
+          - condition: trigger
+            id: arranque
+          - condition: state
+            entity_id: input_boolean.simulacion_presencia_ausencia
+            state: "on"
     action:
       - if:
           - condition: trigger
