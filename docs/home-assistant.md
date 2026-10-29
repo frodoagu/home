@@ -1011,7 +1011,17 @@ power via `turn_on`/`turn_off`, volume via `volume_up`/`down`/`volume_mute`, cha
 via `media_next/previous_track`, and all nav/apps (Home, Back, OK, arrows, Netflix,
 Prime, Settings, Input, Play/Pause) via `media_player.select_source` with the source
 names from the `1042` code. So the pad drives the TV over **IR**, independent of the
-network.
+network. The one exception is **YouTube**: the `1042` code has no such key, so that
+button selects the `YouTube` source on the TV's webOS entity, which needs the TV on.
+
+Both pads are one definition. The second card reuses the first one's `rows`,
+`custom_actions` and `styles` through YAML anchors and sets only its own
+`media_player_id`. A button's target is `{{ config.entity }}`: in the card's
+nunjucks templates, `config` is the **button's** config, not the card's (so
+`config.media_player_id` is empty), and `entity` is the button's entity, which
+the card fills with its `media_player_id`. YouTube maps that IR entity to the
+webOS one. A YAML merge (`<<:`) with an overriding key would also work, but HA's
+loader warns about the duplicate key on every load.
 
 The card is **not installed through HACS** — it was added manually (equivalent effect,
 but HACS won't track it for updates):
