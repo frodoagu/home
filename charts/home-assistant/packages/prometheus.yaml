@@ -1,0 +1,6 @@
+# HA package: every entity's state at /api/prometheus, scraped by VictoriaMetrics
+# with a long-lived token (charts/monitoring, homeAssistantScrape). Feeds the
+# "Home Assistant — Insights" Grafana dashboard. See
+# docs/monitoring.md#home-assistant-metrics.
+prometheus:
+  requires_auth: true

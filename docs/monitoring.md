@@ -66,6 +66,7 @@ keep Grafana focused on these:
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 | Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
+| Home Assistant — Insights | `home-assistant` | runs per automation (and per group, per hour, last run), gas left, use per 24h/7d, burn rate and days left, liquid height raw vs filtered, AC hours per unit and per mode, AC mode timeline, room/outside temperatures vs setpoints, light hours and on/off timeline, presence timeline, PC and washer-dryer, HA uptime/restarts/memory, unavailable and chattiest entities (see *Home Assistant metrics*) |
 | psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, usage (seconds played, per player, per user; exports, shares and autopilot starts), visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
@@ -189,6 +190,59 @@ Limitations (in the exporter, not fixable here):
   that drops out of the top 10 keeps its last count until the exporter restarts.
 - **"today" means the last 24h.** `*_today` comes from FTL's in-memory window
   (`/api/stats/summary`), not from the calendar day.
+
+## Home Assistant metrics
+
+HA's own [`prometheus`](https://www.home-assistant.io/integrations/prometheus/)
+integration, turned on by
+[`packages/prometheus.yaml`](../charts/home-assistant/packages/prometheus.yaml),
+serves every entity's state at `/api/prometheus`.
+[templates/vmservicescrape-home-assistant.yaml](../charts/monitoring/templates/vmservicescrape-home-assistant.yaml)
+(`homeAssistantScrape` in `values.yaml`) scrapes it through the in-cluster
+`home-assistant` Service every 60 s and drops the `*_created` series. The
+*Home Assistant — Insights* dashboard reads it.
+
+- **It needs a token.** `requires_auth` stays on: HA runs `hostNetwork`, so
+  without auth the endpoint would be open to the whole LAN, and through
+  `home.agu.com.ar` to the internet, which would expose presence data. The scrape
+  sends a long-lived HA token from the `home-assistant-metrics` SealedSecret
+  ([templates/home-assistant-metrics-sealed.yaml](../charts/monitoring/templates/home-assistant-metrics-sealed.yaml)).
+  HA has no read-only tokens, so this one carries full admin rights. Its HA
+  profile entry is *VictoriaMetrics (monitoring)*. To rotate it, create a new
+  token, re-seal it and delete the old one in the HA profile:
+
+  ```bash
+  read -rs T   # paste the new token
+  printf '%s' "$T" | kubectl create secret generic home-assistant-metrics -n monitoring \
+      --from-file=token=/dev/stdin --dry-run=client -o yaml \
+    | kubeseal --format yaml > charts/monitoring/templates/home-assistant-metrics-sealed.yaml
+  unset T
+  ```
+
+- **Metric names follow the entity.** Sensors are
+  `homeassistant_sensor_<device_class>_<unit>` (`sensor.gas_restante` →
+  `homeassistant_sensor_weight_kg`) or `homeassistant_sensor_unit_<unit>` when
+  there's no device class. Lights are `homeassistant_light_brightness_percent`
+  (0 = off), climates `homeassistant_climate_mode{mode=…}` (one 0/1 series per
+  mode). Binary sensors and input booleans are `homeassistant_<domain>_state`.
+  Every series carries `entity`, `domain` and `friendly_name`. Renaming an
+  entity in HA starts a new series under the new name, so a panel that filters
+  by `entity` loses the history from before the rename.
+- **Unavailable entities drop out.** HA removes an entity's value series while
+  it's `unavailable`/`unknown` and keeps only `homeassistant_entity_available 0`.
+  The "hours on" panels count samples (`count_*_over_time(...) / 60`, one sample
+  per minute), so time spent unavailable counts as off. If the scrape interval
+  changes, change that `/ 60` too.
+- **The automation counter counts state writes, not runs.**
+  `homeassistant_automation_triggered_count_total` goes up on every state change
+  of the automation entity. A run writes twice: once when it starts and once when
+  it ends, because the `current` attribute goes 1 → 0. Each HA start also adds 1
+  to every automation. So the dashboard counts runs as
+  `increase((counter - 1)[…:1m]) / 2`. The `- 1` puts each post-restart counter
+  at 0, so `increase()` doesn't count the restart as a run. A run still going at
+  either edge of the range counts as half a run, which `round()` absorbs.
+- **History is 15 days** (vmsingle's `retentionPeriod`) and starts when the scrape
+  first runs. Nothing is backfilled from HA's recorder.
 
 ## psy-sampler cloud save
 

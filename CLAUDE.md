@@ -39,7 +39,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      (agu-spa, psy-sampler + psy-sync, origin-firewall).
   monitoring/        VictoriaMetrics k8s-stack + blackbox (wrapper chart). Grafana at grafana.agu.com.ar
                      (google-auth gated), Telegram alerts, RPi temp/throttle, uptime/TLS probes,
-                     Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard).
+                     Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard),
+                     Home Assistant entity state (HA's `prometheus` package, scraped with a
+                     token SealedSecret → "Home Assistant — Insights" dashboard).
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.
@@ -264,6 +266,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   password while Pi-hole's login is off. If that login is turned on, the
   exporter needs a copy of the Secret in `monitoring`
   (`piholeExporter.passwordSecret`). See docs/monitoring.md#pi-hole-metrics.
+- **monitoring — HA's automation counter is NOT a run count.**
+  `homeassistant_automation_triggered_count_total` goes up on every state write of
+  the automation: 2 per run (start, then end as `current` goes 1 → 0), plus 1 on
+  every HA start. Count runs as `increase((counter - 1)[…:1m]) / 2` (the `- 1`
+  makes a restart count as 0). Don't turn off `requires_auth` to drop the token:
+  HA is hostNetwork and public via home.agu.com.ar, so `/api/prometheus` would
+  expose presence data. See docs/monitoring.md#home-assistant-metrics.
 - **victoria-logs.** The upstream `victoria-logs-single` chart bundles a **Vector**
   agent (`vector.enabled: true`, DaemonSet) whose elasticsearch sink is
   auto-wired to the server when both are enabled — no manual endpoint needed.

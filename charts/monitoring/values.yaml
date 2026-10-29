@@ -60,6 +60,16 @@ traefikScrape:
   enabled: true
   namespace: kube-system
 
+# Scrape Home Assistant's /api/prometheus (entity states, automation triggers).
+# Drives the "Home Assistant — Insights" dashboard. The token Secret lives in
+# THIS namespace. See templates/vmservicescrape-home-assistant.yaml.
+homeAssistantScrape:
+  enabled: true
+  namespace: home-assistant
+  tokenSecret:
+    name: home-assistant-metrics
+    key: token
+
 # Pi-hole stats exporter (eko/pihole-exporter) + its VMPodScrape. Drives the
 # "Pi-hole — DNS" dashboard. Pi-hole has no Prometheus endpoint of its own; this
 # polls its v6 REST API on every scrape. See templates/pihole-exporter.yaml.

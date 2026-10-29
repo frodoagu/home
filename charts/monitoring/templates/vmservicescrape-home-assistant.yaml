@@ -1,0 +1,35 @@
+{{- if .Values.homeAssistantScrape.enabled }}
+# Scrape Home Assistant's `prometheus` integration (charts/home-assistant
+# packages/prometheus.yaml). HA requires a bearer token on /api/prometheus: a
+# long-lived token kept in the home-assistant-metrics SealedSecret
+# (templates/home-assistant-metrics-sealed.yaml). Drives the
+# "Home Assistant — Insights" dashboard.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: {{ include "monitoring.fullname" . }}-home-assistant
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.homeAssistantScrape.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: home-assistant
+  endpoints:
+    - port: http
+      path: /api/prometheus
+      interval: 60s
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.homeAssistantScrape.tokenSecret.name }}
+          key: {{ .Values.homeAssistantScrape.tokenSecret.key }}
+      # prometheus_client adds a `<counter>_created` timestamp per counter series.
+      metricRelabelConfigs:
+        - action: drop
+          source_labels: [__name__]
+          regex: homeassistant_.*_created
+{{- end }}
