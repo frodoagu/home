@@ -1444,19 +1444,20 @@
     },
     {
       "type": "bargauge",
-      "title": "Horas por modo",
-      "description": "Horas de cada modo en el rango elegido, sumando todos los aires: cada aire aporta las horas del rango. Sólo aparecen los modos que se usaron.",
+      "title": "Tiempo por modo",
+      "description": "Qué parte del tiempo de los aires pasó en cada modo, en el rango elegido (todos los aires juntos, suma 100 %). Sólo aparecen los modos que se usaron.",
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: h",
-          "decimals": 1,
+          "unit": "percent",
+          "decimals": 0,
           "min": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
           },
           "noValue": "Sin datos",
-          "displayName": "${__field.labels.mode}"
+          "displayName": "${__field.labels.mode}",
+          "max": 100
         },
         "overrides": [
           {
@@ -1574,7 +1575,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode[$__range], 1)) / 60 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\"), \"mode\", \"Apagado\", \"mode\", \"off\")",
+          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(100 * sum by (mode) (count_eq_over_time(homeassistant_climate_mode[$__range], 1)) / scalar(sum(count_over_time(homeassistant_climate_mode{mode=\"off\"}[$__range]))) > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\"), \"mode\", \"Apagado\", \"mode\", \"off\")",
           "legendFormat": "{{mode}}",
           "refId": "A",
           "instant": true,
