@@ -1,0 +1,28 @@
+{{- if .Values.argocdScrape.enabled }}
+# Scrape the Argo CD application controller (its `metrics` port, 8082, is not
+# on any Service) for the deploy annotations every dashboard carries: each
+# successful sync bumps argocd_app_sync_total for that app. Only the two app
+# series are kept; the controller exposes ~800 more about itself.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "monitoring.fullname" . }}-argocd
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.argocdScrape.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      metricRelabelConfigs:
+        - action: keep
+          source_labels: [__name__]
+          regex: argocd_app_(sync_total|info)
+{{- end }}
