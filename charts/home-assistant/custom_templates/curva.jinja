@@ -16,11 +16,12 @@
 {{ (t.hour * 60 + t.minute + extra - 720) % 1440 }}
 {%- endmacro -%}
 
-{#- Column `col` of curve `p` now: rows are [minute, value, ...] in ascending
-    minutes, joined by straight lines; before the first row it holds the first,
-    after the last it holds the last. -#}
-{%- macro curva(p, col=1) -%}
-{%- set m = minutos(now()) | int -%}
+{#- Column `col` of curve `p` at minute `m` (now by default): rows are
+    [minute, value, ...] in ascending minutes, joined by straight lines; before
+    the first row it holds the first, after the last it holds the last. Pass
+    `m` when reading several columns, so they all come from the same minute. -#}
+{%- macro curva(p, col=1, m=none) -%}
+{%- set m = m if m is not none else minutos(now()) | int -%}
 {%- set ns = namespace(a=p[0], b=p[0], f=0) -%}
 {%- for i in range(p | count - 1) if p[i][0] <= m -%}
 {%- set ns.a = p[i] -%}

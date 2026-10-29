@@ -436,8 +436,14 @@ Google Home:
 
 Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
 and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is **24 °C**
-everywhere. The two bedrooms share a cool setpoint but not a heat one, so every
-script that heats both sends each its own `climate.set_temperature`.
+everywhere. They live in one place, `script.aires_prender` (`aires`, optional
+`modo`; the seasonal mode by default), which sends each unit its own
+`climate.set_temperature`; every script and automation that turns units on at
+"their" temperature calls it. `script.aires_piezas_dormir` puts the bedrooms on
+it at the slowest fan, for `aires_modo_dormir` and `aires_solo_dormitorio_toggle`.
+Both are hidden in the entity registry so Google Home doesn't list them as
+scenes. `group.aires` holds the four units for actions and templates (triggers
+still list them, since a trigger takes no template).
 
 Every "on" side picks heat or cool from `sensor.aires_modo_estacional`; nothing
 here forces a season. To force one, use a unit's thermostat card on the
@@ -609,8 +615,9 @@ bedroom reads its own, and the kids' room joins the bedroom's zone while
 [`binary_sensor.chicos_en_casa`](#kids-calendar) is `on`. The kids' calendar is
 only a condition here: their coming home never starts a unit.
 
-- **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat 21 °C**, above
-  25 °C to **cool 24 °C**, the setpoints of the schedule above. A zone inside
+- **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat** (21 °C, 20 °C in
+  Fede's bedroom), above 25 °C to **cool 24 °C**: the usual setpoints, through
+  `script.aires_prender` with `mantener`. A zone inside
   the range, or with a dead thermometer, is left alone.
 - **It never turns anything off**, and it doesn't touch a unit outside the
   zones it acts on.
@@ -938,23 +945,17 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
    did). `turn_off` mirrors it (webOS off → wait for off → IR only if it never
    lands):
 
+   The logic is written once, in `script.tv_encender` / `script.tv_apagar`
+   (fields `webos` and `ir`, `parallel` so both TVs can run at once, hidden from
+   Google). Each TV's `tv_<room>_turn_on/off` only calls them with its two
+   entities, and stays `single` so a double tap can't send the IR toggle twice:
+
    ```yaml
    tv_sala_turn_on:
      sequence:
-       - action: media_player.turn_on
-         target: { entity_id: media_player.sala_de_estar }
-       - wait_template: >-
-           {{ states('media_player.sala_de_estar') not in ['off', 'unavailable', 'unknown', 'standby'] }}
-         timeout: "00:00:20"
-         continue_on_timeout: true
-       - if:
-           - condition: template
-             value_template: "{{ not wait.completed }}"
-         then:
-           - action: media_player.turn_on
-             target: { entity_id: media_player.tv_sala_ir }
+       - action: script.tv_encender
+         data: { webos: media_player.sala_de_estar, ir: media_player.tv_sala_ir }
      mode: single
-   # ...tv_sala_turn_off, tv_dormitorio_turn_on/off analogous
    ```
 
 **One entity to Google.** `expose_by_default: true` would surface all three
@@ -1432,25 +1433,26 @@ steps.
 - **A colour or a WiZ scene is left alone**: it only acts while the lamp's
   `color_mode` is `color_temp` with no effect. Back to white from the app, it
   picks the curve up at the next turn-on.
-- **Except after a power cut.** The lamp also hangs off a wall switch, and back
-  from `unavailable` it boots in its last state. Then it gets the curve's white
-  and the [wall-switch lamps'](#wall-switch-lamps) brightness for the hour
-  (`sensor.brillo_segun_la_hora`, the evening ramp's line), whatever it was
-  showing. The restored `unavailable` of an HA start doesn't count for the
-  first minute.
+- **Except after a power cut or an HA start.** The lamp is a table lamp on a
+  wall switch, and back from `unavailable` it boots in its last state. Then it
+  gets the curve's white and the [wall-switch lamps'](#wall-switch-lamps)
+  brightness for the hour (`sensor.brillo_segun_la_hora`, the evening ramp's
+  line), whatever it was showing. An HA start restores it as `unavailable` too,
+  so it gets the same, except while the presence simulation runs.
 - Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
   of day (today's or tomorrow's, a minute or two apart).
 
 ## Wall-switch lamps
 
-The office and the bedroom each have a table lamp (*Velador*, driven by the
-[evening lamps](#evening-lamps) and the [presence simulation](#presence-simulation))
-and a WiZ RGBW Tunable on a **plain wall switch**. The stairs to the kids' room
-have one too, with no table lamp:
+The office and the bedroom each have a WiZ RGBW Tunable on a **plain wall
+switch**, and so do the stairs to the kids' room and the office table lamp
+(*Velador oficina*, also one of the [evening lamps](#evening-lamps); while
+PC-Fede is on it is violet and this curve leaves it alone):
 
 | Lamp | Entity | Reservation |
 |---|---|---|
 | *Lámpara oficina* | `light.lampara_oficina` | `lampara-oficina` → `192.168.0.64` |
+| *Velador oficina* | `light.velador_oficina` | `velador-oficina` → `192.168.0.61` |
 | *Lámpara dormitorio* | `light.lampara_dormitorio` | `lampara-dormitorio` → `192.168.0.65` |
 | *Lámpara escalera* | `light.lampara_escalera` | `lampara-escalera` → `192.168.0.66` |
 
@@ -1476,14 +1478,20 @@ The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
   was (±2 %). A level set by hand stays until it's next switched on at the
   wall. An `off` from HA or the app isn't a power cut: the next `on` from there
   is left alone.
-- **An HA start isn't a turn-on**: the restored `unavailable` it begins with is
-  skipped for the first minute. A lamp that was off the curve when HA started
-  stays off it until it's next switched on at the wall.
+- **An HA start counts as a turn-on**: every lamp starts out as a restored
+  `unavailable`, so each one that is on gets the curve's level as soon as the
+  wiz integration loads it, a level set by hand included. Not while the
+  presence simulation runs (below).
+- **HA sees it back within a second.** A lamp off at the wall leaves its wiz
+  config entry in `setup_retry`, whose backoff grows to 10 min, but at boot the
+  lamp asks Pi-hole for `ntp.wiz.world` and HA picks it up at once: the office
+  table lamp booted at 23:46:59 and was `on` in HA at 23:47:00 (2026-10-28).
 - **Not while the [presence simulation](#presence-simulation) runs** (absence
   recorded, not paused): the curve isn't followed then, since the simulation
   dims the stairs lamp on its own ramp (10 % at 23:00, not 23:30) and the two
   would pull it back and forth where the lines cross. A turn-on at the wall
-  still gets the curve; the simulation's next 5-min tick takes it from there.
+  still gets the curve (an HA start doesn't); the simulation's next 5-min tick
+  takes it from there.
 - A new lamp on a wall switch joins by its entity in both `lamparas` and the
   `prendida` trigger.
 

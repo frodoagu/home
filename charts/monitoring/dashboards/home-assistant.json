@@ -2644,7 +2644,162 @@
             "align": "auto"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tipo"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "automation": {
+                        "text": "Automatizaciones",
+                        "index": 0
+                      },
+                      "binary_sensor": {
+                        "text": "Sensores sí/no",
+                        "index": 1
+                      },
+                      "button": {
+                        "text": "Botones",
+                        "index": 2
+                      },
+                      "calendar": {
+                        "text": "Calendarios",
+                        "index": 3
+                      },
+                      "climate": {
+                        "text": "Aires",
+                        "index": 4
+                      },
+                      "conversation": {
+                        "text": "Asistente de voz",
+                        "index": 5
+                      },
+                      "counter": {
+                        "text": "Contadores",
+                        "index": 6
+                      },
+                      "device_tracker": {
+                        "text": "Ubicación de celulares",
+                        "index": 7
+                      },
+                      "event": {
+                        "text": "Eventos",
+                        "index": 8
+                      },
+                      "fan": {
+                        "text": "Ventiladores",
+                        "index": 9
+                      },
+                      "group": {
+                        "text": "Grupos",
+                        "index": 10
+                      },
+                      "infrared": {
+                        "text": "Emisores IR",
+                        "index": 11
+                      },
+                      "input_boolean": {
+                        "text": "Interruptores virtuales",
+                        "index": 12
+                      },
+                      "input_datetime": {
+                        "text": "Horarios configurables",
+                        "index": 13
+                      },
+                      "input_number": {
+                        "text": "Valores configurables",
+                        "index": 14
+                      },
+                      "input_select": {
+                        "text": "Listas de opciones",
+                        "index": 15
+                      },
+                      "light": {
+                        "text": "Luces",
+                        "index": 16
+                      },
+                      "media_player": {
+                        "text": "Teles y parlantes",
+                        "index": 17
+                      },
+                      "notify": {
+                        "text": "Notificaciones",
+                        "index": 18
+                      },
+                      "number": {
+                        "text": "Ajustes numéricos",
+                        "index": 19
+                      },
+                      "person": {
+                        "text": "Personas",
+                        "index": 20
+                      },
+                      "remote": {
+                        "text": "Controles remotos",
+                        "index": 21
+                      },
+                      "scene": {
+                        "text": "Escenas",
+                        "index": 22
+                      },
+                      "script": {
+                        "text": "Scripts",
+                        "index": 23
+                      },
+                      "select": {
+                        "text": "Selectores",
+                        "index": 24
+                      },
+                      "sensor": {
+                        "text": "Sensores",
+                        "index": 25
+                      },
+                      "sun": {
+                        "text": "Sol",
+                        "index": 26
+                      },
+                      "switch": {
+                        "text": "Enchufes e interruptores",
+                        "index": 27
+                      },
+                      "timer": {
+                        "text": "Temporizadores",
+                        "index": 28
+                      },
+                      "todo": {
+                        "text": "Listas de tareas",
+                        "index": 29
+                      },
+                      "tts": {
+                        "text": "Texto a voz",
+                        "index": 30
+                      },
+                      "update": {
+                        "text": "Actualizaciones",
+                        "index": 31
+                      },
+                      "weather": {
+                        "text": "Pronóstico",
+                        "index": 32
+                      },
+                      "zone": {
+                        "text": "Zonas",
+                        "index": 33
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true
@@ -2668,12 +2823,19 @@
               "namespace": true,
               "pod": true,
               "service": true,
-              "container": true
+              "container": true,
+              "__name__": true,
+              "prometheus": true
+            },
+            "indexByName": {
+              "friendly_name": 0,
+              "domain": 1,
+              "entity": 2
             },
             "renameByName": {
               "friendly_name": "Nombre",
               "entity": "Entidad",
-              "domain": "Dominio"
+              "domain": "Tipo"
             }
           }
         }
@@ -2765,11 +2927,11 @@
     },
     {
       "type": "timeseries",
-      "title": "Cambios de estado por dominio",
-      "description": "Por minuto.",
+      "title": "Cambios de estado por tipo de entidad",
+      "description": "Cuántas veces por minuto cambia de estado cada tipo de entidad, apilado. Cada cambio es una escritura en la base de HA: lo que más cambia es lo que más la hace crecer.",
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "suffix: /min",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -2787,7 +2949,416 @@
           },
           "min": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "automation"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Automatizaciones"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "binary_sensor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sensores sí/no"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "button"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Botones"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "calendar"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Calendarios"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "climate"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aires"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "conversation"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Asistente de voz"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "counter"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Contadores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "device_tracker"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ubicación de celulares"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "event"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Eventos"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fan"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ventiladores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "group"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Grupos"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "infrared"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Emisores IR"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "input_boolean"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Interruptores virtuales"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "input_datetime"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Horarios configurables"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "input_number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Valores configurables"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "input_select"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Listas de opciones"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "light"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Luces"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "media_player"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Teles y parlantes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "notify"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Notificaciones"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ajustes numéricos"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "person"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Personas"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "remote"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Controles remotos"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "scene"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Escenas"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "script"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Scripts"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "select"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Selectores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sensor"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sensores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sun"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sol"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "switch"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Enchufes e interruptores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "timer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Temporizadores"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "todo"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Listas de tareas"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tts"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Texto a voz"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "update"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Actualizaciones"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "weather"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pronóstico"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "zone"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Zonas"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {

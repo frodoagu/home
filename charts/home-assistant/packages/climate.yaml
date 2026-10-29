@@ -68,16 +68,28 @@ input_datetime:
     has_date: false
     has_time: true
 
-# Escenas de acceso rápido para los aires. Aparecen como entidades script.*
-# (botones en la app HA / el dashboard "Aires") y, al estar `script` en
-# googleAssistant.exposedDomains, también como escenas en Google Home.
+# The four units, for actions (`entity_id: group.aires`) and templates
+# (`expand('group.aires')`, in no useful order). Triggers take no template, so
+# they keep their own lists.
+group:
+  aires:
+    name: Aires
+    entities:
+      - climate.aire_living
+      - climate.aire_cocina
+      - climate.aire_dormitorio
+      - climate.aire_chicos
+
+# Quick-access scenes for the ACs. They show up as script.* entities (buttons
+# in the HA app and the "Aires" dashboard) and, with `script` in
+# googleAssistant.exposedDomains, as scenes in Google Home; the building blocks
+# (`aires_prender`, `aires_piezas_dormir`) are hidden so Google doesn't list them.
 #
-# Setpoints: heat is 21 in the living areas and the kids' room, 20 in Fede's
-# bedroom; cool is 24 everywhere. So the two bedrooms share a cool setpoint but
-# not a heat one, and every script that heats both sends them separately.
-# Turning on sets mode and temperature in ONE
-# `climate.set_temperature` call: every IR send carries the whole frame, so a
-# single blast leaves the unit in the wanted state.
+# Setpoints live in `aires_prender` and nowhere else: heat is 21 in the living
+# areas and the kids' room, 20 in Fede's bedroom; cool is 24 everywhere.
+# Turning on sets mode and temperature in ONE `climate.set_temperature` call:
+# every IR send carries the whole frame, so a single blast leaves the unit in
+# the wanted state.
 #
 # The kids' unit follows Fede's bedroom while `binary_sensor.chicos_en_casa`
 # (chicos.yaml) isn't `off`, so a broken calendar still starts it: every script
@@ -91,6 +103,81 @@ input_datetime:
 # HA reports the state it ASSUMED; IR is one-way, so a physical remote goes
 # unnoticed.
 script:
+  # Turns `aires` on at their setpoint for `modo` (heat/cool; the seasonal one
+  # by default). One call per unit: the bedroom's heat setpoint differs. With
+  # `mantener`, a unit already in `modo` keeps its own setpoint (re-sent).
+  aires_prender:
+    alias: Aires - Prender a su temperatura
+    icon: mdi:air-conditioner
+    fields:
+      aires:
+        description: Los aires a prender.
+        required: true
+        selector:
+          entity:
+            domain: climate
+            multiple: true
+      modo:
+        description: heat o cool; sin nada, el de la estación.
+        selector:
+          select:
+            options: [heat, cool]
+      mantener:
+        description: Si un aire ya está en ese modo, conserva su temperatura.
+        selector:
+          boolean:
+    sequence:
+      - variables:
+          modo: >-
+            {{ modo if modo is defined and modo in ['heat', 'cool']
+               else 'cool' if is_state('sensor.aires_modo_estacional', 'cool') else 'heat' }}
+          lista: "{{ [aires] if aires is string else aires }}"
+      - repeat:
+          for_each: "{{ lista }}"
+          sequence:
+            - action: climate.set_temperature
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                hvac_mode: "{{ modo }}"
+                temperature: >-
+                  {%- set propia = state_attr(repeat.item, 'temperature') %}
+                  {%- if mantener | default(false) and is_state(repeat.item, modo) and propia is not none %}
+                  {{- propia }}
+                  {%- else %}
+                  {{- 24 if modo == 'cool' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
+                  {%- endif %}
+    mode: parallel
+
+  # Fede's bedroom (and the kids', while they're home) on at the seasonal
+  # setpoint and the slowest fan each unit declares (`level1` on the 5140, `low`
+  # on the 3340). The delay keeps the fan frame from stepping on the
+  # temperature frame on the same blaster.
+  aires_piezas_dormir:
+    alias: Aires - Piezas a dormir
+    icon: mdi:sleep
+    variables:
+      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
+    sequence:
+      - action: script.aires_prender
+        data:
+          aires: "{{ ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) }}"
+      - delay: "00:00:01"
+      - action: climate.set_fan_mode
+        target:
+          entity_id: climate.aire_dormitorio
+        data:
+          fan_mode: level1
+      - if: "{{ chicos }}"
+        then:
+          - action: climate.set_fan_mode
+            target:
+              entity_id: climate.aire_chicos
+            data:
+              fan_mode: low
+    mode: single
+
   # Re-blasts what HA believes each unit holds, `off` included. SmartIR builds
   # every frame from the entity's whole state (mode, fan, swing, setpoint), so a
   # `set_temperature` with the current mode and setpoint resends all of it. For a
@@ -100,11 +187,7 @@ script:
     icon: mdi:send
     sequence:
       - repeat:
-          for_each:
-            - climate.aire_living
-            - climate.aire_cocina
-            - climate.aire_dormitorio
-            - climate.aire_chicos
+          for_each: "{{ expand('group.aires') | map(attribute='entity_id') | list }}"
           sequence:
             - choose:
                 - conditions:
@@ -134,11 +217,7 @@ script:
     sequence:
       - action: climate.turn_off
         target:
-          entity_id:
-            - climate.aire_living
-            - climate.aire_cocina
-            - climate.aire_dormitorio
-            - climate.aire_chicos
+          entity_id: group.aires
     mode: single
 
   # One button for the whole house: the "on" side reads
@@ -162,36 +241,11 @@ script:
             sequence:
               - action: climate.turn_off
                 target:
-                  entity_id:
-                    - climate.aire_living
-                    - climate.aire_cocina
-                    - climate.aire_dormitorio
-                    - climate.aire_chicos
+                  entity_id: group.aires
         default:
-          - if:
-              - condition: state
-                entity_id: sensor.aires_modo_estacional
-                state: cool
-            then:
-              - action: climate.set_temperature
-                target:
-                  entity_id: "{{ aires }}"
-                data:
-                  hvac_mode: cool
-                  temperature: 24
-            else:
-              - action: climate.set_temperature
-                target:
-                  entity_id: "{{ aires | reject('eq', 'climate.aire_dormitorio') | list }}"
-                data:
-                  hvac_mode: heat
-                  temperature: 21
-              - action: climate.set_temperature
-                target:
-                  entity_id: climate.aire_dormitorio
-                data:
-                  hvac_mode: heat
-                  temperature: 20
+          - action: script.aires_prender
+            data:
+              aires: "{{ aires }}"
     mode: single
 
   # The seasonal toggle scoped to half the house: the day zone (kitchen + living)
@@ -216,16 +270,9 @@ script:
                     - climate.aire_cocina
                     - climate.aire_living
         default:
-          - variables:
-              frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
-          - action: climate.set_temperature
-            target:
-              entity_id:
-                - climate.aire_cocina
-                - climate.aire_living
+          - action: script.aires_prender
             data:
-              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-              temperature: "{{ 24 if frio else 21 }}"
+              aires: [climate.aire_cocina, climate.aire_living]
     mode: single
 
   aires_zona_noche_toggle:
@@ -248,71 +295,29 @@ script:
                     - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
-          - variables:
-              frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_dormitorio
+          - action: script.aires_prender
             data:
-              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-              temperature: "{{ 24 if frio else 20 }}"
-          - if: "{{ chicos }}"
-            then:
-              - action: climate.set_temperature
-                target:
-                  entity_id: climate.aire_chicos
-                data:
-                  hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-                  temperature: "{{ 24 if frio else 21 }}"
+              aires: "{{ ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) }}"
     mode: single
 
-  # Bedrooms on at the seasonal setpoint and the slowest fan each unit declares
-  # (`level1` on the 5140, `low` on the 3340); the rest off. The delay keeps the
-  # fan frame from stepping on the temperature frame on the same blaster.
+  # Bedrooms to sleep (`aires_piezas_dormir`), the rest off.
   aires_modo_dormir:
     alias: Aires - Modo dormir (piezas suaves, resto apagado)
     icon: mdi:sleep
     sequence:
       - variables:
-          frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
       - action: climate.turn_off
         target:
           entity_id: >-
             {{ ['climate.aire_living', 'climate.aire_cocina']
                + ([] if chicos else ['climate.aire_chicos']) }}
-      - action: climate.set_temperature
-        target:
-          entity_id: climate.aire_dormitorio
-        data:
-          hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-          temperature: "{{ 24 if frio else 20 }}"
-      - if: "{{ chicos }}"
-        then:
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_chicos
-            data:
-              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-              temperature: "{{ 24 if frio else 21 }}"
-      - delay: "00:00:01"
-      - action: climate.set_fan_mode
-        target:
-          entity_id: climate.aire_dormitorio
-        data:
-          fan_mode: level1
-      - if: "{{ chicos }}"
-        then:
-          - action: climate.set_fan_mode
-            target:
-              entity_id: climate.aire_chicos
-            data:
-              fan_mode: low
+      - action: script.aires_piezas_dormir
     mode: single
 
   # Fede's bedroom (and so the kids', while they're home) as the only units on:
   # off only when they are ALL on and kitchen and living are off (in any mode),
-  # otherwise them on the slowest fan and the rest off. The off frame goes to
+  # otherwise them to sleep (`aires_piezas_dormir`) and the rest off. The off frame goes to
   # the rest even when HA has them off, so a unit started from its remote is
   # caught too.
   aires_solo_dormitorio_toggle:
@@ -339,38 +344,10 @@ script:
                     - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
-          - variables:
-              frio: "{{ is_state('sensor.aires_modo_estacional', 'cool') }}"
           - action: climate.turn_off
             target:
               entity_id: "{{ otros + ([] if chicos else ['climate.aire_chicos']) }}"
-          - action: climate.set_temperature
-            target:
-              entity_id: climate.aire_dormitorio
-            data:
-              hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-              temperature: "{{ 24 if frio else 20 }}"
-          - if: "{{ chicos }}"
-            then:
-              - action: climate.set_temperature
-                target:
-                  entity_id: climate.aire_chicos
-                data:
-                  hvac_mode: "{{ 'cool' if frio else 'heat' }}"
-                  temperature: "{{ 24 if frio else 21 }}"
-          - delay: "00:00:01"
-          - action: climate.set_fan_mode
-            target:
-              entity_id: climate.aire_dormitorio
-            data:
-              fan_mode: level1
-          - if: "{{ chicos }}"
-            then:
-              - action: climate.set_fan_mode
-                target:
-                  entity_id: climate.aire_chicos
-                data:
-                  fan_mode: low
+          - action: script.aires_piezas_dormir
     mode: single
 
   # ±1 °C on every unit that is ON, each clamped to its own min/max (they differ:
@@ -386,11 +363,7 @@ script:
       chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
     sequence: &ajustar_grado
       - repeat:
-          for_each:
-            - climate.aire_living
-            - climate.aire_cocina
-            - climate.aire_dormitorio
-            - climate.aire_chicos
+          for_each: "{{ expand('group.aires') | map(attribute='entity_id') | list }}"
           sequence:
             - if:
                 - condition: template
@@ -618,14 +591,10 @@ automation:
       - condition: template
         value_template: "{{ states('sensor.atc_29a8_temperatura') | float(99) <= 17 }}"
     action:
-      - action: climate.set_temperature
-        target:
-          entity_id:
-            - climate.aire_cocina
-            - climate.aire_living
+      - action: script.aires_prender
         data:
-          hvac_mode: heat
-          temperature: 21
+          aires: [climate.aire_cocina, climate.aire_living]
+          modo: heat
       - action: script.avisar_celu
         data:
           titulo: Aires
@@ -783,12 +752,10 @@ automation:
           aires: >-
             {{ ['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
                + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
-      - action: climate.set_temperature
-        target:
-          entity_id: "{{ aires }}"
+      - action: script.aires_prender
         data:
-          hvac_mode: cool
-          temperature: 24
+          aires: "{{ aires }}"
+          modo: cool
       - action: script.avisar_celu
         data:
           titulo: Aires
@@ -882,14 +849,15 @@ automation:
   # is unavailable -> on and doesn't count. From 01:00 to 07:00 only the
   # bedroom's unit is in play. It never turns a unit off. Every unit
   # of a zone out of range gets the command, because the IR state is assumed:
-  # one switched off by remote still reads as on. A unit already in that mode
-  # keeps its setpoint.
+  # one switched off by remote still reads as on. Units go on through
+  # `aires_prender` with `mantener`: their usual setpoint, or their own if
+  # already in that mode.
   - id: aires_llegada
     alias: Aires - Prender al llegar Fede
     description: >-
       Cuando Fede llega a casa (su celular vuelve a aparecer en Pi-hole después
       de 30 min sin verse), prende los aires de las zonas que están fuera de
-      19-25 °C: calor 21 por debajo de 19, frío 24 por encima de 25. Cocina y
+      19-25 °C: calor (21, el dormitorio 20) por debajo de 19, frío 24 por encima de 25. Cocina y
       living miran el termómetro del living; dormitorio, el del dormitorio, y
       con él el de los chicos si están según el calendario. Entre la 1 y las 7
       solo el del dormitorio. Nunca apaga nada.
@@ -916,9 +884,7 @@ automation:
               {%- if adentro < 19 or adentro > 25 %}
                 {%- set modo = 'heat' if adentro < 19 else 'cool' %}
                 {%- for a in z.aires %}
-                  {%- set temp = state_attr(a, 'temperature') | float(0) if is_state(a, modo) else 0 %}
-                  {%- set ns.planes = ns.planes + [{'aire': a, 'termometro': z.termometro, 'modo': modo,
-                        'temp': temp or (21 if modo == 'heat' else 24)}] %}
+                  {%- set ns.planes = ns.planes + [{'aire': a, 'termometro': z.termometro, 'modo': modo}] %}
                 {%- endfor %}
               {%- endif %}
             {%- endfor %}
@@ -926,15 +892,13 @@ automation:
       - condition: template
         value_template: "{{ planes | count > 0 }}"
       - repeat:
-          for_each: "{{ planes }}"
+          for_each: "{{ planes | map(attribute='modo') | unique | list }}"
           sequence:
-            - action: climate.set_temperature
-              continue_on_error: true
-              target:
-                entity_id: "{{ repeat.item.aire }}"
+            - action: script.aires_prender
               data:
-                hvac_mode: "{{ repeat.item.modo }}"
-                temperature: "{{ repeat.item.temp }}"
+                aires: "{{ planes | selectattr('modo', 'eq', repeat.item) | map(attribute='aire') | list }}"
+                modo: "{{ repeat.item }}"
+                mantener: true
       - action: script.avisar_celu
         data:
           titulo: Aires
@@ -944,7 +908,7 @@ automation:
             {% for t in planes | map(attribute='termometro') | unique %}{{ state_attr(t, 'friendly_name') | lower }}
             a {{ states(t) | float | round(1) }} °C{{ ', ' if not loop.last }}{% endfor %}.
             Prendí {% for p in planes %}{{ state_attr(p.aire, 'friendly_name') | replace('Aire ', '') | lower }}
-            en {{ modos[p.modo] }} {{ '%g' | format(p.temp) }} °C{{ ', ' if not loop.last }}{% endfor %}.
+            en {{ modos[p.modo] }} {{ '%g' | format(state_attr(p.aire, 'temperature') | float(0)) }} °C{{ ', ' if not loop.last }}{% endfor %}.
           extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
@@ -1031,8 +995,7 @@ automation:
           mensaje: >-
             {% set modos = {'heat': 'calor', 'cool': 'frío', 'dry': 'seco',
                             'fan_only': 'ventilador', 'heat_cool': 'auto'} %}
-            {% set aires = ['climate.aire_living', 'climate.aire_cocina',
-                            'climate.aire_dormitorio', 'climate.aire_chicos'] %}
+            {% set aires = expand('group.aires') | map(attribute='entity_id') | sort %}
             {% set prendidos = aires | reject('is_state', ['off', 'unavailable', 'unknown']) | list %}
             {% set apagados = aires | reject('in', prendidos) | map('state_attr', 'friendly_name')
                               | map('replace', 'Aire ', '') | list %}

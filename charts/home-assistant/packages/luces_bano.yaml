@@ -38,8 +38,8 @@ template:
             {%- set p = [[540, 100, 6500], [570, 100, 5250], [600, 90, 4000], [660, 70, 4000], [720, 40, 4000],
                          [780, 10, 4000], [840, 10, 2200], [amanecer, 10, 2200], [amanecer + 60, 100, 6500]] %}
             {%- set m = minutos(now()) | int %}
-            {{- {'brillo': curva(p, 1) | float | round(0) | int,
-                 'kelvin': (curva(p, 2) | float / 50) | round(0) | int * 50,
+            {{- {'brillo': curva(p, 1, m) | float | round(0) | int,
+                 'kelvin': (curva(p, 2, m) | float / 50) | round(0) | int * 50,
                  'ambar': 840 <= m < amanecer} }}
     sensor:
       - name: Lámpara baño - Brillo según la hora

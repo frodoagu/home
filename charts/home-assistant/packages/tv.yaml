@@ -13,9 +13,9 @@
 wake_on_lan:
 
 media_player:
-  # --- Entidades IR puras (SmartIR, LG code 1042: on/off discretos) ---
-  # Blaster LG completo (power, volumen, mute, canales, sources/nav). Sirven de
-  # fuente del power IR de respaldo y de control manual total cuando la red cae.
+  # --- IR-only entities (SmartIR, LG code 1042: discrete on/off) ---
+  # The whole LG blaster (power, volume, mute, channels, sources/nav): the IR
+  # power fallback, and full manual control when the network is down.
   - platform: smartir
     name: "TV Sala IR"
     unique_id: tv_sala_ir
@@ -27,10 +27,10 @@ media_player:
     device_code: 1042  # LG webOS
     controller_data: remote.control_dormitorio
 
-  # --- Entidades unificadas (una por ambiente) ---
-  # Estado on/off y control rico (apps, sources, volumen con nivel) los da el
-  # webOS por IP; encendido/apagado usan scripts WoL/webOS-primero + IR de
-  # respaldo. Es la unica entidad expuesta a Google Home.
+  # --- Unified entities (one per room) ---
+  # webOS over IP gives on/off state and the rich controls (apps, sources,
+  # volume level); turn on/off use the WoL/webOS-first scripts with an IR
+  # fallback. The only entity exposed to Google Home.
   - platform: universal
     name: "TV Sala"
     unique_id: tv_sala
@@ -59,14 +59,31 @@ media_player:
 # the TV is still booting from WoL turns it back off: the wait has to outlast a
 # cold boot, not just the WoL send. turn_off mirrors it.
 script:
-  tv_sala_turn_on:
-    alias: TV Sala - Encender (WoL + IR fallback)
+  # The two TVs' turn_on/turn_off, given the webOS entity and the IR one.
+  # `parallel` so both TVs can run at once; each TV's own script below is
+  # `single`, so a double tap can't send the IR toggle twice.
+  tv_encender:
+    alias: TV - Encender (WoL + IR de respaldo)
+    icon: mdi:television
+    fields: &tv_campos
+      webos:
+        description: El media_player webOS de la tele.
+        required: true
+        selector:
+          entity:
+            domain: media_player
+      ir:
+        description: El media_player IR de la misma tele.
+        required: true
+        selector:
+          entity:
+            domain: media_player
     sequence:
       - action: media_player.turn_on
         target:
-          entity_id: media_player.sala_de_estar
+          entity_id: "{{ webos }}"
       - wait_template: >-
-          {{ states('media_player.sala_de_estar') not in ['off', 'unavailable', 'unknown', 'standby'] }}
+          {{ states(webos) not in ['off', 'unavailable', 'unknown', 'standby'] }}
         timeout: "00:00:20"
         continue_on_timeout: true
       - if:
@@ -75,69 +92,65 @@ script:
         then:
           - action: media_player.turn_on
             target:
-              entity_id: media_player.tv_sala_ir
+              entity_id: "{{ ir }}"
+    mode: parallel
+
+  tv_apagar:
+    alias: TV - Apagar (webOS + IR de respaldo)
+    icon: mdi:television-off
+    fields: *tv_campos
+    sequence:
+      - action: media_player.turn_off
+        target:
+          entity_id: "{{ webos }}"
+      - wait_template: >-
+          {{ states(webos) in ['off', 'unavailable', 'standby'] }}
+        timeout: "00:00:20"
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ not wait.completed }}"
+        then:
+          - action: media_player.turn_off
+            target:
+              entity_id: "{{ ir }}"
+    mode: parallel
+
+  tv_sala_turn_on:
+    alias: TV Sala - Encender (WoL + IR fallback)
+    sequence:
+      - action: script.tv_encender
+        data: &tv_sala
+          webos: media_player.sala_de_estar
+          ir: media_player.tv_sala_ir
     mode: single
 
   tv_sala_turn_off:
     alias: TV Sala - Apagar (webOS + IR fallback)
     sequence:
-      - action: media_player.turn_off
-        target:
-          entity_id: media_player.sala_de_estar
-      - wait_template: >-
-          {{ states('media_player.sala_de_estar') in ['off', 'unavailable', 'standby'] }}
-        timeout: "00:00:20"
-        continue_on_timeout: true
-      - if:
-          - condition: template
-            value_template: "{{ not wait.completed }}"
-        then:
-          - action: media_player.turn_off
-            target:
-              entity_id: media_player.tv_sala_ir
+      - action: script.tv_apagar
+        data: *tv_sala
     mode: single
 
   tv_dormitorio_turn_on:
     alias: TV Dormitorio - Encender (WoL + IR fallback)
     sequence:
-      - action: media_player.turn_on
-        target:
-          entity_id: media_player.dormitorio
-      - wait_template: >-
-          {{ states('media_player.dormitorio') not in ['off', 'unavailable', 'unknown', 'standby'] }}
-        timeout: "00:00:20"
-        continue_on_timeout: true
-      - if:
-          - condition: template
-            value_template: "{{ not wait.completed }}"
-        then:
-          - action: media_player.turn_on
-            target:
-              entity_id: media_player.tv_dormitorio_ir
+      - action: script.tv_encender
+        data: &tv_dormitorio
+          webos: media_player.dormitorio
+          ir: media_player.tv_dormitorio_ir
     mode: single
 
   tv_dormitorio_turn_off:
     alias: TV Dormitorio - Apagar (webOS + IR fallback)
     sequence:
-      - action: media_player.turn_off
-        target:
-          entity_id: media_player.dormitorio
-      - wait_template: >-
-          {{ states('media_player.dormitorio') in ['off', 'unavailable', 'standby'] }}
-        timeout: "00:00:20"
-        continue_on_timeout: true
-      - if:
-          - condition: template
-            value_template: "{{ not wait.completed }}"
-        then:
-          - action: media_player.turn_off
-            target:
-              entity_id: media_player.tv_dormitorio_ir
+      - action: script.tv_apagar
+        data: *tv_dormitorio
     mode: single
 
-# Encienden la LG webOS por Wake on LAN: media_player.turn_on dispara el trigger
-# webostv.turn_on, que manda el magic packet a la MAC. Requiere network standby
-# activo en la TV ("Encender via Wi-Fi/Ethernet").
+# Wake on LAN for the LG webOS TVs: media_player.turn_on fires the
+# webostv.turn_on trigger, which sends the magic packet to the TV's MAC. Needs
+# network standby on the TV ("Encender vía Wi-Fi/Ethernet").
 automation:
   - id: tv_sala_wake_on_lan
     alias: TV Sala - Wake on LAN

@@ -1,33 +1,31 @@
-# HA package: lavasecarropas Candy simply-Fi. Contexto completo en
+# HA package: Candy simply-Fi washer-dryer. Full context in
 # docs/lavarropas-candy.md.
 #
-# La integración `candy` (HACS) publica sólo 3 sensores y descarta 10 campos que
-# el equipo sí reporta (Err, SLevel, Opt1..Opt8, Steam, DryT, DelVal, RecipeId,
-# CheckUpState). Este package lee el MISMO endpoint local y los expone todos.
+# The HACS `candy` integration publishes only 3 sensors and drops 10 fields the
+# machine does report (Err, SLevel, Opt1..Opt8, Steam, DryT, DelVal, RecipeId,
+# CheckUpState). This package reads the SAME local endpoint and exposes them all.
 #
-# El endpoint devuelve el JSON hex-encodeado, a veces además cifrado con XOR de
-# clave repetida de 16 chars y a veces en claro pese al `encrypted=1` — el
-# firmware es inconsistente. Por eso el decode mira si el hex ya arranca con `{`
-# y sólo aplica el XOR cuando no. La clave va en claro acá a propósito: se
-# recupera del propio tráfico del equipo en segundos, así que es ofuscación y no
-# un secreto (docs §2).
+# The endpoint returns hex-encoded JSON, sometimes also XOR'd with a repeating
+# 16-char key and sometimes plain despite `encrypted=1`: the firmware is
+# inconsistent. So the decode checks whether the hex already starts with `{`
+# and XORs only when it doesn't. The key is in the clear on purpose: it comes
+# back out of the machine's own traffic in seconds, so it's obfuscation, not a
+# secret (docs §2).
 #
-# El equipo atiende UNA conexión por vez y corta la que no puede servir, así que
-# el comando reintenta 5 veces: una lectura suelta devuelve vacío. La integración
-# `candy` de HACS se sacó justamente porque poleaba el mismo endpoint cada 60 s y
-# chocaba con este fetch (docs §3.1) — no volver a agregarla.
+# The machine serves ONE connection at a time and drops the rest, so the
+# command retries 5 times: a single read comes back empty. Don't add the HACS
+# `candy` integration back: it polled the same endpoint every 60 s and collided
+# with this fetch (docs §3.1).
 
 command_line:
   - sensor:
-      # Un único fetch por ciclo; todo lo demás son template sensors sobre estos
-      # atributos, para no multiplicar requests contra un equipo que no los tolera.
+      # One fetch per cycle; everything else is template sensors on these
+      # attributes, so a machine that can't take requests doesn't get more.
       name: "Lavasecarropas datos"
       unique_id: lavasecarropas_datos
-      # Presupuesto de tiempo: 5 intentos x (8 s de curl + 2 s de espera) = 50 s
-      # peor caso, bajo el command_timeout de 55 y el scan_interval de 60. La
-      # version anterior pedia 3 intentos de 15 s pero cortaba a los 45, asi que
-      # nunca llegaba al tercero. El equipo responde en 1-2 s cuando responde,
-      # de modo que conviene timeout corto y mas intentos.
+      # Time budget: 5 tries x (8 s of curl + 2 s of wait) = 50 s worst case,
+      # under the 55 s command_timeout and the 60 s scan_interval. The machine
+      # answers in 1-2 s when it answers, so a short timeout and more tries.
       command: >-
         for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://lavarropas.lan/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
         printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';r=bytes.fromhex(sys.stdin.read().strip());d=r if r.lstrip().startswith(b'{') else bytes(c^k[i%16] for i,c in enumerate(r));print(json.dumps(json.loads(d)['statusLavatrice']))"
@@ -80,12 +78,12 @@ template:
               4: 'Último aclarado', 5: 'Fin', 6: 'Secando', 7: 'Error',
               8: 'Vapor', 9: 'Centrifugando (noche)', 10: 'Centrifugando'}.get(p, 'Desconocido') }}
 
-      # RemTime viene en MINUTOS. La integración lo divide por 60 asumiendo
-      # segundos y publica ~60x menos; este sensor es el valor correcto.
+      # RemTime is in MINUTES. The integration divides it by 60 assuming
+      # seconds and publishes ~60x less; this sensor is the right value.
       #
-      # Al terminar el ciclo el equipo pone 65535 (0xFFFF) = "sin dato". Sin este
-      # filtro el sensor publica 65535 minutos y ensucia las estadisticas; no
-      # disponible es la representacion correcta de un dato que no existe.
+      # At the end of a cycle the machine sets 65535 (0xFFFF) = "no data".
+      # Unfiltered, the sensor would publish 65535 minutes and spoil the
+      # statistics; unavailable is the right way to show a value that isn't there.
       - name: "Lavasecarropas tiempo restante"
         unique_id: lavasecarropas_tiempo_restante_real
         unit_of_measurement: "min"
@@ -97,8 +95,8 @@ template:
              and state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(65535) != 65535 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0) }}"
 
-      # Sólo con la máquina en marcha: parada, RemTime es la duración del
-      # programa seleccionado y una hora de fin no significaría nada.
+      # Only while running: stopped, RemTime is the selected program's length
+      # and an end time would mean nothing.
       - name: "Lavasecarropas fin estimado"
         unique_id: lavasecarropas_fin_estimado
         device_class: timestamp
@@ -109,7 +107,7 @@ template:
         state: >-
           {{ (now() + timedelta(minutes = state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0))).isoformat() }}
 
-      # 255 (0xFF) = "sin dato", que el equipo publica al terminar el ciclo.
+      # 255 (0xFF) = "no data", which the machine publishes at the end of a cycle.
       - name: "Lavasecarropas temperatura"
         unique_id: lavasecarropas_temperatura
         unit_of_measurement: "°C"
@@ -121,8 +119,8 @@ template:
              and state_attr('sensor.lavasecarropas_datos', 'Temp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Temp') | int(0) }}"
 
-      # SpinSp viene en centenas de rpm, con el mismo centinela 255: sin filtrar,
-      # al terminar el ciclo publicaria 25500 rpm.
+      # SpinSp comes in hundreds of rpm, with the same 255 sentinel: unfiltered,
+      # the end of a cycle would publish 25500 rpm.
       - name: "Lavasecarropas centrifugado"
         unique_id: lavasecarropas_centrifugado
         unit_of_measurement: "rpm"
@@ -133,18 +131,17 @@ template:
              and state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
 
-      # Los numeros de programa son ESPECIFICOS DEL MODELO: son posiciones de la
-      # perilla y no estan documentados en ningun lado. Este mapeo sale de leer
-      # el panel del equipo: las posiciones numeran EN SENTIDO HORARIO desde
-      # APAGADO, empezando en 1.
+      # Program numbers are MODEL-SPECIFIC: knob positions, documented nowhere.
+      # This mapping comes from reading the machine's panel: positions count
+      # CLOCKWISE from OFF, starting at 1.
       #
-      # CONFIRMADO empiricamente: solo Pr=2, observado en un ciclo real con la
-      # perilla en Perfect Mix. El resto se deduce del orden del panel. El
-      # sentido de giro NO es una suposicion libre: en antihorario el 2 caeria
-      # en "Rapido L&S", que contradice la observacion.
+      # CONFIRMED by observation: only Pr=2, seen in a real cycle with the knob
+      # on Perfect Mix. The rest follows the panel's order. The direction isn't
+      # a free guess: counter-clockwise, 2 would land on "Rapido L&S", which
+      # contradicts what was seen.
       #
-      # Verificar el resto con `scripts/candyctl.py learn`. Lo que no este en el
-      # diccionario cae al numero crudo.
+      # Check the rest with `scripts/candyctl.py learn`. Anything not in the
+      # dictionary falls back to the raw number.
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
@@ -170,11 +167,11 @@ template:
           } %}
           {{ nombres.get(p, 'Programa ' ~ p) }}
 
-      # El panel NO tiene selector de suciedad: solo "Seleccion Temperatura" y
-      # "Seleccion Centrifugado". Asi que SLevel no se elige y probablemente sea
-      # constante en 3 (o lo fije el programa). Queda sin nombres a proposito;
-      # si `learn` confirma que nunca cambia, esta entidad sale del dashboard.
-      # Mismo centinela 255 al terminar el ciclo.
+      # The panel has NO soil selector, only "Seleccion Temperatura" and
+      # "Seleccion Centrifugado", so SLevel isn't chosen and is probably
+      # constant at 3 (or set by the program). It keeps no names on purpose; if
+      # `learn` shows it never changes, this entity leaves the dashboard.
+      # Same 255 sentinel at the end of a cycle.
       - name: "Lavasecarropas nivel de suciedad"
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
@@ -186,9 +183,9 @@ template:
           {% set nombres = {} %}
           {{ nombres.get(n, 'Nivel ' ~ n) }}
 
-      # El mapeo replica DryerCycleState de la integración. El equipo reporta
-      # DryT (no DryLev, que es el campo que ese enum cubre oficialmente), así
-      # que la escala es probable pero NO está confirmada — ver docs §5.
+      # The mapping copies the integration's DryerCycleState. The machine
+      # reports DryT (not DryLev, the field that enum officially covers), so the
+      # scale is likely but NOT confirmed; see docs §5.
       - name: "Lavasecarropas nivel de secado"
         unique_id: lavasecarropas_nivel_secado
         icon: mdi:tumble-dryer
@@ -198,7 +195,7 @@ template:
           {{ {0: 'Sin secado', 1: 'Secado para planchar', 2: 'Secado para colgar',
               3: 'Secado para guardar', 4: 'Secado extra'}.get(d, 'Desconocido') }}
 
-      # 255 es el centinela de "sin inicio diferido".
+      # 255 is the "no delayed start" sentinel.
       - name: "Lavasecarropas inicio diferido"
         unique_id: lavasecarropas_inicio_diferido
         icon: mdi:clock-start
@@ -207,7 +204,7 @@ template:
           {% set d = state_attr('sensor.lavasecarropas_datos', 'DelVal') | int(255) %}
           {{ 'Sin programar' if d == 255 else d }}
 
-      # Ídem: 255 significa "sin error".
+      # Likewise: 255 means "no error".
       - name: "Lavasecarropas error"
         unique_id: lavasecarropas_error
         icon: mdi:alert-circle-outline
@@ -237,7 +234,7 @@ template:
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 2 }}"
 
-      # MachMd 7 y 8 son ambos "Finished" en la integración.
+      # MachMd 7 and 8 are both "Finished" in the integration.
       - name: "Lavasecarropas ciclo terminado"
         unique_id: lavasecarropas_ciclo_terminado
         icon: mdi:check-circle-outline
@@ -258,9 +255,9 @@ template:
         availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Steam') | int(0) != 0 }}"
 
-# El aviso dispara por TRANSICIÓN de estado, nunca por el tiempo restante: ese
-# campo se revisa a la baja al pesar la carga y ademas emite valores espurios
-# sueltos (docs/lavarropas-candy.md §5).
+# The alert fires on a state TRANSITION, never on the remaining time: that
+# field is revised down once the load is weighed and also emits stray bogus
+# values (docs/lavarropas-candy.md §5).
 automation:
   - id: lavasecarropas_ciclo_terminado
     alias: Lavasecarropas - Avisar cuando termina el ciclo
@@ -269,10 +266,10 @@ automation:
       queda en ese estado hasta que alguien lo abre, asi que el aviso sale una
       sola vez por ciclo.
     trigger:
-      # `from: "off"` es lo que evita el aviso fantasma al arrancar HA: el
-      # command_line tarda hasta 60 s en su primera lectura, con lo cual el
-      # binary_sensor pasa por unavailable y despues resuelve. Sin el `from`,
-      # esa transicion se veria como un ciclo recien terminado.
+      # `from: "off"` is what keeps HA's startup from sending a phantom alert:
+      # the command_line takes up to 60 s for its first read, so the
+      # binary_sensor goes through unavailable before it resolves. Without the
+      # `from`, that would look like a cycle that just ended.
       - platform: state
         entity_id: binary_sensor.lavasecarropas_ciclo_terminado
         from: "off"
@@ -281,11 +278,11 @@ automation:
       - action: script.avisar_celu
         data:
           titulo: Lavasecarropas
-          # NO citar temperatura ni centrifugado: justo al terminar el ciclo el
-          # equipo los pone en 255, asi que el aviso saldria "a 255 grados". Pr
-          # sigue siendo valido en ese momento, pero el sensor puede estar
-          # momentaneamente no disponible si el fetch colisiono, y entonces el
-          # mensaje diria "(unavailable)": de ahi el guardia.
+          # Don't quote temperature or spin: right at the end of a cycle the
+          # machine sets them to 255, so the alert would say "at 255 degrees".
+          # Pr is still valid then, but the sensor can be briefly unavailable if
+          # the fetch collided, and the message would say "(unavailable)":
+          # hence the guard.
           mensaje: >-
             {% set prog = states('sensor.lavasecarropas_programa') %}
             Termino el ciclo{{ ' (' ~ prog ~ ')' if prog not in ['unknown', 'unavailable'] else '' }}.
@@ -297,27 +294,27 @@ automation:
     mode: single
 
 # --------------------------------------------------------------------------
-# Control (escritura). Protocolo confirmado contra el equipo — ver docs §8.
+# Control (writing). Protocol confirmed against the machine; see docs §8.
 #
-# La escritura va por `GET /http-write.json?encrypted=1&data=<HEX>`, donde HEX
-# es el texto plano en ASCII hexeado y NO cifrado: el `encrypted=1` es
-# obligatorio (con `encrypted=0` contesta BAD REQUEST) pero el equipo no
-# descifra nada. Mandar el blob XOR de la clave de lectura no produce ningun
-# efecto, que es lo que hace ver la escritura como imposible.
+# Writes go through `GET /http-write.json?encrypted=1&data=<HEX>`, where HEX is
+# the plain ASCII text hex-encoded and NOT encrypted: `encrypted=1` is required
+# (`encrypted=0` answers BAD REQUEST) but the machine decrypts nothing. Sending
+# the read key's XOR blob has no effect, which is what makes writing look
+# impossible.
 #
-# La respuesta es SIEMPRE {"response":"SUCCESS"}, incluso ante un pedido vacio
-# o con parametros inexistentes, asi que no confirma nada: el unico testigo de
-# que un comando entro es el cambio de los campos en http-read.
+# The reply is ALWAYS {"response":"SUCCESS"}, even for an empty request or made-up
+# parameters, so it confirms nothing: the only proof a command landed is the
+# fields changing in http-read.
 #
-# Los nombres de escritura NO son los de lectura: se escribe PrNm/TmpTgt/SpdTgt/
-# Dry y se lee Pr/Temp/SpinSp/DryT. Escribir `Temp=30` no hace nada.
+# Write names are NOT read names: PrNm/TmpTgt/SpdTgt/Dry are written and
+# Pr/Temp/SpinSp/DryT read. Writing `Temp=30` does nothing.
 # --------------------------------------------------------------------------
 
 input_select:
-  # Los numeros de PrNm salen de barrer el equipo y anotar la receta que carga
-  # cada uno (docs §8.3). PrNm no coincide con el Pr que despues se lee: PrNm=3
-  # se lee como Pr=2. Los nombres son descriptivos de la receta MEDIDA, no de
-  # la leyenda de la perilla, que no esta confirmada.
+  # The PrNm numbers come from sweeping the machine and noting the recipe each
+  # one loads (docs §8.3). PrNm doesn't match the Pr read back: PrNm=3 reads as
+  # Pr=2. The names describe the MEASURED recipe, not the knob's legend, which
+  # isn't confirmed.
   lavasecarropas_preset:
     name: Lavasecarropas preset
     icon: mdi:playlist-check
@@ -331,13 +328,13 @@ input_select:
       - "Desagüe"
       - "Manual"
 
-  # El PrNm crudo no le dice nada a nadie, asi que la lista va por nombre. Las
-  # etiquetas describen la receta MEDIDA (docs §8.3), no la leyenda de la
-  # perilla: de esa leyenda solo estan confirmados Pr=2 (Perfect Mix) y Pr=15
-  # (Smart Fi+), y la medicion contradice el resto — PrNm=11 carga un secado
-  # donde el panel dice "Lana". Los que no se pudieron caracterizar quedan como
-  # "Programa N" con su receta al lado, que es lo unico cierto que se puede
-  # decir de ellos. PrNm 1 y 2 no aparecen porque el equipo los rechaza.
+  # A raw PrNm means nothing to anyone, so the list goes by name. The labels
+  # describe the MEASURED recipe (docs §8.3), not the knob's legend: of that
+  # legend only Pr=2 (Perfect Mix) and Pr=15 (Smart Fi+) are confirmed, and the
+  # measurements contradict the rest (PrNm=11 loads a dry cycle where the panel
+  # says "Lana"). The ones that couldn't be characterized stay "Programa N" with
+  # their recipe next to them, the only sure thing about them. PrNm 1 and 2 are
+  # missing because the machine rejects them.
   lavasecarropas_programa_manual:
     name: Lavasecarropas programa (manual)
     icon: mdi:playlist-music
@@ -361,28 +358,28 @@ input_select:
     icon: mdi:thermometer
     options: ["Del programa", "20", "30", "40", "60", "90"]
 
-  # El equipo recibe centenas de rpm (SpdTgt=10 -> 1000), igual que las publica.
+  # The machine takes hundreds of rpm (SpdTgt=10 -> 1000), as it publishes them.
   lavasecarropas_centrifugado_manual:
     name: Lavasecarropas centrifugado (manual)
     icon: mdi:rotate-3d-variant
     options: ["Del programa", "0", "400", "800", "1000", "1200", "1400"]
 
-  # `Dry` no es la misma escala que el `DryT` que se lee: Dry=3 vuelve como
-  # DryT=2. Los nombres siguen el orden creciente de secado y hay que
-  # confirmarlos contra el panel; el valor crudo es lo unico seguro.
+  # `Dry` isn't on the same scale as the `DryT` read back: Dry=3 comes back as
+  # DryT=2. The names follow increasing drying and need confirming against the
+  # panel; the raw value is the only sure thing.
   lavasecarropas_secado_manual:
     name: Lavasecarropas secado (manual)
     icon: mdi:tumble-dryer
     options: ["Del programa", "Sin secado", "Planchar", "Colgar", "Guardar", "Extra"]
 
 shell_command:
-  # HA pasa a create_subprocess_exec (sin shell) apenas el comando trae una
-  # plantilla, de ahi el `sh -c` explicito. `comando` viaja como argumento
-  # posicional y se hexea en python, no se interpola en la URL: asi el `&` de
-  # los parametros no se parte ni necesita escaping.
+  # HA switches to create_subprocess_exec (no shell) as soon as the command
+  # has a template, hence the explicit `sh -c`. `comando` travels as a
+  # positional argument and is hex-encoded in python, not interpolated into the
+  # URL, so the parameters' `&` neither splits nor needs escaping.
   #
-  # Tres intentos espaciados y nada mas: el equipo atiende UNA conexion por vez
-  # y una rafaga de escrituras lo cuelga hasta el corte de energia (docs §8.4).
+  # Three spaced tries and no more: the machine serves ONE connection at a time
+  # and a burst of writes wedges it until a power cycle (docs §8.4).
   lavasecarropas_enviar: >-
     sh -c 'H=$(python3 -c "import sys;print(sys.argv[1].encode().hex().upper())" "$1");
     for i in 1 2 3; do
@@ -461,8 +458,8 @@ script:
         {% endif %}
         {{ ns.partes | join('&') }}
     sequence:
-      # Arrancar sobre un ciclo en marcha es la unica combinacion que puede
-      # sorprender; seleccionar un programa con la maquina andando no la altera.
+      # Starting over a running cycle is the one combination that can
+      # surprise; selecting a program while the machine runs doesn't change it.
       - condition: template
         value_template: >-
           {{ not (arrancar | default(false))
