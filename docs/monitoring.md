@@ -66,7 +66,7 @@ keep Grafana focused on these:
 | Traefik — Ingress | `traefik-ingress` | request rate, status codes, p50/p95/p99 latency, 5xx, open connections |
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 | Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
-| Home Assistant — Insights | `home-assistant` | runs per automation (and per group, per hour, last run), gas left, use per 24h/7d, burn rate and days left, liquid height raw vs filtered, AC hours per unit and per mode, AC mode timeline, room/outside temperatures vs setpoints, light hours and on/off timeline, presence timeline, PC and washer-dryer, HA uptime/restarts/memory, unavailable and chattiest entities (see *Home Assistant metrics*) |
+| Home Assistant — Estadísticas | `home-assistant` | in Spanish: runs per automation (and per group, per hour, last run), gas left, use per 24h/7d, burn rate and days left, liquid height raw vs filtered, AC hours per unit and per mode, AC mode timeline, hours on per computer, room/outside temperatures vs setpoints, light hours and on/off timeline, presence timeline, PC and washer-dryer, HA uptime/restarts/memory, unavailable and chattiest entities (see *Home Assistant metrics*) |
 | psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, usage (seconds played, per player, per user; exports, shares and autopilot starts), visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
@@ -200,7 +200,7 @@ serves every entity's state at `/api/prometheus`.
 [templates/vmservicescrape-home-assistant.yaml](../charts/monitoring/templates/vmservicescrape-home-assistant.yaml)
 (`homeAssistantScrape` in `values.yaml`) scrapes it through the in-cluster
 `home-assistant` Service every 60 s and drops the `*_created` series. The
-*Home Assistant — Insights* dashboard reads it.
+*Home Assistant — Estadísticas* dashboard reads it.
 
 - **It needs a token.** `requires_auth` stays on: HA runs `hostNetwork`, so
   without auth the endpoint would be open to the whole LAN, and through

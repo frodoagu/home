@@ -16,4 +16,19 @@ data:
   {{ base $path }}: |-
 {{ $.Files.Get $path | indent 4 }}
 {{- end }}
+---
+# Jinja macros the packages import (`{% from 'curva.jinja' import ... %}`), from
+# custom_templates/, mounted read-only at /config/custom_templates. Same file as
+# the packages ConfigMap so checksum/packages rolls HA when a macro changes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-custom-templates
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "custom_templates/*.jinja" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
 {{- end }}

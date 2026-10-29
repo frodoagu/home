@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Home Assistant entity state via its prometheus integration: automations, gas, ACs, lights, presence.",
+  "description": "Estado de las entidades de Home Assistant vía su integración prometheus: automatizaciones, gas, aires, luces, computadoras y presencia.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -31,7 +31,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "🏠 Now",
+      "title": "🏠 Ahora",
       "collapsed": false,
       "id": 1,
       "gridPos": {
@@ -44,8 +44,8 @@
     },
     {
       "type": "stat",
-      "title": "Gas left",
-      "description": "Two-phase mass in the 45 kg cylinder (sensor.gas_restante).",
+      "title": "Gas restante",
+      "description": "Masa de las dos fases en el tubo de 45 kg (sensor.gas_restante).",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -113,8 +113,8 @@
     },
     {
       "type": "stat",
-      "title": "ACs on",
-      "description": "Air conditioners whose HVAC mode isn't off.",
+      "title": "Aires prendidos",
+      "description": "Aires en cualquier modo que no sea apagado.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -165,8 +165,8 @@
     },
     {
       "type": "stat",
-      "title": "Lights on",
-      "description": "Lamps on (the velador's group and zone entities are left out so it counts once).",
+      "title": "Luces prendidas",
+      "description": "Lámparas prendidas (el grupo y las zonas del velador no cuentan, así cuenta una sola vez).",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -217,7 +217,7 @@
     },
     {
       "type": "stat",
-      "title": "Somebody home",
+      "title": "Alguien en casa",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -235,7 +235,7 @@
                   "color": "text"
                 },
                 "1": {
-                  "text": "Yes",
+                  "text": "Sí",
                   "color": "green"
                 }
               }
@@ -284,8 +284,8 @@
     },
     {
       "type": "stat",
-      "title": "Automation runs",
-      "description": "All automations, over the selected range.",
+      "title": "Ejecuciones de automatizaciones",
+      "description": "Todas las automatizaciones, en el rango elegido.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -336,8 +336,8 @@
     },
     {
       "type": "stat",
-      "title": "Unavailable entities",
-      "description": "",
+      "title": "Entidades no disponibles",
+      "description": "No disponibles o desconocidas, sin contar botones, emisores IR y demás entidades sin estado propio.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -379,7 +379,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "count(homeassistant_entity_available == 0) or vector(0)",
+          "expr": "count(homeassistant_entity_available{domain!~\"button|infrared|tts|event|notify|scene|conversation\"} == 0) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -400,7 +400,7 @@
     },
     {
       "type": "row",
-      "title": "⚙️ Automations",
+      "title": "⚙️ Automatizaciones",
       "collapsed": false,
       "id": 8,
       "gridPos": {
@@ -413,8 +413,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Runs per automation",
-      "description": "Runs in the selected range, zeros included: an automation stuck at 0 for weeks is worth a look.",
+      "title": "Ejecuciones por automatización",
+      "description": "Ejecuciones en el rango elegido, incluidas las que están en 0: una que no corre en semanas vale una mirada.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -423,7 +423,8 @@
           "color": {
             "mode": "fixed",
             "fixedColor": "blue"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -471,22 +472,34 @@
     },
     {
       "type": "table",
-      "title": "Last run",
-      "description": "When each automation last ran (1-minute resolution). Empty = not in the selected range.",
+      "title": "Última ejecución",
+      "description": "Cuándo corrió cada automatización por última vez (resolución de 1 minuto). Vacía = no corrió en el rango.",
       "fieldConfig": {
         "defaults": {
-          "unit": "dateTimeFromNow",
           "custom": {
             "align": "auto"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Última ejecución"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "time: DD/MM HH:mm"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
         "sortBy": [
           {
-            "displayName": "Last run",
+            "displayName": "Última ejecución",
             "desc": true
           }
         ]
@@ -514,8 +527,8 @@
               "container": true
             },
             "renameByName": {
-              "friendly_name": "Automation",
-              "Value": "Last run"
+              "friendly_name": "Automatización",
+              "Value": "Última ejecución"
             }
           }
         }
@@ -548,8 +561,8 @@
     },
     {
       "type": "bargauge",
-      "title": "Runs per group",
-      "description": "Grouped by the alias prefix (Aires, Gas, Luces adentro…).",
+      "title": "Ejecuciones por grupo",
+      "description": "Agrupadas por el prefijo del alias (Aires, Gas, Luces adentro…).",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -558,7 +571,8 @@
           "color": {
             "mode": "fixed",
             "fixedColor": "purple"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -606,8 +620,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Runs per hour",
-      "description": "Stacked by automation.",
+      "title": "Ejecuciones por hora",
+      "description": "Apiladas por automatización.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -681,7 +695,7 @@
     },
     {
       "type": "stat",
-      "title": "Level",
+      "title": "Nivel",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -734,7 +748,7 @@
     },
     {
       "type": "stat",
-      "title": "Used · 24h",
+      "title": "Consumo · 24 h",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -787,7 +801,7 @@
     },
     {
       "type": "stat",
-      "title": "Used · 7d",
+      "title": "Consumo · 7 días",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -840,11 +854,11 @@
     },
     {
       "type": "stat",
-      "title": "Burn rate",
-      "description": "Linear trend over the last 7 days.",
+      "title": "Ritmo",
+      "description": "Tendencia lineal de los últimos 7 días.",
       "fieldConfig": {
         "defaults": {
-          "unit": "suffix: kg/day",
+          "unit": "suffix: kg/día",
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
@@ -893,11 +907,11 @@
     },
     {
       "type": "stat",
-      "title": "Days left",
-      "description": "Until the liquid runs out (~1.6 kg of vapour remain), at the 7-day burn rate. A refill inside the window throws it off until it slides out.",
+      "title": "Días restantes",
+      "description": "Hasta que se acabe el líquido (quedan ~1,6 kg de vapor), al ritmo de los últimos 7 días. Una recarga dentro de esa ventana lo desvía hasta que sale de ella.",
       "fieldConfig": {
         "defaults": {
-          "unit": "d",
+          "unit": "suffix: días",
           "color": {
             "mode": "thresholds"
           },
@@ -918,7 +932,20 @@
                 "value": 30
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "range",
+              "options": {
+                "from": 365,
+                "to": 1000000000000.0,
+                "result": {
+                  "text": "Sin consumo",
+                  "color": "text"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
@@ -962,7 +989,7 @@
     },
     {
       "type": "stat",
-      "title": "Sensor battery",
+      "title": "Batería del sensor",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -1030,8 +1057,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Gas left",
-      "description": "Dashed lines: the low (10 kg) and critical (6 kg) alerts.",
+      "title": "Gas restante",
+      "description": "Líneas punteadas: los avisos de nivel bajo (10 kg) y crítico (6 kg).",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -1105,8 +1132,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Used · rolling 24h",
-      "description": "",
+      "title": "Consumo de las últimas 24 h",
+      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -1144,7 +1171,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
-          "legendFormat": "kg / 24h",
+          "legendFormat": "kg en 24 h",
           "refId": "A"
         }
       ],
@@ -1162,8 +1189,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Liquid height",
-      "description": "The Mopeka's raw reading and the two filters in packages/gas.yaml.",
+      "title": "Altura del líquido",
+      "description": "La lectura cruda del Mopeka y los dos filtros de packages/gas.yaml.",
       "fieldConfig": {
         "defaults": {
           "unit": "lengthmm",
@@ -1199,7 +1226,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.pro_check_universal_5343_tank_level\"})",
-          "legendFormat": "raw",
+          "legendFormat": "cruda",
           "refId": "A"
         },
         {
@@ -1208,7 +1235,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.gas_altura\"})",
-          "legendFormat": "double echo rejected",
+          "legendFormat": "sin eco doble",
           "refId": "B"
         },
         {
@@ -1217,7 +1244,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_distance_mm{entity=\"sensor.gas_altura_suave\"})",
-          "legendFormat": "3 h average",
+          "legendFormat": "promedio 3 h",
           "refId": "C"
         }
       ],
@@ -1235,7 +1262,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Cylinder sensor",
+      "title": "Sensor del tubo",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -1256,7 +1283,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "reading quality"
+              "options": "calidad de lectura"
             },
             "properties": [
               {
@@ -1293,7 +1320,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_temperature_celsius{entity=\"sensor.pro_check_universal_5343_temperature\"})",
-          "legendFormat": "temperature",
+          "legendFormat": "temperatura",
           "refId": "A"
         },
         {
@@ -1302,7 +1329,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_unit_percent{entity=\"sensor.pro_check_universal_5343_reading_quality\"})",
-          "legendFormat": "reading quality",
+          "legendFormat": "calidad de lectura",
           "refId": "B"
         }
       ],
@@ -1320,7 +1347,7 @@
     },
     {
       "type": "row",
-      "title": "❄️ Air conditioners",
+      "title": "❄️ Aires",
       "collapsed": false,
       "id": 24,
       "gridPos": {
@@ -1333,17 +1360,18 @@
     },
     {
       "type": "bargauge",
-      "title": "Hours on per AC",
-      "description": "Time in any mode but off, over the selected range (SmartIR: the mode HA last sent).",
+      "title": "Horas prendido por aire",
+      "description": "Tiempo en cualquier modo menos apagado, en el rango elegido (SmartIR: el último modo que mandó HA).",
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "suffix: h",
           "decimals": 1,
           "min": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "green"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -1391,17 +1419,19 @@
     },
     {
       "type": "bargauge",
-      "title": "Hours per mode",
-      "description": "All ACs together.",
+      "title": "Horas por modo",
+      "description": "Todos los aires juntos. Sólo aparecen los modos que se usaron en el rango.",
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "suffix: h",
           "decimals": 1,
           "min": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "purple"
-          }
+          },
+          "noValue": "Ningún aire prendido",
+          "displayName": "${__field.labels.mode}"
         },
         "overrides": []
       },
@@ -1428,7 +1458,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode{mode!=\"off\"}[$__range], 1)) / 60)",
+          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode{mode!=\"off\"}[$__range], 1)) / 60 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\")",
           "legendFormat": "{{mode}}",
           "refId": "A",
           "instant": true,
@@ -1449,7 +1479,7 @@
     },
     {
       "type": "state-timeline",
-      "title": "Mode",
+      "title": "Modo",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -1462,54 +1492,54 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "off",
-                  "color": "transparent"
+                  "text": "Apagado",
+                  "color": "#4a4a4a",
+                  "index": 0
                 },
                 "1": {
-                  "text": "heat",
-                  "color": "orange"
+                  "text": "Calor",
+                  "color": "orange",
+                  "index": 1
                 },
                 "2": {
-                  "text": "cool",
-                  "color": "blue"
+                  "text": "Frío",
+                  "color": "blue",
+                  "index": 2
                 },
                 "3": {
-                  "text": "dry",
-                  "color": "yellow"
+                  "text": "Seco",
+                  "color": "yellow",
+                  "index": 3
                 },
                 "4": {
-                  "text": "fan",
-                  "color": "green"
+                  "text": "Ventilación",
+                  "color": "green",
+                  "index": 4
                 },
                 "5": {
-                  "text": "auto",
-                  "color": "purple"
+                  "text": "Automático",
+                  "color": "purple",
+                  "index": 5
                 }
               }
             }
           ],
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "#4a4a4a"
           }
         },
         "overrides": []
       },
       "options": {
         "mergeValues": true,
-        "showValue": "never",
+        "showValue": "auto",
         "rowHeight": 0.85,
         "alignValue": "left",
         "legend": {
-          "showLegend": false
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
         }
       },
       "targets": [
@@ -1518,7 +1548,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sum by (friendly_name) (homeassistant_climate_mode{mode=\"heat\"} or homeassistant_climate_mode{mode=\"cool\"} * 2 or homeassistant_climate_mode{mode=\"dry\"} * 3 or homeassistant_climate_mode{mode=\"fan_only\"} * 4 or homeassistant_climate_mode{mode=\"heat_cool\"} * 5)",
+          "expr": "sum by (friendly_name) (homeassistant_climate_mode{mode=\"heat\"} * 1 or homeassistant_climate_mode{mode=\"cool\"} * 2 or homeassistant_climate_mode{mode=\"dry\"} * 3 or homeassistant_climate_mode{mode=\"fan_only\"} * 4 or homeassistant_climate_mode{mode=\"heat_cool\"} * 5)",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         }
@@ -1537,8 +1567,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Temperatures",
-      "description": "Room thermometers, the outside temperature, and each AC's setpoint while it's on.",
+      "title": "Temperaturas",
+      "description": "Los termómetros de los ambientes, la temperatura de afuera y la que tiene puesta cada aire mientras está prendido.",
       "fieldConfig": {
         "defaults": {
           "unit": "celsius",
@@ -1576,7 +1606,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Outside"
+              "options": "Afuera"
             },
             "properties": [
               {
@@ -1617,7 +1647,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "max(homeassistant_sensor_temperature_celsius{entity=\"sensor.temperatura_exterior\"})",
-          "legendFormat": "Outside",
+          "legendFormat": "Afuera",
           "refId": "B"
         },
         {
@@ -1626,7 +1656,7 @@
             "uid": "${DS_PROM}"
           },
           "expr": "homeassistant_climate_target_temperature_celsius and on (entity) (homeassistant_climate_mode{mode=\"off\"} == 0)",
-          "legendFormat": "{{friendly_name}} target",
+          "legendFormat": "{{friendly_name}} (objetivo)",
           "refId": "C"
         }
       ],
@@ -1644,7 +1674,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Humidity",
+      "title": "Humedad",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -1699,7 +1729,7 @@
     },
     {
       "type": "row",
-      "title": "💡 Lights",
+      "title": "💡 Luces",
       "collapsed": false,
       "id": 30,
       "gridPos": {
@@ -1712,17 +1742,18 @@
     },
     {
       "type": "bargauge",
-      "title": "Hours on per light",
-      "description": "Over the selected range. Lamps that are unavailable (unplugged at the wall) count as off.",
+      "title": "Horas prendida por luz",
+      "description": "En el rango elegido. Una lámpara no disponible (apagada desde la llave) cuenta como apagada.",
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "suffix: h",
           "decimals": 1,
           "min": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "yellow"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -1770,7 +1801,7 @@
     },
     {
       "type": "state-timeline",
-      "title": "On / off",
+      "title": "Prendida / apagada",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -1783,38 +1814,34 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "off",
-                  "color": "transparent"
+                  "text": "Apagada",
+                  "color": "#4a4a4a",
+                  "index": 0
                 },
                 "1": {
-                  "text": "on",
-                  "color": "yellow"
+                  "text": "Prendida",
+                  "color": "yellow",
+                  "index": 1
                 }
               }
             }
           ],
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "#4a4a4a"
           }
         },
         "overrides": []
       },
       "options": {
         "mergeValues": true,
-        "showValue": "never",
+        "showValue": "auto",
         "rowHeight": 0.85,
         "alignValue": "left",
         "legend": {
-          "showLegend": false
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
         }
       },
       "targets": [
@@ -1842,7 +1869,7 @@
     },
     {
       "type": "row",
-      "title": "🏡 Presence and more",
+      "title": "💻 Computadoras",
       "collapsed": false,
       "id": 33,
       "gridPos": {
@@ -1854,9 +1881,68 @@
       "panels": []
     },
     {
+      "type": "bargauge",
+      "title": "Horas prendida por computadora",
+      "description": "En el rango elegido. Prendida = consultó DNS en Pi-hole en los últimos 5 min.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: h",
+          "decimals": 1,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "displayName": "${__field.labels.friendly_name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "manual",
+        "minVizHeight": 16,
+        "maxVizHeight": 24,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "sort_desc(sum by (friendly_name) (count_eq_over_time(homeassistant_binary_sensor_state{entity=~\"binary_sensor\\\\.(pc_fede_prendida|pc_noah_prendida|pc_juli_prendida|think_prendida)\"}[$__range], 1)) / 60)",
+          "legendFormat": "{{friendly_name}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "id": 34,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 86
+      }
+    },
+    {
       "type": "state-timeline",
-      "title": "Presence",
-      "description": "Pi-hole based presence (packages/presencia.yaml), the kids' nights, guests and the presence simulation.",
+      "title": "Prendida / apagada",
+      "description": "packages/computadoras.yaml y luces_adentro.yaml (PC Fede).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1868,38 +1954,115 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "off",
-                  "color": "transparent"
+                  "text": "Apagada",
+                  "color": "#4a4a4a",
+                  "index": 0
                 },
                 "1": {
-                  "text": "on",
-                  "color": "green"
+                  "text": "Prendida",
+                  "color": "blue",
+                  "index": 1
                 }
               }
             }
           ],
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "#4a4a4a"
           }
         },
         "overrides": []
       },
       "options": {
         "mergeValues": true,
-        "showValue": "never",
+        "showValue": "auto",
         "rowHeight": 0.85,
         "alignValue": "left",
         "legend": {
-          "showLegend": false
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROM}"
+          },
+          "expr": "max by (friendly_name) (homeassistant_binary_sensor_state{entity=~\"binary_sensor\\\\.(pc_fede_prendida|pc_noah_prendida|pc_juli_prendida|think_prendida)\"})",
+          "legendFormat": "{{friendly_name}}",
+          "refId": "A"
+        }
+      ],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROM}"
+      },
+      "id": 35,
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 86
+      }
+    },
+    {
+      "type": "row",
+      "title": "🏡 Presencia y lavasecarropas",
+      "collapsed": false,
+      "id": 36,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 93
+      },
+      "panels": []
+    },
+    {
+      "type": "state-timeline",
+      "title": "Presencia",
+      "description": "Presencia por Pi-hole (packages/presencia.yaml), las noches de los chicos, visitas y la simulación de presencia.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "No",
+                  "color": "#4a4a4a",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Sí",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#4a4a4a"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "rowHeight": 0.85,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
         }
       },
       "targets": [
@@ -1926,27 +2089,28 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 34,
+      "id": 37,
       "gridPos": {
         "h": 8,
         "w": 16,
         "x": 0,
-        "y": 86
+        "y": 94
       }
     },
     {
       "type": "bargauge",
-      "title": "Hours on",
-      "description": "Over the selected range.",
+      "title": "Horas en «sí»",
+      "description": "En el rango elegido.",
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "suffix: h",
           "decimals": 1,
           "min": 0,
           "color": {
             "mode": "fixed",
             "fixedColor": "green"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -1984,18 +2148,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 35,
+      "id": 38,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 86
+        "y": 94
       }
     },
     {
       "type": "state-timeline",
-      "title": "PC and washer-dryer",
-      "description": "Gaps are the washer's Wi-Fi asleep (unavailable).",
+      "title": "Lavasecarropas",
+      "description": "Con el lavarropas apagado su Wi-Fi duerme (no disponible): eso cuenta como parado.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -2007,38 +2171,34 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "off",
-                  "color": "transparent"
+                  "text": "Parado",
+                  "color": "#4a4a4a",
+                  "index": 0
                 },
                 "1": {
-                  "text": "on",
-                  "color": "blue"
+                  "text": "En marcha",
+                  "color": "blue",
+                  "index": 1
                 }
               }
             }
           ],
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "#4a4a4a"
           }
         },
         "overrides": []
       },
       "options": {
         "mergeValues": true,
-        "showValue": "never",
+        "showValue": "auto",
         "rowHeight": 0.85,
         "alignValue": "left",
         "legend": {
-          "showLegend": false
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
         }
       },
       "targets": [
@@ -2047,7 +2207,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "max by (friendly_name) (homeassistant_binary_sensor_state{entity=~\"binary_sensor\\\\.(pc_fede_prendida|lavasecarropas_en_marcha)\"})",
+          "expr": "max by (friendly_name) (homeassistant_binary_sensor_state{entity=\"binary_sensor.lavasecarropas_en_marcha\"}) or label_replace(vector(0), \"friendly_name\", \"Lavasecarropas en marcha\", \"\", \"\")",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         }
@@ -2056,18 +2216,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 36,
+      "id": 39,
       "gridPos": {
-        "h": 5,
-        "w": 16,
+        "h": 4,
+        "w": 20,
         "x": 0,
-        "y": 94
+        "y": 102
       }
     },
     {
       "type": "stat",
-      "title": "Washer-dryer cycles",
-      "description": "Starts in the selected range.",
+      "title": "Ciclos",
+      "description": "Ciclos arrancados en el rango elegido.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -2108,83 +2268,30 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 37,
+      "id": 40,
       "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 16,
-        "y": 94
-      }
-    },
-    {
-      "type": "stat",
-      "title": "PC hours on",
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "unit": "h",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "text"
-          },
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROM}"
-          },
-          "expr": "sum(count_eq_over_time(homeassistant_binary_sensor_state{entity=\"binary_sensor.pc_fede_prendida\"}[$__range], 1)) / 60",
-          "legendFormat": "",
-          "refId": "A",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROM}"
-      },
-      "id": 38,
-      "gridPos": {
-        "h": 5,
+        "h": 4,
         "w": 4,
         "x": 20,
-        "y": 94
+        "y": 102
       }
     },
     {
       "type": "row",
       "title": "🩺 Home Assistant",
       "collapsed": false,
-      "id": 39,
+      "id": 41,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 106
       },
       "panels": []
     },
     {
       "type": "stat",
-      "title": "Up",
+      "title": "Estado",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -2198,11 +2305,11 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "DOWN",
+                  "text": "CAÍDO",
                   "color": "red"
                 },
                 "1": {
-                  "text": "UP",
+                  "text": "ARRIBA",
                   "color": "green"
                 }
               }
@@ -2241,25 +2348,26 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 40,
+      "id": 42,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "stat",
-      "title": "Uptime",
+      "title": "Tiempo prendido",
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "suffix: h",
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
-          }
+          },
+          "decimals": 1
         },
         "overrides": []
       },
@@ -2282,7 +2390,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "time() - max(process_start_time_seconds{service=\"home-assistant\"})",
+          "expr": "(time() - max(process_start_time_seconds{service=\"home-assistant\"})) / 3600",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -2293,18 +2401,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 41,
+      "id": 43,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "stat",
-      "title": "Restarts",
-      "description": "HA restarts in the selected range (each package change in git rolls the pod).",
+      "title": "Reinicios",
+      "description": "Reinicios de HA en el rango elegido (cada cambio de un package en git reinicia el pod).",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -2345,17 +2453,17 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 42,
+      "id": 44,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "stat",
-      "title": "Entities",
+      "title": "Entidades",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -2397,17 +2505,17 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 43,
+      "id": 45,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "stat",
-      "title": "State changes / min",
+      "title": "Cambios de estado / min",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -2450,18 +2558,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 44,
+      "id": 46,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "stat",
-      "title": "Memory",
-      "description": "Resident memory (limit 1 GiB).",
+      "title": "Memoria",
+      "description": "Memoria residente (límite 1 GiB).",
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
@@ -2519,17 +2627,17 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 45,
+      "id": 47,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 100
+        "y": 107
       }
     },
     {
       "type": "table",
-      "title": "Unavailable entities",
+      "title": "Entidades no disponibles",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -2563,9 +2671,9 @@
               "container": true
             },
             "renameByName": {
-              "friendly_name": "Name",
-              "entity": "Entity",
-              "domain": "Domain"
+              "friendly_name": "Nombre",
+              "entity": "Entidad",
+              "domain": "Dominio"
             }
           }
         }
@@ -2576,7 +2684,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "homeassistant_entity_available == 0",
+          "expr": "homeassistant_entity_available{domain!~\"button|infrared|tts|event|notify|scene|conversation\"} == 0",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -2588,18 +2696,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 46,
+      "id": 48,
       "gridPos": {
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 104
+        "y": 111
       }
     },
     {
       "type": "bargauge",
-      "title": "Chattiest entities",
-      "description": "State changes in the selected range: what fills the recorder.",
+      "title": "Entidades más activas",
+      "description": "Cambios de estado en el rango elegido: lo que más llena el recorder.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -2608,7 +2716,8 @@
           "color": {
             "mode": "fixed",
             "fixedColor": "orange"
-          }
+          },
+          "displayName": "${__field.labels.friendly_name}"
         },
         "overrides": []
       },
@@ -2646,18 +2755,18 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 47,
+      "id": 49,
       "gridPos": {
         "h": 9,
         "w": 8,
         "x": 8,
-        "y": 104
+        "y": 111
       }
     },
     {
       "type": "timeseries",
-      "title": "State changes by domain",
-      "description": "Per minute.",
+      "title": "Cambios de estado por dominio",
+      "description": "Por minuto.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -2706,12 +2815,12 @@
         "type": "prometheus",
         "uid": "${DS_PROM}"
       },
-      "id": 48,
+      "id": 50,
       "gridPos": {
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 104
+        "y": 111
       }
     }
   ],
@@ -2741,7 +2850,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Home Assistant — Insights",
+  "title": "Home Assistant — Estadísticas",
   "uid": "home-assistant",
-  "weekStart": ""
+  "weekStart": "monday"
 }

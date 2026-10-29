@@ -244,6 +244,10 @@ spec:
             - name: packages
               mountPath: /config/packages
               readOnly: true
+            # Jinja macros the packages import.
+            - name: custom-templates
+              mountPath: /config/custom_templates
+              readOnly: true
             {{- end }}
             {{- if .Values.dashboards.enabled }}
             # Versioned Lovelace dashboards + the generated lovelace.yaml registry.
@@ -271,6 +275,9 @@ spec:
         - name: packages
           configMap:
             name: {{ include "home-assistant.fullname" . }}-packages
+        - name: custom-templates
+          configMap:
+            name: {{ include "home-assistant.fullname" . }}-custom-templates
         {{- end }}
         {{- if .Values.dashboards.enabled }}
         - name: dashboards

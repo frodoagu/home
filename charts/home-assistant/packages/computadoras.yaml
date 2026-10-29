@@ -1,0 +1,84 @@
+# HA package: whether each computer is on, from its last DNS query in Pi-hole.
+# On, each queries every 1-2 min; off, never, so on = a query in the last
+# 5 min. Looked up by client NAME: the Think randomizes its MAC, so its IP
+# changes but its DHCP hostname doesn't. PC-Fede drives the office lamp
+# (luces_adentro.yaml); all four feed the hours in Grafana.
+# See docs/home-assistant.md#computers.
+
+rest:
+  - resource: http://192.168.0.100:8080/api/queries?client_name=pc-fede.lan&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: PC Fede - última consulta DNS
+        unique_id: pc_fede_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:desktop-tower
+        value_template: &ultima >-
+          {%- set q = value_json.queries | default([]) %}
+          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+  - resource: http://192.168.0.100:8080/api/queries?client_name=pc-noah.lan&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: PC Noah - última consulta DNS
+        unique_id: pc_noah_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:desktop-tower
+        value_template: *ultima
+  - resource: http://192.168.0.100:8080/api/queries?client_name=pc-julian.lan&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: PC Juli - última consulta DNS
+        unique_id: pc_juli_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:desktop-tower
+        value_template: *ultima
+  - resource: http://192.168.0.100:8080/api/queries?client_name=think.lan&length=1
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: Think - última consulta DNS
+        unique_id: think_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:laptop
+        value_template: *ultima
+
+template:
+  - binary_sensor:
+      - name: PC Fede prendida
+        unique_id: pc_fede_prendida
+        default_entity_id: binary_sensor.pc_fede_prendida
+        device_class: power
+        state: >-
+          {%- set t = states('sensor.pc_fede_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=5) }}
+        availability: "{{ has_value('sensor.pc_fede_ultima_consulta_dns') }}"
+
+      - name: PC Noah prendida
+        unique_id: pc_noah_prendida
+        default_entity_id: binary_sensor.pc_noah_prendida
+        device_class: power
+        state: >-
+          {%- set t = states('sensor.pc_noah_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=5) }}
+        availability: "{{ has_value('sensor.pc_noah_ultima_consulta_dns') }}"
+
+      - name: PC Juli prendida
+        unique_id: pc_juli_prendida
+        default_entity_id: binary_sensor.pc_juli_prendida
+        device_class: power
+        state: >-
+          {%- set t = states('sensor.pc_juli_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=5) }}
+        availability: "{{ has_value('sensor.pc_juli_ultima_consulta_dns') }}"
+
+      - name: Think prendida
+        unique_id: think_prendida
+        default_entity_id: binary_sensor.think_prendida
+        device_class: power
+        state: >-
+          {%- set t = states('sensor.think_ultima_consulta_dns') | as_datetime(none) %}
+          {{- t is not none and now() - t < timedelta(minutes=5) }}
+        availability: "{{ has_value('sensor.think_ultima_consulta_dns') }}"
