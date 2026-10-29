@@ -1133,7 +1133,7 @@
     {
       "type": "timeseries",
       "title": "Consumo de las últimas 24 h",
-      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores.",
+      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores. El tubo de 45 kg dura ~2 meses (~0,75 kg/día), así que el eje arranca en 0-2 kg y sólo crece si un día se consume más.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -1149,7 +1149,9 @@
             "mode": "fixed",
             "fixedColor": "red"
           },
-          "min": 0
+          "min": 0,
+          "softMax": 2,
+          "decimals": 2
         },
         "overrides": []
       },
