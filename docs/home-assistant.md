@@ -436,8 +436,14 @@ Google Home:
 
 Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
 and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is **24 °C**
-everywhere. The two bedrooms share a cool setpoint but not a heat one, so every
-script that heats both sends each its own `climate.set_temperature`.
+everywhere. They live in one place, `script.aires_prender` (`aires`, optional
+`modo`; the seasonal mode by default), which sends each unit its own
+`climate.set_temperature`; every script and automation that turns units on at
+"their" temperature calls it. `script.aires_piezas_dormir` puts the bedrooms on
+it at the slowest fan, for `aires_modo_dormir` and `aires_solo_dormitorio_toggle`.
+Both are hidden in the entity registry so Google Home doesn't list them as
+scenes. `group.aires` holds the four units for actions and templates (triggers
+still list them, since a trigger takes no template).
 
 Every "on" side picks heat or cool from `sensor.aires_modo_estacional`; nothing
 here forces a season. To force one, use a unit's thermostat card on the
@@ -609,8 +615,9 @@ bedroom reads its own, and the kids' room joins the bedroom's zone while
 [`binary_sensor.chicos_en_casa`](#kids-calendar) is `on`. The kids' calendar is
 only a condition here: their coming home never starts a unit.
 
-- **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat 21 °C**, above
-  25 °C to **cool 24 °C**, the setpoints of the schedule above. A zone inside
+- **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat** (21 °C, 20 °C in
+  Fede's bedroom), above 25 °C to **cool 24 °C**: the usual setpoints, through
+  `script.aires_prender` with `mantener`. A zone inside
   the range, or with a dead thermometer, is left alone.
 - **It never turns anything off**, and it doesn't touch a unit outside the
   zones it acts on.
@@ -938,23 +945,17 @@ and gives full manual control (volume, sources, nav, apps) when IP is unavailabl
    did). `turn_off` mirrors it (webOS off → wait for off → IR only if it never
    lands):
 
+   The logic is written once, in `script.tv_encender` / `script.tv_apagar`
+   (fields `webos` and `ir`, `parallel` so both TVs can run at once, hidden from
+   Google). Each TV's `tv_<room>_turn_on/off` only calls them with its two
+   entities, and stays `single` so a double tap can't send the IR toggle twice:
+
    ```yaml
    tv_sala_turn_on:
      sequence:
-       - action: media_player.turn_on
-         target: { entity_id: media_player.sala_de_estar }
-       - wait_template: >-
-           {{ states('media_player.sala_de_estar') not in ['off', 'unavailable', 'unknown', 'standby'] }}
-         timeout: "00:00:20"
-         continue_on_timeout: true
-       - if:
-           - condition: template
-             value_template: "{{ not wait.completed }}"
-         then:
-           - action: media_player.turn_on
-             target: { entity_id: media_player.tv_sala_ir }
+       - action: script.tv_encender
+         data: { webos: media_player.sala_de_estar, ir: media_player.tv_sala_ir }
      mode: single
-   # ...tv_sala_turn_off, tv_dormitorio_turn_on/off analogous
    ```
 
 **One entity to Google.** `expose_by_default: true` would surface all three

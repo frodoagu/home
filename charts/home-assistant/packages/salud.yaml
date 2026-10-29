@@ -1,14 +1,13 @@
-# HA package: avisos de salud de los sensores de los que dependen las otras
-# automatizaciones. Todo acá es NOTIFICACIÓN, no toca ningún equipo.
+# HA package: health alerts for the sensors the other automations depend on.
+# Notification only; it drives no device.
 #
-# Por qué existe: las automatizaciones de climate.yaml se disparan sobre los
-# termómetros BTHome, y las de gas.yaml sobre el Mopeka. Los tres son sensores
-# BLE a pila que llegan por el proxy Bluetooth ESPHome — cuando uno se muere, la
-# automatización que lo lee no falla con un error: simplemente deja de
-# dispararse. Sin estos avisos, "el aire ya no prende a la mañana" se descubre
-# semanas después y parece un problema de la automatización.
+# The AC automations (climate.yaml) trigger on the BTHome thermometers and the
+# gas ones on the Mopeka: battery BLE sensors reached through the ESPHome
+# Bluetooth proxy. When one dies, the automation reading it doesn't error, it
+# just stops firing, and "the AC no longer turns on in the morning" surfaces
+# weeks later looking like a broken automation.
 #
-# Los avisos salen por `script.avisar_telegram` (avisos.yaml), igual que gas.yaml.
+# Alerts go through `script.avisar_telegram` (avisos.yaml).
 automation:
   - id: salud_termometro_living_sin_datos
     alias: Salud - Termómetro del living sin datos
@@ -72,8 +71,8 @@ automation:
     action:
       - action: script.avisar_telegram
         data:
-          # El friendly_name de estas entidades es "Termómetro Living Tensión",
-          # así que se arma el nombre a mano en vez de interpolarlo.
+          # These entities' friendly_name is "Termómetro Living Tensión", so the
+          # name is spelled out instead of interpolated.
           mensaje: >-
             Termómetro {{ 'del living' if trigger.entity_id == 'sensor.atc_29a8_tension'
                           else 'del dormitorio' }}: la pila está en

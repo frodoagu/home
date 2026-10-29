@@ -419,7 +419,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   of HA's *entire* config, not just that block. Jinja shared between packages lives in
   `charts/home-assistant/custom_templates/*.jinja`, mounted at
   `/config/custom_templates` (`{% from 'curva.jinja' import ... %}`); a macro
-  returns text, so pipe it through `| int`/`| float`.
+  returns text, so pipe it through `| int`/`| float`. Shared actions are scripts
+  (`avisos.yaml`, `aires_prender`, `tv_encender`); a helper script with fields
+  must be hidden in the entity registry, or Google Home (`script` exposed by
+  default) lists it as a scene that fails when tapped.
 - **HA `http:` is UI-only now** — same story as Telegram below. Since 2026.8 the
   `http` integration is a config flow: HA imports an existing `http:` block into
   `/config/.storage/http` (`yaml_migration_done: true`) and then raises a
