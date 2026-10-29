@@ -23,6 +23,7 @@ views:
       - settings
       - volume_mute
     - - netflix
+      - youtube
       - primevideo
     - - play
       - pause
@@ -193,6 +194,17 @@ views:
           source: Netflix
       icon: mdi:netflix
       styles: ':host { --icon-color: #e50914; }'
+    - type: button
+      name: youtube
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.sala_de_estar
+        data:
+          source: YouTube
+      icon: mdi:youtube
+      styles: ':host { --icon-color: #ff0000; }'
     - type: button
       name: primevideo
       tap_action:
@@ -246,6 +258,7 @@ views:
       - settings
       - volume_mute
     - - netflix
+      - youtube
       - primevideo
     - - play
       - pause
@@ -416,6 +429,17 @@ views:
           source: Netflix
       icon: mdi:netflix
       styles: ':host { --icon-color: #e50914; }'
+    - type: button
+      name: youtube
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.dormitorio
+        data:
+          source: YouTube
+      icon: mdi:youtube
+      styles: ':host { --icon-color: #ff0000; }'
     - type: button
       name: primevideo
       tap_action:
