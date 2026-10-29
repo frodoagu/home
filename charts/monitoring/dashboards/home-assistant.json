@@ -1441,7 +1441,7 @@
     {
       "type": "bargauge",
       "title": "Horas por modo",
-      "description": "Todos los aires juntos. Sólo aparecen los modos que se usaron en el rango.",
+      "description": "Horas de cada modo en el rango elegido, sumando todos los aires: cada aire aporta las horas del rango. Sólo aparecen los modos que se usaron.",
       "fieldConfig": {
         "defaults": {
           "unit": "suffix: h",
@@ -1449,12 +1449,103 @@
           "min": 0,
           "color": {
             "mode": "fixed",
-            "fixedColor": "purple"
+            "fixedColor": "text"
           },
-          "noValue": "Ningún aire prendido",
+          "noValue": "Sin datos",
           "displayName": "${__field.labels.mode}"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Apagado"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Calor"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Frío"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Seco"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ventilación"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Automático"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "displayMode": "basic",
@@ -1479,7 +1570,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode{mode!=\"off\"}[$__range], 1)) / 60 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\")",
+          "expr": "label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(sort_desc(sum by (mode) (count_eq_over_time(homeassistant_climate_mode[$__range], 1)) / 60 > 0), \"mode\", \"Calor\", \"mode\", \"heat\"), \"mode\", \"Frío\", \"mode\", \"cool\"), \"mode\", \"Seco\", \"mode\", \"dry\"), \"mode\", \"Ventilación\", \"mode\", \"fan_only\"), \"mode\", \"Automático\", \"mode\", \"heat_cool\"), \"mode\", \"Apagado\", \"mode\", \"off\")",
           "legendFormat": "{{mode}}",
           "refId": "A",
           "instant": true,
