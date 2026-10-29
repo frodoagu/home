@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: home-assistant-metrics
+  namespace: monitoring
+spec:
+  encryptedData:
+    token: AgAx4k+msancfy291VKJW1zUcCQvOqJRVapz4PeLSOjLprSY2N1IRF3SoijxjneTveSu5qYslIR1NNWWV8vxvZSkD17yAQxj3hlANbukiEddB6y95IVQ8UbWtCJLd4A3nl21YQ7V8MTafJyBuwA7gPfgKsA22LVwWr+NQ5teYiS/pjjTKK5G9R7lF9pYlKfn363mTkwHRxHBysSHKY6VFP/t1iq57nSjyjReHMKI3gyiouTsyhkON/wtVNW/vTk4FILhI9kJOQHFpfRw9VLdWynmi0KzWn/zc82idjFYgD3fsCIK0yH48fkdgpyEsDVJrLx5x1+DciqIxBW3/vD2ExhXkcogXpljqyIk5Csmcg+WTm2kykEs8JJ080tdKSO5TrZjszbw7Xw0/yMuW8L2dLghQT/DwskA7XlPz29xU+c7cElngqqxZYlzFwHGyEpEsuxwSUl+aBV1MHwSbX5hC9M1FVqjoSuDfp/VeMiHBWSkpdwbEXwLYwrxf/U8N16cdx73c1rZFa9zmIuQiG8R4GHawR0S+DoHK8t1y3kl2C/8QaRyPRpVDXHwISDucTHstonDbtFyLCJ8z5kWkyzA7/Sv/jCkaHdxR7eyZaI8JH2dtTc03ZvtGiPH95xpmcVK4Ms2bZTV7nULAM68vubwGUQl9sqvlFjneC2RDOR4hgYmjQjJvMQDq88yXtbOis3WpHI6HUWm+QMPJWi94V5G0ejRYmCU8OVYeWiXVfoKXeGTLUC8+Lsgp6zHwqlQnYcFtq4cUcM//lNOhFkvIaJuSt3PqjDt+Nsrct4ERL5lG8Xq51L8xTOmYaRbltGUoVv6dIA067a5Kw1xFMwuU+Gx6MIx5xcQePipn50rQA/zRX4fxshiKA5Ue0uZZEQ5X6cd12i331IV4/PL+HtuYcSRhFYj9vjp9tNSJ+QPuQko4imNyfPVUNmxh3o=
+  template:
+    metadata:
+      name: home-assistant-metrics
+      namespace: monitoring

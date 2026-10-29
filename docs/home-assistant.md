@@ -725,6 +725,15 @@ Notes that matter when editing them:
   `below` are strict. Where the boundary matters (`≥ 19 °C` outside, `≤ 17 °C`
   inside) the check is a template instead — the reasons are in the comments.
 
+## Grafana insights (`prometheus.yaml`)
+
+[`packages/prometheus.yaml`](../charts/home-assistant/packages/prometheus.yaml)
+turns on HA's `prometheus` integration (token required). VictoriaMetrics scrapes
+it, and the Grafana dashboard *Home Assistant — Insights*
+(`grafana.agu.com.ar/d/home-assistant`) shows automation runs, gas use, AC
+and light hours, and presence. How the scrape and token work and how to read the
+metrics: [monitoring.md](monitoring.md#home-assistant-metrics).
+
 ## Sensor health alerts (`salud.yaml`)
 
 [`packages/salud.yaml`](../charts/home-assistant/packages/salud.yaml) is
