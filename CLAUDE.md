@@ -42,6 +42,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      Pi-hole stats (pihole-exporter → "Pi-hole — DNS" dashboard),
                      Home Assistant entity state (HA's `prometheus` package, scraped with a
                      token SealedSecret → "Home Assistant — Estadísticas" dashboard, in Spanish).
+                     Every dashboard has a "Deploys" annotation from Argo CD's sync counter
+                     (VMPodScrape on the application controller; docs/monitoring.md#deploy-annotations).
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.

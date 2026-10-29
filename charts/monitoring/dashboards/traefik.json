@@ -1,5 +1,24 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROM}"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 152, 48, 0.9)",
+        "name": "Deploys",
+        "expr": "sum by (name) (round(increase(argocd_app_sync_total{phase=\"Succeeded\",dry_run=\"false\"}[1m]))) > 0",
+        "step": "1m",
+        "titleFormat": "Deploy: {{name}}",
+        "textFormat": "Argo CD sync",
+        "tagKeys": "name",
+        "useValueForTime": false
+      }
+    ]
+  },
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,

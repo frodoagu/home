@@ -60,6 +60,12 @@ traefikScrape:
   enabled: true
   namespace: kube-system
 
+# Scrape the Argo CD application controller for the "Deploys" annotation on
+# every dashboard. See templates/vmpodscrape-argocd.yaml.
+argocdScrape:
+  enabled: true
+  namespace: argocd
+
 # Scrape Home Assistant's /api/prometheus (entity states, automation triggers).
 # Drives the "Home Assistant — Insights" dashboard. The token Secret lives in
 # THIS namespace. See templates/vmservicescrape-home-assistant.yaml.

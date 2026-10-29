@@ -76,6 +76,31 @@ provisioned VictoriaMetrics datasource automatically. To change the landing
 dashboard, set `grafana."grafana.ini".dashboards.default_home_dashboard_path` in
 `values.yaml` (path is `/var/lib/grafana/dashboards/default/<file>.json`).
 
+## Deploy annotations
+
+Every dashboard carries a **Deploys** annotation, an orange line at each
+successful Argo CD sync, titled with the app (`Deploy: home-assistant`), so a
+change in the data can be matched to what was deployed. It can be toggled at
+the top of each dashboard.
+
+It's a query, not something pushed into Grafana:
+`sum by (name) (round(increase(argocd_app_sync_total{phase="Succeeded",dry_run="false"}[1m]))) > 0`
+with a 1-minute step.
+[templates/vmpodscrape-argocd.yaml](../charts/monitoring/templates/vmpodscrape-argocd.yaml)
+(`argocdScrape`) scrapes the application controller's `metrics` port (8082,
+on no Service) and keeps only `argocd_app_sync_total` and `argocd_app_info`;
+the controller exposes ~800 series about itself. The definition lives in each
+dashboard's JSON, so it survives the ephemeral Grafana and needs no API token.
+
+Argo CD notifications could push annotations into Grafana instead, carrying
+the commit message. That needs a Grafana PVC (its SQLite writes often, on the
+SD card) and a Grafana credential sealed into the `argocd` namespace.
+
+The counter starts at each controller start, so the first sync of an app
+after one may not draw a line. `victoria-logs.json` has no `DS_PROM` variable,
+so its annotation names the datasource uid (`VictoriaMetrics`). A new dashboard
+gets the annotation by copying the entry from another one.
+
 ## Playlist (rotate through all dashboards)
 
 Grafana has an **All dashboards** playlist that cycles through every dashboard on
