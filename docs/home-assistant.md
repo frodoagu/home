@@ -1307,7 +1307,7 @@ the living-room lamp while Fede is home
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | The four lamps on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp) |
+| Sunset + 10 min | The lamps that are off come on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp). One already on keeps its brightness and colour |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, in the same whites |
 | 01:30 | The four lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
