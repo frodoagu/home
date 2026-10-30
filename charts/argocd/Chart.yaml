@@ -2,8 +2,8 @@ apiVersion: v2
 name: argocd
 description: Wrapper Helm chart for Argo CD on k3s
 type: application
-version: 0.1.1
-appVersion: "3.5.5"
+version: 0.1.2
+appVersion: "3.5.6"
 keywords:
   - argocd
   - gitops
@@ -14,5 +14,5 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: argo-cd
-    version: "10.10.5"
+    version: "10.11.6"
     repository: https://argoproj.github.io/argo-helm

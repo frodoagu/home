@@ -2,8 +2,8 @@ apiVersion: v2
 name: home-assistant
 description: Helm chart for Home Assistant on k3s with Traefik ingress
 type: application
-version: 0.1.1
-appVersion: "2026.10.2"
+version: 0.1.2
+appVersion: "2026.10.4"
 keywords:
   - home-assistant
   - home-automation

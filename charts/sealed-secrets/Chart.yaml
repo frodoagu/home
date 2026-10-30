@@ -9,8 +9,8 @@ description: >-
   the 2025 Bitnami catalog changes); the controller lives in kube-system as
   `sealed-secrets-controller` so `kubeseal` works with zero flags.
 type: application
-version: 0.1.0
-appVersion: "0.40.0"
+version: 0.1.1
+appVersion: "0.41.2"
 keywords:
   - sealed-secrets
   - secrets

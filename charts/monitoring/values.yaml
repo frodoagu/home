@@ -83,7 +83,7 @@ piholeExporter:
   enabled: true
   image:
     repository: ekofr/pihole-exporter
-    tag: "v1.2.0"
+    tag: "v1.3.0"
   revisionHistoryLimit: 1
   # Pi-hole's in-cluster web/API Service (charts/pihole), NOT pihole.agu.com.ar:
   # the public route sits behind google-auth and would answer the exporter with
