@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { pick, useLanguage } from "./i18n/LanguageProvider";
 import { notFoundTitle } from "./seo";
 

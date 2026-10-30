@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { getApp } from "./apps/registry";
 import LanguageToggle from "./components/LanguageToggle";
