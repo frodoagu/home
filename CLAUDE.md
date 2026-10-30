@@ -232,6 +232,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `restoreNonIgnoredFields` resets a list to the git value when only live holds
   the ignored entries. Don't add these finalizers to `apps/*.yaml` either: the
   controller owns them and removes them once the hook is gone.
+- **root — sync waves don't stage a multi-chart commit.** Every child app has
+  its own automated sync, so a commit that only touches `charts/` syncs them all
+  at once and root never runs (it only syncs `apps/`). What overloads the Pi on
+  such a commit is the SD card, not CPU or memory: parallel image pulls unpack
+  together, the card sits at 100 % busy, the API server stalls, probes time out
+  in untouched pods and controllers lose their leader lease. The fix is
+  host-side, `serialize-image-pulls=true` in `/etc/rancher/k3s/config.yaml`
+  (README step 3), not in git.
 - **monitoring — the `VMRule` sits OutOfSync forever without `ignoreDifferences`.**
   The VMRule CRD schema defaults `record` (and `alert`) to `""`, so the API
   server stamps `record: ""` onto every alerting rule and the live object cannot
