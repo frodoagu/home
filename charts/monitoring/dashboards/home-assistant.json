@@ -765,7 +765,7 @@
     {
       "type": "stat",
       "title": "Consumo · 24 h",
-      "description": "",
+      "description": "Máximo de las últimas 24 h contra el de las 24 h anteriores. Mientras se usa gas la lectura baja hasta ~2 kg y después vuelve, y el máximo la deja afuera.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -796,7 +796,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
+          "expr": "clamp_min(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h] offset 24h) - max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -818,7 +818,7 @@
     {
       "type": "stat",
       "title": "Consumo · 7 días",
-      "description": "",
+      "description": "Máximo de las últimas 24 h contra el de hace 6 días, por la misma razón que el de 24 h. Sin datos hasta tener una semana de historia.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -849,7 +849,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[7d]), 0)",
+          "expr": "clamp_min(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h] offset 6d) - max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -871,7 +871,7 @@
     {
       "type": "stat",
       "title": "Ritmo",
-      "description": "Tendencia lineal de los últimos 7 días.",
+      "description": "Tendencia lineal del máximo diario en los últimos 7 días.",
       "fieldConfig": {
         "defaults": {
           "unit": "suffix: kg/día",
@@ -902,7 +902,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "clamp_min(-deriv(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[7d]) * 86400, 0)",
+          "expr": "clamp_min(-deriv(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h])[7d:1h]) * 86400, 0)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -984,7 +984,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"}) - 1.6) / clamp_min(-deriv(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[7d]) * 86400, 0.01)",
+          "expr": "(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"}) - 1.6) / clamp_min(-deriv(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h])[7d:1h]) * 86400, 0.01)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -1178,7 +1178,7 @@
     {
       "type": "timeseries",
       "title": "Consumo de los últimos 7 días",
-      "description": "Ventana móvil: cada punto es lo consumido en los 7 días anteriores. A ~0,75 kg/día son ~5 kg por semana, así que el eje arranca en 0-10 kg.",
+      "description": "Ventana móvil: cada punto es lo consumido en los 7 días anteriores. Compara el máximo de cada día: mientras se usa gas la lectura baja hasta ~2 kg y después vuelve, y el máximo la deja afuera. A ~0,75 kg/día son ~5 kg por semana, así que el eje arranca en 0-10 kg.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -1217,7 +1217,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[7d]), 0)",
+          "expr": "clamp_min(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h] offset 6d) - max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
           "legendFormat": "kg en 7 días",
           "refId": "A"
         }
@@ -1237,7 +1237,7 @@
     {
       "type": "timeseries",
       "title": "Consumo de las últimas 24 h",
-      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores. El tubo de 45 kg dura ~2 meses (~0,75 kg/día), así que el eje arranca en 0-2 kg y sólo crece si un día se consume más.",
+      "description": "Ventana móvil: cada punto es lo consumido en las 24 h anteriores. Compara el máximo de cada día: mientras se usa gas la lectura baja hasta ~2 kg y después vuelve, y el máximo la deja afuera. El tubo de 45 kg dura ~2 meses (~0,75 kg/día), así que el eje arranca en 0-2 kg y sólo crece si un día se consume más.",
       "fieldConfig": {
         "defaults": {
           "unit": "masskg",
@@ -1276,7 +1276,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "clamp_min(-delta(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
+          "expr": "clamp_min(max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h] offset 24h) - max_over_time(max(homeassistant_sensor_weight_kg{entity=\"sensor.gas_restante\"})[24h]), 0)",
           "legendFormat": "kg en 24 h",
           "refId": "A"
         }
