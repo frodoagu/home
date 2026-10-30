@@ -220,7 +220,19 @@ This repo uses the **Traefik bundled with k3s** (configured later via a
 The bundled ServiceLB (klipper) gives Traefik's `LoadBalancer` service the
 Pi's IP.
 
+The kubelet must pull images **one at a time**. k3s pulls them in parallel by
+default, and a commit that bumps several charts then unpacks every new image
+onto the SD card at once: the card sits at 100 % busy, the API server (its
+datastore lives on the same card) stalls, probes time out across untouched
+pods and controllers lose their leader lease. Serial pulls cap that burst.
+
 ```bash
+sudo mkdir -p /etc/rancher/k3s
+sudo tee /etc/rancher/k3s/config.yaml <<'EOF'
+kubelet-arg:
+  - "serialize-image-pulls=true"
+EOF
+
 curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
 
 # Verify the node is Ready and Traefik is running
