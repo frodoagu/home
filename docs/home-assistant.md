@@ -1016,11 +1016,14 @@ button selects the `YouTube` source on the TV's webOS entity, which needs the TV
 
 Both pads are one definition. The second card reuses the first one's `rows`,
 `custom_actions` and `styles` through YAML anchors and sets only its own
-`media_player_id`. A button's target is `{{ config.entity }}`: in the card's
-nunjucks templates, `config` is the **button's** config, not the card's (so
-`config.media_player_id` is empty), and `entity` is the button's entity, which
-the card fills with its `media_player_id`. YouTube maps that IR entity to the
-webOS one. A YAML merge (`<<:`) with an overriding key would also work, but HA's
+`media_player_id`. The buttons name no target: when a `media_player.*` action has
+none, the card points it at its `media_player_id`. Don't target
+`{{ config.entity }}`: `entity` is the button's entity, which the card derives
+from that same target first, so it renders empty and HA rejects the call
+(*expected 'all' or 'none' at 'target.entity_id'*). In the card's templates
+`config` is the **button's** config (so `config.media_player_id` is empty); the
+card's own config is `config.card`, and YouTube maps
+`config.card.media_player_id` to the webOS entity. A YAML merge (`<<:`) with an overriding key would also work, but HA's
 loader warns about the duplicate key on every load.
 
 The card is **not installed through HACS** — it was added manually (equivalent effect,
