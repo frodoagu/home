@@ -7,12 +7,12 @@ image:
   repository: favonia/cloudflare-ddns
   # Human-readable tag (used only when digest is empty). Releases:
   # https://github.com/favonia/cloudflare-ddns/releases
-  tag: "1.17.1"
+  tag: "1.18.0"
   # Pin by digest for reproducible deploys (takes precedence over tag).
   # This is the digest currently running; update deliberately on upgrade.
-  # Multi-arch manifest-list (index) digest for 1.17.1 — lets the arm64 node
+  # Multi-arch manifest-list (index) digest for 1.18.0 — lets the arm64 node
   # select its image. Do NOT pin a per-arch image digest here.
-  digest: "sha256:5e61736b982b87d84a1120b4767c4deff0f2cc55ca3ee9dcb1dc58623039b5cb"
+  digest: "sha256:345b41895a8846d74c62d30bd27e61101a754f8ab8da10c68115823883803afb"
   pullPolicy: IfNotPresent
 
 cloudflare:

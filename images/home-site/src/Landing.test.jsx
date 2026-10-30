@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import Landing from "./Landing";
 import { AuthProvider } from "./auth/AuthProvider";
 import { LanguageProvider } from "./i18n/LanguageProvider";

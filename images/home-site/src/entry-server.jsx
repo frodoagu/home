@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { routes } from "./routes";
 import { AuthProvider } from "./auth/AuthProvider";
 import { LanguageProvider } from "./i18n/LanguageProvider";

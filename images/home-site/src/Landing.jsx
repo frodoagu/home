@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { ArrowUpRight, Linkedin, Mail } from "lucide-react";
 import { apps, CATEGORIES, getCategoryLabel, privateLinks } from "./apps/registry";
 import PrivateSection from "./PrivateSection";
