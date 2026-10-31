@@ -8,9 +8,9 @@ import {
   clearStoredUser,
   isAuthorized,
 } from "./auth";
-import { ALLOWED_EMAILS } from "./config";
+import { ALLOWED_SUBJECTS } from "./config";
 
-const ALLOWED = ALLOWED_EMAILS[0];
+const ALLOWED = ALLOWED_SUBJECTS[0];
 
 // Build a JWT-like token "header.payload.sig" with a UTF-8-safe base64url payload,
 // exactly the inverse of what decodeJwt expects.
@@ -39,6 +39,7 @@ describe("decodeJwt", () => {
 describe("userFromClaims", () => {
   it("mapea los claims al usuario persistido", () => {
     const u = userFromClaims({
+      sub: "123",
       email: "x@y.com",
       email_verified: true,
       name: "X",
@@ -46,6 +47,7 @@ describe("userFromClaims", () => {
       exp: 999,
     });
     expect(u).toEqual({
+      sub: "123",
       email: "x@y.com",
       emailVerified: true,
       name: "X",
@@ -71,13 +73,13 @@ describe("storage de la sesión", () => {
   beforeEach(() => localStorage.clear());
 
   it("storeUser + loadStoredUser hace round-trip si no expiró", () => {
-    const user = { email: ALLOWED, emailVerified: true, exp: Math.floor(Date.now() / 1000) + 3600 };
+    const user = { sub: ALLOWED, email: "x@y.com", emailVerified: true, exp: Math.floor(Date.now() / 1000) + 3600 };
     storeUser(user);
     expect(loadStoredUser()).toEqual(user);
   });
 
   it("loadStoredUser descarta sesiones expiradas", () => {
-    const expired = { email: ALLOWED, exp: Math.floor(Date.now() / 1000) - 10 };
+    const expired = { sub: ALLOWED, exp: Math.floor(Date.now() / 1000) - 10 };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expired));
     expect(loadStoredUser()).toBeNull();
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull(); // la limpia
@@ -90,27 +92,23 @@ describe("storage de la sesión", () => {
   });
 
   it("clearStoredUser borra la sesión", () => {
-    storeUser({ email: ALLOWED, exp: Date.now() });
+    storeUser({ sub: ALLOWED, exp: Date.now() });
     clearStoredUser();
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });
 
 describe("isAuthorized", () => {
-  it("autoriza email en la allowlist con email verificado", () => {
-    expect(isAuthorized({ email: ALLOWED, emailVerified: true })).toBe(true);
+  it("autoriza una cuenta de Google en la allowlist", () => {
+    expect(isAuthorized({ sub: ALLOWED, email: "x@y.com", emailVerified: true })).toBe(true);
   });
 
-  it("es case-insensitive con el email", () => {
-    expect(isAuthorized({ email: ALLOWED.toUpperCase(), emailVerified: true })).toBe(true);
+  it("rechaza cuentas fuera de la allowlist", () => {
+    expect(isAuthorized({ sub: "999", email: "intruso@evil.com", emailVerified: true })).toBe(false);
   });
 
-  it("rechaza si el email no está verificado", () => {
-    expect(isAuthorized({ email: ALLOWED, emailVerified: false })).toBe(false);
-  });
-
-  it("rechaza emails fuera de la allowlist y usuarios nulos", () => {
-    expect(isAuthorized({ email: "intruso@evil.com", emailVerified: true })).toBe(false);
+  it("rechaza sesiones guardadas sin sub y usuarios nulos", () => {
+    expect(isAuthorized({ email: "x@y.com", emailVerified: true })).toBe(false);
     expect(isAuthorized(null)).toBe(false);
     expect(isAuthorized({})).toBe(false);
   });

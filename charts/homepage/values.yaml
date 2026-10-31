@@ -121,6 +121,10 @@ config:
             href: https://shelly.agu.com.ar
             description: Outdoor lights control
             icon: shelly.png
+        - VPN:
+            href: https://vpn.agu.com.ar
+            description: WireGuard devices (wg-easy)
+            icon: wireguard.png
     - Sites:
         - agu.com.ar:
             href: https://agu.com.ar

@@ -11,11 +11,13 @@
  *
  * To wire this up: create a "Web application" OAuth Client ID in Google Cloud,
  * add https://agu.com.ar (and http://localhost:5173 for dev) to the Authorized
- * JavaScript origins, then paste the ID below and list the allowed emails.
+ * JavaScript origins, then paste the ID below and list the allowed accounts.
  * ---------------------------------------------------------------------- */
 export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ||
   "1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com";
 
-// Emails allowed into the private section. Compared case-insensitively.
-export const ALLOWED_EMAILS = ["federico.nicolas.agu@gmail.com"];
+// Google account IDs (the ID token's `sub`) allowed into the private section.
+// IDs, not emails: this ships in the public bundle and lives in a public repo.
+// Same ID as the Argo CD admin in charts/argocd/values.yaml.
+export const ALLOWED_SUBJECTS = ["108670547033650249289"];

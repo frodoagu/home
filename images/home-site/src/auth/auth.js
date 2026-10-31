@@ -1,4 +1,4 @@
-import { ALLOWED_EMAILS } from "./config";
+import { ALLOWED_SUBJECTS } from "./config";
 
 /* -------------------------------------------------------------------------
  * Pure auth helpers (no React) for the client-side Google sign-in: JWT decode,
@@ -33,6 +33,7 @@ export function decodeJwt(token) {
 export function userFromClaims(claims) {
   if (!claims?.email) return null;
   return {
+    sub: claims.sub,
     email: claims.email,
     emailVerified: claims.email_verified === true,
     name: claims.name || claims.email,
@@ -65,9 +66,8 @@ export function clearStoredUser() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// A user is authorized only if their email is verified and in the allowlist
-// (compared case-insensitively).
+// A user is authorized only if their Google account ID is in the allowlist. A
+// session stored before `sub` was kept has none, so it signs in again.
 export function isAuthorized(user) {
-  if (!user?.email || !user.emailVerified) return false;
-  return ALLOWED_EMAILS.map((e) => e.toLowerCase()).includes(user.email.toLowerCase());
+  return Boolean(user?.sub) && ALLOWED_SUBJECTS.includes(user.sub);
 }

@@ -82,8 +82,8 @@ The landing has two halves (see [`images/home-site/src/Landing.jsx`](../images/h
   app on its own subdomain (`href`, e.g. `psy.agu.com.ar`), whose card opens in a
   new tab.
 - **Privadas** — external links to other self-hosted services (Traefik dashboard,
-  Home Assistant, ArgoCD), revealed only after a Google sign-in with an allowed
-  email. Source of truth: `privateLinks` in the same registry — adjust the
+  Home Assistant, ArgoCD, the VPN admin…), revealed only after a Google
+  sign-in with an allowed account. Source of truth: `privateLinks` in the same registry — adjust the
   placeholder `*.agu.com.ar` URLs to your real hostnames.
 
 Auth is **client-side** Google Identity Services
@@ -102,7 +102,10 @@ from casual visitors; the real authentication still lives on each linked service
 2. Put the client ID in [`images/home-site/src/auth/config.js`](../images/home-site/src/auth/config.js)
    (or build with `VITE_GOOGLE_CLIENT_ID=...`). The client ID is **public by
    design**, so committing it is fine.
-3. List the allowed emails in `ALLOWED_EMAILS` in the same file.
+3. List the allowed Google account IDs (the ID token's `sub`, not the email: this
+   ships in the public bundle) in `ALLOWED_SUBJECTS` in the same file. Read one
+   from a decoded ID token, or from `argocd account get-user-info` after an SSO
+   login (Dex's `sub` is base64 of the account ID plus `google`).
 
 ## Languages
 

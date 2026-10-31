@@ -43,6 +43,9 @@ domains:
   - shelly.agu.com.ar
   - alertmanager.agu.com.ar
   - psy.agu.com.ar
+  - vpn.agu.com.ar
+  # WireGuard endpoint (charts/wg-easy): UDP, so it must stay DNS-only. See dnsOnly.
+  - wg.agu.com.ar
   # PR previews (pr-<n>-psy.agu.com.ar, charts/psy-sampler-previews) come and
   # go with the PRs. Cloudflare answers the explicit records above first; any
   # other name lands on Traefik, which 404s what no route claims.
@@ -56,6 +59,14 @@ domains:
 # Cloudflare Universal SSL (*.agu.com.ar) covers them at the edge. Set false for
 # DNS-only (grey cloud) if you need the browser to reach Traefik directly.
 proxied: true
+
+# Records kept DNS-only (grey cloud) while `proxied` is true, for traffic
+# Cloudflare can't proxy. They publish the home IP, which is why origin-firewall
+# still drops direct hits on 80/443. Rendered as PROXIED=!is(...). It only
+# applies when favonia CREATES a record: an existing one keeps its status, so
+# flip a record that was already orange by hand in the Cloudflare dashboard.
+dnsOnly:
+  - wg.agu.com.ar
 
 # IP detection. IPv4 via Cloudflare's trace endpoint; IPv6 disabled by default.
 ip4Provider: "cloudflare.trace"

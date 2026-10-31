@@ -28,6 +28,8 @@ services running on a Raspberry Pi with k3s.
 | [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
 | [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
 | [homepage](https://gethomepage.dev/) | Dashboard / start page for the lab (Google sign-in gated) | `charts/homepage/` |
+| [wg-easy](https://github.com/wg-easy/wg-easy) | WireGuard VPN out through the home IP (Android / Windows / Linux clients) + admin UI at `vpn.agu.com.ar` behind its own Google sign-in | `charts/wg-easy/` |
+| [restic](https://restic.net/) | Nightly off-Pi backups of the wg-easy database and Home Assistant's own backup to Cloudflare R2 | `charts/backups/` |
 | [nftables](https://nftables.org/) | Cloudflare-only origin firewall — DaemonSet dropping direct-to-public-IP hits on tcp/80,443 (and non-LAN udp/443 QUIC) | `charts/origin-firewall/` |
 
 ## Architecture
@@ -170,6 +172,8 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
   - `logs.agu.com.ar` → VictoriaLogs UI (google-auth gated)
   - `dash.agu.com.ar` → homepage start page (google-auth gated)
   - `pihole.agu.com.ar` → Pi-hole admin UI (google-auth gated)
+  - `vpn.agu.com.ar` → wg-easy admin UI (its own Google sign-in)
+  - `wg.agu.com.ar` → WireGuard endpoint, **DNS-only** (grey cloud): Cloudflare can't proxy UDP
 - A **second zone**, `yaskia.com`, if you run the `yaskia-spa` app. The same
   `cloudflare-ddns` updater also tracks `yaskia.com` / `www.yaskia.com`, so the
   DDNS token must have **Zone:DNS:Edit on both zones** (one token scoped to both,
@@ -183,6 +187,8 @@ renumbering caveats are in [docs/pihole.md](docs/pihole.md#static-dhcp-reservati
     origin to Cloudflare's IP ranges so nobody can reach it by raw IP — deployed
     as the `origin-firewall` app (nftables DaemonSet), see
     [docs/origin-firewall.md](docs/origin-firewall.md).
+- Router port-forwarding: **UDP 51820** → RPi local IP, for the WireGuard VPN
+  ([docs/vpn.md](docs/vpn.md)).
 
 ## Setup from a fresh Raspberry Pi OS
 
@@ -207,6 +213,9 @@ sudo apt update && sudo apt full-upgrade -y
 
 # Enable cgroup memory (required by k3s) – append to the kernel cmdline
 sudo sed -i '1 s/$/ cgroup_memory=1 cgroup_enable=memory/' /boot/firmware/cmdline.txt
+
+# Load WireGuard at boot for the VPN (charts/wg-easy, docs/vpn.md)
+echo wireguard | sudo tee /etc/modules-load.d/wireguard.conf
 
 # A static IP / DHCP reservation for the Pi is strongly recommended so your
 # router port-forwarding and DNS records stay valid.
@@ -364,8 +373,8 @@ aren't k8s secrets and are still required either way:
 Log in to the ArgoCD UI at `argocd.agu.com.ar` to watch everything converge —
 click **Log in via Google**. The built-in local `admin` account is disabled
 (`admin.enabled: "false"` in `charts/argocd/values.yaml`), so sign-in is
-Dex/OIDC only; your Google email must be mapped to `role:admin` there
-(`rbac.policy.csv`). The `argocd` CLI still works with
+Dex/OIDC only; your Google account ID must be mapped to `role:admin` there
+(`rbac.policy.csv`, by ID rather than email because this repo is public). The `argocd` CLI still works with
 `argocd login argocd.agu.com.ar --sso`.
 
 ### 5 – Customise values
@@ -376,8 +385,8 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 | Chart | Key values to change |
 |---|---|
 | `charts/traefik-config/values.yaml` | `acme.email`, `dashboard.host`, `googleAuth` (ForwardAuth gate) |
-| `charts/oauth2-proxy/values.yaml` | `ingress.host`, `authenticatedEmailsFile.restricted_access` (allowed emails) |
-| `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname`, `configs.cm.url`/`dex.config`, `configs.rbac.policy.csv` (admin emails) |
+| `charts/oauth2-proxy/values.yaml` | `ingress.host`; the allowed emails are the `oauth2-proxy-allowed-emails` SealedSecret ([docs/secrets.md](docs/secrets.md)) |
+| `charts/argocd/values.yaml` | `argo-cd.server.ingress.hostname`, `configs.cm.url`/`dex.config`, `configs.rbac.policy.csv` (admin Google account IDs) |
 | `charts/home-assistant/values.yaml` | `ingress.host`, `externalUrl`, `env` (e.g. timezone), `hostNetwork`, `googleAssistant`; device config (ACs/TVs) is versioned under `charts/home-assistant/packages/` |
 | `charts/agu-spa/values.yaml` | `ingress.host`, `image` + `content.source` (image vs. placeholder ConfigMap) |
 | `charts/psy-sampler/values.yaml` | `ingress.host`, `imagePullSecrets` (`[]` while the GHCR package is public) |
@@ -447,6 +456,8 @@ webhook config (`-f config[secret]=...`).
     ├── victoria-logs/      # VictoriaLogs single-node + Vector collector (cluster-wide logs)
     ├── homepage/           # gethomepage start page (dash.agu.com.ar, google-auth gated)
     ├── pihole/             # Pi-hole DNS ad-blocker + LAN DHCP server (hostNetwork)
+    ├── wg-easy/            # WireGuard VPN + admin UI (vpn.agu.com.ar, own Google sign-in)
+    ├── backups/            # restic CronJobs → Cloudflare R2 (wg-easy DB, Home Assistant backups)
     └── origin-firewall/    # Cloudflare-only origin firewall (nftables DaemonSet, kube-system)
 ```
 
@@ -515,6 +526,8 @@ Per-topic guides live in [docs/](docs/):
 - [docs/psy-sampler.md](docs/psy-sampler.md) — psytrance layer sampler at psy.agu.com.ar: lookahead scheduler, click-free lane fades, editable variants (step grid, piano roll, synths, knobs), delay/reverb, measured mix levels, first-deploy GHCR visibility step, PR previews
 - [docs/pihole.md](docs/pihole.md) — Pi-hole DNS ad-blocker + LAN DHCP server: hostNetwork, the static-IP cold-boot requirement, phased rollout, static MAC→IP reservations
 - [docs/origin-firewall.md](docs/origin-firewall.md) — Cloudflare-only origin firewall (nftables DaemonSet): block direct-to-public-IP hits on 80/443 below klipper's SNAT, why it can't be a Traefik middleware, and the router-SNAT caveat
+- [docs/vpn.md](docs/vpn.md) — WireGuard VPN (wg-easy): DNS-only endpoint, pod network + nf_tables, Google-only sign-in with users kept out of git, adding devices
+- [docs/backups.md](docs/backups.md) — nightly restic backups to Cloudflare R2: targets, secrets, alerts, restore
 - [docs/email-migration.md](docs/email-migration.md) — **design/runbook (not yet deployed)** for self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + SES relay)
 
 ## Let's Encrypt notes

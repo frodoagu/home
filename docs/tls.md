@@ -19,7 +19,7 @@ In [charts/traefik-config/values.yaml](../charts/traefik-config/values.yaml):
 
 ```yaml
 acme:
-  email: federico.nicolas.agu@gmail.com
+  email: acme@agu.com.ar
   storage: /data/acme.json
   dnsChallenge:
     provider: cloudflare

@@ -32,12 +32,13 @@ oauth2-proxy:
       email_domains = []
 
   # ── Restrict access to specific email addresses ────────────────────────────
-  # The ConfigMap is re-rendered on each ArgoCD sync, so adding an email here
-  # is all it takes — no secret rotation needed.
+  # The list (one email per line, key restricted_user_access) is the
+  # oauth2-proxy-allowed-emails SealedSecret (templates/), so the addresses stay
+  # out of this public repo. Changing it means re-sealing; see docs/secrets.md.
   authenticatedEmailsFile:
     enabled: true
-    restricted_access: |-
-      federico.nicolas.agu@gmail.com
+    persistence: secret
+    template: oauth2-proxy-allowed-emails
 
   # ── Provider and cookie configuration ─────────────────────────────────────
   extraArgs:

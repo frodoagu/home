@@ -107,6 +107,32 @@ piholeExporter:
     limits:
       memory: 48Mi
 
+# Cloudflare usage and charges, checked every 12h by a CronJob that pushes
+# cloudflare_* gauges into vmsingle (templates/cloudflare-usage.yaml). Alerts in
+# templates/vmrules.yaml fire at `alertRatio` of R2's free tier, on any paid
+# subscription or zone plan, and when the check stops succeeding.
+cloudflareUsage:
+  enabled: true
+  schedule: "0 */12 * * *"
+  image: "docker.io/library/python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"
+  # Keys CLOUDFLARE_API_TOKEN (Account Analytics:Read, Billing:Read, and
+  # Zone:Read on all zones) and CLOUDFLARE_ACCOUNT_ID. Not the DDNS token,
+  # which can only edit DNS.
+  existingSecret: cloudflare-usage
+  pushUrl: http://vmsingle-monitoring-victoria-metrics-k8s-stack.monitoring.svc:8428/api/v1/import/prometheus
+  # R2 free tier per month: https://developers.cloudflare.com/r2/pricing/
+  freeTier:
+    storageBytes: 10000000000
+    classAOperations: 1000000
+    classBOperations: 10000000
+  alertRatio: 0.8
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
 # External endpoints probed by blackbox for uptime + TLS-expiry. Probed from
 # inside the cluster against the public hostnames, so this also exercises the
 # whole Traefik + Let's Encrypt path end-to-end.
@@ -382,8 +408,9 @@ victoria-metrics-k8s-stack:
     # tag-based playlist (dashboard_by_tag: home), so every dashboard carrying the
     # shared `home` tag is auto-included — dropping a new tagged *.json in
     # dashboards/ joins it with no change here. Auth: Grafana trusts the
-    # X-Auth-Request-Email header (auth.proxy below) and auto-assigns Admin, so
-    # sending the operator's email authenticates as Admin without any secret.
+    # X-Auth-Request-Email header (auth.proxy below) and auto-creates any address
+    # as Admin, so a service identity authenticates without any secret. The
+    # playlist belongs to the org, so who creates it doesn't matter.
     extraContainers: |
       - name: playlist-provisioner
         image: curlimages/curl:8.23.0
@@ -391,7 +418,7 @@ victoria-metrics-k8s-stack:
         args:
           - |
             GRAFANA=http://localhost:3000
-            EMAIL=federico.nicolas.agu@gmail.com
+            EMAIL=playlist-provisioner@agu.com.ar
             echo "waiting for Grafana to be ready..."
             until curl -sf "$GRAFANA/api/health" >/dev/null 2>&1; do sleep 5; done
             # Defensive: drop any existing "All dashboards" playlist first. The DB

@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: wg-easy-init
+  namespace: wg-easy
+spec:
+  encryptedData:
+    INIT_PASSWORD: AgBK1cTSsVZlqy4RJHKnEi2bxyZgpLOKQxpyjuWFZX4Ntcl2bPeiRovoHrSWED1DLJt5EmJtXWVfUpBOtPGqjov0+xGqP+QCwVCjSPpAjC9+O/O1Tg4MnvQpjY65Cr8Shd+kCbf00uWncieiNvbTOZWeCQJyInuTqLJwoE7f1SlVvh1X1BZewhaojHUyjTIRbBANG12ObNcCsJuZ9vDD8XwGHz3dChXopeaGCOaFsNA/fP7kvIQM/4yMf14eSZPQD45KjJgReJFC8kRvlMD9b/3pU5KR2kw7eztWBoEo/cJvTx5hq/slNK3Znorp0TWDVWJtLFHl8D21lt0lCe2K5/pNsfW9snd8SRfK/YR4dYQTga91tBdUqa9XzNci6ENmJZ3r3UMWJdim/1e3u0FzK3hN8RX2gf/z+Ktqp+hEput+LcF895E2Jb3xI49lFVAjAVCiWgI/aYlbuhePBqEJXQeyHX2puOEhKzYGI/i4Qgj/v+r+XZCvKVXNaFinO1dKx0ZFYuEHHcnpN+A0jF9Yr4vq0jUOpiRic/dtcZFAIu9KVZWqBk2OE+CJo/+hPDDsfmEvul5FRlGXAM1UAHeQyig0az5ZSef2EYOGVE9JVV8zUKPximrLuhHjoPi44vy1ZcMLhq2CH622zleA8zW/HJh9kplALwR4hMsxGgjZsV4h5Oh9gRgtbB+5HRPyA3rScoHQ2dLh1TZPFWji342xr7aNFExxmpPyyCjYIQpf7bS8B7ACCMGj7ZWq/t2bYf0Kn2U=
+  template:
+    metadata:
+      name: wg-easy-init
+      namespace: wg-easy

@@ -35,7 +35,12 @@ http3:
 # challenge path. DNS-01 needs no inbound ports and works for Cloudflare-proxied
 # records too.
 acme:
-  email: federico.nicolas.agu@gmail.com
+  # Let's Encrypt account contact. A role address, not a personal one: this repo
+  # is public. Traefik keeps the account already in acme.json (it only registers
+  # one when that has no email), so changing this doesn't re-register or touch
+  # issued certs. Never leave it empty: a stored account without an email is
+  # re-registered on every start.
+  email: acme@agu.com.ar
   storage: /data/acme.json
   dnsChallenge:
     provider: cloudflare

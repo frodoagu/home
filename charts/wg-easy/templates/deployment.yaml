@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wg-easy.fullname" . }}
+  labels:
+    {{- include "wg-easy.labels" . | nindent 4 }}
+spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  replicas: 1
+  # One SQLite database on one PVC: never two pods at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wg-easy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wg-easy.selectorLabels" . | nindent 8 }}
+    spec:
+      # Pod network, not hostNetwork: wg-easy's MASQUERADE and FORWARD rules
+      # stay in this pod's netns instead of the host tables flannel and
+      # kube-proxy own.
+      initContainers:
+        - name: sysctls
+          image: {{ .Values.sysctlImage }}
+          command:
+            - sysctl
+            - -w
+            - net.ipv4.ip_forward=1
+            - net.ipv4.conf.all.src_valid_mark=1
+          securityContext:
+            privileged: true
+      containers:
+        - name: wg-easy
+          image: {{ include "wg-easy.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # The image points iptables at the legacy backend, whose ip_tables
+          # modules the Pi's kernel doesn't load (k3s uses nf_tables). Point it
+          # at iptables-nft before starting the image's own CMD.
+          command:
+            - sh
+            - -c
+            - |
+              for t in iptables iptables-restore iptables-save ip6tables ip6tables-restore ip6tables-save; do
+                ln -sf /usr/sbin/xtables-nft-multi "/etc/alternatives/$t"
+              done
+              exec /usr/bin/dumb-init node server/index.mjs
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: wireguard
+              containerPort: {{ .Values.wireguard.port }}
+              protocol: UDP
+          env:
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: DISABLE_IPV6
+              value: "true"
+            - name: DISABLE_VERSION_CHECK
+              value: "true"
+            - name: TRUSTED_PROXIES
+              value: {{ .Values.trustedProxies | quote }}
+            - name: OAUTH_PROVIDERS
+              value: google
+            - name: OAUTH_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oauth.existingSecret }}
+                  key: OAUTH_GOOGLE_CLIENT_ID
+            - name: OAUTH_GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oauth.existingSecret }}
+                  key: OAUTH_GOOGLE_CLIENT_SECRET
+            - name: OAUTH_AUTO_REGISTER
+              value: "false"
+            - name: OAUTH_AUTO_LAUNCH
+              value: google
+            - name: DISABLE_PASSWORD_AUTH
+              value: "true"
+            - name: INIT_ENABLED
+              value: "true"
+            - name: INIT_USERNAME
+              value: {{ .Values.init.username | quote }}
+            - name: INIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.init.existingSecret }}
+                  key: INIT_PASSWORD
+            - name: INIT_HOST
+              value: {{ .Values.wireguard.host | quote }}
+            - name: INIT_PORT
+              value: {{ .Values.wireguard.port | quote }}
+            - name: INIT_DNS
+              value: {{ .Values.wireguard.dns | quote }}
+            - name: INIT_ALLOWED_IPS
+              value: {{ .Values.wireguard.allowedIps | quote }}
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+          volumeMounts:
+            - name: data
+              mountPath: /etc/wireguard
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "wg show | grep -q interface"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "wg-easy.fullname" . }}-data
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

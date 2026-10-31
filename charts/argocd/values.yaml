@@ -66,15 +66,20 @@ argo-cd:
               clientSecret: $argocd-google-oidc:clientSecret
               redirectURI: https://argocd.agu.com.ar/api/dex/callback
 
-    # -- Map the signed-in Google account (matched by email) to ArgoCD admin.
-    # `scopes: [email]` makes RBAC match the email claim; everyone else gets the
-    # empty default role (no access). Add more `g, <email>, role:admin` lines to
-    # grant additional users.
+    # -- Map the signed-in Google account to ArgoCD admin by its account ID, so
+    # no email lands in this public repo. RBAC always matches the user's
+    # identifier (`federated_claims.user_id` when the token carries it, else
+    # `sub`), so the ID is listed in both forms: the Google account ID, and
+    # Dex's `sub` (base64 of that ID + connector "google"), which is what our
+    # tokens carry today. `scopes: [groups]` keeps the email claim out of RBAC;
+    # everyone else gets the empty default role (no access). Read a user's
+    # `sub` with `argocd account get-user-info` after an SSO login.
     rbac:
       policy.default: ""
-      scopes: "[email]"
+      scopes: "[groups]"
       policy.csv: |
-        g, federico.nicolas.agu@gmail.com, role:admin
+        g, 108670547033650249289, role:admin
+        g, ChUxMDg2NzA1NDcwMzM2NTAyNDkyODkSBmdvb2dsZQ, role:admin
 
   # -- Use a single replica for a home / RPi environment
   controller:

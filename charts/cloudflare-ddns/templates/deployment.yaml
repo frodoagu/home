@@ -41,7 +41,11 @@ spec:
             - name: DOMAINS
               value: {{ join "," .Values.domains | quote }}
             - name: PROXIED
+              {{- if and .Values.proxied .Values.dnsOnly }}
+              value: {{ printf "!is(%s)" (join "," .Values.dnsOnly) | quote }}
+              {{- else }}
               value: {{ .Values.proxied | quote }}
+              {{- end }}
             - name: IP4_PROVIDER
               value: {{ .Values.ip4Provider | quote }}
             - name: IP6_PROVIDER

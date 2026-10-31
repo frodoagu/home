@@ -161,6 +161,47 @@ curl -s localhost:9093/api/v2/alerts -XPOST -H 'Content-Type: application/json' 
        "annotations":{"summary":"test"}}]'
 ```
 
+## Cloudflare usage
+
+Nothing in Cloudflare should cost money: R2 must stay inside its free tier and
+every plan should be free. The `cloudflare-usage` CronJob
+([templates/cloudflare-usage.yaml](../charts/monitoring/templates/cloudflare-usage.yaml),
+script in [files/cloudflare-usage.py](../charts/monitoring/files/cloudflare-usage.py))
+checks that every 12 h and pushes the numbers into vmsingle
+(`/api/v1/import/prometheus`, `job="cloudflare-usage"`):
+
+| Series | From |
+|---|---|
+| `cloudflare_r2_storage_bytes{bucket}`, `cloudflare_r2_objects{bucket}` | GraphQL `r2StorageAdaptiveGroups`, newest row per bucket |
+| `cloudflare_r2_operations_month{class}` | GraphQL `r2OperationsAdaptiveGroups` since the 1st (UTC), summed into `A` / `B` / `free` / `other` by [R2's pricing table](https://developers.cloudflare.com/r2/pricing/) |
+| `cloudflare_subscription_price_usd{plan,state,frequency}` | `GET /accounts/{id}/subscriptions` (cancelled/expired skipped) |
+| `cloudflare_zone_plan_price_usd{zone,plan}` | `GET /zones?account.id=` |
+| `cloudflare_usage_last_success_timestamp_seconds` | the run itself |
+
+Alerts (group `cloudflare.billing`), all through Telegram:
+
+- `R2StorageNearFreeTier`: stored bytes over `alertRatio` (80 %) of 10 GB.
+  The free tier is 10 GB-*month* (an average), so current size is the
+  conservative read.
+- `R2OperationsNearFreeTier`: this month's Class A over 80 % of 1M, or
+  Class B over 80 % of 10M.
+- `CloudflarePaidPlan`: any subscription or zone plan with a price above 0.
+- `CloudflareUsageCheckStale`: no successful run in 26 h (once it has
+  succeeded at all; a failed run already pages through `KubeJobFailed`).
+
+The thresholds are `cloudflareUsage.freeTier` / `alertRatio` in values. The
+token (`cloudflare-usage` SealedSecret, [secrets.md](secrets.md)) needs
+*Account Analytics: Read*, *Billing: Read* and *Zone: Read*; it is not the DDNS
+token. Run it now:
+
+```bash
+kubectl -n monitoring create job --from=cronjob/monitoring-cloudflare-usage cf-now
+kubectl -n monitoring logs -f job/cf-now
+```
+
+R2 being down shows up as failed backups instead: `KubeJobFailed` and
+`BackupStale` ([backups.md](backups.md#alerts)).
+
 ## Blackbox probing
 
 Probes run from inside the cluster against the **public** hostnames, so they also

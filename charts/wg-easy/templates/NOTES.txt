@@ -1,0 +1,14 @@
+wg-easy has been deployed! 🔒
+
+1. Admin UI (Google sign-in, registered accounts only):
+   https://{{ .Values.ingress.host }}
+
+2. Allow someone in (their email stays in the database, never in git):
+     scripts/vpn-user.sh add <email>
+
+3. Clients connect to {{ .Values.wireguard.host }}:{{ .Values.wireguard.port }}/udp. The router must
+   forward that port to the Pi, and the record must be DNS-only (grey cloud).
+
+4. Backups: charts/backups (target wg-easy), daily to Cloudflare R2.
+
+See docs/vpn.md.

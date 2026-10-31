@@ -14,4 +14,6 @@ for the stack overview and bootstrap; come here for per-topic detail.
 | [agu-spa.md](agu-spa.md) | SPA chart: how `images/home-site/` ships via GHCR + Image Updater, image vs. placeholder content, SPA routing fallback |
 | [psy-sampler.md](psy-sampler.md) | Sampler de capas de psytrance en `psy.agu.com.ar`: scheduler con lookahead, cambios sin clics (lanes con fade), tabla de capas, niveles medidos, paso manual de visibilidad del paquete GHCR |
 | [pihole.md](pihole.md) | Pi-hole as DNS ad-blocker + LAN DHCP: hostNetwork, the static-IP cold-boot chicken-and-egg, phased rollout, MAC→IP reservations |
+| [vpn.md](vpn.md) | WireGuard VPN (wg-easy) at `vpn.agu.com.ar` / `wg.agu.com.ar`: pod network + nf_tables, Google-only sign-in with users kept out of git, adding devices on Android/Windows/Linux |
+| [backups.md](backups.md) | Nightly restic backups to Cloudflare R2 (wg-easy database, Home Assistant's own backups): targets, secrets, alerts, restore |
 | [email-migration.md](email-migration.md) | **Design / migration runbook (not yet deployed)** — self-hosting `fede@agu.com.ar` off Google Workspace (Stalwart + AWS SES relay) |

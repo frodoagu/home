@@ -1,0 +1,38 @@
+---
+# ArgoCD Application – deploys wg-easy (WireGuard VPN + admin UI) from this repository.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wg-easy
+  namespace: argocd
+  labels:
+    agu.com.ar/category: networking
+    agu.com.ar/exposure: own-auth
+    agu.com.ar/blast-radius: app
+  annotations:
+    link.argocd.argoproj.io/external-link: "https://vpn.agu.com.ar"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  info:
+    - name: Description
+      value: "WireGuard VPN out through the home IP (wg.agu.com.ar:51820/udp) + its admin UI behind its own Google sign-in; daily restic backup to R2."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/vpn.md"
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/wg-easy
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wg-easy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
