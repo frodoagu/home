@@ -128,7 +128,10 @@ dns:
   # Pi still does the host-based routing, so this only shortcuts the path —
   # behavior is identical to the public route. Off-LAN devices are unaffected
   # (they don't use this resolver). Each entry is one IP with the hostnames
-  # that share it.
+  # that share it. Every host Traefik serves belongs here, except
+  # wg.agu.com.ar: WireGuard resolves its endpoint once, when the tunnel comes
+  # up, so a tunnel started at home would keep aiming at this LAN IP after
+  # leaving (docs/vpn.md).
   localRecords:
     - ip: "192.168.0.100"
       hosts:
@@ -144,6 +147,8 @@ dns:
         - dash.agu.com.ar
         - alertmanager.agu.com.ar
         - psy.agu.com.ar
+        - shelly.agu.com.ar
+        - vpn.agu.com.ar
   # HTTPS (SVCB, type 65) record served locally for every localRecords host.
   # localRecords only override A/AAAA, so without this the HTTPS query is
   # forwarded and Cloudflare's answer carries an `ech=` config whose public name
