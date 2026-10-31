@@ -105,6 +105,32 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /etc/wireguard
+          {{- if .Values.metrics.enabled }}
+          # Waits for the server to create its tables, then turns the Prometheus
+          # endpoint on. Never fails: a hook error would kill the container.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - node
+                  - -e
+                  - |
+                    const fs = require("fs");
+                    const Database = require("/app/server/node_modules/libsql");
+                    const path = "/etc/wireguard/wg-easy.db";
+                    const deadline = Date.now() + 120000;
+                    while (Date.now() < deadline) {
+                      try {
+                        if (fs.existsSync(path)) {
+                          const db = new Database(path);
+                          db.exec("PRAGMA busy_timeout = 10000");
+                          db.prepare("UPDATE general_table SET metrics_prometheus = 1 WHERE metrics_prometheus = 0").run();
+                          process.exit(0);
+                        }
+                      } catch {}
+                      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+                    }
+          {{- end }}
           readinessProbe:
             tcpSocket:
               port: http

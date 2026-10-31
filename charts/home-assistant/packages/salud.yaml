@@ -116,14 +116,15 @@ automation:
   - id: salud_backup_atrasado
     alias: Salud - Backup de HA atrasado
     description: >-
-      El backup automático de HA corre todos los días a las 07:30. Si deja de
+      El backup automático de HA corre todos los días a las 04:30. Si deja de
       correr no avisa nadie y se descubre el día que hace falta restaurar.
 
       Chequeo UNA vez por día y no por hora: un backup atrasado es un estado que
       persiste, así que un trigger horario mandaría el mismo aviso cada hora
       hasta que se arregle (`mode: single` no lo evita — sólo impide dos
       ejecuciones simultáneas). Con un trigger diario el throttle sale gratis.
-      A las 10:00 el backup de las 07:30 ya tuvo tiempo de correr.
+      A las 10:00 el backup de las 04:30 ya tuvo tiempo de correr. Una copia
+      sale del Pi a las 05:30 (charts/backups, docs/backups.md).
     trigger:
       - platform: time
         at: "10:00:00"

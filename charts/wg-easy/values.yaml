@@ -63,6 +63,14 @@ ingress:
   # the other dashboards.
   middlewares: []
 
+# Prometheus metrics on the UI port (/metrics/prometheus): per-client traffic
+# and handshakes, read by a VMPodScrape for the "WireGuard — VPN" dashboard in
+# charts/monitoring. wg-easy keeps the on/off switch in its database (Admin >
+# General), so a postStart hook switches it on at every start. No bearer
+# password: the IngressRoute never routes /metrics, so only the cluster reaches it.
+metrics:
+  enabled: true
+
 persistence:
   # SQLite database (users, clients, keys) + the generated wg0.conf.
   size: 100Mi

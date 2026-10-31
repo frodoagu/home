@@ -567,8 +567,8 @@ the tallest one and short sections leave a hole.
 ### Automatic schedule (migrated from Google Home)
 
 Three of the package's `automation:`s are migrated 1:1 from the Google Home
-app (same times, thresholds and guards — see
-[google-home/README.md](../google-home/README.md)):
+app (same times, thresholds and guards; the Google Home exports were in
+`google-home/`, removed once migrated):
 
 - `aires_calor_manana` — kitchen + living to **heat 21 °C** at 08:00 on
   weekdays / 09:00 on weekends, if someone's home and the living room is ≤ 17 °C.
@@ -1063,8 +1063,7 @@ setup, is in [docs/shelly.md](shelly.md).
 
 [`packages/luces_afuera.yaml`](../charts/home-assistant/packages/luces_afuera.yaml)
 turns both on at sunset and off at sunrise. This used to be a **Google
-Home automation** (Google's cloud, nothing in git — see
-[google-home/README.md](../google-home/README.md)); if that one is still in the
+Home automation** (Google's cloud, nothing in git); if that one is still in the
 app, delete it, otherwise two schedulers drive the same relays.
 
 It does not violate the one-controller rule above: that rule is about reacting to

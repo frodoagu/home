@@ -88,8 +88,10 @@ must be listed as a test user there.
 
 In the UI: **New client** → a name per device.
 
-- **Android / iOS**: install *WireGuard*, tap **+** → *Scan from QR code*, and
-  scan the client's QR in the UI.
+- **Android / iOS**: install *WireGuard* (WireGuard Development Team), tap
+  **+** → *Scan from QR code*, and scan the client's QR in the UI. Scan it from
+  INSIDE the app: the QR holds the config as text, so the phone's camera or
+  Google Lens just shows that text.
 - **Windows / macOS / Linux**: download the client's `.conf` from the UI.
   Windows/macOS: *WireGuard* app → *Import tunnel(s) from file*. Linux:
   `sudo cp <name>.conf /etc/wireguard/ && sudo wg-quick up <name>` (or import it
@@ -99,6 +101,24 @@ Check: on mobile data, `https://ifconfig.me` shows the home IP, and
 `http://lavarropas.lan` resolves.
 
 One client per device: two devices sharing a key keep knocking each other off.
+
+## Metrics
+
+wg-easy serves Prometheus metrics on the UI port, `/metrics/prometheus`: per
+client (label `name`) bytes sent and received, seconds since the last
+handshake, the endpoint it connects from, and configured / enabled /
+connected counts (connected = a handshake in the last 10 minutes). A
+VMPodScrape (`charts/wg-easy/templates/vmpodscrape.yaml`) reads them every
+60 s for the **WireGuard — VPN** dashboard in Grafana (uid `wireguard`).
+
+- The switch lives in wg-easy's database (Admin > General > Prometheus), so a
+  `postStart` hook turns it on at every start (`metrics.enabled`).
+- There's no bearer password, so the IngressRoute matches
+  `!PathPrefix(/metrics)`: from the internet `/metrics/*` is a Traefik 404, and
+  only the cluster reaches it. Don't route it: it lists every client and the
+  address it connects from.
+- The byte counters restart with the pod (they're WireGuard's own); the
+  dashboard uses `increase()`/`rate()`, which absorb that.
 
 ## One-time setup outside git
 
