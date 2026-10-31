@@ -7,6 +7,13 @@
 # `Invalid params`) and labels its reply `"devices": 1|2`. Delete this package
 # once the integration ships per-zone entities.
 # See docs/home-assistant.md#bedroom-table-lamp-wiz-squire.
+#
+# AFTER A POWER CUT the lamp can come back on at full in warm white (its
+# default pilot), even when it was off: a cut of a few seconds did it, one of
+# 40 min didn't. Its own power-on setting (`po`) is already on and doesn't
+# prevent it, so HA puts each zone back as it was. The lamp has no uptime to
+# read, and a short cut fits between two polls, so a boot is read from Pi-hole:
+# the lamp only queries DNS (wiz.world's MQTT and NTP) when it joins the network.
 
 command_line:
   - sensor:
@@ -44,6 +51,21 @@ command_line:
       json_attributes:
         - zona_a
         - zona_b
+
+rest:
+  # The `presencia.yaml` approach: Pi-hole's login is off and both are
+  # hostNetwork on the Pi. No query in Pi-hole's 24 h window renders the epoch.
+  - resource: http://192.168.0.100:8080/api/queries?client_name=velador-dormitorio.lan&length=1
+    scan_interval: 15
+    timeout: 10
+    sensor:
+      - name: Velador dormitorio - última consulta DNS
+        unique_id: velador_dormitorio_ultima_consulta_dns
+        device_class: timestamp
+        icon: mdi:restart
+        value_template: >-
+          {%- set q = value_json.queries | default([]) %}
+          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
 
 shell_command:
   # `pilot` is the setPilot params, as JSON or as a mapping. A template in the
@@ -126,9 +148,38 @@ script:
         target:
           entity_id: sensor.velador_dormitorio_zonas
 
+template:
+  # What the zones are set to (`actual`) and were set to before the last change
+  # (`anterior`), as the setPilot params getPilot reports (`devices` is
+  # setPilot's index), and when that change happened (the state). A poll with a
+  # zone missing is skipped, so a boot's first half-answer is not a change.
+  - trigger:
+      - platform: state
+        entity_id: sensor.velador_dormitorio_zonas
+    sensor:
+      - name: Velador dormitorio - estado guardado
+        unique_id: velador_dormitorio_guardado
+        default_entity_id: sensor.velador_dormitorio_guardado
+        device_class: timestamp
+        icon: mdi:content-save-outline
+        variables:
+          pilotos: >-
+            {%- set a = trigger.to_state.attributes %}
+            {%- set ns = namespace(lista=[]) %}
+            {%- for z in [a.zona_a, a.zona_b] if z is mapping %}
+            {%- set ns.lista = ns.lista + [dict(z.items() | rejectattr('0', 'in', ['mac', 'rssi']) | list)] %}
+            {%- endfor %}
+            {{- ns.lista if ns.lista | count == 2 else none }}
+          actual: "{{ this.attributes.actual | default(none) }}"
+          cambio: "{{ pilotos is not none and pilotos != actual }}"
+        state: >-
+          {{- now().isoformat() if cambio or not has_value(this.entity_id) else this.state }}
+        attributes:
+          actual: "{{ pilotos if cambio else actual }}"
+          anterior: "{{ actual if cambio else this.attributes.anterior | default(none) }}"
+
 # The two zones are identical apart from the index and the attribute they read,
 # so both lights share these blocks through YAML anchors.
-template:
   - light:
       - name: "Velador dormitorio arriba"
         unique_id: lampara_dormitorio_zona_a
@@ -266,3 +317,53 @@ light:
     entities:
       - light.velador_dormitorio_zona_a
       - light.velador_dormitorio_zona_b
+
+automation:
+  # A boot puts back the zones from before it: `anterior` when the lamp's change
+  # landed up to 30 s before the DNS query (it lights at power-on, and a poll
+  # can see it before the query), else `actual`, not yet changed. A network
+  # rejoin without a boot just resends what is there. Only a query under 2 min
+  # old counts, so a Pi-hole or HA restart doesn't replay an old boot.
+  - id: velador_dormitorio_restaurar_tras_corte
+    alias: Velador dormitorio - Restaurar después de un corte de luz
+    description: >-
+      Cuando vuelve la luz el velador puede arrancar prendido a full. Lo deja
+      como estaba antes del corte: apagado, o prendido con el mismo brillo y
+      color.
+    trigger:
+      - platform: state
+        entity_id: sensor.velador_dormitorio_ultima_consulta_dns
+        not_from: [unknown, unavailable]
+    condition:
+      - "{{ now() - trigger.to_state.state | as_datetime(now() - timedelta(days=1)) < timedelta(minutes=2) }}"
+    action:
+      - variables:
+          pilotos: >-
+            {%- set arranque = trigger.to_state.state | as_datetime %}
+            {%- set guardado = 'sensor.velador_dormitorio_guardado' %}
+            {%- set cambio = states(guardado) | as_datetime(none) %}
+            {{- state_attr(guardado, 'anterior' if cambio and cambio > arranque - timedelta(seconds=30) else 'actual') }}
+      - condition: "{{ pilotos is list and pilotos | count == 2 }}"
+      - repeat:
+          for_each: "{{ pilotos }}"
+          sequence:
+            # A scene carries `sceneId`, a white `temp`, a colour `r`/`g`/`b`
+            # (+ `c`/`w`); getPilot may report a stale `temp` next to a scene.
+            - action: shell_command.velador_dormitorio_enviar
+              continue_on_error: true
+              data:
+                pilot: >-
+                  {%- set z = repeat.item %}
+                  {%- set ns = namespace(p={'devices': z.devices, 'state': z.state}) %}
+                  {%- if z.state %}
+                  {%- set claves = ['sceneId', 'speed'] if z.sceneId | default(0) > 0
+                        else ['temp'] if z.temp is defined else ['r', 'g', 'b', 'c', 'w'] %}
+                  {%- for k in claves + ['dimming'] if k in z %}
+                  {%- set ns.p = dict(ns.p, **{k: z[k]}) %}
+                  {%- endfor %}
+                  {%- endif %}
+                  {{- ns.p | to_json }}
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.velador_dormitorio_zonas
+    mode: single
