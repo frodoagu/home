@@ -1178,6 +1178,25 @@ A change made from the WiZ app shows up in HA within one poll. The integration's
 own `light.velador_dormitorio` still drives both zones together. It's hidden
 from Google (see below), but it stays in HA for whole-lamp automations.
 
+**After a power cut** the lamp can come back on at full in warm white (scene 11,
+its default pilot) even when it was off. On 2026-10-31 a cut of a few seconds did
+it, while a 40-minute one that morning left it off. The lamp's power-on setting
+(`po`) is already on and doesn't prevent it. The other WiZ lamps on the same cut
+stayed off. So the package puts each zone back the way it was:
+
+- `sensor.velador_dormitorio_ultima_consulta_dns` reads from Pi-hole the lamp's
+  last DNS query (`eu.mqtt.wiz.world` / `ntp.wiz.world`). The lamp only queries
+  them when it joins the network, a few times a week. Polling the lamp can't
+  tell a boot apart: it has no uptime, and a short cut fits between two polls.
+- `sensor.velador_dormitorio_guardado` keeps the zones' pilots (`actual`), the
+  pilots before the last change (`anterior`), and when that change happened. A
+  poll with a zone missing doesn't count.
+- *Velador dormitorio - Restaurar después de un corte de luz* fires on a fresh
+  query. If the change landed up to 30 s before that query, the boot caused it,
+  and the automation sends `anterior`. Otherwise the poll hasn't seen the boot
+  yet, and it sends `actual`. A network rejoin without a boot resends what is
+  already there.
+
 **One lamp in the HA UI.** The package also defines a light group,
 `light.velador_dormitorio_grupo` (*Velador dormitorio*), over the two zone lights.
 It's the lamp's single tile: on/off and brightness drive both zones, and its
