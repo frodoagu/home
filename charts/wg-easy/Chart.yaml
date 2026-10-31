@@ -1,0 +1,14 @@
+apiVersion: v2
+name: wg-easy
+description: Helm chart for wg-easy (WireGuard VPN + web admin) on k3s, with daily restic backups of its database to Cloudflare R2
+type: application
+version: 0.1.0
+appVersion: "15.5.0"
+keywords:
+  - wireguard
+  - vpn
+  - wg-easy
+sources:
+  - https://github.com/wg-easy/wg-easy
+maintainers:
+  - name: frodoagu

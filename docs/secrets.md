@@ -28,6 +28,11 @@ see [.gitignore](../.gitignore).
 | `ha-google-sa` | `home-assistant` | Home Assistant `google_assistant` | HomeGraph service-account JSON under key `service_account.json` (optional — only for report_state / request_sync) |
 | `alertmanager-telegram` | `monitoring` | Alertmanager (telegram receiver) | Telegram bot token under key `bot-token` |
 | `grafana-admin` | `monitoring` | Grafana (`admin.existingSecret`) + its dashboard sidecar | Random admin `admin-user` / `admin-password`; no one logs in with it (auth.proxy). Pinned so the chart stops minting a new one per render and rolling the pod |
+| `oauth2-proxy-allowed-emails` | `oauth2-proxy` | oauth2-proxy (`authenticatedEmailsFile`) | The google-auth allowlist, one email per line under key `restricted_user_access`. Sealed so the addresses stay out of this public repo |
+| `wg-easy-oauth` | `wg-easy` | wg-easy Google sign-in | The same Google OAuth client as oauth2-proxy, under keys `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` |
+| `wg-easy-init` | `wg-easy` | wg-easy first start (`INIT_PASSWORD`) | Random password of the setup wizard's admin; nobody uses it (password sign-in is off) |
+| `backup-r2` | each backup target's namespace (`wg-easy`, `home-assistant`) | restic CronJobs (charts/backups) | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, and an R2 token's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Keep `RESTIC_PASSWORD` outside the cluster too: see [backups.md](backups.md) |
+| `cloudflare-usage` | `monitoring` | cloudflare-usage CronJob | Cloudflare API token (Account Analytics:Read, Billing:Read, Zone:Read) under `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ACCOUNT_ID` |
 | `pihole-admin` | `pihole` (+ `monitoring`) | Pi-hole web UI (+ pihole-exporter) | Admin password under key `password` (**optional** — only when `admin.disablePassword: false`; by default Pi-hole's own login is off and google-auth gates the UI). When it is set, the exporter needs a copy in `monitoring` (`piholeExporter.passwordSecret`) |
 
 ## Create them
@@ -66,6 +71,16 @@ kubectl create secret generic oauth2-proxy-secrets -n oauth2-proxy \
   --from-literal=client-id='1036300943412-3np4as1pb6d2ovkbt9j89aiact2bddc0.apps.googleusercontent.com' \
   --from-literal=client-secret='<google-client-secret-from-console>' \
   --from-literal=cookie-secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+```
+
+**oauth2-proxy allowlist** (who gets past google-auth). One email per line;
+adding or removing someone means re-sealing the whole list:
+
+```bash
+printf '%s\n' you@example.com other@example.com |
+  kubectl create secret generic oauth2-proxy-allowed-emails -n oauth2-proxy \
+    --from-file=restricted_user_access=/dev/stdin --dry-run=client -o yaml |
+  kubeseal --format yaml > charts/oauth2-proxy/templates/oauth2-proxy-allowed-emails-sealed.yaml
 ```
 
 **ArgoCD Google login (Dex/OIDC).** ArgoCD's Dex reads the Google client creds
@@ -184,6 +199,11 @@ beside the chart that consumes them:
 | `ha-google-sa` (home-assistant) | `charts/home-assistant/templates/ha-google-sa-sealed.yaml` |
 | `alertmanager-telegram` (monitoring) | `charts/monitoring/templates/alertmanager-telegram-sealed.yaml` |
 | `grafana-admin` (monitoring) | `charts/monitoring/templates/grafana-admin-sealed.yaml` |
+| `cloudflare-usage` (monitoring) | `charts/monitoring/templates/cloudflare-usage-sealed.yaml` |
+| `oauth2-proxy-allowed-emails` (oauth2-proxy) | `charts/oauth2-proxy/templates/oauth2-proxy-allowed-emails-sealed.yaml` |
+| `wg-easy-oauth` (wg-easy) | `charts/wg-easy/templates/wg-easy-oauth-sealed.yaml` |
+| `wg-easy-init` (wg-easy) | `charts/wg-easy/templates/wg-easy-init-sealed.yaml` |
+| `backup-r2` (wg-easy, home-assistant) | `charts/backups/templates/backup-r2-<namespace>-sealed.yaml` |
 
 Install the CLI once, matching the controller's `appVersion` in
 `charts/sealed-secrets/Chart.yaml` (`brew install kubeseal`). The controller is

@@ -1,4 +1,4 @@
-import { Activity, AudioWaveform, BellRing, Cable, GitBranch, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
+import { Activity, AudioWaveform, BellRing, Cable, GitBranch, GlobeLock, Home, LayoutDashboard, Lightbulb, Network, ScrollText, Shield, Sparkles, Zap } from "lucide-react";
 import NeutralCurrentVisualizer from "./NeutralCurrentVisualizer";
 import MandelbrotExplorer from "./MandelbrotExplorer";
 import BalancedAudio from "./BalancedAudio";
@@ -229,6 +229,21 @@ export const privateLinks = [
     tag: { es: "Hogar", en: "Home", pt: "Casa", fr: "Maison" },
     icon: Lightbulb,
     accent: "#eab308",
+  },
+  {
+    slug: "vpn",
+    title: { es: "VPN", en: "VPN", pt: "VPN", fr: "VPN" },
+    description: {
+      es: "WireGuard para salir por la IP de casa: dispositivos y códigos QR.",
+      en: "WireGuard out through the home IP: devices and QR codes.",
+      pt: "WireGuard para sair pelo IP de casa: dispositivos e códigos QR.",
+      fr: "WireGuard pour sortir par l'IP de la maison : appareils et QR codes.",
+    },
+    href: "https://vpn.agu.com.ar",
+    categories: ["devops"],
+    tag: { es: "Red", en: "Network", pt: "Rede", fr: "Réseau" },
+    icon: GlobeLock,
+    accent: "#10b981",
   },
   {
     slug: "homepage",

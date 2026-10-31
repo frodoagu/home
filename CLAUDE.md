@@ -48,6 +48,8 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.
   pihole/            Pi-hole DNS ad-blocker + DHCP server (hostNetwork). UI at pihole.agu.com.ar (google-auth).
+                     Cloudflare usage/charges: a 12 h CronJob pushes cloudflare_* gauges into
+                     vmsingle (R2 vs its free tier, paid plans) → cloudflare.billing alerts.
   victoria-logs/     VictoriaLogs single + bundled Vector collector (wrapper chart). Cluster-wide log DB;
                      UI (vmui) at logs.agu.com.ar (google-auth) + queryable from Grafana. SD-friendly retention.
                      Vector GeoIP-tags Traefik access logs (log.client_country, DB-IP Lite; docs/monitoring.md#geoip).
@@ -68,6 +70,14 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      per device (/escalera, /principal) to that device's LAN HTTP RPC. Does NOT link the
                      device's native UI (it hardcodes ws:// → dead behind HTTPS); the panel speaks the
                      same-origin RPC instead. Separate from shelly-config. See docs/shelly.md + gotchas.
+  wg-easy/           WireGuard VPN (wg-easy) out through the home IP. Endpoint wg.agu.com.ar:51820/udp
+                     (DNS-only record, router forward), admin UI at vpn.agu.com.ar behind wg-easy's OWN
+                     Google sign-in (not google-auth), users added by scripts/vpn-user.sh so their
+                     emails stay out of git. Pod network + nf_tables. See docs/vpn.md + gotchas.
+  backups/           restic CronJobs → one repo in the Cloudflare R2 bucket agu-backups. One CronJob
+                     per `targets` entry, IN the target's namespace (wg-easy DB via VACUUM INTO; the
+                     newest Home Assistant nightly backup tar). backup-r2 sealed once per namespace.
+                     See docs/backups.md.
 images/              Dockerfiles + build contexts for CI-built container images (one dir per image).
   home-site/         The agu.com.ar landing SPA (Vite + React + Tailwind) AND its Dockerfile.
                      Public apps (src/apps/registry.jsx `apps`: in-app tools, or an `href` to an
@@ -151,11 +161,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (`auth.agu.com.ar`); a `google-auth-signin` `errors` middleware turns 401/403s
   into a sign-in redirect. The session cookie is scoped to `.agu.com.ar`, so one
   sign-in covers all subdomains; authorization is an explicit email allowlist
-  (`authenticatedEmailsFile.restricted_access` in `charts/oauth2-proxy/values.yaml`),
+  (the `oauth2-proxy-allowed-emails` SealedSecret, `authenticatedEmailsFile.template`),
   NOT `--email-domain`. (2) **ArgoCD** logs in via its bundled **Dex/OIDC**
   (`charts/argocd/values.yaml`); its local `admin` account is disabled
-  (`admin.enabled: "false"`), so Google is the only sign-in and the email must
-  be mapped to `role:admin`. **Home Assistant** is deliberately NOT behind
+  (`admin.enabled: "false"`), so Google is the only sign-in and the Google
+  account ID must be mapped to `role:admin`. **No email in git**: the repo is
+  public, so allowlists are a SealedSecret (oauth2-proxy), Google account IDs
+  (Argo CD RBAC, the site's `ALLOWED_SUBJECTS`) or a database (wg-easy users).
+  **wg-easy** (`vpn.agu.com.ar`) has its own Google sign-in and is NOT behind
+  google-auth either, so VPN-only users don't get the dashboards. **Home Assistant** is deliberately NOT behind
   google-auth (the mobile app / Google Assistant webhook need direct access) —
   it keeps its own login, fronted by a Traefik `rateLimit` on `/auth/*`
   (`charts/home-assistant`). The site's `privateLinks` use a separate,
@@ -685,6 +699,23 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   fullname (the google-auth Middlewares do). Cloud save stays off there: Google
   OAuth JS origins take no wildcard. DNS is the `*.agu.com.ar` DDNS record; TLS
   is one shared `*.agu.com.ar` origin cert (`ingress.tlsDomains`).
+- **wg-easy — iptables-nft, pod network, users by script.** The image points
+  `iptables` at the legacy backend; the Pi's kernel doesn't load `ip_tables`/
+  `iptable_nat` (k3s is nf_tables), so `wg-quick up` dies on its first rule. The
+  container command repoints `/etc/alternatives/ip{,6}tables*` at
+  `xtables-nft-multi` before `exec`ing the image's CMD; keep that if you touch
+  the command. It runs on the pod network (rules stay in its netns), with the
+  forwarding sysctls set by a privileged init container (not "safe" sysctls).
+  `INIT_*` apply on the FIRST start only; after that host/DNS/AllowedIPs are DB
+  state, edited in the UI. wg-easy has no UI to create users and
+  `OAUTH_AUTO_REGISTER=true` would make ANY Google account an admin, so users go
+  in with `scripts/vpn-user.sh` (email matched exactly, lowercase). The endpoint
+  `wg.agu.com.ar` must be grey: favonia applies `dnsOnly` only when it CREATES a
+  record. See docs/vpn.md.
+- **backups — group by host, not paths.** HA's backup tar is named after its day,
+  so restic's default `forget` grouping (host + paths) would keep every snapshot
+  forever; `charts/backups` forgets with `--group-by host`. Targets share one
+  repo: space their schedules (prune locks it; `--retry-lock` covers overlap).
 - **New public hostnames** must be added to `charts/cloudflare-ddns/values.yaml`
   `domains:` (the DDNS updater creates the Cloudflare A records).
 - Local env: `helm` v3.14.2; chart-dependency repos (vm, oauth2-proxy,

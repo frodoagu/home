@@ -21,8 +21,8 @@ import { useLanguage } from "../i18n/LanguageProvider";
  * Client-side Google sign-in (Google Identity Services).
  *
  * No backend: the GIS script returns a signed JWT ID token in the browser. We
- * decode it for the email/name/picture, persist it until it expires, and treat
- * any email in ALLOWED_EMAILS as authorized. This gates the private section at
+ * decode it for the account ID/email/name/picture, persist it until it expires,
+ * and treat any account ID in ALLOWED_SUBJECTS as authorized. This gates the private section at
  * the UX level only — the services behind the links keep their own auth.
  * Pure helpers (decode/storage/allowlist) live in `auth.js`.
  * ---------------------------------------------------------------------- */

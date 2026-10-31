@@ -1,0 +1,80 @@
+{{- if .Values.cloudflareUsage.enabled }}
+{{- $component := "cloudflare-usage" }}
+# cloudflare-usage
+#
+# What Cloudflare could bill: R2 against its free tier (stored bytes, and this
+# month's Class A / Class B operations, from the GraphQL Analytics API), every
+# account subscription and every zone plan with its price. A CronJob, not an
+# exporter: the numbers move slowly and the API is rate-limited, so it pushes
+# them into vmsingle twice a day and the rules read them with last_over_time.
+#
+# Exported series:
+#   cloudflare_r2_storage_bytes{bucket}             payload + metadata, latest
+#   cloudflare_r2_objects{bucket}                   object count, latest
+#   cloudflare_r2_operations_month{class}           A | B | free | other, month to date (UTC)
+#   cloudflare_subscription_price_usd{plan,state,frequency}
+#   cloudflare_zone_plan_price_usd{zone,plan}
+#   cloudflare_usage_last_success_timestamp_seconds
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "monitoring.fullname" . }}-{{ $component }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+data:
+  check.py: |
+    {{- .Files.Get "files/cloudflare-usage.py" | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "monitoring.fullname" . }}-{{ $component }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  schedule: {{ .Values.cloudflareUsage.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "monitoring.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: {{ $component }}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: check
+              image: {{ .Values.cloudflareUsage.image }}
+              command: ["python", "/script/check.py"]
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.cloudflareUsage.existingSecret }}
+              env:
+                - name: PUSH_URL
+                  value: {{ .Values.cloudflareUsage.pushUrl | quote }}
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65534
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+              resources:
+                {{- toYaml .Values.cloudflareUsage.resources | nindent 16 }}
+          volumes:
+            - name: script
+              configMap:
+                name: {{ include "monitoring.fullname" . }}-{{ $component }}
+{{- end }}

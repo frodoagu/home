@@ -1,0 +1,42 @@
+---
+# ArgoCD Application – off-Pi restic backups of selected PVCs to Cloudflare R2.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backups
+  namespace: argocd
+  labels:
+    agu.com.ar/category: security
+    agu.com.ar/exposure: internal
+    agu.com.ar/blast-radius: app
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  info:
+    - name: Description
+      value: "Daily restic snapshots of the wg-easy database and Home Assistant's nightly backup to Cloudflare R2, one CronJob per target namespace."
+    - name: Docs
+      value: "https://github.com/frodoagu/home/blob/main/docs/backups.md"
+  source:
+    repoURL: git@github.com:frodoagu/home.git
+    targetRevision: HEAD
+    path: charts/backups
+    helm:
+      valueFiles:
+        - values.yaml
+  # No destination namespace: every resource names its target's namespace,
+  # which that target's own Application creates.
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # A brand-new target's namespace may not exist yet on the first sync.
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

@@ -11,7 +11,7 @@ the Dockerfile that bakes it into an nginx image. Deployed by
   An entry is either an in-app tool (`Component`, routed at `/app/<slug>`) or an
   app on its own subdomain (`href`, e.g. `psy.agu.com.ar`).
 - **Private links**: `privateLinks` in the same registry, shown only after a
-  client-side Google sign-in with an email from `ALLOWED_EMAILS` in
+  client-side Google sign-in with an account ID from `ALLOWED_SUBJECTS` in
   [`src/auth/config.js`](src/auth/config.js). It hides the URLs from casual
   visitors; each linked service still does its own auth.
 

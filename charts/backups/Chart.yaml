@@ -1,0 +1,14 @@
+apiVersion: v2
+name: backups
+description: Daily off-Pi restic backups of selected PVCs to Cloudflare R2, one CronJob per target in the target's namespace
+type: application
+version: 0.1.0
+appVersion: "0.19.1"
+keywords:
+  - backup
+  - restic
+  - r2
+sources:
+  - https://github.com/restic/restic
+maintainers:
+  - name: frodoagu

@@ -7,9 +7,11 @@ Argo CD or called by a chart.
 |---|---|---|
 | [`candyctl.py`](#candyctlpy) | Read and drive the Candy washer-dryer over its local HTTP API | `lavarropas.lan` on the LAN |
 | [`phrase_cues.py`](#phrase_cuespy) | Write rekordbox hot cues N bars before every phrase change | rekordbox's local `master.db` |
+| [`vpn-user.sh`](#vpn-usersh) | Add, list or remove who can sign in to the VPN admin with Google | the `wg-easy` pod, via `kubectl exec` |
 
-Both are single-file Python 3 scripts. `candyctl.py` uses only the standard
-library; `phrase_cues.py` needs [`pyrekordbox`](https://github.com/dylanljones/pyrekordbox).
+The two Python 3 scripts are single files: `candyctl.py` uses only the
+standard library; `phrase_cues.py` needs [`pyrekordbox`](https://github.com/dylanljones/pyrekordbox).
+`vpn-user.sh` needs only bash and `kubectl`.
 
 ---
 
@@ -310,3 +312,28 @@ to avoid overwriting).
   Windows), so the import matches the tracks already in the collection.
 - The 4-beats-per-bar assumption suits psytrance and most dance music; tracks
   in another meter get cues at the wrong distance.
+
+---
+
+## vpn-user.sh
+
+Manages who can sign in to the wg-easy admin at `vpn.agu.com.ar`
+([docs/vpn.md](../docs/vpn.md#who-can-sign-in)). wg-easy lets in a Google
+account only when its email already belongs to a wg-easy user, and has no
+screen to create users, so this writes them into its SQLite database through
+`kubectl exec`. The emails stay out of git.
+
+```text
+vpn-user.sh list
+vpn-user.sh add <email> [display name]
+vpn-user.sh remove <email>
+```
+
+```bash
+scripts/vpn-user.sh add someone@example.com   # they then sign in with Google
+scripts/vpn-user.sh list                      # email, username, linked or not
+```
+
+Emails are lowercased (Google sends them that way and wg-easy matches them
+exactly). Users are admins, like every user wg-easy creates. `WG_EASY_NAMESPACE`
+overrides the namespace (default `wg-easy`).

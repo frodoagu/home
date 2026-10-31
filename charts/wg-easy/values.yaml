@@ -1,0 +1,81 @@
+# wg-easy: a WireGuard VPN server plus its web admin, on the pod network.
+# Clients connect to wg.agu.com.ar:51820/udp (DNS-only record, router forward)
+# and leave through the home IP; the admin lives at vpn.agu.com.ar.
+# See docs/vpn.md.
+
+revisionHistoryLimit: 1
+
+image:
+  repository: ghcr.io/wg-easy/wg-easy
+  # Releases: https://github.com/wg-easy/wg-easy/releases
+  tag: "15.5.0"
+  # Multi-arch index digest for 15.5.0, so the arm64 node picks its own image.
+  digest: "sha256:071f79a639e9361123a5e57733107320207b844ddbbd92dfa6962f541fe8aac8"
+  pullPolicy: IfNotPresent
+
+# Sets the pod netns' forwarding sysctls. They aren't on Kubernetes' "safe"
+# list, so a privileged init container writes them instead of
+# securityContext.sysctls (which would need kubelet --allowed-unsafe-sysctls).
+sysctlImage: "docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec"
+
+wireguard:
+  # Public endpoint the client configs point at. Must be a DNS-only (grey)
+  # Cloudflare record: Cloudflare can't proxy UDP. charts/cloudflare-ddns
+  # keeps it in `dnsOnly`.
+  host: wg.agu.com.ar
+  port: 51820
+  # Pi-hole: ad blocking and .lan names for the clients too.
+  dns: "192.168.0.100"
+  # Full tunnel, so everything leaves through the home IP. ::/0 sends IPv6 into
+  # the tunnel (where there is none) instead of leaking it past the VPN.
+  allowedIps: "0.0.0.0/0,::/0"
+
+# The UI's peer: Traefik in the pod CIDR. wg-easy only trusts X-Forwarded-* from
+# here, and builds the Google OAuth redirect URI from them.
+trustedProxies: "10.42.0.0/16"
+
+# Sign-in is Google only, and only for accounts whose email is already a
+# wg-easy user (scripts/vpn-user.sh adds them). Those emails live in the
+# database, never in git. Same OAuth client as oauth2-proxy and Argo CD.
+oauth:
+  # Keys OAUTH_GOOGLE_CLIENT_ID / OAUTH_GOOGLE_CLIENT_SECRET.
+  existingSecret: wg-easy-oauth
+
+# wg-easy reads INIT_* on the first start only, to skip its setup wizard. The
+# admin it creates has a random password that nobody uses: password sign-in is
+# off. Key INIT_PASSWORD.
+init:
+  username: bootstrap
+  existingSecret: wg-easy-init
+
+service:
+  # The admin UI, for the IngressRoute only.
+  port: 51821
+  # WireGuard itself, published on the node by klipper's svclb.
+  wireguardType: LoadBalancer
+
+ingress:
+  enabled: true
+  host: vpn.agu.com.ar
+  certResolver: letsencrypt
+  # No google-auth here: wg-easy's own Google sign-in is the gate, so people
+  # outside oauth2-proxy's allowlist can use the VPN admin without reaching
+  # the other dashboards.
+  middlewares: []
+
+persistence:
+  # SQLite database (users, clients, keys) + the generated wg0.conf.
+  size: 100Mi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 96Mi
+  limits:
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

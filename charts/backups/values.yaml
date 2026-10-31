@@ -1,0 +1,56 @@
+# Off-Pi backups: one restic repository in a Cloudflare R2 bucket, one CronJob
+# per target, each in its target's namespace (a pod can only mount a PVC from
+# its own namespace). Snapshots are tagged --host <target name>, so retention
+# and restores are per target. See docs/backups.md.
+
+image:
+  repository: docker.io/restic/restic
+  tag: "0.19.1"
+  # Multi-arch index digest, so the arm64 node picks its own image.
+  digest: "sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510"
+  pullPolicy: IfNotPresent
+
+# Takes the consistent copy of a live SQLite database (`sqlite` targets).
+sqliteImage: "docker.io/library/python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"
+
+# Sealed into EVERY target namespace under this name (templates/
+# backup-r2-<namespace>-sealed.yaml), with the same values: RESTIC_REPOSITORY
+# (s3:https://<account>.r2.cloudflarestorage.com/<bucket>), RESTIC_PASSWORD,
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Without RESTIC_PASSWORD the
+# repository is unreadable: keep a copy outside the cluster.
+existingSecret: backup-r2
+
+retention:
+  keepDaily: 7
+  keepWeekly: 4
+
+# Each target backs up ONE of:
+#   sqlite: a live SQLite file on the claim, copied with VACUUM INTO (a
+#           consistent snapshot while its app keeps it open);
+#   latest: the newest file matching a glob on the claim, e.g. an app's own
+#           nightly backup archive.
+# Space the schedules out: they share one repository, and prune locks it.
+targets:
+  - name: wg-easy
+    namespace: wg-easy
+    claim: wg-easy-data
+    schedule: "0 4 * * *"
+    sqlite: wg-easy.db
+  # Home Assistant writes its own backup (config, .storage, recorder database)
+  # every night at 04:30, the format its onboarding restores from. This ships
+  # the newest one off the Pi. It may be encrypted with HA's backup key
+  # (Settings > System > Backups): keep that key outside the cluster too.
+  - name: home-assistant
+    namespace: home-assistant
+    claim: home-assistant-config
+    schedule: "30 5 * * *"
+    latest: "backups/Automatic_backup_*.tar"
+
+timeZone: America/Argentina/Buenos_Aires
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    memory: 512Mi

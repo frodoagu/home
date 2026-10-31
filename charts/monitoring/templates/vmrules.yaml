@@ -111,6 +111,61 @@ spec:
           annotations:
             summary: "shelly-config hasn't reconciled successfully in a while"
             description: {{ `shelly-config CronJob has had no successful run for over 100m (several consecutive ticks) -- the outdoor light Shellys may be out of sync or unreachable.` | quote }}
+        # The daily off-Pi backups (charts/backups). KubeJobFailed already pages
+        # on a failed run; this catches the runs that never happen (a suspended
+        # CronJob, a missing secret, a scheduler that skipped them).
+        - alert: BackupStale
+          expr: time() - kube_cronjob_status_last_successful_time{cronjob=~"backup-.+"} > 2 * 86400
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Backup {{ $labels.namespace }}/{{ $labels.cronjob }} is stale` | quote }}
+            description: {{ `No successful run of {{ $labels.cronjob }} in two days, so the newest off-Pi copy in R2 is older than that. See docs/backups.md.` | quote }}
+
+    {{- with .Values.cloudflareUsage }}
+    {{- if .enabled }}
+    # Pushed twice a day by the cloudflare-usage CronJob, hence last_over_time
+    # over a window wider than its 12h schedule.
+    - name: cloudflare.billing
+      rules:
+        - alert: R2StorageNearFreeTier
+          expr: sum(last_over_time(cloudflare_r2_storage_bytes[13h])) > {{ .alertRatio }} * {{ int64 .freeTier.storageBytes }}
+          labels:
+            severity: warning
+          annotations:
+            summary: "R2 storage is near the free tier"
+            description: {{ printf "R2 holds {{ $value | humanize1024 }}B, over %v%% of the %v GB free tier. Past it, storage is billed per GB-month. Trim restic retention (charts/backups) or the buckets." (mulf .alertRatio 100) (div (int64 .freeTier.storageBytes) 1000000000) | quote }}
+        - alert: R2OperationsNearFreeTier
+          expr: |
+            last_over_time(cloudflare_r2_operations_month{class="A"}[13h]) > {{ .alertRatio }} * {{ int64 .freeTier.classAOperations }}
+              or
+            last_over_time(cloudflare_r2_operations_month{class="B"}[13h]) > {{ .alertRatio }} * {{ int64 .freeTier.classBOperations }}
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `R2 Class {{ $labels.class }} operations are near the free tier` | quote }}
+            description: {{ printf "{{ $value | humanize }} Class {{ $labels.class }} operations this month, over %v%% of the free tier (A: %v, B: %v). Past it, every million is billed." (mulf .alertRatio 100) (int64 .freeTier.classAOperations) (int64 .freeTier.classBOperations) | quote }}
+        - alert: CloudflarePaidPlan
+          expr: |
+            last_over_time(cloudflare_subscription_price_usd[13h]) > 0
+              or
+            last_over_time(cloudflare_zone_plan_price_usd[13h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: {{ `Cloudflare is billing a plan: {{ $labels.plan }}` | quote }}
+            description: {{ `{{ $labels.plan }}{{ with $labels.zone }} on {{ . }}{{ end }} costs {{ $value }} USD{{ with $labels.frequency }} ({{ . }}){{ end }}. Check Billing in the Cloudflare dashboard.` | quote }}
+        # Only once it has succeeded at least once; failed runs page through
+        # KubeJobFailed.
+        - alert: CloudflareUsageCheckStale
+          expr: time() - max(last_over_time(cloudflare_usage_last_success_timestamp_seconds[3d])) > 26 * 3600
+          labels:
+            severity: warning
+          annotations:
+            summary: "The Cloudflare usage check hasn't succeeded in over a day"
+            description: "Nothing watches R2's free tier or Cloudflare charges until the cloudflare-usage CronJob (monitoring) succeeds again."
+    {{- end }}
+    {{- end }}
 
     - name: blackbox.uptime
       rules:

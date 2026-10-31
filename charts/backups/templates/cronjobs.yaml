@@ -1,0 +1,104 @@
+{{- range .Values.targets }}
+{{- if eq (len (compact (list .sqlite .latest))) 1 | not }}
+{{- fail (printf "backup target %s needs exactly one of sqlite / latest" .name) }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-{{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    {{- include "backups.labels" $ | nindent 4 }}
+    app.kubernetes.io/instance: {{ .name }}
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: {{ $.Values.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ $.Chart.Name }}
+            app.kubernetes.io/instance: {{ .name }}
+        spec:
+          restartPolicy: Never
+          {{- if .sqlite }}
+          initContainers:
+            # A read transaction, so the app keeps writing while it runs.
+            - name: snapshot
+              image: {{ $.Values.sqliteImage }}
+              command:
+                - python
+                - -c
+                - |
+                  import sqlite3
+                  sqlite3.connect("/data/{{ .sqlite }}").execute("VACUUM INTO ?", ("/stage/{{ .sqlite }}",))
+                  copy = sqlite3.connect("file:/stage/{{ .sqlite }}?mode=ro", uri=True)
+                  check = copy.execute("PRAGMA integrity_check").fetchone()[0]
+                  if check != "ok":
+                      raise SystemExit(f"snapshot integrity: {check}")
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: stage
+                  mountPath: /stage
+              resources:
+                {{- toYaml $.Values.resources | nindent 16 }}
+          {{- end }}
+          containers:
+            - name: restic
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}{{ with $.Values.image.digest }}@{{ . }}{{ end }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              command:
+                - sh
+                - -ec
+                - |
+                  {{- if .sqlite }}
+                  file=/stage/{{ .sqlite }}
+                  {{- else }}
+                  file=$(ls -t /data/{{ .latest }} | head -n 1)
+                  {{- end }}
+                  test -f "$file" || { echo "nothing to back up"; exit 1; }
+                  restic cat config >/dev/null 2>&1 || restic init
+                  restic backup --retry-lock 30m --host {{ .name }} "$file"
+                  # By host only: a `latest` file is named after its day, and
+                  # restic's default grouping (host + paths) would keep each forever.
+                  restic forget --retry-lock 30m --host {{ .name }} --group-by host --prune \
+                    --keep-daily {{ $.Values.retention.keepDaily }} --keep-weekly {{ $.Values.retention.keepWeekly }}
+              envFrom:
+                - secretRef:
+                    name: {{ $.Values.existingSecret }}
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+              volumeMounts:
+                {{- if .sqlite }}
+                - name: stage
+                  mountPath: /stage
+                {{- else }}
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                {{- end }}
+                - name: cache
+                  mountPath: /cache
+              resources:
+                {{- toYaml $.Values.resources | nindent 16 }}
+          volumes:
+            # RWO, but a single node lets this pod mount it next to the app.
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ .claim }}
+            {{- if .sqlite }}
+            - name: stage
+              emptyDir: {}
+            {{- end }}
+            - name: cache
+              emptyDir: {}
+{{- end }}
