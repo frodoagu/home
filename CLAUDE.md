@@ -47,9 +47,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      Custom dashboards are JSON under charts/monitoring/dashboards/ (globbed into one
                      ConfigMap; bundled defaultDashboards are off). Also provisions the VictoriaLogs
                      Grafana datasource (see victoria-logs below). See docs/monitoring.md.
-  pihole/            Pi-hole DNS ad-blocker + DHCP server (hostNetwork). UI at pihole.agu.com.ar (google-auth).
                      Cloudflare usage/charges: a 12 h CronJob pushes cloudflare_* gauges into
                      vmsingle (R2 vs its free tier, paid plans) → cloudflare.billing alerts.
+  pihole/            Pi-hole DNS ad-blocker + DHCP server (hostNetwork). UI at pihole.agu.com.ar (google-auth).
   victoria-logs/     VictoriaLogs single + bundled Vector collector (wrapper chart). Cluster-wide log DB;
                      UI (vmui) at logs.agu.com.ar (google-auth) + queryable from Grafana. SD-friendly retention.
                      Vector GeoIP-tags Traefik access logs (log.client_country, DB-IP Lite; docs/monitoring.md#geoip).
@@ -73,7 +73,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
   wg-easy/           WireGuard VPN (wg-easy) out through the home IP. Endpoint wg.agu.com.ar:51820/udp
                      (DNS-only record, router forward), admin UI at vpn.agu.com.ar behind wg-easy's OWN
                      Google sign-in (not google-auth), users added by scripts/vpn-user.sh so their
-                     emails stay out of git. Pod network + nf_tables. See docs/vpn.md + gotchas.
+                     emails stay out of git. Pod network + nf_tables. Prometheus metrics (in-cluster only:
+                     the IngressRoute doesn't route /metrics) → "WireGuard — VPN" dashboard.
+                     See docs/vpn.md + gotchas.
   backups/           restic CronJobs → one repo in the Cloudflare R2 bucket agu-backups. One CronJob
                      per `targets` entry, IN the target's namespace (wg-easy DB via VACUUM INTO; the
                      newest Home Assistant nightly backup tar). backup-r2 sealed once per namespace.
@@ -174,12 +176,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   it keeps its own login, fronted by a Traefik `rateLimit` on `/auth/*`
   (`charts/home-assistant`). The site's `privateLinks` use a separate,
   purely client-side Google sign-in (`images/home-site/src/auth/`) — unrelated to oauth2-proxy.
-- **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex,
-  Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`, `git-creds`)
-  are created **out-of-band with `kubectl create secret`** and
-  referenced by name — never committed. Full list in `docs/secrets.md`. The
-  `sealed-secrets` controller (kube-system) offers a git-committable alternative:
-  `kubeseal` encrypts a Secret into a `SealedSecret` only this cluster can decrypt.
+- **Secrets** (Cloudflare tokens, Google OAuth for oauth2-proxy + ArgoCD Dex +
+  wg-easy, Google HomeGraph SA, dashboard basic-auth fallback, `ghcr-creds`,
+  `git-creds`, the R2/restic `backup-r2`, the oauth2-proxy allowlist) are
+  committed ENCRYPTED as `SealedSecret`s next to the chart that uses them
+  (`templates/<name>-sealed.yaml`); never in plaintext. The `sealed-secrets`
+  controller (kube-system) decrypts them, and only this cluster's key can, so
+  that key's off-Pi backup is what makes the repo reproducible. Mint the
+  plaintext with `kubectl create secret … --dry-run=client -o yaml | kubeseal`.
+  Full list in `docs/secrets.md`.
 - **SPA image auto-updates**: CI builds `images/home-site/` → `ghcr.io/frodoagu/home-site:latest`;
   the `ImageUpdater` CR (in `charts/argocd-image-updater`) pins its digest into
   `charts/agu-spa/values.yaml` via git write-back. Same for `images/psy-sampler/`

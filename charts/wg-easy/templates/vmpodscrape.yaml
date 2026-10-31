@@ -1,0 +1,17 @@
+{{- if .Values.metrics.enabled }}
+# Feeds the "WireGuard — VPN" dashboard in charts/monitoring.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "wg-easy.fullname" . }}
+  labels:
+    {{- include "wg-easy.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "wg-easy.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics/prometheus
+      interval: 60s
+{{- end }}

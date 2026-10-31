@@ -67,6 +67,7 @@ keep Grafana focused on these:
 | Blackbox — Uptime & SLA | `blackbox-sla` | per-endpoint status, uptime %, up/down history, latency, TLS days-to-expiry |
 | Pi-hole — DNS | `pihole` | blocking status, queries/blocked/% (24h), cached vs forwarded, query and reply types, top domains/ads, upstreams, active clients. Community dashboard [10176](https://grafana.com/grafana/dashboards/10176-pi-hole-exporter/), adapted (see *Pi-hole metrics*) |
 | Home Assistant — Estadísticas | `home-assistant` | in Spanish: runs per automation (and per group, per hour, last run), gas left, use per 24h/7d, burn rate and days left, cylinder level % vs temperature, AC hours per unit and per mode, AC mode timeline, hours on per computer, room/outside temperatures vs setpoints, light hours and on/off timeline, presence timeline, PC and washer-dryer, HA uptime/restarts/memory, unavailable and chattiest entities (see *Home Assistant metrics*) |
+| WireGuard — VPN | `wireguard` | connected / configured / enabled clients, traffic through home per direction (24h), server up, client table (tunnel IP, last handshake, 24h traffic, endpoint), throughput per client, connected timeline, traffic per day (see [vpn.md#metrics](vpn.md#metrics)) |
 | psy-sampler — Cloud save | `psy-sync` | accounts (total, vs cap, new/active per window), anonymous browsers, usage (seconds played, per player, per user; exports, shares and autopilot starts), visitor countries (map, top list, over time; from VictoriaLogs), disk per account and size distribution, SQLite vs PVC, API traffic by route/status (see *psy-sampler cloud save*) |
 
 To add one: drop a `*.json` in `dashboards/` (give it a unique `uid`, and include
@@ -129,7 +130,9 @@ at `https://grafana.agu.com.ar/playlists/play/<uid>`.
 Rules in [templates/vmrules.yaml](../charts/monitoring/templates/vmrules.yaml)
 (plus the chart's `defaultRules`) cover: RPi temperature (70 °C warn / 80 °C
 crit), under-voltage/throttling, disk/memory pressure, node-exporter down, pod
-issues, blackbox probe down, and TLS cert expiry (<14d / <3d). They fire through
+issues, blackbox probe down, TLS cert expiry (<14d / <3d), stale off-Pi
+backups (`BackupStale`, [backups.md](backups.md#alerts)) and Cloudflare usage
+and charges ([Cloudflare usage](#cloudflare-usage)). They fire through
 Alertmanager to a Telegram bot.
 
 Setup:

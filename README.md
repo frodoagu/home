@@ -38,7 +38,7 @@ services running on a Raspberry Pi with k3s.
 flowchart TD
     Internet([Internet])
     CF[Cloudflare DNS<br/>agu.com.ar zone]
-    Router[Home Router<br/>forwards TCP 80/443]
+    Router[Home Router<br/>forwards TCP 80/443 + UDP 51820]
 
     Internet -->|DNS lookup| CF
     Internet -->|HTTPS| Router
@@ -62,7 +62,11 @@ flowchart TD
         MON[monitoring<br/>VictoriaMetrics · Grafana<br/>node/RPi · blackbox]
         VL[VictoriaLogs<br/>logs + Vector collector]
         HP[homepage<br/>start page]
+        WG[wg-easy<br/>WireGuard VPN · admin UI]
+        BK[backups<br/>restic CronJobs]
     end
+
+    R2[(Cloudflare R2<br/>agu-backups)]
 
     Router --> Traefik
     Traefik -->|argocd.agu.com.ar| Argo
@@ -78,6 +82,9 @@ flowchart TD
     Traefik -->|alertmanager.agu.com.ar| MON
     Traefik -->|dash.agu.com.ar| HP
     Traefik -->|pihole.agu.com.ar| PIHOLE
+    Traefik -->|vpn.agu.com.ar| WG
+    Router -->|wg.agu.com.ar<br/>UDP 51820| WG
+    BK -->|nightly| R2
     Traefik -.->|ForwardAuth on dashboard +<br/>grafana · alertmanager · logs · dash · pihole| OA2
 
     Argo -.->|App of Apps sync| Traefik
