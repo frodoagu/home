@@ -390,13 +390,11 @@ adlists rather than duplicating them. This is the no-root, fully reversible
 "debloat": it kills the home-screen ads and ACR/telemetry callbacks without
 touching the TV.
 
-- `lgtvsdp.com` — the adlists NULL-block `rdx2.lgtvsdp.com` but leave
-  `us.lgtvsdp.com` (a live AWS IP) open; the apex `local=` covers both.
 - `lgthinq.com` — resolves to a real LG IP and is not on the adlists. Safe here
   only because the TVs run over the LAN `webostv` integration, not the ThinQ cloud.
-- `lgad.cjpowercast.com`, `nextlgsdp.com`, `lgtvcommon.com`, `lgtviot.com` — LG
-  ad/telemetry platform hosts the adlists miss. `NXDOMAIN` today (blocking them is
-  a no-op for now), kept so a later geo/subdomain LG enables is pre-blocked.
+- `lgad.cjpowercast.com`, `lgtvcommon.com`, `lgtviot.com` — LG ad/telemetry
+  platform hosts the adlists miss (home-screen content, recommendations and
+  beacons on `aic.*.lgtvcommon.com` / `aic.lgtviot.com`, live in this region).
 
 Already covered by the adlists and therefore **not** repeated here:
 `lgsmartad.com` (+ `us.*`/`us.ad.*`/`us.info.*`), `yumenetworks.com`,
@@ -410,6 +408,12 @@ Deliberately **left open**:
   decide it is offline (spinner on launch, "no connection" banners), even though
   everything else works. The `lgrecommends.lgappstv.com` host in particular is
   what a blanket `*.lgappstv.com` block trips over.
+- **Smart Delivery Platform** — `ar.lgtvsdp.com`, `ar.nextlgsdp.com` (the TVs use
+  the `ar.*` region, not `us.*`). webOS sets its clock from SDP, not NTP: the TVs
+  never query an NTP host. With SDP blocked, a TV that kept its clock in standby
+  looks fine, but after a power cut it boots with no time and retries SDP
+  non-stop (~5,000 queries a day). SDP's ad hosts (`ar.rdx2.lgtvsdp.com`,
+  `ar.rdx2.nextlgsdp.com`) are already on the adlists.
 
 LG moves these domains between firmware releases (the community list that covers
 `tv-sala`'s fw `03.53.45` may miss an endpoint a later build adds), so **recheck
