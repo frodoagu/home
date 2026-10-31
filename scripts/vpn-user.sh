@@ -36,6 +36,8 @@ esac
 read -r -d '' script <<'JS' || true
 const Database = require("/app/server/node_modules/libsql");
 const db = new Database("/etc/wireguard/wg-easy.db");
+// wg-easy writes too (sign-ins, its cron): wait for its lock instead of failing.
+db.exec("PRAGMA busy_timeout = 10000");
 const [command, email, name] = process.argv.slice(1);
 if (command === "list") {
   for (const u of db.prepare("SELECT username, email, oauth_provider, enabled FROM users_table ORDER BY id").all()) {
