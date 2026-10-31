@@ -163,21 +163,20 @@ dns:
   # adlists instead of duplicating them (lgsmartad.com, yumenetworks.com and
   # smartclip.net were already NULL-blocked, so they're intentionally absent).
   # Deliberately NOT blocked: the LG firmware/update hosts (snu.lge.com,
-  # ngfts.lge.com) and the App Store/recommends hosts (*.lgappstv.com) — blocking
-  # those makes the TV think it is offline and can stall OTA updates. Retest after
-  # every TV firmware bump: LG moves these domains and the adlists may lag.
+  # ngfts.lge.com), the App Store/recommends hosts (*.lgappstv.com) — blocking
+  # those makes the TV think it is offline and can stall OTA updates — and the
+  # Smart Delivery Platform (ar.lgtvsdp.com, ar.nextlgsdp.com): webOS sets its
+  # clock from SDP, not NTP, so without it a TV that lost power boots with no
+  # time. Its ad hosts (*.rdx2.*) are already on the adlists. Retest after every
+  # TV firmware bump: LG moves these domains and the adlists may lag.
   blockDomains:
-    # Smart-delivery / telemetry platform. The adlists block rdx2.lgtvsdp.com but
-    # NOT us.lgtvsdp.com (resolves to a live AWS IP) — this closes that gap.
-    - lgtvsdp.com
     # ThinQ / IoT telemetry — resolves to a real LG IP and is NOT on the adlists.
     # Safe to block: these TVs are driven over the LAN `webostv` integration, not
     # the ThinQ cloud.
     - lgthinq.com
-    # LG ad/telemetry platform hosts the adlists miss. NXDOMAIN today, so blocking
-    # is a no-op for now; kept so a geo/subdomain LG turns on later is pre-blocked.
+    # LG ad/telemetry platform hosts the adlists miss: home-screen content,
+    # recommendations and beacons on aic.*.lgtvcommon.com / aic.lgtviot.com.
     - lgad.cjpowercast.com
-    - nextlgsdp.com
     - lgtvcommon.com
     - lgtviot.com
 
