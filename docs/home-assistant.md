@@ -1079,8 +1079,15 @@ re-evaluates and corrects it. The conditions bound the catch-up so it never
 overrides a deliberate manual change: the on-side only applies between sunset and
 local midnight, the off-side only during the day.
 
-> **The two catch-up windows must not overlap.** Both automations trigger on
-> `homeassistant.start`, so any instant where both conditions hold is an instant
+They also trigger on either relay coming back from `unavailable`, with the same
+conditions. The Pi and the APs are on a UPS but the relays aren't, so a power cut
+at the sun event leaves the call with nowhere to go, and the relays return with
+`initial_state: restore_last`. On 2026-10-31 a cut from 06:21 to 07:02 spanned
+sunrise and the lights came back on for the rest of the morning. Now a return
+during the day turns them off, and one between sunset and midnight turns them on.
+
+> **The two catch-up windows must not overlap.** Both automations share the
+> catch-up triggers, so any instant where both conditions hold is an instant
 > where starting HA runs *both* — one turning the lights on, the other off, with
 > the winner decided by a race. The two windows meet at sunset and do not
 > overlap: the off-side's `before: sunset` closes exactly where the on-side's
