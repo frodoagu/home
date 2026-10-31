@@ -17,31 +17,43 @@
 # trigger re-evaluates the condition on boot and leaves the lights in the state
 # the current time calls for.
 #
-# It is deliberately bounded so it never overrides a manual decision:
+# The relays coming back from `unavailable` re-evaluate the same way. A power
+# cut at the sun event (the Pi and the APs are on a UPS, the relays aren't)
+# leaves the call with nowhere to go, and the relays come back with
+# `initial_state: restore_last`: still on after a cut at dawn.
+#
+# Both catch-ups are deliberately bounded so they never override a manual
+# decision:
 #   - on: `after: sunset` with no `before` is true from sunset to midnight (HA's
 #     `sun` condition semantics), so a restart at 3 AM doesn't turn on lights
 #     somebody switched off at 2.
 #   - off: only with the sun up, where leaving them on isn't a deliberate choice.
 #
-# THE TWO WINDOWS MUST NOT OVERLAP. Both automations trigger on
-# `homeassistant.start`, so if their conditions are true at the same time,
-# starting HA runs BOTH: one turns on, the other off, and a race decides. The two
-# windows meet at sunset: off ends where on begins. Any offset added to one has
-# to be added to the other.
+# THE TWO WINDOWS MUST NOT OVERLAP. Both automations share the catch-up
+# triggers, so if their conditions are true at the same time, starting HA runs
+# BOTH: one turns on, the other off, and a race decides. The two windows meet
+# at sunset: off ends where on begins. Any offset added to one has to be added
+# to the other.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: luces_afuera_prender_atardecer
     alias: Luces afuera - Prender al atardecer
     description: >-
       Prende las dos luces de afuera al atardecer y las re-evalúa al arrancar
-      HA por si el atardecer pasó con HA caído.
+      HA o al volver los relés, por si el atardecer pasó con HA o los relés
+      caídos.
     trigger:
       - platform: sun
         event: sunset
       - platform: homeassistant
         event: start
+      - platform: state
+        entity_id: &luces
+          - light.afuera_interruptor_puerta_principal
+          - light.afuera_interruptor_puerta_escalera
+        from: unavailable
     condition:
-      # Only applies to the start trigger; on the sun one it's true by
+      # Only applies to the catch-up triggers; on the sun one it's true by
       # definition. Sunset to midnight — past that window, if they're off it's
       # because somebody turned them off.
       - condition: sun
@@ -49,22 +61,25 @@ automation:
     action:
       - action: light.turn_on
         target:
-          entity_id:
-            - light.afuera_interruptor_puerta_principal
-            - light.afuera_interruptor_puerta_escalera
-    mode: single
+          entity_id: *luces
+    # Each relay's return runs it again, so one still down on the first run
+    # gets its turn.
+    mode: queued
 
   - id: luces_afuera_apagar_amanecer
     alias: Luces afuera - Apagar al amanecer
     description: >-
       Apaga las dos luces al amanecer, y también al arrancar HA si el sol ya
-      está arriba (mismo motivo que el de prender: el amanecer pudo haber
-      pasado con HA caído).
+      está arriba o cuando vuelven los relés (mismo motivo que el de prender:
+      el amanecer pudo haber pasado con HA o los relés caídos).
     trigger:
       - platform: sun
         event: sunrise
       - platform: homeassistant
         event: start
+      - platform: state
+        entity_id: *luces
+        from: unavailable
     condition:
       # `before: sunset` closes this window exactly where the on-side's opens
       # (see the header).
@@ -74,7 +89,7 @@ automation:
     action:
       - action: light.turn_off
         target:
-          entity_id:
-            - light.afuera_interruptor_puerta_principal
-            - light.afuera_interruptor_puerta_escalera
-    mode: single
+          entity_id: *luces
+    # Each relay's return runs it again, so one still down on the first run
+    # gets its turn.
+    mode: queued
