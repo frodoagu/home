@@ -15,8 +15,8 @@ Backups: [backups.md](backups.md)
 ```mermaid
 flowchart LR
     Phone([Client<br/>WireGuard app]) -- "udp/51820<br/>wg.agu.com.ar (DNS-only)" --> Router
-    Router -- "forward udp/51820" --> SVC[klipper svclb<br/>node :51820]
-    SVC --> POD[wg-easy pod<br/>wg0 10.8.0.0/24<br/>MASQUERADE → eth0]
+    Router -- "forward udp/51820" --> HP[hostPort<br/>node :51820]
+    HP --> POD[wg-easy pod<br/>wg0 10.8.0.0/24<br/>MASQUERADE → eth0]
     POD --> PIHOLE[Pi-hole<br/>192.168.0.100:53]
     POD --> LAN[LAN / internet<br/>via the home IP]
     Browser([Browser]) -- "https://vpn.agu.com.ar<br/>(Cloudflare proxied)" --> Traefik --> UI[wg-easy UI :51821]
@@ -38,6 +38,12 @@ flowchart LR
     starting. The image defaults to iptables-legacy, whose `ip_tables` /
     `iptable_nat` modules the Pi's kernel doesn't load (k3s uses nf_tables), so
     `wg-quick up` would fail on the first rule.
+- **A hostPort, not a LoadBalancer Service.** klipper's svclb masquerades
+  what it forwards, so wg-easy would see every peer at `10.42.0.1` (the node's
+  CNI bridge): wrong endpoints in the UI and in the metrics. The pod publishes
+  `51820/udp` as a `hostPort` instead, and the CNI portmap plugin only DNATs,
+  so the client's real address arrives. There's no Service for it, and none
+  must come back: a LoadBalancer on 51820 would claim the same hostPort.
 - **Full tunnel.** Clients get `AllowedIPs = 0.0.0.0/0, ::/0` and DNS
   `192.168.0.100` (Pi-hole): ad blocking and `.lan` names work from anywhere.
   There's no IPv6 in the tunnel (`DISABLE_IPV6`); `::/0` keeps the phone's IPv6

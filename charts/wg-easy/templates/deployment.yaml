@@ -54,8 +54,12 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            # A hostPort, not a LoadBalancer: klipper's svclb masquerades what it
+            # forwards, so every peer's endpoint would read 10.42.0.1. The CNI
+            # portmap DNAT keeps the client's real address.
             - name: wireguard
               containerPort: {{ .Values.wireguard.port }}
+              hostPort: {{ .Values.wireguard.port }}
               protocol: UDP
           env:
             - name: PORT

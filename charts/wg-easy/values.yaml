@@ -29,6 +29,7 @@ wireguard:
   # Cloudflare record: Cloudflare can't proxy UDP. charts/cloudflare-ddns
   # keeps it in `dnsOnly`.
   host: wg.agu.com.ar
+  # Also the pod's hostPort on the node (no Service: see deployment.yaml).
   port: 51820
   # Pi-hole: ad blocking and .lan names for the clients too.
   dns: "192.168.0.100"
@@ -59,8 +60,6 @@ init:
 service:
   # The admin UI, for the IngressRoute only.
   port: 51821
-  # WireGuard itself, published on the node by klipper's svclb.
-  wireguardType: LoadBalancer
 ingress:
   enabled: true
   host: vpn.agu.com.ar

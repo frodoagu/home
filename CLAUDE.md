@@ -717,6 +717,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `xtables-nft-multi` before `exec`ing the image's CMD; keep that if you touch
   the command. It runs on the pod network (rules stay in its netns), with the
   forwarding sysctls set by a privileged init container (not "safe" sysctls).
+  51820/udp is the pod's `hostPort`, NOT a LoadBalancer Service: klipper's
+  svclb masquerades, so every peer endpoint (UI + metrics) read `10.42.0.1`.
   `INIT_*` apply on the FIRST start only; after that host/DNS/AllowedIPs are DB
   state, edited in the UI. wg-easy has no UI to create users and
   `OAUTH_AUTO_REGISTER=true` would let ANY Google account create a device and
