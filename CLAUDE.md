@@ -70,7 +70,9 @@ charts/              Helm charts, one dir per service. Each app/<name>.yaml -> c
                      per device (/escalera, /principal) to that device's LAN HTTP RPC. Does NOT link the
                      device's native UI (it hardcodes ws:// → dead behind HTTPS); the panel speaks the
                      same-origin RPC instead. Separate from shelly-config. See docs/shelly.md + gotchas.
-  wg-easy/           WireGuard VPN (wg-easy) out through the home IP. Endpoint wg.agu.com.ar:51820/udp
+  wg-easy/           WireGuard VPN out through the home IP, running OUR FORK (ghcr.io/frodoagu/wg-easy,
+                     github.com/frodoagu/wg-easy feat/per-user-clients: per-user device ownership +
+                     OAUTH_ADMIN_EMAILS; digest pinned by Image Updater). Endpoint wg.agu.com.ar:51820/udp
                      (DNS-only record, router forward), admin UI at vpn.agu.com.ar behind wg-easy's OWN
                      Google sign-in (not google-auth), users added by scripts/vpn-user.sh so their
                      emails stay out of git. Pod network + nf_tables. Prometheus metrics (in-cluster only:
@@ -717,8 +719,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   forwarding sysctls set by a privileged init container (not "safe" sysctls).
   `INIT_*` apply on the FIRST start only; after that host/DNS/AllowedIPs are DB
   state, edited in the UI. wg-easy has no UI to create users and
-  `OAUTH_AUTO_REGISTER=true` would make ANY Google account an admin, so users go
-  in with `scripts/vpn-user.sh` (email matched exactly, lowercase). The endpoint
+  `OAUTH_AUTO_REGISTER=true` would let ANY Google account create a device and
+  leave through the home IP, so users go in with `scripts/vpn-user.sh` (email
+  matched exactly, lowercase) as `client`s; admins are `OAUTH_ADMIN_EMAILS`
+  (sealed `wg-easy-admins`), re-applied by the fork at every Google sign-in.
+  The fork's image CMD wraps the server in `iptables-backend`, which would pick
+  legacy if `iptables-legacy -L` works (autoloading the host's ip_tables), so
+  the container command selects nft with `update-alternatives` and starts
+  `node server/index.mjs` without it. It also carries upstream-master
+  migrations: rolling back to an older image means restoring the DB backup. The endpoint
   `wg.agu.com.ar` must be grey: favonia applies `dnsOnly` only when it CREATES a
   record. It's outside-only on purpose (origin-firewall `vpnFromInside`): a
   tunnel up at home hides the phone from Pi-hole, and HA presence marks it

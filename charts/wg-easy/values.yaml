@@ -6,12 +6,20 @@
 revisionHistoryLimit: 1
 
 image:
-  repository: ghcr.io/wg-easy/wg-easy
-  # Releases: https://github.com/wg-easy/wg-easy/releases
-  tag: "15.5.0"
-  # Multi-arch index digest for 15.5.0, so the arm64 node picks its own image.
-  digest: "sha256:071f79a639e9361123a5e57733107320207b844ddbbd92dfa6962f541fe8aac8"
+  # Our fork (github.com/frodoagu/wg-easy, branch feat/per-user-clients):
+  # upstream master plus per-user client ownership and OAUTH_ADMIN_EMAILS.
+  # Argo CD Image Updater pins `latest`'s digest into image.tag (like
+  # origin-firewall), so what runs is an immutable digest — don't hand-edit it.
+  repository: ghcr.io/frodoagu/wg-easy
+  tag: "latest"
+  digest: ""
   pullPolicy: IfNotPresent
+
+# The image holds nothing private (the fork is public), so the GHCR package is
+# public and needs no pull secret. GHCR creates it PRIVATE on the first push:
+# flip it once (GitHub > Packages > wg-easy > Change visibility) or the pod
+# sits in ImagePullBackOff.
+imagePullSecrets: []
 
 # Sets the pod netns' forwarding sysctls. They aren't on Kubernetes' "safe"
 # list, so a privileged init container writes them instead of
@@ -40,6 +48,12 @@ trustedProxies: "10.42.0.0/16"
 oauth:
   # Keys OAUTH_GOOGLE_CLIENT_ID / OAUTH_GOOGLE_CLIENT_SECRET.
   existingSecret: wg-easy-oauth
+  # Key OAUTH_ADMIN_EMAILS (comma-separated): who gets the admin role. Sealed so
+  # the emails stay out of this public repo. On every Google sign-in the fork
+  # re-syncs the role of password-less users: listed → admin, everyone else →
+  # client (sees and manages only the devices they created, can't change their
+  # addresses or routes).
+  adminsSecret: wg-easy-admins
 
 # wg-easy reads INIT_* on the first start only, to skip its setup wizard. The
 # admin it creates has a random password that nobody uses: password sign-in is
