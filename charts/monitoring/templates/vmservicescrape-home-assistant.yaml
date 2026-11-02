@@ -32,4 +32,8 @@ spec:
         - action: drop
           source_labels: [__name__]
           regex: homeassistant_.*_created
+        # The pod name changes on every HA rollout and would start a new series
+        # per entity each time; there is only ever one HA.
+        - action: labeldrop
+          regex: pod
 {{- end }}

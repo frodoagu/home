@@ -299,7 +299,11 @@ serves every entity's state at `/api/prometheus`.
   mode). Binary sensors and input booleans are `homeassistant_<domain>_state`.
   Every series carries `entity`, `domain` and `friendly_name`. Renaming an
   entity in HA starts a new series under the new name, so a panel that filters
-  by `entity` loses the history from before the rename.
+  by `entity` loses the history from before the rename. The scrape drops the
+  `pod` label, which changes on every HA rollout and would otherwise start a
+  new series per entity each time. Data from before the label was dropped still
+  has it, so panels aggregate (`max by (entity, friendly_name)`) instead of
+  plotting the raw series.
 - **Unavailable entities drop out.** HA removes an entity's value series while
   it's `unavailable`/`unknown` and keeps only `homeassistant_entity_available 0`.
   The "hours on" panels count samples (`count_*_over_time(...) / 60`, one sample
