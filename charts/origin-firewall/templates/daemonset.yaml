@@ -50,6 +50,12 @@ spec:
               value: {{ .Values.cloudflareAutoUpdate.ipv4Url | quote }}
             - name: CF_V6_URL
               value: {{ .Values.cloudflareAutoUpdate.ipv6Url | quote }}
+            {{- if .Values.vpnFromInside.enabled }}
+            - name: HOME_IP_URL
+              value: {{ .Values.vpnFromInside.homeIP.url | quote }}
+            - name: HOME_IP_INTERVAL
+              value: {{ .Values.vpnFromInside.homeIP.interval | quote }}
+            {{- end }}
           securityContext:
             {{- if .Values.privileged }}
             privileged: true

@@ -42,6 +42,11 @@ flowchart LR
   `192.168.0.100` (Pi-hole): ad blocking and `.lan` names work from anywhere.
   There's no IPv6 in the tunnel (`DISABLE_IPV6`); `::/0` keeps the phone's IPv6
   from going around it.
+- **Not from inside the house.** [origin-firewall](origin-firewall.md#wireguard-udp51820-is-outside-only)
+  drops `udp/51820` from the LAN and from the home's own public IP (where the
+  router's NAT loopback puts a LAN client that dials `wg.agu.com.ar`). A tunnel
+  up at home would send the phone's DNS through the pod, and Home Assistant's
+  presence (Pi-hole queries per phone) would mark that person away.
 - **Setup is from env, once.** `INIT_*` skips wg-easy's setup wizard on the
   first start only (host, port, DNS, AllowedIPs). After that those settings
   live in the database and are changed in the UI (Admin > Interface /
@@ -131,6 +136,8 @@ VMPodScrape (`charts/wg-easy/templates/vmpodscrape.yaml`) reads them every
 
 ## Troubleshooting
 
+- **Handshake never completes at home**: by design (above). Turn the tunnel
+  off on the home Wi-Fi.
 - **Handshake never completes**: check the router forward and that
   `wg.agu.com.ar` is grey in Cloudflare and resolves to the current home IP
   (`dig +short wg.agu.com.ar`). favonia only sets the proxy status when it

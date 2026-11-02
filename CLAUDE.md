@@ -346,8 +346,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   can block direct hits. The firewall instead runs on the host at nftables
   `prerouting priority -300` (before klipper's dstnat -100), where the real source
   IP is still visible; a privileged hostNetwork DaemonSet programs it (own
-  `inet origin_fw` table, only touches tcp/80,443 + udp/443 so SSH/6443/DNS are
-  safe; the udp/443 `quic_filter` chain is LAN-only — see the next bullet). Effectiveness
+  `inet origin_fw` table, only touches tcp/80,443 + udp/443 + udp/51820 so
+  SSH/6443/DNS are safe; the udp/443 `quic_filter` chain is LAN-only — see the
+  next bullet — and the udp/51820 `vpn_filter` is the reverse, outside-only:
+  it drops the LAN and the home's OWN public IP, because the router's NAT
+  loopback rewrites a LAN client dialing wg.agu.com.ar to that IP; the
+  entrypoint keeps that set fresh from Cloudflare's trace). Effectiveness
   hinges on the ROUTER preserving the source IP on port-forward — verify via the
   rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
 - **pihole — LAN addressing: a static block, and `.lan` names instead of hardcoded
@@ -716,7 +720,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `OAUTH_AUTO_REGISTER=true` would make ANY Google account an admin, so users go
   in with `scripts/vpn-user.sh` (email matched exactly, lowercase). The endpoint
   `wg.agu.com.ar` must be grey: favonia applies `dnsOnly` only when it CREATES a
-  record. See docs/vpn.md.
+  record. It's outside-only on purpose (origin-firewall `vpnFromInside`): a
+  tunnel up at home hides the phone from Pi-hole, and HA presence marks it
+  away. See docs/vpn.md.
 - **backups — group by host, not paths.** HA's backup tar is named after its day,
   so restic's default `forget` grouping (host + paths) would keep every snapshot
   forever; `charts/backups` forgets with `--group-by host`. Targets share one
