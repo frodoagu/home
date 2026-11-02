@@ -14,4 +14,7 @@ spec:
     - port: http
       path: /metrics/prometheus
       interval: 60s
+      # wireguard_peer_endpoint_info has its own `endpoint` label (the device's
+      # public address); without this the scrape's endpoint="http" replaces it.
+      honorLabels: true
 {{- end }}
