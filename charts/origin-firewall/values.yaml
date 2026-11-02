@@ -84,6 +84,26 @@ localIPv4:
 - 127.0.0.0/8
 localIPv6:
 - ::1/128
+# WireGuard (charts/wg-easy) is for leaving the house, so a tunnel can't come
+# up from inside it: on the LAN a phone resolves no DNS from its own address
+# while the tunnel is on, and Home Assistant's presence (Pi-hole queries per
+# phone) would mark it away. Inside traffic reaches the port two ways, both
+# dropped here:
+#   - straight to the Pi: source in `lanIPv4`;
+#   - to the public address: the router's NAT loopback rewrites the source to
+#     the home's own public IP, which changes, so the entrypoint keeps the
+#     `home_public_v4` set at the IP `homeIP.url` reports (Cloudflare's trace,
+#     like cloudflare-ddns) every `homeIP.interval` seconds.
+# Nobody outside can arrive from the home's public IP, so outside clients pass.
+vpnFromInside:
+  enabled: true
+  ports:
+  - 51820
+  lanIPv4:
+  - 192.168.0.0/24
+  homeIP:
+    url: https://1.1.1.1/cdn-cgi/trace
+    interval: 300
 # Container privileges. NET_ADMIN (+ NET_RAW) on a hostNetwork pod is enough to
 # program the host's nftables. If the DaemonSet logs show nft permission errors
 # on your kernel, set privileged: true.
