@@ -1754,7 +1754,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "homeassistant_sensor_temperature_celsius{entity=~\"sensor\\\\.(atc_29a8|dormitorio_atc_b6d2)_temperatura\"}",
+          "expr": "max by (entity, friendly_name) (homeassistant_sensor_temperature_celsius{entity=~\"sensor\\\\.(atc_29a8|dormitorio_atc_b6d2)_temperatura\"})",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         },
@@ -1772,7 +1772,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "homeassistant_climate_target_temperature_celsius and on (entity) (homeassistant_climate_mode{mode=\"off\"} == 0)",
+          "expr": "max by (entity, friendly_name) (homeassistant_climate_target_temperature_celsius) and on (entity) (homeassistant_climate_mode{mode=\"off\"} == 0)",
           "legendFormat": "{{friendly_name}} (objetivo)",
           "refId": "C"
         }
@@ -1827,7 +1827,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "homeassistant_sensor_humidity_percent{entity=~\"sensor\\\\.(atc_29a8|dormitorio_atc_b6d2)_humedad\"}",
+          "expr": "max by (entity, friendly_name) (homeassistant_sensor_humidity_percent{entity=~\"sensor\\\\.(atc_29a8|dormitorio_atc_b6d2)_humedad\"})",
           "legendFormat": "{{friendly_name}}",
           "refId": "A"
         }
@@ -2963,7 +2963,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "homeassistant_entity_available{domain!~\"button|infrared|tts|event|notify|scene|conversation\"} == 0",
+          "expr": "max by (domain, entity, friendly_name) (homeassistant_entity_available{domain!~\"button|infrared|tts|event|notify|scene|conversation\"}) == 0",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
