@@ -4,7 +4,6 @@
 # See docs/vpn.md.
 
 revisionHistoryLimit: 1
-
 image:
   # Our fork (github.com/frodoagu/wg-easy, branch feat/per-user-clients):
   # upstream master plus per-user client ownership and OAUTH_ADMIN_EMAILS.
@@ -13,21 +12,18 @@ image:
   # pins its digest into image.tag (like origin-firewall), so what runs is an
   # immutable digest — don't hand-edit it.
   repository: ghcr.io/frodoagu/wg-easy
-  tag: "feat-per-user-clients@sha256:39ef5ba0ed0764db5c13b9212b9ad0be44383ece08ad4729055c975a3a0e1b34"
+  tag: "feat-per-user-clients@sha256:90feb70da07d6feb148d813b241476a55e95c99db982db4c17ea00afc2a76877"
   digest: ""
   pullPolicy: IfNotPresent
-
 # The image holds nothing private (the fork is public), so the GHCR package is
 # public and needs no pull secret. GHCR creates it PRIVATE on the first push:
 # flip it once (GitHub > Packages > wg-easy > Change visibility) or the pod
 # sits in ImagePullBackOff.
 imagePullSecrets: []
-
 # Sets the pod netns' forwarding sysctls. They aren't on Kubernetes' "safe"
 # list, so a privileged init container writes them instead of
 # securityContext.sysctls (which would need kubelet --allowed-unsafe-sysctls).
 sysctlImage: "docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec"
-
 wireguard:
   # Public endpoint the client configs point at. Must be a DNS-only (grey)
   # Cloudflare record: Cloudflare can't proxy UDP. charts/cloudflare-ddns
@@ -39,11 +35,9 @@ wireguard:
   # Full tunnel, so everything leaves through the home IP. ::/0 sends IPv6 into
   # the tunnel (where there is none) instead of leaking it past the VPN.
   allowedIps: "0.0.0.0/0,::/0"
-
 # The UI's peer: Traefik in the pod CIDR. wg-easy only trusts X-Forwarded-* from
 # here, and builds the Google OAuth redirect URI from them.
 trustedProxies: "10.42.0.0/16"
-
 # Sign-in is Google only, and only for accounts whose email is already a
 # wg-easy user (scripts/vpn-user.sh adds them). Those emails live in the
 # database, never in git. Same OAuth client as oauth2-proxy and Argo CD.
@@ -56,20 +50,17 @@ oauth:
   # client (sees and manages only the devices they created, can't change their
   # addresses or routes).
   adminsSecret: wg-easy-admins
-
 # wg-easy reads INIT_* on the first start only, to skip its setup wizard. The
 # admin it creates has a random password that nobody uses: password sign-in is
 # off. Key INIT_PASSWORD.
 init:
   username: bootstrap
   existingSecret: wg-easy-init
-
 service:
   # The admin UI, for the IngressRoute only.
   port: 51821
   # WireGuard itself, published on the node by klipper's svclb.
   wireguardType: LoadBalancer
-
 ingress:
   enabled: true
   host: vpn.agu.com.ar
@@ -78,7 +69,6 @@ ingress:
   # outside oauth2-proxy's allowlist can use the VPN admin without reaching
   # the other dashboards.
   middlewares: []
-
 # Prometheus metrics on the UI port (/metrics/prometheus): per-client traffic
 # and handshakes, read by a VMPodScrape for the "WireGuard — VPN" dashboard in
 # charts/monitoring. wg-easy keeps the on/off switch in its database (Admin >
@@ -86,20 +76,17 @@ ingress:
 # password: the IngressRoute never routes /metrics, so only the cluster reaches it.
 metrics:
   enabled: true
-
 persistence:
   # SQLite database (users, clients, keys) + the generated wg0.conf.
   size: 100Mi
   accessMode: ReadWriteOnce
   storageClass: ""
-
 resources:
   requests:
     cpu: 20m
     memory: 96Mi
   limits:
     memory: 256Mi
-
 nodeSelector: {}
 tolerations: []
 affinity: {}
