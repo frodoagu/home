@@ -471,7 +471,7 @@
     {
       "type": "table",
       "title": "Clients",
-      "description": "One row per client. Last handshake is how long ago the device last refreshed its session (every 2 min while the tunnel carries traffic); over 10 min it is not connected. Endpoint is the public address it connected from last.",
+      "description": "One row per client, keyed by its tunnel IP, so 24h traffic includes what it moved under an older name. Last handshake is how long ago the device last refreshed its session (every 2 min while the tunnel carries traffic); over 10 min it is not connected. Endpoint is the public address it connected from last.",
       "id": 8,
       "datasource": {
         "type": "prometheus",
@@ -489,7 +489,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "max by (name, ipv4Address, enabled) (wireguard_latest_handshake_seconds)",
+          "expr": "max by (ipv4Address, name, owner, enabled) (wireguard_latest_handshake_seconds)",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -501,7 +501,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sum by (name) (increase(wireguard_sent_bytes[24h]))",
+          "expr": "sum by (ipv4Address) (increase(wireguard_sent_bytes[24h])) and on (ipv4Address) wireguard_latest_handshake_seconds",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -513,7 +513,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sum by (name) (increase(wireguard_received_bytes[24h]))",
+          "expr": "sum by (ipv4Address) (increase(wireguard_received_bytes[24h])) and on (ipv4Address) wireguard_latest_handshake_seconds",
           "legendFormat": "",
           "refId": "C",
           "instant": true,
@@ -525,7 +525,7 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "max by (name, endpoint) (wireguard_peer_endpoint_info)",
+          "expr": "max by (ipv4Address, endpoint) (wireguard_peer_endpoint_info)",
           "legendFormat": "",
           "refId": "D",
           "instant": true,
@@ -546,13 +546,14 @@
               "Value #D": true
             },
             "indexByName": {
-              "name": 0,
-              "ipv4Address": 1,
-              "enabled": 2,
-              "Value #A": 3,
-              "Value #B": 4,
-              "Value #C": 5,
-              "endpoint": 6
+              "owner": 0,
+              "name": 1,
+              "ipv4Address": 2,
+              "enabled": 3,
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "endpoint": 7
             },
             "renameByName": {
               "name": "Client",
@@ -561,7 +562,8 @@
               "Value #A": "Last handshake",
               "Value #B": "↓ To device · 24h",
               "Value #C": "↑ From device · 24h",
-              "endpoint": "Endpoint"
+              "endpoint": "Endpoint",
+              "owner": "Owner"
             }
           }
         },
@@ -570,8 +572,7 @@
           "options": {
             "sort": [
               {
-                "field": "Last handshake",
-                "desc": false
+                "field": "Owner"
               }
             ]
           }
@@ -677,7 +678,7 @@
     {
       "type": "timeseries",
       "title": "Throughput per client",
-      "description": "Above zero: to the device (downloads through home). Below zero: from the device.",
+      "description": "Above zero: to the device (downloads through home). Below zero: from the device. One series per device (tunnel IP) under its current name, so a rename doesn't split it.",
       "id": 10,
       "datasource": {
         "type": "prometheus",
@@ -732,8 +733,8 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sum by (name) (rate(wireguard_sent_bytes[5m]))",
-          "legendFormat": "{{name}} ↓",
+          "expr": "(sum by (ipv4Address) (rate(wireguard_sent_bytes[5m])) * on (ipv4Address) group_left (name, owner) group by (ipv4Address, name, owner) (wireguard_latest_handshake_seconds @ end())) or on (ipv4Address) sum by (ipv4Address, name) (rate(wireguard_sent_bytes[5m]))",
+          "legendFormat": "{{owner}} · {{name}} ↓",
           "refId": "A"
         },
         {
@@ -741,16 +742,25 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "-sum by (name) (rate(wireguard_received_bytes[5m]))",
-          "legendFormat": "{{name}} ↑",
+          "expr": "-((sum by (ipv4Address) (rate(wireguard_received_bytes[5m])) * on (ipv4Address) group_left (name, owner) group by (ipv4Address, name, owner) (wireguard_latest_handshake_seconds @ end())) or on (ipv4Address) sum by (ipv4Address, name) (rate(wireguard_received_bytes[5m])))",
+          "legendFormat": "{{owner}} · {{name}} ↑",
           "refId": "B"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^ · (.*)$",
+            "renamePattern": "$1"
+          }
         }
       ]
     },
     {
       "type": "state-timeline",
       "title": "Connected",
-      "description": "Green while the client's last handshake is under 10 minutes old. A client that never connected has no row.",
+      "description": "Green while the client's last handshake is under 10 minutes old. A client that never connected has no row. One series per device (tunnel IP) under its current name, so a rename doesn't split it.",
       "id": 11,
       "datasource": {
         "type": "prometheus",
@@ -820,16 +830,25 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "max by (name) ((wireguard_latest_handshake_seconds > 0) < bool 600)",
-          "legendFormat": "{{name}}",
+          "expr": "(max by (ipv4Address) ((wireguard_latest_handshake_seconds > 0) < bool 600) * on (ipv4Address) group_left (name, owner) group by (ipv4Address, name, owner) (wireguard_latest_handshake_seconds @ end())) or on (ipv4Address) max by (ipv4Address, name) ((wireguard_latest_handshake_seconds > 0) < bool 600)",
+          "legendFormat": "{{owner}} · {{name}}",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^ · (.*)$",
+            "renamePattern": "$1"
+          }
         }
       ]
     },
     {
       "type": "timeseries",
       "title": "Traffic per day",
-      "description": "Both directions, per client and day.",
+      "description": "Both directions, per client and day. One series per device (tunnel IP) under its current name, so a rename doesn't split it.",
       "id": 12,
       "datasource": {
         "type": "prometheus",
@@ -884,10 +903,19 @@
             "type": "prometheus",
             "uid": "${DS_PROM}"
           },
-          "expr": "sum by (name) (increase(wireguard_sent_bytes[1d]) + increase(wireguard_received_bytes[1d]))",
-          "legendFormat": "{{name}}",
+          "expr": "(sum by (ipv4Address) (increase(wireguard_sent_bytes[1d]) + increase(wireguard_received_bytes[1d])) * on (ipv4Address) group_left (name, owner) group by (ipv4Address, name, owner) (wireguard_latest_handshake_seconds @ end())) or on (ipv4Address) sum by (ipv4Address, name) (increase(wireguard_sent_bytes[1d]) + increase(wireguard_received_bytes[1d]))",
+          "legendFormat": "{{owner}} · {{name}}",
           "refId": "A",
           "interval": "1d"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "^ · (.*)$",
+            "renamePattern": "$1"
+          }
         }
       ]
     }

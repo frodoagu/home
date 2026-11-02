@@ -145,11 +145,17 @@ One client per device: two devices sharing a key keep knocking each other off.
 ## Metrics
 
 wg-easy serves Prometheus metrics on the UI port, `/metrics/prometheus`: per
-client (label `name`) bytes sent and received, seconds since the last
-handshake, the endpoint it connects from, and configured / enabled /
-connected counts (connected = a handshake in the last 10 minutes). A
+client (labels `name`, `owner`, `ipv4Address`) bytes sent and received,
+seconds since the last handshake, the endpoint it connects from, and
+configured / enabled / connected counts (connected = a handshake in the last
+10 minutes). `owner` (the owning user's name) comes from the fork. A
 VMPodScrape (`charts/wg-easy/templates/vmpodscrape.yaml`) reads them every
 60 s for the **WireGuard — VPN** dashboard in Grafana (uid `wireguard`).
+
+- The dashboard keys each device by its tunnel IP, not its name: a rename
+  starts new series, and grouping by `ipv4Address` keeps a device's history in
+  one line, shown under its current name and owner (read at the end of the
+  range with `@ end()`). A deleted device keeps its last name.
 
 - The switch lives in wg-easy's database (Admin > General > Prometheus), so a
   `postStart` hook turns it on at every start (`metrics.enabled`).
