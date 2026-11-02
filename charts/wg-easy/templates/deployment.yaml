@@ -18,6 +18,10 @@ spec:
       labels:
         {{- include "wg-easy.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       # Pod network, not hostNetwork: wg-easy's MASQUERADE and FORWARD rules
       # stay in this pod's netns instead of the host tables flannel and
       # kube-proxy own.
@@ -35,16 +39,16 @@ spec:
         - name: wg-easy
           image: {{ include "wg-easy.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          # The image points iptables at the legacy backend, whose ip_tables
-          # modules the Pi's kernel doesn't load (k3s uses nf_tables). Point it
-          # at iptables-nft before starting the image's own CMD.
+          # Always iptables-nft, like k3s. The image's own CMD runs it through
+          # `iptables-backend`, which picks legacy whenever `iptables-legacy -L`
+          # works: on this kernel that would autoload the host's ip_tables
+          # modules. So select nft and start the server without that wrapper.
           command:
             - sh
             - -c
             - |
-              for t in iptables iptables-restore iptables-save ip6tables ip6tables-restore ip6tables-save; do
-                ln -sf /usr/sbin/xtables-nft-multi "/etc/alternatives/$t"
-              done
+              update-alternatives --set iptables /usr/sbin/iptables-nft
+              update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
               exec /usr/bin/dumb-init node server/index.mjs
           ports:
             - name: http
@@ -74,8 +78,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.oauth.existingSecret }}
                   key: OAUTH_GOOGLE_CLIENT_SECRET
+            # Off even though the fork registers newcomers as `client`: on, any
+            # Google account could create a device and leave through the home
+            # IP. Users come in with scripts/vpn-user.sh.
             - name: OAUTH_AUTO_REGISTER
               value: "false"
+            - name: OAUTH_ADMIN_EMAILS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oauth.adminsSecret }}
+                  key: OAUTH_ADMIN_EMAILS
             - name: OAUTH_AUTO_LAUNCH
               value: google
             - name: DISABLE_PASSWORD_AUTH

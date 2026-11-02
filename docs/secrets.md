@@ -30,6 +30,7 @@ see [.gitignore](../.gitignore).
 | `grafana-admin` | `monitoring` | Grafana (`admin.existingSecret`) + its dashboard sidecar | Random admin `admin-user` / `admin-password`; no one logs in with it (auth.proxy). Pinned so the chart stops minting a new one per render and rolling the pod |
 | `oauth2-proxy-allowed-emails` | `oauth2-proxy` | oauth2-proxy (`authenticatedEmailsFile`) | The google-auth allowlist, one email per line under key `restricted_user_access`. Sealed so the addresses stay out of this public repo |
 | `wg-easy-oauth` | `wg-easy` | wg-easy Google sign-in | The same Google OAuth client as oauth2-proxy, under keys `OAUTH_GOOGLE_CLIENT_ID` / `OAUTH_GOOGLE_CLIENT_SECRET` |
+| `wg-easy-admins` | `wg-easy` | wg-easy (`OAUTH_ADMIN_EMAILS`) | Comma-separated emails of the VPN admins; everyone else signing in with Google is a `client` ([vpn.md](vpn.md#roles-and-owners)) |
 | `wg-easy-init` | `wg-easy` | wg-easy first start (`INIT_PASSWORD`) | Random password of the setup wizard's admin; nobody uses it (password sign-in is off) |
 | `backup-r2` | each backup target's namespace (`wg-easy`, `home-assistant`) | restic CronJobs (charts/backups) | `RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, and an R2 token's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Keep `RESTIC_PASSWORD` outside the cluster too: see [backups.md](backups.md) |
 | `cloudflare-usage` | `monitoring` | cloudflare-usage CronJob | Cloudflare API token (Account Analytics:Read, Billing:Read, Zone:Read) under `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ACCOUNT_ID` |
@@ -203,6 +204,7 @@ beside the chart that consumes them:
 | `oauth2-proxy-allowed-emails` (oauth2-proxy) | `charts/oauth2-proxy/templates/oauth2-proxy-allowed-emails-sealed.yaml` |
 | `wg-easy-oauth` (wg-easy) | `charts/wg-easy/templates/wg-easy-oauth-sealed.yaml` |
 | `wg-easy-init` (wg-easy) | `charts/wg-easy/templates/wg-easy-init-sealed.yaml` |
+| `wg-easy-admins` (wg-easy) | `charts/wg-easy/templates/wg-easy-admins-sealed.yaml` |
 | `backup-r2` (wg-easy, home-assistant) | `charts/backups/templates/backup-r2-<namespace>-sealed.yaml` |
 
 Install the CLI once, matching the controller's `appVersion` in

@@ -28,7 +28,7 @@ services running on a Raspberry Pi with k3s.
 | [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) | Cluster-wide log aggregation (single node) + bundled Vector collector; queryable from Grafana | `charts/victoria-logs/` |
 | [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) | Commit **encrypted** secrets to git; the in-cluster controller decrypts them | `charts/sealed-secrets/` |
 | [homepage](https://gethomepage.dev/) | Dashboard / start page for the lab (Google sign-in gated) | `charts/homepage/` |
-| [wg-easy](https://github.com/wg-easy/wg-easy) | WireGuard VPN out through the home IP (Android / Windows / Linux clients) + admin UI at `vpn.agu.com.ar` behind its own Google sign-in | `charts/wg-easy/` |
+| [wg-easy](https://github.com/wg-easy/wg-easy) ([our fork](https://github.com/frodoagu/wg-easy)) | WireGuard VPN out through the home IP (Android / Windows / Linux clients) + admin UI at `vpn.agu.com.ar` behind its own Google sign-in, devices owned per user | `charts/wg-easy/` |
 | [restic](https://restic.net/) | Nightly off-Pi backups of the wg-easy database and Home Assistant's own backup to Cloudflare R2 | `charts/backups/` |
 | [nftables](https://nftables.org/) | Cloudflare-only origin firewall — DaemonSet dropping direct-to-public-IP hits on tcp/80,443 (and non-LAN udp/443 QUIC) | `charts/origin-firewall/` |
 

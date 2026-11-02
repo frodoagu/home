@@ -1,0 +1,29 @@
+# Per-app image-update config for wg-easy, running our fork
+# (github.com/frodoagu/wg-easy). Tracks the digest of the mutable branch tag
+# the fork's CI pushes to GHCR (`feat-per-user-clients`) and writes the pinned
+# `feat-per-user-clients@sha256:...` back to
+# charts/wg-easy/values.yaml, like origin-firewall.
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: wg-easy
+  namespace: {{ .Release.Namespace }}
+spec:
+  writeBackConfig:
+    method: "git:secret:argocd/git-creds"
+    gitConfig:
+      repository: "https://github.com/frodoagu/home.git"
+      branch: main
+      # Relative to the wg-easy Application's source path (charts/wg-easy).
+      writeBackTarget: "helmvalues:./values.yaml"
+  applicationRefs:
+    - namePattern: wg-easy
+      images:
+        - alias: wg
+          imageName: ghcr.io/frodoagu/wg-easy:feat-per-user-clients
+          commonUpdateSettings:
+            updateStrategy: digest
+          manifestTargets:
+            helm:
+              name: image.repository
+              tag: image.tag

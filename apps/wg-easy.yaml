@@ -20,6 +20,8 @@ spec:
       value: "WireGuard VPN out through the home IP (wg.agu.com.ar:51820/udp) + its admin UI behind its own Google sign-in; daily restic backup to R2."
     - name: Docs
       value: "https://github.com/frodoagu/home/blob/main/docs/vpn.md"
+    - name: Image
+      value: "ghcr.io/frodoagu/wg-easy (our fork, digest pinned by Image Updater)"
   source:
     repoURL: git@github.com:frodoagu/home.git
     targetRevision: HEAD

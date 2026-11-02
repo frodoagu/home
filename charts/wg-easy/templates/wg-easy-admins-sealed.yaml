@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: wg-easy-admins
+  namespace: wg-easy
+spec:
+  encryptedData:
+    OAUTH_ADMIN_EMAILS: AgCKu3HeGK0ZsfM3QslT8SdskN3z5tQ03mvwB26GkaEvHnazoyc82sDjweBRpAlRDFopWSEt+ILF9DVrpqVmPv3GtbeseCOVwyypVJiaIxZ/A/I2LK0kAFBKhovRUYNm4ULGmSF1quPPfxLRosGymIRoRFfZh28UFy2lFLCGzZS0MsSk+egLmmzqDhEH9C3dxX8JTrUBQM3Y8hdr8mJNAAa7zLI1V9tnHvCkY/xMp2wHiX3drBgECxaIKiBFy/FEo5SG8cbQtdhgZF9VWX8n2fW+S6VxY3syCpt+uhqYbpEdVh0a9WFKwy7MYoNfv6zQJyj/WUjk5jTAiw/aus4G+lwR4kyWu3RrD5HOYjFIiAgD9CcLJTrxO8e+SQyHWQrcZ7ROrFmD3HZPN7jzKl2w6qXBNqfUYm1oBnlbXOch2EHrlwlolsOhgf41rK7Q/00BNne+eW+/iJbNtHb6K0c/Dn6dzQ9I6hg1EjJtyXM7jokVBbIBo9GT33tISJlGGtxZ8IbrE/8rgeA91YD7N0Aq1U3KZt/u9mbz4hJW5yjR5z2R7Z02YBvgXNzs74j/RKXfVGiuj23ZLu/jJ6guqho+zHtBsmA0bJmJvzpAHwfp/YH6DAxLZb1L42+IorEV6D3NxbYxqJH63J7ryBZfxm3GLcVXM270vDikDZaVW+3ffYBULxxkI1lYBDaCK+7Cjc6DdXnkwuL7BlrudfGRozbPI0yRBbIgxtHHwD5rM4U0AqU=
+  template:
+    metadata:
+      name: wg-easy-admins
+      namespace: wg-easy

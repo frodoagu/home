@@ -52,6 +52,22 @@ flowchart LR
   live in the database and are changed in the UI (Admin > Interface /
   Config), not here.
 
+## The image: our fork
+
+The chart runs `ghcr.io/frodoagu/wg-easy`, built from
+[frodoagu/wg-easy](https://github.com/frodoagu/wg-easy) branch
+`feat/per-user-clients`: upstream's unreleased master plus one commit that
+gives each device an owner and adds `OAUTH_ADMIN_EMAILS` (see below).
+The fork's CI tags each image with the branch name and the commit sha; Image
+Updater follows the branch tag and pins its digest into `charts/wg-easy/values.yaml`
+(`ImageUpdater` `wg-easy` in charts/argocd-image-updater), like origin-firewall.
+The GHCR package is public, so there's no pull secret; a new package starts
+private and must be flipped once.
+
+Upstream master carries database migrations that 15.5.0 doesn't know, so going
+back to an older image means restoring the database from the backup taken
+before the switch ([backups.md](backups.md#run-list-restore)).
+
 ## Who can sign in
 
 Google only, and only accounts that are already wg-easy users:
@@ -68,14 +84,33 @@ Google only, and only accounts that are already wg-easy users:
   every dashboard, and people who only use the VPN shouldn't get them.
 - The setup wizard's admin (`bootstrap`) has a random password from the
   `wg-easy-init` SealedSecret that nobody uses: password sign-in is off.
+- Auto-registration stays off even though the fork registers newcomers as
+  `client`: on, any Google account could create a device and leave through
+  the home IP.
+
+### Roles and owners
+
+- **admin**: sees and edits every device and the server settings. Who is an
+  admin is `OAUTH_ADMIN_EMAILS`, a comma-separated list sealed into the
+  `wg-easy-admins` SealedSecret (emails stay out of git). On every Google
+  sign-in the fork re-applies it to password-less users: listed → admin,
+  anyone else → client. The `bootstrap` user has a password, so it keeps its
+  role.
+- **client**: sees only the devices they own and creates their own; can rename,
+  disable or delete them, but not change their addresses, Allowed IPs, Server
+  Allowed IPs or firewall IPs.
+- A device belongs to whoever creates it. Devices from before the fork all
+  belonged to `bootstrap` and were handed out with `give`.
 
 ```bash
-scripts/vpn-user.sh add someone@example.com       # then they sign in with Google
-scripts/vpn-user.sh list                        # who, and whether they've signed in yet
-scripts/vpn-user.sh remove someone@example.com
+scripts/vpn-user.sh add someone@example.com        # client; then they sign in with Google
+scripts/vpn-user.sh list                           # role, devices, signed in yet
+scripts/vpn-user.sh give someone@example.com "Their phone"   # hand a device over
+scripts/vpn-user.sh remove someone@example.com     # refused while they own devices
 ```
 
-Every user is an admin (wg-easy has no other working role yet).
+To make someone an admin, re-seal `wg-easy-admins` with their email added
+([secrets.md](secrets.md)); it applies at their next Google sign-in.
 
 ### Google OAuth client
 
