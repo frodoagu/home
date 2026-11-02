@@ -8,10 +8,12 @@ revisionHistoryLimit: 1
 image:
   # Our fork (github.com/frodoagu/wg-easy, branch feat/per-user-clients):
   # upstream master plus per-user client ownership and OAUTH_ADMIN_EMAILS.
-  # Argo CD Image Updater pins `latest`'s digest into image.tag (like
-  # origin-firewall), so what runs is an immutable digest — don't hand-edit it.
+  # The fork's CI (.github/workflows/fork-image.yml) tags each push with the
+  # branch name and the sha. Argo CD Image Updater follows the branch tag and
+  # pins its digest into image.tag (like origin-firewall), so what runs is an
+  # immutable digest — don't hand-edit it.
   repository: ghcr.io/frodoagu/wg-easy
-  tag: "latest"
+  tag: "feat-per-user-clients@sha256:39ef5ba0ed0764db5c13b9212b9ad0be44383ece08ad4729055c975a3a0e1b34"
   digest: ""
   pullPolicy: IfNotPresent
 

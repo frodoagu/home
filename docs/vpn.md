@@ -58,7 +58,8 @@ The chart runs `ghcr.io/frodoagu/wg-easy`, built from
 [frodoagu/wg-easy](https://github.com/frodoagu/wg-easy) branch
 `feat/per-user-clients`: upstream's unreleased master plus one commit that
 gives each device an owner and adds `OAUTH_ADMIN_EMAILS` (see below).
-Image Updater pins the digest of its `latest` tag into `charts/wg-easy/values.yaml`
+The fork's CI tags each image with the branch name and the commit sha; Image
+Updater follows the branch tag and pins its digest into `charts/wg-easy/values.yaml`
 (`ImageUpdater` `wg-easy` in charts/argocd-image-updater), like origin-firewall.
 The GHCR package is public, so there's no pull secret; a new package starts
 private and must be flipped once.
