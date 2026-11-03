@@ -86,7 +86,7 @@ group:
 # (`aires_prender`, `aires_piezas_dormir`) are hidden so Google doesn't list them.
 #
 # Setpoints live in `aires_prender` and nowhere else: heat is 21 in the living
-# areas and the kids' room, 20 in Fede's bedroom; cool is 24 everywhere.
+# areas and the kids' room, 20 in Fede's bedroom; cool and dry are 24 everywhere.
 # Turning on sets mode and temperature in ONE `climate.set_temperature` call:
 # every IR send carries the whole frame, so a single blast leaves the unit in
 # the wanted state.
@@ -103,7 +103,7 @@ group:
 # HA reports the state it ASSUMED; IR is one-way, so a physical remote goes
 # unnoticed.
 script:
-  # Turns `aires` on at their setpoint for `modo` (heat/cool; the seasonal one
+  # Turns `aires` on at their setpoint for `modo` (heat/cool/dry; the seasonal one
   # by default). One call per unit: the bedroom's heat setpoint differs. With
   # `mantener`, a unit already in `modo` keeps its own setpoint (re-sent).
   aires_prender:
@@ -118,10 +118,10 @@ script:
             domain: climate
             multiple: true
       modo:
-        description: heat o cool; sin nada, el de la estación.
+        description: heat, cool o dry; sin nada, el de la estación.
         selector:
           select:
-            options: [heat, cool]
+            options: [heat, cool, dry]
       mantener:
         description: Si un aire ya está en ese modo, conserva su temperatura.
         selector:
@@ -129,7 +129,7 @@ script:
     sequence:
       - variables:
           modo: >-
-            {{ modo if modo is defined and modo in ['heat', 'cool']
+            {{ modo if modo is defined and modo in ['heat', 'cool', 'dry']
                else 'cool' if is_state('sensor.aires_modo_estacional', 'cool') else 'heat' }}
           lista: "{{ [aires] if aires is string else aires }}"
       - repeat:
@@ -146,7 +146,7 @@ script:
                   {%- if mantener | default(false) and is_state(repeat.item, modo) and propia is not none %}
                   {{- propia }}
                   {%- else %}
-                  {{- 24 if modo == 'cool' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
+                  {{- 24 if modo != 'heat' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
                   {%- endif %}
     mode: parallel
 
@@ -246,6 +246,20 @@ script:
           - action: script.aires_prender
             data:
               aires: "{{ aires }}"
+    mode: single
+
+  # Every unit (the kids' only while they're home) to dry. Not a toggle: the
+  # whole-house button turns them off.
+  aires_todos_seco:
+    alias: Aires - Todos en seco (humedad)
+    icon: mdi:water-percent
+    sequence:
+      - action: script.aires_prender
+        data:
+          modo: dry
+          aires: >-
+            {{ ['climate.aire_living', 'climate.aire_cocina', 'climate.aire_dormitorio']
+               + (['climate.aire_chicos'] if not is_state('binary_sensor.chicos_en_casa', 'off') else []) }}
     mode: single
 
   # The seasonal toggle scoped to half the house: the day zone (kitchen + living)

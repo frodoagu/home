@@ -121,6 +121,25 @@ views:
       grid_options:
         columns: 12
     - type: markdown
+      content: '{% set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
+
+        **En seco** prende {{ ''los cuatro'' if con_chicos else ''living, cocina y dormitorio''
+        }} en modo humedad a 24°. No es toggle: para apagarlos, el botón de arriba.
+
+        {%- if not con_chicos %} Los chicos no están, así que el de ellos no lo toca.{% endif %}
+
+        '
+      grid_options:
+        columns: 12
+    - type: button
+      name: Todos en seco
+      icon: mdi:water-percent
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_todos_seco
+      grid_options:
+        columns: 12
+    - type: markdown
       content: 'Corrigen la temperatura **sin cambiar qué está prendido**: suben o
 
         bajan un grado a los aires que ya están funcionando y no tocan los

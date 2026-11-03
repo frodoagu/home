@@ -435,9 +435,9 @@ cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes i
 Google Home:
 
 Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
-and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is **24 °C**
-everywhere. They live in one place, `script.aires_prender` (`aires`, optional
-`modo`; the seasonal mode by default), which sends each unit its own
+and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool and dry are
+**24 °C** everywhere. They live in one place, `script.aires_prender` (`aires`, optional
+`modo`: heat, cool or dry; the seasonal mode by default), which sends each unit its own
 `climate.set_temperature`; every script and automation that turns units on at
 "their" temperature calls it. `script.aires_piezas_dormir` puts the bedrooms on
 it at the slowest fan, for `aires_modo_dormir` and `aires_solo_dormitorio_toggle`.
@@ -466,6 +466,9 @@ except the scheduled shutdown below, which turns all four off.
   turns all on in the seasonal mode. So a mixed state is first driven to "all on"
   and only the next tap turns everything off. This is the dashboard's main button
   and the one to put on a home-screen widget / iOS Shortcut.
+- `aires_todos_seco` — every unit to **dry** (dehumidify) at 24 °C, the kids'
+  only while they're home (out, it isn't touched at all). Not a toggle: the
+  whole-house toggle above turns them off, since dry counts as on.
 - `aires_cocina_living_toggle` — the seasonal toggle scoped to the **day zone**
   (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
   to heat 21 °C / cool 24 °C.
