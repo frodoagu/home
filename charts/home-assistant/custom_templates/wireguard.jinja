@@ -1,0 +1,16 @@
+{#- WireGuard presence (presencia.yaml). Import with
+    {% from 'wireguard.jinja' import handshake_en_casa %}
+    `metricas` is wg-easy's /metrics/prometheus text. Renders the time of the
+    last handshake of the peer with tunnel IP `ip` while its endpoint is inside
+    the house: the LAN, or the home's public IP `ip_publica`, where the
+    router's NAT loopback puts a LAN client that dials wg.agu.com.ar. Otherwise
+    (away, or no handshake since wg-easy started) the epoch. Rounded to 10 s so
+    the state doesn't change on every poll. -#}
+{%- macro handshake_en_casa(metricas, ip, ip_publica) -%}
+{%- set e = ip | replace('.', '\\.') -%}
+{%- set hs = metricas | regex_findall('wireguard_latest_handshake_seconds\\{[^\\n]*ipv4Address="' ~ e ~ '",[^\\n]*\\} ([0-9.]+)') -%}
+{%- set ep = metricas | regex_findall('wireguard_peer_endpoint_info\\{[^\\n]*ipv4Address="' ~ e ~ '",[^\\n]*endpoint="([0-9.]+):[0-9]+"') -%}
+{%- set s = hs[0] | float(0) if hs else 0 -%}
+{%- set casa = ep | count > 0 and (ep[0].startswith('192.168.0.') or ep[0] == ip_publica) -%}
+{{- ((now().timestamp() - s) | round(-1) if s > 0 and casa else 0) | as_datetime | string | replace(' ', 'T') -}}
+{%- endmacro -%}

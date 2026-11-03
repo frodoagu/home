@@ -1312,8 +1312,23 @@ house: with her there the simulation stays off and the ACs aren't cut.
   so it's found by the hostname it sends over DHCP, which Pi-hole files its
   queries under. Renaming the phone breaks it. Pi-hole's login is off, so the
   API needs no password.
+- **The VPN left on at home counts too.** A tunnel up at home sends the
+  phone's DNS through the wg-easy pod, so Pi-hole stops seeing it. The `rest`
+  sensor `sensor.celu_*_ultimo_handshake_en_casa` reads wg-easy's metrics
+  (in-cluster, every minute) and renders the time of the phone's last
+  WireGuard handshake while its endpoint is inside the house: `192.168.0.x`
+  (tunnel brought up at home) or the home's public IP (it came home with the
+  tunnel on, and the router's NAT loopback rewrites the source), kept in
+  `sensor.ip_publica_de_casa` from Cloudflare's trace every 5 min. The newer of
+  the two timestamps is what the limits above apply to; a handshake comes
+  every 2 min while the phone moves traffic, so the limits fit it too. Each
+  phone's WireGuard client is found by its tunnel IP (`10.8.0.2` Fede's,
+  `10.8.0.3` Irupé's), which stays put across renames. Off or unreachable,
+  wg-easy just adds nothing (a restart reads "no handshake" until the phone
+  sends traffic). The parsing lives in
+  [`custom_templates/wireguard.jinja`](../charts/home-assistant/custom_templates/wireguard.jinja).
 - **What breaks it on the phone:** a Private DNS hostname (DNS over TLS to
-  someone else skips Pi-hole), an always-on VPN, or Wi-Fi off at home. Private
+  someone else skips Pi-hole), a VPN other than ours, or Wi-Fi off at home. Private
   DNS **Automatic** is fine: Pi-hole doesn't serve DNS over TLS, so the phone
   falls back to plain DNS.
 

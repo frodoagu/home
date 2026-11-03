@@ -18,6 +18,12 @@
 # randomizes its MAC, so it's found by the hostname it sends over DHCP. Pi-hole's
 # login is off, so the API needs no password; HA and Pi-hole are both
 # hostNetwork on the Pi.
+#
+# A phone whose VPN tunnel stays on at home sends its DNS through the wg-easy
+# pod, so Pi-hole stops seeing it. Its tunnel's last handshake counts as a
+# query instead, while the endpoint is inside the house (the LAN, or the home's
+# public IP through the router's NAT loopback). Each phone's WireGuard client
+# is found by its tunnel IP, like the Pi-hole one by its LAN IP.
 
 rest:
   - resource: http://192.168.0.100:8080/api/queries?client_ip=192.168.0.80&length=1
@@ -41,10 +47,40 @@ rest:
         device_class: timestamp
         icon: mdi:cellphone-wireless
         value_template: *ultima
+  # In-cluster only (the IngressRoute doesn't route /metrics); HA's dnsPolicy
+  # resolves cluster names.
+  - resource: http://wg-easy.wg-easy.svc.cluster.local:51821/metrics/prometheus
+    scan_interval: 60
+    timeout: 10
+    sensor:
+      - name: Celu Fede - último handshake en casa
+        unique_id: celu_fede_ultimo_handshake_en_casa
+        device_class: timestamp
+        icon: mdi:vpn
+        value_template: >-
+          {%- from 'wireguard.jinja' import handshake_en_casa %}
+          {{- handshake_en_casa(value, '10.8.0.2', states('sensor.ip_publica_de_casa')) }}
+      - name: Celu Irupé - último handshake en casa
+        unique_id: celu_irupe_ultimo_handshake_en_casa
+        device_class: timestamp
+        icon: mdi:vpn
+        value_template: >-
+          {%- from 'wireguard.jinja' import handshake_en_casa %}
+          {{- handshake_en_casa(value, '10.8.0.3', states('sensor.ip_publica_de_casa')) }}
+  # Same source as cloudflare-ddns.
+  - resource: https://1.1.1.1/cdn-cgi/trace
+    scan_interval: 300
+    timeout: 10
+    sensor:
+      - name: IP pública de casa
+        unique_id: ip_publica_de_casa
+        icon: mdi:ip-network
+        value_template: "{{ value | regex_findall('(?m)^ip=([0-9.]+)$') | first | default('') }}"
 
 template:
   # Unavailable until the first poll and while Pi-hole doesn't answer, so
-  # neither an HA nor a Pi-hole restart is a departure or an arrival:
+  # neither an HA nor a Pi-hole restart is a departure or an arrival (the
+  # WireGuard handshake is optional: unavailable, it just doesn't count):
   # consumers trigger on `off`/`on` only. The rest sensor doesn't restore its
   # state, so a stale timestamp never comes back from before a restart.
   - binary_sensor:
@@ -53,7 +89,9 @@ template:
         default_entity_id: binary_sensor.fede_en_casa
         device_class: presence
         state: >-
-          {%- set t = states('sensor.celu_fede_ultima_consulta_dns') | as_datetime(none) %}
+          {%- set dns = states('sensor.celu_fede_ultima_consulta_dns') | as_datetime(none) %}
+          {%- set wg = states('sensor.celu_fede_ultimo_handshake_en_casa') | as_datetime(none) %}
+          {%- set t = [dns, wg] | reject('none') | max if dns or wg else none %}
           {%- set bateria = states('sensor.motorola_edge_70_battery_level') | float(100) %}
           {%- set de_noche = t is not none and (t | as_local).hour < 8 %}
           {%- set tope = 45 if de_noche or bateria < 16 else 30 %}
@@ -65,7 +103,9 @@ template:
         default_entity_id: binary_sensor.irupe_en_casa
         device_class: presence
         state: >-
-          {%- set t = states('sensor.celu_irupe_ultima_consulta_dns') | as_datetime(none) %}
+          {%- set dns = states('sensor.celu_irupe_ultima_consulta_dns') | as_datetime(none) %}
+          {%- set wg = states('sensor.celu_irupe_ultimo_handshake_en_casa') | as_datetime(none) %}
+          {%- set t = [dns, wg] | reject('none') | max if dns or wg else none %}
           {{- t is not none and now() - t < timedelta(minutes=90) }}
         availability: "{{ has_value('sensor.celu_irupe_ultima_consulta_dns') }}"
 

@@ -8,9 +8,7 @@ ever comes from Cloudflare; anything hitting the raw IP is bypassing Cloudflare
 (and any per-service auth/rate-limit that trusts CF-supplied headers).
 
 Inbound `udp/443` (HTTP/3) is policed too, and more strictly — **LAN/cluster
-only**, see [QUIC](#quic-http3-on-udp443-is-lan-only) below. The WireGuard port
-(`udp/51820`) gets the opposite rule: **outside only**, see
-[VPN from inside](#wireguard-udp51820-is-outside-only).
+only**, see [QUIC](#quic-http3-on-udp443-is-lan-only) below.
 
 Deployed like everything else in this repo — an ArgoCD `Application`
 (`apps/origin-firewall.yaml`) syncing a chart. No manual SSH steps.
@@ -65,28 +63,6 @@ stricter than `web_filter` — it accepts `@local_v4`/`@local_v6` and drops
 everything else, Cloudflare included. Keep the router forwarding **TCP only**;
 `quicPorts: []` in `values.yaml` turns the UDP rule off entirely.
 
-## WireGuard (udp/51820) is outside-only
-
-The VPN ([vpn.md](vpn.md)) is for leaving the house. A tunnel up at home sends
-the phone's DNS through the wg-easy pod instead of from the phone's own LAN
-address, so Home Assistant's presence (Pi-hole queries per phone) marks it away.
-`vpnFromInside` drops the port's traffic from inside, which arrives two ways
-(measured with a temporary nft set on the Pi, 2026-11-02):
-
-| Client dials | Source the Pi sees | Dropped by |
-|---|---|---|
-| the Pi, `192.168.0.100:51820` | its LAN address (`192.168.0.x`) | `@vpn_lan_v4` (`lanIPv4`) |
-| `wg.agu.com.ar` (the public IP) | **the home's own public IP**: the router's NAT loopback rewrites the source | `@home_public_v4` |
-
-The public IP changes, so the entrypoint keeps `home_public_v4` at what
-`homeIP.url` (Cloudflare's `/cdn-cgi/trace`, the same source as
-cloudflare-ddns) reports, every `homeIP.interval` seconds (300). A failed fetch
-keeps the last IP. Nobody outside arrives from the home's own public IP, so
-outside clients pass untouched. A phone that comes home with the tunnel still on
-loses its connection until the tunnel is turned off, which is the point.
-
-`vpnFromInside.enabled: false` removes the chain.
-
 ## Why a DaemonSet and not a Traefik `IPAllowList`
 
 k3s's klipper `svclb` SNATs every external connection to the node's CNI bridge
@@ -103,7 +79,7 @@ can tell the two apart, and a DaemonSet is how we program it under GitOps.
 
 ## Safety
 
-- The ruleset **only ever matches `tcp/80,443`, `udp/443` and `udp/51820`**. SSH (22), the k8s
+- The ruleset **only ever matches `tcp/80,443` and `udp/443`**. SSH (22), the k8s
   API (6443), DNS/DHCP (53/67) and everything else are never touched — a bad
   ruleset can't lock you out.
 - If the pod dies after applying, the kernel rules persist (fail-closed, still
@@ -133,9 +109,7 @@ kubectl -n kube-system exec ds/origin-firewall -- nft list table inet origin_fw
   count climbs when you browse via Cloudflare; `@local_v4` climbs from on-LAN
   devices; `counter drop` climbs from real direct-IP probes. In `quic_filter`,
   `@local_v4` climbs while an on-LAN browser uses HTTP/3 and `counter drop` should
-  stay at **0** (anything there means the router is forwarding UDP 443). In
-  `vpn_filter`, the `@vpn_lan_v4` / `@home_public_v4` drops climb only while a
-  device tries the VPN from inside the house.
+  stay at **0** (anything there means the router is forwarding UDP 443).
 - ❌ **Router is SNATing:** external browsing makes **`@local_v4`** climb (all
   traffic looks like `192.168.0.x`) and `@cloudflare_v4` stays at 0. The firewall
   is a no-op — block at the router instead (allow WAN 80/443 only from the

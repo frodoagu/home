@@ -348,12 +348,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   can block direct hits. The firewall instead runs on the host at nftables
   `prerouting priority -300` (before klipper's dstnat -100), where the real source
   IP is still visible; a privileged hostNetwork DaemonSet programs it (own
-  `inet origin_fw` table, only touches tcp/80,443 + udp/443 + udp/51820 so
-  SSH/6443/DNS are safe; the udp/443 `quic_filter` chain is LAN-only — see the
-  next bullet — and the udp/51820 `vpn_filter` is the reverse, outside-only:
-  it drops the LAN and the home's OWN public IP, because the router's NAT
-  loopback rewrites a LAN client dialing wg.agu.com.ar to that IP; the
-  entrypoint keeps that set fresh from Cloudflare's trace). Effectiveness
+  `inet origin_fw` table, only touches tcp/80,443 + udp/443 so SSH/6443/DNS are
+  safe; the udp/443 `quic_filter` chain is LAN-only — see the next bullet). Effectiveness
   hinges on the ROUTER preserving the source IP on port-forward — verify via the
   rule counters (docs/origin-firewall.md); if it SNATs, filter at the router.
 - **pihole — LAN addressing: a static block, and `.lan` names instead of hardcoded
@@ -436,7 +432,10 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   bothers her when she minds the house. Never `zone.home`/`person`: the GPS sat
   at `not_home` for a day at home, an idle Android doesn't answer ping, and
   Pi-hole's ARP `lastSeen` lags its DNS queries by an hour. Consumers trigger on
-  `off`/`on` only, so Pi-hole down (unavailable) is never an arrival. The kids'
+  `off`/`on` only, so Pi-hole down (unavailable) is never an arrival. A VPN tunnel
+  left on at home also counts (`custom_templates/wireguard.jinja`: last handshake
+  of the phone's tunnel IP while its endpoint is the LAN or the home public IP).
+  The kids'
   calendar (`packages/chicos.yaml`) is a condition only; a marked day is a NIGHT
   (home 18:00 that day → 13:50 the next), not a day. See
   docs/home-assistant.md#presence.
@@ -731,9 +730,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   `node server/index.mjs` without it. It also carries upstream-master
   migrations: rolling back to an older image means restoring the DB backup. The endpoint
   `wg.agu.com.ar` must be grey: favonia applies `dnsOnly` only when it CREATES a
-  record. It's outside-only on purpose (origin-firewall `vpnFromInside`): a
-  tunnel up at home hides the phone from Pi-hole, and HA presence marks it
-  away. See docs/vpn.md.
+  record. A tunnel up at home is allowed: it hides the phone from Pi-hole, so
+  HA presence also reads wg-easy's metrics (handshake from the LAN or the home
+  public IP; see the presence bullet). See docs/vpn.md.
 - **backups — group by host, not paths.** HA's backup tar is named after its day,
   so restic's default `forget` grouping (host + paths) would keep every snapshot
   forever; `charts/backups` forgets with `--group-by host`. Targets share one
