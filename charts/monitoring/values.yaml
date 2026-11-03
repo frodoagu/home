@@ -85,12 +85,14 @@ piholeExporter:
     repository: ekofr/pihole-exporter
     tag: "v1.3.0"
   revisionHistoryLimit: 1
-  # Pi-hole's in-cluster web/API Service (charts/pihole), NOT pihole.agu.com.ar:
-  # the public route sits behind google-auth and would answer the exporter with
-  # a sign-in redirect.
+  # Pi-hole's API on the node's IP (Pi-hole is hostNetwork). Not
+  # pihole.agu.com.ar, whose route sits behind google-auth, and not the
+  # in-cluster Service name: with no password Pi-hole answers only requests
+  # for its own names (IP, pi.hole, webserver.domain, hostname) and 401s the
+  # rest.
   pihole:
     protocol: http
-    host: pihole.pihole.svc.cluster.local
+    host: 192.168.0.100
     port: 8080
     # Value of the `hostname` label on every series (the dashboard's $node).
     label: pihole

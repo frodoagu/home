@@ -232,9 +232,13 @@ Pi-hole has no Prometheus endpoint, so
 [templates/pihole-exporter.yaml](../charts/monitoring/templates/pihole-exporter.yaml)
 runs [eko/pihole-exporter](https://github.com/eko/pihole-exporter) (`piholeExporter`
 in `values.yaml`) plus a `VMPodScrape`. On every scrape it reads Pi-hole's v6 REST
-API (`/api/stats/*`, `/api/dns/blocking`) through the in-cluster Service
-`pihole.pihole.svc.cluster.local:8080`. It can't use `pihole.agu.com.ar`: that route
-sits behind google-auth, so the exporter would only get a sign-in redirect.
+API (`/api/stats/*`, `/api/dns/blocking`) at the node's IP, `192.168.0.100:8080`
+(Pi-hole is hostNetwork). It can't use `pihole.agu.com.ar`: that route sits
+behind google-auth, so the exporter would only get a sign-in redirect. Nor the
+in-cluster Service name: with no password set, Pi-hole (since 2026.10) accepts
+requests for its own names only (its IP, `pi.hole`, `webserver.domain`, its
+hostname) and answers any other `Host` with a 401, which left the whole
+dashboard on "No data".
 
 - **Its own Deployment, not a sidecar.** Pi-hole runs `hostNetwork`, so a sidecar's
   `:9617` would listen on the node and expose top domains and client names to the

@@ -293,8 +293,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   grafana.com at pod start (needs egress).
 - **monitoring — pihole-exporter can make a dead Pi-hole look alive.** When the API
   is unreachable, eko/pihole-exporter serves the LAST values with a 200, so `up`
-  and `pihole_status` stay 1. Don't alert on them. It must read the in-cluster
-  `pihole.pihole.svc.cluster.local:8080`: the public host is behind google-auth.
+  and `pihole_status` stay 1. Don't alert on them. It reads `192.168.0.100:8080`:
+  the public host is behind google-auth, and a password-less Pi-hole (2026.10+)
+  401s any `Host` that isn't one of its own names, the Service name included.
   It runs as its own Deployment rather than a sidecar because Pi-hole is
   hostNetwork, so a sidecar's :9617 would be open to the whole LAN. It needs no
   password while Pi-hole's login is off. If that login is turned on, the
