@@ -1316,9 +1316,10 @@ house: with her there the simulation stays off and the ACs aren't cut.
   phone's DNS through the wg-easy pod, so Pi-hole stops seeing it. The `rest`
   sensor `sensor.celu_*_ultimo_handshake_en_casa` reads wg-easy's metrics
   (in-cluster, every minute) and renders the time of the phone's last
-  WireGuard handshake while its endpoint is inside the house: `192.168.0.x`
-  (tunnel brought up at home) or the home's public IP (it came home with the
-  tunnel on, and the router's NAT loopback rewrites the source), kept in
+  WireGuard handshake while its endpoint is inside the house: the home's
+  public IP (the client dials `wg.agu.com.ar`, and from the home Wi-Fi the
+  router's NAT loopback rewrites the source to it) or `192.168.0.x` (a client
+  configured to dial the Pi directly), the public IP kept in
   `sensor.ip_publica_de_casa` from Cloudflare's trace every 5 min. The newer of
   the two timestamps is what the limits above apply to; a handshake comes
   every 2 min while the phone moves traffic, so the limits fit it too. Each
