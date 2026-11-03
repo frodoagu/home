@@ -136,12 +136,16 @@ victoria-logs-single:
             if is_string(.log) && strip_whitespace(string!(.log)) == "" {
               abort
             }
+            # The message leads with the client's public IP: klipper SNATs
+            # ClientHost to 10.42.0.1, so Cloudflare's header is the real one.
+            ip = .log."request_Cf-Connecting-Ip"
             if exists(.log.RequestMethod) {
-              .message = (to_string(.log.RequestMethod) ?? "-") + " " +
+              client = if is_string(ip) { string!(ip) } else { to_string(.log.ClientHost) ?? "-" }
+              .message = client + " " +
+                (to_string(.log.RequestMethod) ?? "-") + " " +
                 (to_string(.log.RequestHost) ?? "-") + (to_string(.log.RequestPath) ?? "") + " " +
                 (to_string(.log.DownstreamStatus) ?? "-")
             }
-            ip = .log."request_Cf-Connecting-Ip"
             if is_string(ip) {
               geo, err = get_enrichment_table_record("geoip", {"ip": ip})
               if err == null {
