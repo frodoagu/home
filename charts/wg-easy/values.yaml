@@ -12,7 +12,7 @@ image:
   # pins its digest into image.tag (like origin-firewall), so what runs is an
   # immutable digest — don't hand-edit it.
   repository: ghcr.io/frodoagu/wg-easy
-  tag: "feat-per-user-clients@sha256:473807098f1450de17c008e7797d5f20ea2e64e56acb1f4370ddce6a076c1c4f"
+  tag: "feat-per-user-clients@sha256:04adc01b3926c0965f263f4d898e7d24486081a7e2da95dc7d9ec1cc7c9517c9"
   digest: ""
   pullPolicy: IfNotPresent
 # The image holds nothing private (the fork is public), so the GHCR package is
