@@ -26,11 +26,16 @@ command_line:
       # Time budget: 5 tries x (8 s of curl + 2 s of wait) = 50 s worst case,
       # under the 55 s command_timeout and the 60 s scan_interval. The machine
       # answers in 1-2 s when it answers, so a short timeout and more tries.
+      # No answer (the machine is off most of the day) prints nothing and exits
+      # 0, which `availability` turns into unavailable without logging an error
+      # every minute; a reply that doesn't decode still fails loudly.
       command: >-
-        for i in 1 2 3 4 5; do H=$(curl -sS -m 8 "http://lavarropas.lan/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
+        for i in 1 2 3 4 5; do H=$(curl -s -m 8 "http://lavarropas.lan/http-read.json?encrypted=1"); [ -n "$H" ] && break; sleep 2; done;
+        [ -z "$H" ] && exit 0;
         printf '%s' "$H" | python3 -c "import json,sys;k=b'aeaclekbgmjjcebg';r=bytes.fromhex(sys.stdin.read().strip());d=r if r.lstrip().startswith(b'{') else bytes(c^k[i%16] for i,c in enumerate(r));print(json.dumps(json.loads(d)['statusLavatrice']))"
       command_timeout: 55
       scan_interval: 60
+      availability: "{{ value not in [none, ''] }}"
       value_template: "{{ value_json.MachMd }}"
       json_attributes:
         - WiFiStatus

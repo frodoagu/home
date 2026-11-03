@@ -170,13 +170,18 @@ template:
             {%- set ns.lista = ns.lista + [dict(z.items() | rejectattr('0', 'in', ['mac', 'rssi']) | list)] %}
             {%- endfor %}
             {{- ns.lista if ns.lista | count == 2 else none }}
-          actual: "{{ this.attributes.actual | default(none) }}"
-          cambio: "{{ pilotos is not none and pilotos != actual }}"
+        # `this` doesn't exist in `variables`, only in state and attributes.
         state: >-
+          {%- set actual = this.attributes.actual | default(none) %}
+          {%- set cambio = pilotos is not none and pilotos != actual %}
           {{- now().isoformat() if cambio or not has_value(this.entity_id) else this.state }}
         attributes:
-          actual: "{{ pilotos if cambio else actual }}"
-          anterior: "{{ actual if cambio else this.attributes.anterior | default(none) }}"
+          actual: >-
+            {%- set actual = this.attributes.actual | default(none) %}
+            {{- pilotos if pilotos is not none and pilotos != actual else actual }}
+          anterior: >-
+            {%- set actual = this.attributes.actual | default(none) %}
+            {{- actual if pilotos is not none and pilotos != actual else this.attributes.anterior | default(none) }}
 
 # The two zones are identical apart from the index and the attribute they read,
 # so both lights share these blocks through YAML anchors.
