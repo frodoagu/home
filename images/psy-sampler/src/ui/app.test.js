@@ -6,6 +6,7 @@ import { createEngine } from "../audio/engine.js";
 import { defaultData } from "../audio/patterns.js";
 import { stepDuration } from "../audio/timing.js";
 import { STYLES } from "../autopilot.js";
+import { createFlx4 } from "../flx4.js";
 import { FORMS, GENRE, systemOf } from "../planner.js";
 import { zipEntries } from "../import/zip.js";
 import { mountApp } from "./app.js";
@@ -4057,5 +4058,137 @@ describe("usage counts", () => {
     $('[data-action="snapshot"]').click();
     $('[data-action="export-snaps"]').click();
     expect(counted()).toEqual(["presets", "shares", "autopilot", "renders", "snapshots"]);
+  });
+});
+
+describe("FLX4", () => {
+  const RAW_MAX = 0x3fff;
+  const PERC = [0xb0, 0x07];
+  const PAD = [0xb0, 0x0f];
+  const CFX_LEFT = [0xb6, 0x17];
+  const CFX_RIGHT = [0xb6, 0x18];
+  const TEMPO = [0xb0, 0x00];
+  const PLAY = [0x90, 0x0b];
+  const CUE = [0x90, 0x0c];
+  const SYNC = [0x90, 0x58];
+  let port;
+  let access;
+
+  const send = (...data) => port.onmidimessage({ data: Uint8Array.from(data), timeStamp: performance.now() });
+  const press = ([status, number]) => {
+    send(status, number, 127);
+    send(status, number, 0);
+  };
+  const move = ([status, number], raw) => {
+    send(status, number, raw >> 7);
+    send(status, number + 0x20, raw & 0x7f);
+  };
+  const flx4Btn = () => $('[data-action="flx4"]');
+  const layerFader = (id) => $(`[data-layer="${id}"] .layer-volume input`);
+  const remountWith = (flx4) => {
+    root = document.createElement("div");
+    document.body.replaceChildren(root);
+    mount(root, engine, { flx4 });
+  };
+
+  beforeEach(async () => {
+    port = { name: "DDJ-FLX4", state: "connected", onmidimessage: null };
+    access = { inputs: new Map([["1", port]]), onstatechange: null };
+    remountWith(createFlx4({ nav: { requestMIDIAccess: async () => access } }));
+    flx4Btn().click();
+    await flushPromises();
+  });
+
+  it("offers no button without Web MIDI", () => {
+    remountWith(createFlx4({ nav: {} }));
+    expect(flx4Btn()).toBeNull();
+  });
+
+  it("connects from its button and says what it found", async () => {
+    expect(flx4Btn().classList.contains("is-on")).toBe(true);
+    expect($(".status").textContent).toBe("FLX4 conectado");
+    port.state = "disconnected";
+    access.onstatechange();
+    expect(flx4Btn().classList.contains("is-on")).toBe(false);
+    flx4Btn().click();
+    await flushPromises();
+    expect($(".status").textContent).toMatch(/No encontré un FLX4/);
+  });
+
+  it("presses the same transport as the screen", () => {
+    press(PLAY);
+    expect($("button.cue").classList.contains("is-armed")).toBe(true);
+    click("kick.punchy");
+    press(PLAY);
+    expect(engine.isRunning()).toBe(true);
+    press(CUE);
+    expect(engine.isRunning()).toBe(false);
+  });
+
+  it("taps from BEAT SYNC", () => {
+    for (let i = 0; i < 4; i++) {
+      press(SYNC);
+      vi.advanceTimersByTime(400);
+    }
+    expect($("#bpm").value).toBe("150");
+  });
+
+  it("moves a layer's fader on screen and saves when the hand settles", () => {
+    const before = saved()?.volumes.perc;
+    move(PERC, 0x2000);
+    move(PERC, 0);
+    expect(layerFader("perc").value).toBe("0");
+    expect(saved()?.volumes.perc).toBe(before);
+    vi.advanceTimersByTime(400);
+    expect(saved().volumes.perc).toBe(0);
+  });
+
+  it("keeps working after a remount", () => {
+    $('[data-control="style"]').value = "techno";
+    $('[data-control="style"]').dispatchEvent(new Event("change"));
+    move(PERC, 0x2000);
+    move(PERC, 0);
+    expect(layerFader("perc").value).toBe("0");
+  });
+
+  it("drives the DJ filter and the volume", () => {
+    move(CFX_LEFT, 0x2000);
+    move(CFX_LEFT, 0);
+    expect($("#dj").value).toBe("-1");
+    const at = Number($("#volume").value) * 2 * 0x2000;
+    move(CFX_RIGHT, at);
+    move(CFX_RIGHT, 0);
+    expect($("#volume").value).toBe("0");
+  });
+
+  it("the tempo slider ramps like the BPM slider once it settles", () => {
+    click("kick.punchy");
+    advanceSeconds(BAR);
+    move(TEMPO, ((180 - 145) / 120) * RAW_MAX);
+    move(TEMPO, ((180 - 150) / 120) * RAW_MAX);
+    expect($("#bpm").value).toBe("150");
+    expect($(".bpm-value").textContent).toBe("145 → 150");
+    expect(engine.bpm()).toBe(145);
+    vi.advanceTimersByTime(400);
+    expect(saved().bpm).toBe(145);
+  });
+
+  it("a jog changes the speed while it turns and leaves the BPM", () => {
+    send(0xb0, 0x21, 66);
+    expect(engine.bpm()).toBeCloseTo(147.9, 6);
+    expect($("#bpm").value).toBe("145");
+    vi.advanceTimersByTime(150);
+    expect(engine.bpm()).toBe(145);
+  });
+
+  it("the autopilot leaves a held layer's levels alone and rides the others", () => {
+    move(PAD, 0x2000);
+    move(PAD, 0x1000);
+    $("button.auto").click();
+    const ridden = (layer) =>
+      Object.entries(saved().variants).filter(([id, data]) => id.startsWith(`${layer}.`) && data.level !== 1);
+    for (let i = 0; i < 20; i++) advanceSeconds(2 * BAR);
+    expect(ridden("pad")).toEqual([]);
+    expect(ridden("lead").length).toBeGreaterThan(0);
   });
 });

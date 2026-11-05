@@ -217,6 +217,13 @@ export default {
     key: "Tónica",
     keyTitle: "La nota base de la mezcla: todo lo melódico se corre a esta tónica, disonancias incluidas",
     tapTitle: "Tocalo al ritmo, tap tap tap tap: el primero vuelve al 1 del compás, los siguientes ajustan el BPM y la fase a tus toques",
+    flx4: "🎛 FLX4",
+    flx4Title: "Conectá un Pioneer DDJ-FLX4 y tocá el sampler desde el controlador",
+    flx4Status: {
+      on: "FLX4 conectado",
+      missing: "No encontré un FLX4: conectalo y cerrá rekordbox",
+      denied: "El navegador no dio acceso a MIDI",
+    },
     bgKick: "Kick de fondo",
     delay: "Delay 3/16",
     reverb: "Reverb",

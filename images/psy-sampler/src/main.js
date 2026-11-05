@@ -3,6 +3,7 @@ import { createAi } from "./ai.js";
 import { createEngine } from "./audio/engine.js";
 import { createCloud } from "./cloud.js";
 import { guardClose } from "./closeGuard.js";
+import { createFlx4 } from "./flx4.js";
 import { createMediaKeys } from "./mediaKeys.js";
 import { createSamples } from "./samples.js";
 import { detectLang, setLang } from "./i18n/index.js";
@@ -53,6 +54,8 @@ const stats = createStats({ engine, storage: browserStorage() });
 stats.start();
 // The keyboard's play/pause and stop keys drive the transport.
 const mediaKeys = createMediaKeys();
+// A Pioneer DDJ-FLX4 as a control surface, once 🎛 connects it.
+const flx4 = createFlx4();
 // The ✨ AI's models: Chrome's built-in one where it runs, or an LM Studio
 // endpoint. Created here so a remount keeps the session.
 const ai = createAi();
@@ -72,7 +75,7 @@ claimTab({
     cloud.flush().finally(reload);
   },
 }).then(() => {
-  mountApp(document.getElementById("app"), engine, { cloud, samples, stats, mediaKeys, ai });
+  mountApp(document.getElementById("app"), engine, { cloud, samples, stats, mediaKeys, flx4, ai });
   // First visit only: what this is, and the way to the how-to page.
   showIntro({
     storage: browserStorage(),

@@ -1371,6 +1371,10 @@ html:has(dialog.help[open], dialog.intro[open]) {
   padding: 4px 8px;
 }
 
+.ghost[data-action="flx4"].is-on {
+  border-color: var(--current);
+}
+
 .ghost.danger {
   color: var(--stop);
   border-color: color-mix(in srgb, var(--stop) 45%, var(--border));

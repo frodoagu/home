@@ -663,6 +663,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   the SAME streaming chain (`src/audio/fxChain.js`, state kept between blocks) in the
   `psy-take-fx` worklet: keep a stage streaming, and keep fxChain.js free of browser
   APIs (a worklet's scope lacks them). It's imported `?worker&url` so its imports are bundled.
+  🎛 FLX4 (`src/flx4.js`, Web MIDI): absolute controls pick up, and a layer control off its
+  neutral holds that layer's levels from the autopilot (`mixIn` skips it, no PRNG involved).
+  A MIDI message is no user gesture: the 🎛 click is what lets its PLAY start the audio.
   The ✨ AI
   first plans the opening from silence, armed (`openingPrompt`: a long,
   spacey intro, 16-32 bars, with more room than `SECTIONS.intro` via

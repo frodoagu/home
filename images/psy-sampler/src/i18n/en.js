@@ -214,6 +214,13 @@ export default {
     key: "Key",
     keyTitle: "The mix's root note: everything melodic moves to it, dissonances included",
     tapTitle: "Tap it to the beat, tap tap tap tap: the first goes back to the 1 of the bar, the rest bring the BPM and the phase to your taps",
+    flx4: "🎛 FLX4",
+    flx4Title: "Connect a Pioneer DDJ-FLX4 and play the sampler from the controller",
+    flx4Status: {
+      on: "FLX4 connected",
+      missing: "No FLX4 found: plug it in and close rekordbox",
+      denied: "The browser refused MIDI access",
+    },
     bgKick: "Background kick",
     delay: "Delay 3/16",
     reverb: "Reverb",

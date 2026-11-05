@@ -101,7 +101,8 @@ goes through it:
   what was playing queued (dotted) and hides itself, so ▶ Play sits in its
   slot and brings that mix back; the autopilot, armed, takes the queued mix
   and starts. FX still fire at once. The keyboard's play/pause and stop keys
-  press the same buttons (`mediaKeys.js`, see *Gotchas*).
+  press the same buttons (`mediaKeys.js`, see *Gotchas*), and so does a
+  connected [DDJ-FLX4](#ddj-flx4).
 - **Autopilot** (see below), at every loop start.
 - **Snapshot autopilot** (see Snapshots), on the loop start where a snapshot
   has played its bars.
@@ -910,6 +911,52 @@ makes itself (a new version, another tab or device took over) skip the question.
   mix. Shared links carry only the sounds, not the snapshots. The snapshots
   alone travel through the panel's own Export / Import, and one at a time
   through its editor's 🔗 Share (see Snapshots).
+
+## DDJ-FLX4
+
+🎛 in the top bar connects a Pioneer DDJ-FLX4 as a control surface
+([`src/flx4.js`](../images/psy-sampler/src/flx4.js), Web MIDI). The button only
+shows where the browser has Web MIDI (Chrome, Edge). Close rekordbox first: it
+can hold the MIDI port. The sound stays on the computer, so the FLX4's MASTER
+and headphone knobs do nothing here and its microphone never reaches the page.
+
+| Control | Drives |
+|---|---|
+| PLAY (either deck) | ▶ / Stop, the same buttons as the screen |
+| CUE (either deck) | Stop |
+| BEAT SYNC (either deck) | Tap |
+| Channel faders | Layer volume of kick (left) and bass (right), top = 100 % |
+| Left EQ HI / MID / LOW | Layer volume of perc, lead, pad, centre = 100 % |
+| Right EQ HI / MID / LOW | Layer volume of glitch, classic, fx, centre = 100 % |
+| Left CFX | DJ filter |
+| Right CFX | Volume |
+| Left tempo slider | BPM, 60-180, down is faster |
+| Jogs (ring and top) | Speed while they turn |
+
+Layer controls drive the on-screen layer faders (`ws.volumes`, 0-150 %). Faders
+and knobs send 14 bits, a coarse CC and then its fine one 0x20 above; the value
+lands on the fine one. Jogs send the turn as an offset from 64.
+
+- **Pick-up.** A physical control has a position the page can't read, so it
+  moves nothing until it reaches the value it drives or passes over it. Anything
+  else moving that value (the mouse, a loaded workspace, a ramp) lets it go until
+  it reaches the value again.
+- **Taking a layer from the autopilot.** A layer control off its neutral (fader
+  at the top, knob at the centre) holds that layer: `mixIn` leaves its sounds'
+  levels alone while the autopilot rides the others. It still picks that layer's
+  sounds. Back at neutral the layer is the autopilot's again, and unplugging the
+  FLX4 hands every layer back. The hold only skips applying the mix, so it
+  draws nothing from the PRNG and seeds replay the same.
+- **Saving.** `persist()` serializes the whole workspace and a fader sends tens
+  of messages per gesture, so a layer control saves once, 400 ms after it stops.
+- **Tempo.** The slider takes the same path as the wheel on the BPM slider: the
+  readout previews it and the ramp starts 400 ms after it stops.
+- **Jogs.** A turn sets the speed through `engine.setBpm()`, 1 % per tick of the
+  jog's offset up to ±4 %, and the speed returns 150 ms after the last message.
+  `ws.bpm` and the readout stay, so a bend is never saved.
+- **Starting the audio.** A MIDI message is no user gesture, so it can't start an
+  AudioContext by itself: clicking 🎛 calls `ensureContext()`, and that click is
+  what lets PLAY start the sound.
 
 ## Cloud save
 

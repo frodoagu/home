@@ -204,8 +204,8 @@ const REPO = "https://github.com/frodoagu/home/tree/main/images/psy-sampler";
 
 // Drag on a tile's 🔀 over the whole improvise range: the button is small.
 const TILE_SLIDE_PX = 120;
-// The wheel on the BPM slider: the ramp starts this long after its last notch.
-const WHEEL_SETTLE_MS = 400;
+// A BPM moved in small steps: the ramp starts this long after the last one.
+const BPM_SETTLE_MS = 400;
 // The drop by hand: the riser into it, the hit on it, and the layers its
 // second bar takes out.
 const DROP_RISER = "fx.riser";
@@ -270,6 +270,7 @@ export function mountApp(root, engine, opts = {}) {
     samples = null, // samples.js; same
     stats = null, // stats.js; same
     mediaKeys = null, // mediaKeys.js; same
+    flx4 = null, // flx4.js; same
     ai = null, // ai.js: the ✨ AI's models; same
     recorder = createRecorder(engine),
     stemsRecorder = createStemsRecorder(engine),
@@ -424,6 +425,7 @@ export function mountApp(root, engine, opts = {}) {
   keyPick.title = tx.transport.keyTitle;
   const tapBtn = el("button", { type: "button", class: "ghost tap", "data-action": "tap", text: tx.transport.tap });
   tapBtn.title = tx.transport.tapTitle;
+  const flx4Btn = flx4?.available ? el("button", { type: "button", class: "ghost", "data-action": "flx4", text: tx.transport.flx4, title: tx.transport.flx4Title }) : null;
   const bgKick = checkbox("bgkick", tx.transport.bgKick, ws.bgKick);
   const quantize = checkbox("quantize", tx.transport.quantize, ws.quantize);
   quantize.node.title = tx.transport.quantizeTitle;
@@ -868,12 +870,17 @@ export function mountApp(root, engine, opts = {}) {
   }
 
   // The layer's fader: scales every sound in it, on top of each one's own volume.
+  const layerKnobs = new Map(); // layer id -> its fader on screen
+  function setLayerVolume(id, v) {
+    ws.volumes[id] = v;
+    engine.setLayerVolume(id, v);
+  }
   function layerVolume(id) {
     const knob = slider({ ...LEVEL, key: "layer-volume", label: tx.tile.volume }, ws.volumes[id], (v) => {
-      ws.volumes[id] = v;
-      engine.setLayerVolume(id, v);
+      setLayerVolume(id, v);
       persist();
     });
+    layerKnobs.set(id, knob);
     knob.classList.add("layer-volume");
     knob.querySelector("input").setAttribute("aria-label", tx.tile.layerVolume(tx.layers[id].name));
     knob.title = tx.tile.layerVolumeTitle;
@@ -1006,7 +1013,15 @@ export function mountApp(root, engine, opts = {}) {
       rampBox,
       keyPick,
     ),
-    el("div", { class: "topbar-end" }, iconOnly(visualsButton(engine, tx.visuals)), iconOnly(help.button), ...(account ? [account.node] : []), language),
+    el(
+      "div",
+      { class: "topbar-end" },
+      ...(flx4Btn ? [iconOnly(flx4Btn)] : []),
+      iconOnly(visualsButton(engine, tx.visuals)),
+      iconOnly(help.button),
+      ...(account ? [account.node] : []),
+      language,
+    ),
   );
 
   const samplesPanel = samples
@@ -2025,11 +2040,11 @@ export function mountApp(root, engine, opts = {}) {
 
   // The autopilot's balance on every sound it plays, yours too: a level that
   // moves goes there in a straight line over the loop, one that enters
-  // starts there.
+  // starts there. A layer held on the FLX4 stays where it is.
   function mixIn(active = state.active) {
     let moved = false;
     for (const [id, level] of Object.entries(mixOf(state.pilot, active))) {
-      if (!tiles.has(id) || dataOf(id).level === level) continue;
+      if (!tiles.has(id) || dataOf(id).level === level || flx4?.holds(layerOf(id).id)) continue;
       keepForEnd(id);
       setLevel(id, level, { pilot: true, glide: stepDuration(state.tempo) * LOOP_STEPS });
       moved = true;
@@ -2760,6 +2775,7 @@ export function mountApp(root, engine, opts = {}) {
     clearInterval(stemsTimer);
     stemsRecorder.onFull(null);
     mediaKeys?.bind(null);
+    flx4?.bind(null);
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     engine.onBar(null);
@@ -3810,10 +3826,21 @@ export function mountApp(root, engine, opts = {}) {
     held = false;
     startRamp(Number(bpm.value));
   });
-  // The wheel: a BPM a notch (a mouse's 100 px, a trackpad's in sums), the
-  // ramp once it settles.
+  // A hand that moves in small steps (the wheel, the FLX4's slider): the
+  // readout previews it, the ramp starts once it settles.
+  let settleTimer = 0;
+  function moveBpm(to) {
+    held = true;
+    bpm.value = String(clampBpm(to));
+    bpm.dispatchEvent(new Event("input"));
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      held = false;
+      if (alive) startRamp(Number(bpm.value));
+    }, BPM_SETTLE_MS);
+  }
+  // The wheel: a BPM a notch (a mouse's 100 px, a trackpad's in sums).
   let wheelSum = 0;
-  let wheelTimer = 0;
   bpm.addEventListener(
     "wheel",
     (e) => {
@@ -3823,14 +3850,7 @@ export function mountApp(root, engine, opts = {}) {
       const steps = Math.trunc(wheelSum / 100);
       if (!steps) return;
       wheelSum -= steps * 100;
-      held = true;
-      bpm.value = String(clampBpm(Number(bpm.value) + steps));
-      bpm.dispatchEvent(new Event("input"));
-      clearTimeout(wheelTimer);
-      wheelTimer = setTimeout(() => {
-        held = false;
-        if (alive) startRamp(Number(bpm.value));
-      }, WHEEL_SETTLE_MS);
+      moveBpm(Number(bpm.value) + steps);
     },
     { passive: false },
   );
@@ -3995,8 +4015,60 @@ export function mountApp(root, engine, opts = {}) {
     if (closingOpen(state.auto ? state.pilot : null)) uncloseNow();
     else if (!state.pilot?.closing) closeNow();
   });
-  // The keyboard's play/pause and stop keys press the same buttons.
-  mediaKeys?.bind({ playing: engine.isRunning, play: () => cueBtn.click(), stop: () => stopBtn.click() });
+  // The keyboard's play/pause and stop keys press the same buttons, and so does the FLX4.
+  const transport = { playing: engine.isRunning, play: () => cueBtn.click(), stop: () => stopBtn.click() };
+  mediaKeys?.bind(transport);
+  function showFlx4() {
+    flx4Btn?.classList.toggle("is-on", flx4.connected());
+  }
+  flx4?.bind({
+    ...transport,
+    tap: (e) => {
+      if (!tapBtn.disabled) tap(e);
+    },
+    // A jog changes the speed while it turns; the BPM stays.
+    bend: (amount) => {
+      if (!bpm.disabled) engine.setBpm(state.tempo * (1 + amount));
+    },
+    settled: persist,
+    changed: showFlx4,
+    targets: {
+      dj: { get: () => state.dj, set: setDj },
+      volume: {
+        get: () => Number(volumeInput.value),
+        set: (v) => {
+          volumeInput.value = String(v);
+          volumeInput.dispatchEvent(new Event("input"));
+        },
+      },
+      tempo: {
+        get: () => Number(bpm.value),
+        set: (v) => {
+          if (!bpm.disabled) moveBpm(v);
+        },
+      },
+      ...Object.fromEntries(
+        Object.keys(ws.volumes).map((id) => [
+          id,
+          {
+            get: () => ws.volumes[id],
+            set: (v) => {
+              setLayerVolume(id, v);
+              layerKnobs.get(id)?.setValue(v);
+            },
+          },
+        ]),
+      ),
+    },
+  });
+  showFlx4();
+  // A MIDI message is no user gesture: this click is what lets the
+  // controller's PLAY start the audio.
+  flx4Btn?.addEventListener("click", async () => {
+    engine.ensureContext();
+    const result = await flx4.connect();
+    if (alive) status(tx.transport.flx4Status[result]);
+  });
   // What was queued plays: ▶, or the armed autopilot once its plans are in.
   function cue() {
     if (!state.armed) return;
