@@ -5,7 +5,7 @@
 # See docs/home-assistant.md ("Air conditioners"). No secrets here — device codes,
 # entity ids and private LAN references only.
 
-# Activates the SmartIR custom component (installed via HACS). Shared by the AC
+# Activates the SmartIR custom component (installed via the Marketplace). Shared by the AC
 # climate entities here and the TV IR media_players in tv.yaml.
 smartir:
 

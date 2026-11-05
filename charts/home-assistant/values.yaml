@@ -10,7 +10,7 @@ image:
   pullPolicy: IfNotPresent
   # Pin to an explicit version for reproducible deploys. Bump deliberately
   # (also update Chart.yaml appVersion). Avoid floating tags like "stable".
-  tag: "2026.10.4"
+  tag: "2026.11.0"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -141,14 +141,6 @@ googleAssistant:
   serviceAccount:
     secretName: "ha-google-sa"
     secretKey: "service_account.json"
-
-# HACS (Home Assistant Community Store) bootstrap.
-# The init container installs HACS into /config/custom_components only if it is
-# missing, so existing installs are not rewritten.
-hacs:
-  enabled: true
-  # Pin to a concrete HACS release tag from github.com/hacs/integration.
-  version: "2.0.5"
 
 # Versioned Home Assistant packages. Every YAML under this chart's packages/ dir
 # is bundled into a ConfigMap and mounted read-only at /config/packages; the init

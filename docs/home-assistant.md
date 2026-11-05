@@ -26,7 +26,6 @@ so the written YAML is correct regardless of template indentation:
    the versioned `/config/packages` ConfigMap — see [Versioned config](#versioned-config-ha-packages).
 4. Appends the `google_assistant:` block when that integration is enabled
    (including the `entity_config` exposure hides from `.Values.googleAssistant.entityConfig`).
-5. Installs HACS into `/config/custom_components/hacs` when enabled and missing.
 
 It does **not** write an `http:` block anymore — see
 [`trusted_proxies`](#trusted_proxies-and-host-networking) below.
@@ -128,26 +127,28 @@ Two rules the schema itself enforces — `url_path` **must contain a hyphen**
 > custom card **resource** the TV pad needs (see below) — resources are still
 > `.storage`.
 
-## HACS default bootstrap
+## Marketplace and custom components
 
-HACS is enabled by default (`.Values.hacs.enabled: true`). A dedicated init
-container downloads the pinned release zip from
-`https://github.com/hacs/integration` and extracts it into
-`/config/custom_components/hacs`.
+Since 2026.11 the Marketplace is part of Home Assistant and replaces the HACS
+custom integration, so the chart installs nothing: a fresh PVC sets it up on its
+own. Home Assistant no longer loads `custom_components/hacs` and deletes it once
+the Marketplace has adopted its data.
 
-Behavior is idempotent:
+Custom components (SmartIR, Blueprint Studio) live on the PVC, outside git, so
+`helm template` says nothing about them. Before a Home Assistant bump, run the
+new image's `check_config` offline against the rendered chart plus the PVC's
+`custom_components`:
 
-- If `/config/custom_components/hacs` already exists, install is skipped.
-- If it does not exist, HACS is installed before Home Assistant starts.
-
-To disable this behavior, set:
-
-```yaml
-hacs:
-   enabled: false
+```bash
+docker run --rm --network none -v "$PWD/config":/config --entrypoint python3 \
+  ghcr.io/home-assistant/home-assistant:<new> \
+  -m homeassistant --script check_config --config /config
 ```
 
-To upgrade/downgrade HACS, bump `.Values.hacs.version` to another release tag.
+A component can need a release the Marketplace only installs once Home Assistant
+is already on the new version. SmartIR did at 2026.11: 1.18.1 can't load on it and
+1.18.2's `hacs.json` refuses anything older. In that case copy the release's files
+onto the PVC before the bump, or the ACs stay missing until a second restart.
 
 > Why not a ConfigMap? An earlier design copied a whole `configuration.yaml` from
 > a ConfigMap on first run. It was effectively dead on any existing install, and
@@ -268,7 +269,7 @@ One leftover: the WiFi-signal sensor kept an old entity_id
 
 The three split ACs (living room + bedroom + kitchen) are IR-controlled via **Broadlink RM4
 mini** blasters and the **[SmartIR](https://github.com/smartHomeHub/SmartIR)**
-custom component (installed through HACS). The `climate:` entities are **versioned in
+custom component (installed through the Marketplace). The `climate:` entities are **versioned in
 git** as an HA package ([`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml),
 see [Versioned config](#versioned-config-ha-packages)); the Broadlink pairing and
 SmartIR code cache still live on the PVC. Treat this section as the recovery runbook.
@@ -297,7 +298,7 @@ SmartIR code cache still live on the PVC. Treat this section as the recovery run
   with the same name). Deleting the entry takes its entity registry rows with it, so
   re-adding under the identical name reclaims the same `remote.*` entity id — no
   `_2` suffix and no edit to `controller_data`.
-- **SmartIR** — `/config/custom_components/smartir` (via HACS). Device-code JSONs
+- **SmartIR** — `/config/custom_components/smartir` (via the Marketplace). Device-code JSONs
   are cached under `codes/climate/` and auto-downloaded from the SmartIR repo on
   first use.
 - **`climate:` blocks** — versioned in
@@ -1029,8 +1030,8 @@ card's own config is `config.card`, and YouTube maps
 `config.card.media_player_id` to the webOS entity. A YAML merge (`<<:`) with an overriding key would also work, but HA's
 loader warns about the duplicate key on every load.
 
-The card is **not installed through HACS** — it was added manually (equivalent effect,
-but HACS won't track it for updates):
+The card is **not installed through the Marketplace** — it was added manually (equivalent
+effect, but the Marketplace won't track it for updates):
 
 - JS lives at `/config/www/universal-remote-card.min.js` (v4.11.3), served at
   `/local/universal-remote-card.min.js` and registered as a `module` resource in
@@ -1047,7 +1048,7 @@ Gotchas:
 
 > Fresh-PVC recovery: re-download the JS into `/config/www/` and re-add the
 > resource, then restart and hard-refresh. The dashboard itself comes back from
-> git. Or install "Universal Remote Card" from HACS instead of the manual copy.
+> git. Or install "Universal Remote Card" from the Marketplace instead of the manual copy.
 
 ## Outdoor lights (Shelly) — see [docs/shelly.md](shelly.md)
 

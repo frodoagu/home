@@ -150,40 +150,6 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
-        {{- if .Values.hacs.enabled }}
-        # Install HACS only when missing from /config/custom_components.
-        - name: install-hacs
-          image: busybox:1.38
-          env:
-            - name: HACS_VERSION
-              value: {{ .Values.hacs.version | quote }}
-          command:
-            - sh
-            - -c
-            - |
-              set -eu
-              DEST=/config/custom_components/hacs
-
-              if [ -d "$DEST" ]; then
-                echo "HACS already installed, skipping"
-                exit 0
-              fi
-
-              TMP="$(mktemp -d)"
-              cleanup() { rm -rf "$TMP"; }
-              trap cleanup EXIT
-
-              # The release zip holds the integration files at its root, so it
-              # must be extracted INTO the hacs/ dir (not the parent), matching
-              # the manual-install layout HA expects: custom_components/hacs/.
-              URL="https://github.com/hacs/integration/releases/download/${HACS_VERSION}/hacs.zip"
-              wget -qO "$TMP/hacs.zip" "$URL"
-              mkdir -p "$DEST"
-              unzip -q "$TMP/hacs.zip" -d "$DEST"
-          volumeMounts:
-            - name: config
-              mountPath: /config
-        {{- end }}
       containers:
         - name: home-assistant
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

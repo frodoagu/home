@@ -293,7 +293,7 @@ machine and creates no tumble-dryer device.
   exists as an alternative, though its latest release (v1.2.2, June 2024) is
   **older** than the original's.
 
-- **It lives on the PVC, not in git.** Like SmartIR: HACS installs the integration
+- **It lives on the PVC, not in git.** Like SmartIR: the Marketplace installs the integration
   into `/config/custom_components` and the config entry lands in `.storage`. If the
   HA volume is recreated, it has to be reinstalled and the IP re-entered. Only the
   DHCP reservation and the package are versioned.
@@ -302,7 +302,7 @@ machine and creates no tumble-dryer device.
 
 ## 6. Setting it up from scratch
 
-1. HACS → search **"Candy Simply-Fi"** (`ofalvai/home-assistant-candy`) → download
+1. Marketplace → search **"Candy Simply-Fi"** (`ofalvai/home-assistant-candy`) → download
    → restart HA.
 2. Settings → Devices & Services → Add Integration → **Candy**.
 3. Single field: the **IP** (`192.168.0.40`, i.e. `lavarropas.lan`). The key is auto-detected; if it ever
