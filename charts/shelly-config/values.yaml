@@ -9,7 +9,7 @@
 image:
   repository: python
   # Pin explicitly (keep Chart.yaml appVersion in sync). No floating tags.
-  tag: "3.15-alpine"
+  tag: "3.15.2-alpine"
   pullPolicy: IfNotPresent
 
 nameOverride: ""

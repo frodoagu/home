@@ -20,7 +20,7 @@ revisionHistoryLimit: 1
 image:
   repository: nginx
   # Pin explicitly (keep Chart.yaml appVersion in sync). No floating tags.
-  tag: "1.31-alpine"
+  tag: "1.31.8-alpine"
   pullPolicy: IfNotPresent
 
 nameOverride: ""

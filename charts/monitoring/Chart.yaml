@@ -8,7 +8,7 @@ description: >-
   Telegram; Grafana is gated by the same google-auth ForwardAuth as the other
   private services.
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "v1.155.0"
 keywords:
   - monitoring
@@ -24,8 +24,8 @@ maintainers:
   - name: frodoagu
 dependencies:
   - name: victoria-metrics-k8s-stack
-    version: "0.97.0"
+    version: "0.97.1"
     repository: https://victoriametrics.github.io/helm-charts/
   - name: prometheus-blackbox-exporter
-    version: "11.20.2"
+    version: "11.21.1"
     repository: https://prometheus-community.github.io/helm-charts

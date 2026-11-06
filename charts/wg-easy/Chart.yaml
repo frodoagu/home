@@ -2,7 +2,7 @@ apiVersion: v2
 name: wg-easy
 description: Helm chart for wg-easy (WireGuard VPN + web admin, our fork) on k3s
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "15.5.0-per-user-clients"
 keywords:
   - wireguard
