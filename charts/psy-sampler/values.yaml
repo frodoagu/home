@@ -90,7 +90,7 @@ sync:
     repository: ghcr.io/frodoagu/psy-sync
     pullPolicy: IfNotPresent
     # Managed by Argo CD Image Updater (pinned to latest@sha256:...).
-    tag: "latest@sha256:4fa1fb5d80a86a38a0b87911e677039a71264396a494478644130750c7c392c4"
+    tag: "latest@sha256:ade4710c6d597a108b756f450027c1beba0207d578175dc396d64d0341fb743b"
   # Public by design (it ships in the page). Same "Web application" client as
   # agu.com.ar: https://psy.agu.com.ar must be listed among its Authorized
   # JavaScript origins in Google Cloud, or the sign-in button refuses to load.
