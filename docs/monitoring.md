@@ -164,6 +164,22 @@ curl -s localhost:9093/api/v2/alerts -XPOST -H 'Content-Type: application/json' 
        "annotations":{"summary":"test"}}]'
 ```
 
+### Under-voltage
+
+Real dips last 2-10 s (a USB SSD spinning up, for example), and the two
+`vcgencmd get_throttled` bits can't carry an alert on those:
+
+- `node_rpi_under_voltage_now` is polled every 30 s, so it reads 0 through them.
+  `RPiUnderVoltage` (critical) therefore only catches a sag of a minute or more.
+- `node_rpi_under_voltage_occurred` catches them but sticks until the next
+  reboot, so an alert on it repeats forever and a later dip changes nothing.
+
+`RPiUnderVoltageOccurred` (warning) reads the kernel log instead. The driver logs
+every dip, and the exporter publishes the time of the last
+`Undervoltage detected!` line as `node_rpi_under_voltage_last_seconds`. The alert
+is active until 3 h pass without a dip: an isolated one sends one message and
+then a resolved one, and repeated dips keep it active, repeating every 4 h.
+
 ## Cloudflare usage
 
 Nothing in Cloudflare should cost money: R2 must stay inside its free tier and

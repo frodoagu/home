@@ -48,14 +48,15 @@ spec:
           annotations:
             summary: "Raspberry Pi is throttled"
             description: {{ `{{ $labels.instance }} is actively throttling the CPU right now.` | quote }}
+        # Active until 3 h pass without a dip. Keep the window under Alertmanager's
+        # repeat_interval (4 h) so one isolated dip sends one message.
         - alert: RPiUnderVoltageOccurred
-          expr: node_rpi_under_voltage_occurred == 1
-          for: 5m
+          expr: time() - node_rpi_under_voltage_last_seconds < 3 * 3600
           labels:
             severity: warning
           annotations:
-            summary: "Raspberry Pi had under-voltage since boot"
-            description: {{ `{{ $labels.instance }} recorded an under-voltage event since last boot (sticky bit). PSU may be marginal.` | quote }}
+            summary: "Raspberry Pi had under-voltage"
+            description: {{ `{{ $labels.instance }} logged an under-voltage dip in the last 3 h. Check the PSU, the cable and any USB device drawing power.` | quote }}
         - alert: RPiThrottleExporterDown
           expr: node_rpi_exporter_up == 0
           for: 15m

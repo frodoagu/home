@@ -301,6 +301,13 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   password while Pi-hole's login is off. If that login is turned on, the
   exporter needs a copy of the Secret in `monitoring`
   (`piholeExporter.passwordSecret`). See docs/monitoring.md#pi-hole-metrics.
+- **monitoring — alert under-voltage from the kernel log, not the `vcgencmd` bits.**
+  Real dips last 2-10 s: `under_voltage_now` (30 s poll) reads 0 through them, and
+  `under_voltage_occurred` catches them but sticks until reboot, so an alert on it
+  repeats forever and a later dip changes nothing. `RPiUnderVoltageOccurred` reads
+  `node_rpi_under_voltage_last_seconds` (last dip in dmesg) instead. Its 3 h window
+  stays under Alertmanager's 4 h `repeat_interval`, or one dip sends several
+  messages. See docs/monitoring.md#under-voltage.
 - **monitoring — HA's automation counter is NOT a run count.**
   `homeassistant_automation_triggered_count_total` goes up on every state write of
   the automation: 2 per run (start, then end as `current` goes 1 → 0), plus 1 on

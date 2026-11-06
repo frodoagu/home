@@ -21,6 +21,8 @@
 #   node_rpi_freq_capped_occurred    bit 17
 #   node_rpi_throttled_occurred      bit 18
 #   node_rpi_soft_temp_limit_occurred bit 19
+#   node_rpi_under_voltage_last_seconds  unix time of the last dip in dmesg, 0 if none
+#     (see docs/monitoring.md#under-voltage)
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -66,6 +68,12 @@ spec:
                   up=0
                   val=0
                 fi
+                dip="$(chroot /host dmesg 2>/dev/null | sed -n 's/^\[ *\([0-9]*\)\..*Undervoltage detected.*/\1/p' | tail -n 1)"
+                if [ -n "$dip" ]; then
+                  last_dip=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) + dip ))
+                else
+                  last_dip=0
+                fi
                 {
                   echo "# HELP node_rpi_exporter_up 1 if vcgencmd get_throttled succeeded."
                   echo "# TYPE node_rpi_exporter_up gauge"
@@ -89,6 +97,9 @@ spec:
                   echo "node_rpi_throttled_occurred $(( (val >> 18) & 1 ))"
                   echo "# TYPE node_rpi_soft_temp_limit_occurred gauge"
                   echo "node_rpi_soft_temp_limit_occurred $(( (val >> 19) & 1 ))"
+                  echo "# HELP node_rpi_under_voltage_last_seconds Unix time of the last under-voltage dip in the kernel log, 0 if none."
+                  echo "# TYPE node_rpi_under_voltage_last_seconds gauge"
+                  echo "node_rpi_under_voltage_last_seconds $last_dip"
                 } > "${OUT}.tmp" && mv "${OUT}.tmp" "${OUT}"
                 sleep "$INTERVAL"
               done
