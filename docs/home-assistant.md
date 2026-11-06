@@ -1367,6 +1367,10 @@ line as the wall-switch curve, so the two agree.
   below the ramp; one turned up by hand sits above where the ramp was 30 min
   ago. Both are left alone for the rest of the night. The ramp sends brightness
   only, so a colour or scene picked in the evening stays.
+- **A tick with nothing to lower isn't a run.** That check is in the automation's
+  top-level condition, so outside the window, or with no lamp following the ramp,
+  the tick never reaches the [run counter](monitoring.md#home-assistant-metrics).
+  While lamps follow it, it does run every 5 min, about 44 times a night.
 - **Nothing between 23:30 and 01:30**: the lamps hold at 10 % until the 01:30
   turn-off. That one only skips an empty house (`casa_ocupada` `off`), where
   the [presence simulation](#presence-simulation) keeps its own off time.

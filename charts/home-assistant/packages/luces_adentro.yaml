@@ -75,6 +75,58 @@ automation:
         from: "on"
         to: "off"
         id: pc_apagada
+    # Automation-level, so the condition reads them too.
+    variables:
+      # Unavailable counts as on, so a Pi-hole outage never repaints it.
+      lamparas: >-
+        {{ ['light.velador_dormitorio_grupo', 'light.lampara_escalera', 'light.lampara_salon']
+           + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
+      kelvin: 2700
+      # The living room comes on in its own white, so it doesn't flash warm
+      # before luces_salon.yaml repaints it.
+      blancos:
+        light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(kelvin) }}"
+      color_pc: [7, 0, 255, 0]
+      # `next_setting` is today's or tomorrow's sunset, a minute or two
+      # apart, so only its time of day is used.
+      inicio: >-
+        {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
+        {{- today_at((ocaso | as_local + timedelta(minutes=10)).strftime('%H:%M')).isoformat() if ocaso else '' }}
+      fin: "{{ today_at('23:30').isoformat() }}"
+      # The 23:30 tick lands a moment after 23:30.
+      dentro: >-
+        {%- set i = inicio | as_datetime(none) %}
+        {{- i is not none and i <= now() < fin | as_datetime + timedelta(minutes=1) }}
+      largo: >-
+        {%- set i = inicio | as_datetime(none) %}
+        {{- (fin | as_datetime - i).total_seconds() if i else 0 }}
+      # The ramp's level now, and 30 min ago (`tope`).
+      brillo: >-
+        {%- set i = inicio | as_datetime(none) %}
+        {%- set avance = (now() - i).total_seconds() / largo if i and largo > 0 else 0 %}
+        {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
+      tope: >-
+        {%- set i = inicio | as_datetime(none) %}
+        {%- set avance = (now() - timedelta(minutes=30) - i).total_seconds() / largo if i and largo > 0 else 0 %}
+        {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
+      # 1-2 % of slack for the 0-255 round trip.
+      bajar: >-
+        {%- set ns = namespace(lista=[]) %}
+        {%- for e in lamparas if is_state(e, 'on') %}
+        {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
+        {%- if brillo + 1 < pct <= tope + 2 %}
+        {%- set ns.lista = ns.lista + [e] %}
+        {%- endif %}
+        {%- endfor %}
+        {{- ns.lista }}
+      apagadas: "{{ lamparas | select('is_state', 'off') | list }}"
+      # Where the office table lamp goes when the PC goes off; 0 is off.
+      nivel_oficina: >-
+        {%- set i = inicio | as_datetime(none) %}
+        {%- if i is not none and now() >= i %}{{ brillo }}
+        {%- elif now() < today_at('01:30') %}10
+        {%- else %}0
+        {%- endif %}
     condition:
       - condition: or
         conditions:
@@ -85,58 +137,9 @@ automation:
           - condition: state
             entity_id: binary_sensor.fede_en_casa
             state: "on"
+      # A tick with nothing to lower isn't a run.
+      - "{{ trigger.id != 'rampa' or dentro and bajar | count > 0 }}"
     action:
-      - variables:
-          # Unavailable counts as on, so a Pi-hole outage never repaints it.
-          lamparas: >-
-            {{ ['light.velador_dormitorio_grupo', 'light.lampara_escalera', 'light.lampara_salon']
-               + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
-          kelvin: 2700
-          # The living room comes on in its own white, so it doesn't flash warm
-          # before luces_salon.yaml repaints it.
-          blancos:
-            light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(kelvin) }}"
-          color_pc: [7, 0, 255, 0]
-          # `next_setting` is today's or tomorrow's sunset, a minute or two
-          # apart, so only its time of day is used.
-          inicio: >-
-            {%- set ocaso = state_attr('sun.sun', 'next_setting') | as_datetime(none) %}
-            {{- today_at((ocaso | as_local + timedelta(minutes=10)).strftime('%H:%M')).isoformat() if ocaso else '' }}
-          fin: "{{ today_at('23:30').isoformat() }}"
-          # The 23:30 tick lands a moment after 23:30.
-          dentro: >-
-            {%- set i = inicio | as_datetime(none) %}
-            {{- i is not none and i <= now() < fin | as_datetime + timedelta(minutes=1) }}
-          largo: >-
-            {%- set i = inicio | as_datetime(none) %}
-            {{- (fin | as_datetime - i).total_seconds() if i else 0 }}
-          # The ramp's level now, and 30 min ago (`tope`).
-          brillo: >-
-            {%- set i = inicio | as_datetime(none) %}
-            {%- set avance = (now() - i).total_seconds() / largo if i and largo > 0 else 0 %}
-            {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
-          tope: >-
-            {%- set i = inicio | as_datetime(none) %}
-            {%- set avance = (now() - timedelta(minutes=30) - i).total_seconds() / largo if i and largo > 0 else 0 %}
-            {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
-          # 1-2 % of slack for the 0-255 round trip.
-          bajar: >-
-            {%- set ns = namespace(lista=[]) %}
-            {%- for e in lamparas if is_state(e, 'on') %}
-            {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-            {%- if brillo + 1 < pct <= tope + 2 %}
-            {%- set ns.lista = ns.lista + [e] %}
-            {%- endif %}
-            {%- endfor %}
-            {{- ns.lista }}
-          apagadas: "{{ lamparas | select('is_state', 'off') | list }}"
-          # Where the office table lamp goes when the PC goes off; 0 is off.
-          nivel_oficina: >-
-            {%- set i = inicio | as_datetime(none) %}
-            {%- if i is not none and now() >= i %}{{ brillo }}
-            {%- elif now() < today_at('01:30') %}10
-            {%- else %}0
-            {%- endif %}
       - choose:
           - conditions: >-
               {{ trigger.id == 'pc_prendida'
@@ -191,7 +194,7 @@ automation:
                       data:
                         brightness_pct: "{{ brillo }}"
                         color_temp_kelvin: "{{ blancos.get(repeat.item, kelvin) }}"
-          - conditions: "{{ trigger.id == 'rampa' and dentro and bajar | count > 0 }}"
+          - conditions: "{{ trigger.id == 'rampa' }}"
             sequence:
               - action: light.turn_on
                 continue_on_error: true
