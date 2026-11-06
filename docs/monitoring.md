@@ -452,9 +452,9 @@ log.RequestHost:="psy.agu.com.ar" | stats by (log.client_country) count_uniq("lo
   never matches the rendered manifest. selfHeal cannot close it — applying does
   not remove a server-side default — so [apps/monitoring.yaml](../apps/monitoring.yaml)
   drops the field with `ignoreDifferences` when it holds exactly that default,
-  leaving a genuine recording rule still comparable. `ServerSideDiff=true` also
-  hides it, but on this app it surfaces false diffs on the Grafana
-  Secret/Deployment and the operator's validating webhook instead.
+  leaving a genuine recording rule still comparable. Argo CD 3.6 diffs
+  `ServerSideApply=true` apps server-side, which hides it as well, so the rule
+  only matters if the app opts out with `ServerSideDiff=false`.
 - If the app ever gets stuck deleting because the **operator is gone but `VM*`
   CRs still hold finalizers**, clear them so the cascade (and the app-of-apps
   recreation) can finish:

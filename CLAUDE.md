@@ -240,7 +240,7 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
 
 ## Per-chart gotchas (hard-won — don't re-investigate)
 
-- **root — controller-added delete-hook finalizers.** Argo CD (3.5 here) maps
+- **root — controller-added delete-hook finalizers.** Argo CD (3.6 here) maps
   Helm `pre-delete`/`post-delete` hooks to PreDelete/PostDelete and, for any
   child app that renders one, adds `{pre,post}-delete-finalizer.argocd.argoproj.io`
   (+ `/cleanup`) to that Application. Today that's `monitoring`: the k8s-stack
@@ -267,8 +267,9 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   match the manifest; selfHeal never closes it, because applying does not remove
   a server-side default. `apps/monitoring.yaml` drops the field via a
   `jqPathExpressions` `select(.record == "")`, so a real recording rule still
-  diffs. Don't reach for `ServerSideDiff=true` — it hides this one but surfaces
-  false diffs on Grafana and the operator's webhook. See docs/monitoring.md.
+  diffs. Argo CD 3.6 diffs `ServerSideApply=true` apps (this one and
+  `sealed-secrets`) server-side, which hides it as well, so the rule only matters
+  if the app opts out with `ServerSideDiff=false`. See docs/monitoring.md.
 - **monitoring — Grafana restarts on every commit without a pinned admin Secret.**
   With no `adminPassword`/`admin.existingSecret` the Grafana chart mints a
   `randAlphaNum` password on every render (Argo CD doesn't run `lookup`), and the

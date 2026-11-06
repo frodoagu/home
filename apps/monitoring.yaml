@@ -49,8 +49,8 @@ spec:
   # never match the rendered manifest — a permanent OutOfSync that selfHeal
   # cannot fix, because applying does not remove a server-side default. Drop the
   # field only when it holds that default: a real recording rule still diffs.
-  # (ServerSideDiff=true also hides it, but it surfaces false diffs on Grafana
-  # and the operator's webhook instead — don't reach for it here.)
+  # (Argo CD 3.6 diffs ServerSideApply apps server-side, which hides it too; this
+  # only matters if the app opts out with ServerSideDiff=false.)
   ignoreDifferences:
     - group: operator.victoriametrics.com
       kind: VMRule
