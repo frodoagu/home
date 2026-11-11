@@ -703,12 +703,11 @@ the same as the washer's cycle-done alert, on an Android channel called `Aires`,
 so its sound and priority are set per channel on the phone. The push is always the
 last step: a failed notify never keeps a unit from switching.
 
-Manual changes get their own push, but only while Fede is **out**:
-`aires_avisar_afuera` exists to catch a stray tap on the home-screen widget that
-would otherwise go unnoticed until he gets back. It watches the four `climate.*`
-states (on/off and mode, not setpoint) and fires only when the change carries
-Fede's `user_id` and [`binary_sensor.fede_en_casa`](#presence) is not `on`. That filter works
-because a script run shares its context with the state changes it causes, so a
+Manual changes get their own push too, at home or away:
+`aires_avisar_afuera` reports a stray tap on the home-screen widget as well as a
+deliberate one. It watches the four `climate.*` states (on/off and mode, not
+setpoint) and fires only when the change carries Fede's `user_id`. That filter
+works because a script run shares its context with the state changes it causes, so a
 widget tap, a dashboard button, a thermostat card and a Google Home scene all
 carry the user who started them. Automations never carry a user, so their own
 pushes are not doubled. It runs in `restart` mode behind a 5 s delay, so a button

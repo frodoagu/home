@@ -973,14 +973,15 @@ automation:
                 notification_icon: mdi:air-conditioner
     mode: single
 
-  # Catches a stray tap on the home-screen widget. A script run shares its
-  # context with the state changes it causes, so `user_id` names who pressed the
-  # button; automations never set one, so the pushes above are not doubled.
-  # `restart` + the delay fold a multi-unit button into one push of the end state.
+  # Reports every change Fede makes by hand, at home or away. A script run
+  # shares its context with the state changes it causes, so `user_id` names who
+  # pressed the button; automations never set one, so the pushes above are not
+  # doubled. `restart` + the delay fold a multi-unit button into one push of the
+  # end state.
   - id: aires_avisar_afuera
-    alias: Aires - Avisar cambios hechos desde afuera
+    alias: Aires - Avisar cambios manuales
     description: >-
-      Si Fede prende, apaga o cambia de modo algún aire estando fuera de casa, le
+      Si Fede prende, apaga o cambia de modo algún aire (esté o no en casa), le
       manda un push con cómo quedaron los cuatro. Las automatizaciones no avisan
       por acá: ya mandan su propio push.
     trigger:
@@ -996,11 +997,6 @@ automation:
         value_template: >-
           {{ trigger.to_state.context.user_id is not none
              and trigger.to_state.context.user_id == state_attr('person.federico_agu', 'user_id') }}
-      - condition: not
-        conditions:
-          - condition: state
-            entity_id: binary_sensor.fede_en_casa
-            state: "on"
     action:
       - delay: "00:00:05"
       - action: script.avisar_celu
