@@ -86,7 +86,7 @@ group:
 # (`aires_prender`, `aires_piezas_dormir`) are hidden so Google doesn't list them.
 #
 # Setpoints live in `aires_prender` and nowhere else: heat is 21 in the living
-# areas and the kids' room, 20 in Fede's bedroom; cool and dry are 24 everywhere.
+# areas and the kids' room, 20 in Fede's bedroom; cool is 25 and dry 24 everywhere.
 # Turning on sets mode and temperature in ONE `climate.set_temperature` call:
 # every IR send carries the whole frame, so a single blast leaves the unit in
 # the wanted state.
@@ -146,7 +146,7 @@ script:
                   {%- if mantener | default(false) and is_state(repeat.item, modo) and propia is not none %}
                   {{- propia }}
                   {%- else %}
-                  {{- 24 if modo != 'heat' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
+                  {{- 25 if modo == 'cool' else 24 if modo == 'dry' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
                   {%- endif %}
     mode: parallel
 
@@ -213,7 +213,7 @@ script:
 
   aires_todos_apagar:
     alias: Aires - Apagar todos
-    icon: mdi:air-conditioner
+    icon: mdi:power-off
     sequence:
       - action: climate.turn_off
         target:
@@ -744,10 +744,10 @@ automation:
     max: 20
 
   - id: aires_frio_dia_caluroso
-    alias: Aires - Frío 24 en día caluroso
+    alias: Aires - Frío 25 en día caluroso
     description: >-
       Prende cocina, living y dormitorio (y el de los chicos si están según el
-      calendario) en frío 24 cuando afuera pasa los 30 °C y adentro el living
+      calendario) en frío 25 cuando afuera pasa los 30 °C y adentro el living
       ya pasó los 24 °C, sólo si hay alguien en casa (el celular de Fede o el
       de Irupé en Pi-hole).
     trigger:
@@ -777,7 +777,7 @@ automation:
             Afuera hace {{ states('sensor.temperatura_exterior') }} °C y el living
             está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
             prendí {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
-            | map('lower') | join(', ') }} en frío 24 °C.
+            | map('lower') | join(', ') }} en frío 25 °C.
           extras:
             channel: Aires
             notification_icon: mdi:air-conditioner
@@ -871,7 +871,7 @@ automation:
     description: >-
       Cuando Fede llega a casa (su celular vuelve a aparecer en Pi-hole después
       de 30 min sin verse), prende los aires de las zonas que están fuera de
-      19-25 °C: calor (21, el dormitorio 20) por debajo de 19, frío 24 por encima de 25. Cocina y
+      19-25 °C: calor (21, el dormitorio 20) por debajo de 19, frío 25 por encima de 25. Cocina y
       living miran el termómetro del living; dormitorio, el del dormitorio, y
       con él el de los chicos si están según el calendario. Entre la 1 y las 7
       solo el del dormitorio. Nunca apaga nada.

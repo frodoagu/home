@@ -436,8 +436,8 @@ cards) and, because `script` is in `googleAssistant.exposedDomains`, as scenes i
 Google Home:
 
 Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
-and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool and dry are
-**24 °C** everywhere. They live in one place, `script.aires_prender` (`aires`, optional
+and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is
+**25 °C** and dry **24 °C** everywhere. They live in one place, `script.aires_prender` (`aires`, optional
 `modo`: heat, cool or dry; the seasonal mode by default), which sends each unit its own
 `climate.set_temperature`; every script and automation that turns units on at
 "their" temperature calls it. `script.aires_piezas_dormir` puts the bedrooms on
@@ -461,7 +461,9 @@ sure to switch it off. The [automations](#automatic-schedule-migrated-from-googl
 are stricter: they touch it only while the sensor is `on`, off included,
 except the scheduled shutdown below, which turns all four off.
 
-- `aires_todos_apagar` — all four **off**.
+- `aires_todos_apagar` — all four **off**, whatever state they're in. Not a
+  toggle: it sits next to the toggle below on the dashboard, and it's the one for
+  an off-only home-screen widget.
 - `aires_toggle_estacional` — one-button toggle for the whole house. Only turns
   **off** when **all** ACs are on (three of them while the kids are out); in any other state (mixed, or all off) it
   turns all on in the seasonal mode. So a mixed state is first driven to "all on"
@@ -472,9 +474,9 @@ except the scheduled shutdown below, which turns all four off.
   whole-house toggle above turns them off, since dry counts as on.
 - `aires_cocina_living_toggle` — the seasonal toggle scoped to the **day zone**
   (kitchen + living, no bedrooms): off only when **both** are on, otherwise both
-  to heat 21 °C / cool 24 °C.
+  to heat 21 °C / cool 25 °C.
 - `aires_zona_noche_toggle` — the night mirror: the **bedrooms** together,
-  heat 20 °C in Fede's and 21 °C in the kids', cool 24 °C in both. With the kids
+  heat 20 °C in Fede's and 21 °C in the kids', cool 25 °C in both. With the kids
   out it turns Fede's bedroom alone on, and its off side still sends both.
 - `aires_reenviar` — re-blasts what HA believes each unit holds, `off`
   included, and changes nothing HA shows. It exists for a unit that missed an IR
@@ -541,7 +543,7 @@ fronts all of the above, built from stock cards — no custom resource, unlike t
   and state the outcome of the next tap against the live group state ("hay 2 de 4
   prendidos, así que el próximo toque prende los que faltan"). The sections are:
   the house right now (a rendered on/off summary plus a tile per unit), all four
-  ACs (seasonal toggle, ±1 °C, and *Re-enviar*, which re-blasts the current
+  ACs (seasonal toggle, *Apagar todos*, ±1 °C, and *Re-enviar*, which re-blasts the current
   state at a unit that missed the IR), the scheduled shutdown (three preset
   delays, a time picker, the live countdown and a cancel) and half the house (day
   zone, bedrooms, sleep mode). Every button is a `perform-action` tap on a
@@ -579,7 +581,7 @@ app (same times, thresholds and guards; the Google Home exports were in
 - `aires_apagar_templado` — kitchen + living + bedroom (+ kids) **off** once it hits 19 °C outside, but
   only while the living AC is in `heat`. Checking the mode instead of a date
   range is what keeps it from firing in summer.
-- `aires_frio_dia_caluroso` — kitchen + living + bedroom (+ kids) to **cool 24 °C** when
+- `aires_frio_dia_caluroso` — kitchen + living + bedroom (+ kids) to **cool 25 °C** when
   it's over 30 °C outside and over 24 °C in the living room, if someone's home.
 
 **"+ kids" means while [`binary_sensor.chicos_en_casa`](#kids-calendar) is
@@ -606,7 +608,7 @@ read the bedroom one (the kids' room and the kitchen have none of their own).
 - **A dead thermometer turns nothing off**, and neither does a missing outdoor
   reading.
 - **While a unit cools, "indoor" is roughly its setpoint**, so in practice the
-  rule reads "outside dropped below ~24 °C". And the outdoor value is the `met`
+  rule reads "outside dropped below ~25 °C". And the outdoor value is the `met`
   forecast for the town, refreshed once an hour — not a measurement at the house.
 
 ### Turn on when Fede gets home
@@ -620,7 +622,7 @@ bedroom reads its own, and the kids' room joins the bedroom's zone while
 only a condition here: their coming home never starts a unit.
 
 - **Only out of 19-25 °C.** Below 19 °C a zone goes to **heat** (21 °C, 20 °C in
-  Fede's bedroom), above 25 °C to **cool 24 °C**: the usual setpoints, through
+  Fede's bedroom), above 25 °C to **cool 25 °C**: the usual setpoints, through
   `script.aires_prender` with `mantener`. A zone inside
   the range, or with a dead thermometer, is left alone.
 - **It never turns anything off**, and it doesn't touch a unit outside the

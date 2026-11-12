@@ -84,7 +84,7 @@ views:
         {%- set prendidos = aires | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
-        {%- set modo = ''frío 24°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else (''calor
+        {%- set modo = ''frío 25°'' if states(''sensor.aires_modo_estacional'') == ''cool'' else (''calor
         (21° living, cocina y chicos, 20° el dormitorio)'' if con_chicos else ''calor (21° living y cocina,
         20° el dormitorio)'') -%}
 
@@ -109,6 +109,9 @@ views:
 
         {%- endif %}
 
+
+        **Apagar todos** no es toggle: apaga los cuatro siempre, estén como estén.
+
         '
       grid_options:
         columns: 12
@@ -119,7 +122,15 @@ views:
         action: perform-action
         perform_action: script.aires_toggle_estacional
       grid_options:
-        columns: 12
+        columns: 6
+    - type: button
+      name: Apagar todos
+      icon: mdi:power-off
+      tap_action:
+        action: perform-action
+        perform_action: script.aires_todos_apagar
+      grid_options:
+        columns: 6
     - type: markdown
       content: '{% set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
 
@@ -314,9 +325,9 @@ views:
         {%- set prendidas = noche | map(''states'') | reject(''in'',[''off'',''unavailable'',''unknown''])
         | list | count -%}
 
-        {%- set m_dia = ''frío 24°'' if frio else ''calor 21°'' -%}
+        {%- set m_dia = ''frío 25°'' if frio else ''calor 21°'' -%}
 
-        {%- set m_noche = ''frío 24°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
+        {%- set m_noche = ''frío 25°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
         else ''calor 20°'') %}
 
         👉 **Día:** {% if dia == 2 %}los dos prendidos, el próximo toque los apaga.{% elif dia == 0 %}los
@@ -355,7 +366,7 @@ views:
 
         {%- set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
 
-        {%- set m = ''frío 24°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
+        {%- set m = ''frío 25°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
         else ''calor 20°'') -%}
 
         {%- set piezas = ''las dos piezas'' if con_chicos else ''el dormitorio'' -%}
