@@ -31,4 +31,18 @@ data:
   {{ base $path }}: |-
 {{ $.Files.Get $path | indent 4 }}
 {{- end }}
+---
+# Scripts that rewrite SmartIR code tables on the PVC (smartir/*.py), run by the
+# smartir-codes init container. Here too, so a fix to a table rolls HA.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "home-assistant.fullname" . }}-smartir
+  labels:
+    {{- include "home-assistant.labels" . | nindent 4 }}
+data:
+{{- range $path, $bytes := .Files.Glob "smartir/*.py" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
 {{- end }}

@@ -150,6 +150,23 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+        {{- if .Values.packages.enabled }}
+        # Fixes SmartIR code tables on the PVC before HA loads them (smartir/*.py).
+        # HA's own image, for its python; each script skips a missing table.
+        - name: smartir-codes
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - for f in /smartir/*.py; do python3 "$f"; done
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: smartir
+              mountPath: /smartir
+              readOnly: true
+        {{- end }}
       containers:
         - name: home-assistant
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -244,6 +261,9 @@ spec:
         - name: custom-templates
           configMap:
             name: {{ include "home-assistant.fullname" . }}-custom-templates
+        - name: smartir
+          configMap:
+            name: {{ include "home-assistant.fullname" . }}-smartir
         {{- end }}
         {{- if .Values.dashboards.enabled }}
         - name: dashboards

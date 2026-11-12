@@ -469,6 +469,15 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   (`avisos.yaml`, `aires_prender`, `tv_encender`); a helper script with fields
   must be hidden in the entity registry, or Google Home (`script` exposed by
   default) lists it as a scene that fails when tapped.
+- **home-assistant — SmartIR's `5140` (bedroom AC) ships bad captures.** 35 of
+  1344 frames have no leader (the unit ignores them; cool 25 at fan/swing `auto`
+  is one) or a setpoint/fan off by one. The `smartir-codes` init container runs
+  `charts/home-assistant/smartir/5140.py`, which rewrites every heat/cool/dry entry
+  on the PVC from the Mitsubishi112 layout (the same one `dormitorio_led` builds).
+  A HACS update of SmartIR brings the bad table back until the POD restarts (an
+  in-place HA restart skips init containers). A code that "doesn't answer one
+  setpoint" is a bad capture: decode the table before blaming the unit.
+  See docs/home-assistant.md.
 - **HA `http:` is UI-only now** — same story as Telegram below. Since 2026.8 the
   `http` integration is a config flow: HA imports an existing `http:` block into
   `/config/.storage/http` (`yaml_migration_done: true`) and then raises a

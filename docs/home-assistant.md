@@ -424,6 +424,21 @@ doesn't even blink). Two fixes:
   ArgoCD `selfHeal` reverts a manual `kubectl scale --replicas=0`, so this path
   is fiddly; prefer the new-`unique_id` approach.
 
+**Gotcha — SmartIR's `5140` has bad captures.** 35 of its 1344 frames are wrong:
+8 have no leader, so the unit ignores them (**cool 25 °C at fan and swing `auto`**,
+the one the scripts send, is one of them), and 27 carry the setpoint or the fan
+shifted by one (heat `level2`/`auto` 22-30 °C, cool `level1`/`swing` 17-24 °C,
+...). The other 1309 decode to exactly the Mitsubishi112 layout in the
+[display table](#display-off-at-midnight), so the `smartir-codes` init container runs
+[`smartir/5140.py`](../charts/home-assistant/smartir/5140.py) before HA starts and
+rewrites every heat/cool/dry entry of
+`custom_components/smartir/codes/climate/5140.json` from that layout, with the
+timing of `dormitorio_led` (the file's own keys and `off` stay). A SmartIR update
+from HACS brings the upstream table back, and an in-place HA restart doesn't
+re-run the init container, so after an update restart the **pod**. To check a
+table, decode each Broadlink packet (units of ~32.8 µs: leader 114/56, mark 15,
+space 41 = 1, 13 = 0, LSB first) and compare it with its key.
+
 > On a fresh `/config` PVC the `climate:` blocks come back **from git** (the
 > [`packages/climate.yaml`](../charts/home-assistant/packages/climate.yaml) package).
 > You only re-pair the Broadlinks in the UI (so the `remote.*` entities exist, with
@@ -689,9 +704,9 @@ it doesn't count either. 08:00 is when the morning heat starts the units.
   | 12 | `0x80` display toggle |
   | 13 | sum of bytes 0-12 |
 
-  The layout matches the 878 clean frames of SmartIR's `5140`; the rest of that
-  table has temperatures or fans shifted by one (bad captures), and there the
-  display frame leaves the unit at what HA shows.
+  The layout matches every clean frame of SmartIR's `5140`, which is rebuilt from
+  it at pod start (see *SmartIR's `5140` has bad captures* under
+  [Reading the protocol off the remote](#reading-the-protocol-off-the-remote)).
 - **Kids' room (`3340`)** is not in it until its remote's display button is
   learned ([above](#reading-the-protocol-off-the-remote)) and added to the
   `displays` list with its blaster.
