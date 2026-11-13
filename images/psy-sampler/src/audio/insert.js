@@ -23,7 +23,9 @@
 //
 // Also here: the DJ filter on the master bus, one bipolar knob.
 
+import { seeded } from "../random.js";
 import { LOBE, lorenz } from "./chaos.js";
+import { dbToGain } from "./music.js";
 
 export const FILTER_TYPES = ["off", "lowpass", "highpass", "bandpass", "vowel"];
 export const LFO_SHAPES = ["sine", "triangle", "sawtooth", "square", "random", "smooth", "chaos"];
@@ -125,7 +127,7 @@ const driveOf = (amount) => 10 ** (amount * 1.5);
 const DRIVE_TRIM = { soft: [-1.4, 9.6], hard: [0.7, 7.8], fold: [1.7, 9.5], crush: [1, 3] };
 const trimFor = (type, amount) => {
   const [at, per] = DRIVE_TRIM[type];
-  return 10 ** (-Math.max(1, at + per * amount) / 20);
+  return dbToGain(-Math.max(1, at + per * amount));
 };
 
 /**
@@ -140,7 +142,7 @@ export function driveGains(type, amount) {
   const g = driveOf(amount);
   // Folding spreads energy into folds that partly cancel: measured in Chrome,
   // it reads 2.6 dB hot at 0 % and 6.6 dB quiet at 100 % without this.
-  const fold = type === "fold" ? 10 ** ((-2.6 + 9.2 * amount) / 20) : 1;
+  const fold = type === "fold" ? dbToGain(-2.6 + 9.2 * amount) : 1;
   return { pre: g / RANGE, post: (0.5 / Math.tanh(0.5 * g)) * fold * trimFor(type, amount) };
 }
 
@@ -181,13 +183,8 @@ const NOISE_CYCLES = 16;
 const noiseTables = new WeakMap(); // ctx -> { random, smooth, chaos }
 
 export function noiseValues(seed = 0x9e3779b9) {
-  let a = seed >>> 0;
-  return Array.from({ length: NOISE_POINTS * NOISE_CYCLES }, () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), a | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-  });
+  const rng = seeded(seed);
+  return Array.from({ length: NOISE_POINTS * NOISE_CYCLES }, () => rng() * 2 - 1);
 }
 
 // The chaos LFO reads the Lorenz attractor's x, one lobe (LOBE time units) a

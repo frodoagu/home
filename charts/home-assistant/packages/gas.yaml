@@ -81,7 +81,7 @@ template:
         state_class: measurement
         icon: mdi:propane-tank
         availability: >-
-          {{ states('sensor.gas_altura_suave') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.gas_altura_suave')
              and states('sensor.gas_altura_suave') | float(0) > 0 }}
         state: >-
           {% set a = 0.0748 %}
@@ -101,8 +101,7 @@ template:
         unit_of_measurement: "%"
         state_class: measurement
         icon: mdi:propane-tank
-        availability: >-
-          {{ states('sensor.gas_restante') not in ['unknown', 'unavailable'] }}
+        availability: "{{ has_value('sensor.gas_restante') }}"
         state: >-
           {{ min(max(states('sensor.gas_restante') | float(0) / 45 * 100, 0), 100) | round(2) }}
 
@@ -116,8 +115,7 @@ template:
         unique_id: gas_bajo
         device_class: problem
         icon: mdi:propane-tank-outline
-        availability: >-
-          {{ states('sensor.gas_restante') not in ['unknown', 'unavailable'] }}
+        availability: "{{ has_value('sensor.gas_restante') }}"
         state: >-
           {{ states('sensor.gas_restante') | float(99) < 10 }}
         delay_on: "02:00:00"

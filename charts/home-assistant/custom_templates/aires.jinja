@@ -1,0 +1,20 @@
+{#- How the AC pushes (climate.yaml) name the units and what they hold. Import
+    with {% from 'aires.jinja' import nombres, estados %} -#}
+
+{%- macro nombre(a) -%}
+{{ state_attr(a, 'friendly_name') | replace('Aire ', '') | lower }}
+{%- endmacro -%}
+
+{#- "living, cocina" for a list of climate entities. -#}
+{%- macro nombres(aires) -%}
+{%- for a in aires %}{{ nombre(a) }}{{ ', ' if not loop.last }}{% endfor -%}
+{%- endmacro -%}
+
+{#- "living en calor 21 °C, cocina en frío 25 °C": each unit's assumed mode
+    and setpoint. -#}
+{%- macro estados(aires) -%}
+{%- set modos = {'heat': 'calor', 'cool': 'frío', 'dry': 'seco', 'fan_only': 'ventilador', 'heat_cool': 'auto'} -%}
+{%- for a in aires -%}
+{{ nombre(a) }} en {{ modos.get(states(a), states(a)) }} {{ '%g' | format(state_attr(a, 'temperature') | float(0)) }} °C{{ ', ' if not loop.last }}
+{%- endfor -%}
+{%- endmacro -%}

@@ -1,0 +1,13 @@
+{#- Pi-hole's query log (presencia.yaml, computadoras.yaml,
+    velador_dormitorio.yaml), read as a REST sensor of
+    /api/queries?client_…=…&length=1. Import with
+    {% from 'pihole.jinja' import ultima_consulta %}
+    Pi-hole's login is off and HA and Pi-hole are both hostNetwork on the Pi,
+    so the API needs no password. -#}
+
+{#- The time of the client's last DNS query; with none in Pi-hole's 24 h
+    window, the epoch. -#}
+{%- macro ultima_consulta(value_json) -%}
+{%- set q = value_json.queries | default([]) -%}
+{{ ((q[0].time if q else 0) | as_datetime).isoformat() }}
+{%- endmacro -%}

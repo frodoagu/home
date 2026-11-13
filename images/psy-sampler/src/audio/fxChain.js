@@ -9,6 +9,7 @@
 // A stage only runs while it is on; switched off, it forgets its state. The
 // chorus and the reverb make it stereo. Pitch, robot and whisper read ahead
 // (`latency` samples): live that is a delay, a render takes it back out.
+import { seeded } from "../random.js";
 import { DRIVE_TYPES, driveCurve, driveGains } from "./insert.js";
 
 export const FX_FILTERS = ["off", "lowpass", "highpass", "bandpass"];
@@ -224,18 +225,6 @@ export function fft(re, im, inverse = false) {
 
 const hann = (n) => Float64Array.from({ length: n }, (_, i) => Math.sin((Math.PI * i) / n) ** 2);
 
-// mulberry32: the whisper's phases, the same on every render.
-function prng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // Overlap-add of the last `size` samples every `hopOf(s)`, each frame's
 // spectrum passed through `phases(re, im)` and normalized by the windows'
 // own overlap. A sample comes out `size` later, once no frame can touch it.
@@ -303,7 +292,7 @@ function robotStage(sampleRate) {
 // goes, the breath stays.
 function whisperStage(sampleRate) {
   const size = pow2(sampleRate / 200);
-  const random = prng(0x5eed);
+  const random = seeded(0x5eed); // the whisper's phases, the same on every render
   return stftStage(size, () => size / 4, (re, im) => {
     const n = re.length;
     for (let i = 0; i <= n / 2; i++) {

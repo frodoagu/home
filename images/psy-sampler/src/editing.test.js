@@ -16,7 +16,6 @@ import {
   cycleStep,
   cycleStepEcho,
   doubleSteps,
-  euclid,
   euclidSteps,
   changesFor,
   improvise,
@@ -26,7 +25,6 @@ import {
   pruneMods,
   reversePart,
   rotatePart,
-  seeded,
   silenced,
   varyNotes,
   varySteps,
@@ -36,6 +34,7 @@ import {
   withRoll,
   writePart,
 } from "./editing.js";
+import { seeded } from "./random.js";
 
 const n = (step, midi, len = 1, accent = false) => ({ step, midi, len, accent });
 
@@ -435,14 +434,14 @@ describe("pattern tools", () => {
     return { steps, mods };
   };
 
-  it("euclid matches Strudel's euclid and euclidRot", () => {
-    const x = (list) => list.map((v) => (v ? "x" : ".")).join("");
-    expect(x(euclid(3, 8))).toBe("x..x..x.");
-    expect(x(euclid(5, 8))).toBe("x.xx.xx.");
-    expect(x(euclid(4, 16))).toBe("x...x...x...x...");
-    expect(x(euclid(3, 8, 2))).toBe(".x..x.x.");
-    expect(x(euclid(0, 4))).toBe("....");
-    expect(x(euclid(4, 4))).toBe("xxxx");
+  it("euclidSteps matches Strudel's euclid and euclidRot", () => {
+    const x = (k, n, rot) => euclidSteps(k, n, rot).steps.slice(0, n).map((v) => (v ? "x" : ".")).join("");
+    expect(x(3, 8)).toBe("x..x..x.");
+    expect(x(5, 8)).toBe("x.xx.xx.");
+    expect(x(4, 16)).toBe("x...x...x...x...");
+    expect(x(3, 8, 2)).toBe(".x..x.x.");
+    expect(x(0, 4)).toBe("....");
+    expect(x(4, 4)).toBe("xxxx");
   });
 
   it("euclidSteps repeats the cycle across the loop and clears the mods", () => {

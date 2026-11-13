@@ -132,6 +132,8 @@ images/              Dockerfiles + build contexts for CI-built container images 
                      psy-sampler-preview.yml builds a same-repo PR's image (pr-<n>-<sha8>) and labels it;
                      release.yml (auto semver tag+release from Conventional Commits on push to main)
                      and pr-lint.yml (Conventional-Commit PR-title gate). See "Commit & release conventions".
+                     The image builds all call build-image.yml (reusable: QEMU, Buildx, GHCR, summary)
+                     and the two Node test workflows node-test.yml; change those, not each caller.
 esphome/             ESP32 firmware configs (ESPHome YAML) flashed to devices out-of-band — NOT a
                      Kubernetes workload, so no chart/ArgoCD app. saeco-lirika.yaml controls a Saeco
                      Lirika coffee machine (see docs/cafetera-saeco-lirika.md); ble-proxy.yaml is a
@@ -464,7 +466,7 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   and that tag always needs a default — without one a missing var fails the parse
   of HA's *entire* config, not just that block. Jinja shared between packages lives in
   `charts/home-assistant/custom_templates/*.jinja`, mounted at
-  `/config/custom_templates` (`{% from 'curva.jinja' import ... %}`); a macro
+  `/config/custom_templates` (`{% from 'luces.jinja' import ... %}`); a macro
   returns text, so pipe it through `| int`/`| float`. Shared actions are scripts
   (`avisos.yaml`, `aires_prender`, `tv_encender`); a helper script with fields
   must be hidden in the entity registry, or Google Home (`script` exposed by

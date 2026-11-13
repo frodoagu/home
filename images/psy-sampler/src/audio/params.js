@@ -6,10 +6,10 @@ import { t } from "../i18n/index.js";
 // The defaults here are the ones the voices fall back to; a variant can start
 // from different values (patterns.js), but always within [min, max].
 
-const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
+export const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
 const ms = (v) => `${Math.round(v * 1000)} ms`;
 const sec = (v) => `${v.toFixed(1)} s`;
-const pct = (v) => `${Math.round(v * 100)} %`;
+export const pct = (v) => `${Math.round(v * 100)} %`;
 const times = (v) => `×${v.toFixed(2)}`;
 const bars = (v) => t().bars(v);
 const count = (v) => `×${v}`;

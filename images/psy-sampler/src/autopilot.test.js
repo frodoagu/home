@@ -60,7 +60,7 @@ import {
 } from "./autopilot.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
 import { DEFAULTS, baseOf } from "./audio/patterns.js";
-import { seeded } from "./editing.js";
+import { seeded } from "./random.js";
 import { normalize, layerOfVariant } from "./workspace.js";
 
 const { lists } = normalize({ lists: { kick: ["kick.punchy~1"] } });

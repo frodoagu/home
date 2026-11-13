@@ -1,8 +1,10 @@
 // Pure edits behind the editors. Every function returns new data and never
 // mutates its input, so the UI can hand the result straight to the engine.
-import { ACCENT, HIT, MOD_DEFAULTS, OFF, cleanMod, partSteps } from "./audio/patterns.js";
+import { ACCENT, HIT, MOD_DEFAULTS, OFF, cleanMod, euclid, partSteps } from "./audio/patterns.js";
 import { isRoot } from "./audio/music.js";
+import { layerOfVariant } from "./catalog.js";
 import { BAR_STEPS, LOOP_STEPS } from "./audio/timing.js";
+import { pick } from "./random.js";
 
 // Drum grid click: off -> hit -> accent -> off.
 export function cycleStep(steps, i) {
@@ -279,51 +281,20 @@ export const rotatePart = (data, kind, by) => remap(data, kind, (s, size) => wra
 export const reversePart = (data, kind) => remap(data, kind, (s, size) => wrap(-s, size));
 
 /**
- * Bjorklund's `k` hits as evenly as possible over `n` steps, the same
- * pattern as Strudel's euclid(k, n), started `rot` steps in (euclidRot).
- */
-export function euclid(k, n, rot = 0) {
-  let a = Array.from({ length: k }, () => [1]);
-  let b = Array.from({ length: n - k }, () => [0]);
-  while (b.length > 1 && a.length > 0) {
-    const m = Math.min(a.length, b.length);
-    const rest = a.length > m ? a.slice(m) : b.slice(m);
-    a = a.slice(0, m).map((x, i) => [...x, ...b[i]]);
-    b = rest;
-  }
-  const one = [...a, ...b].flat();
-  return Array.from({ length: n }, (_, i) => one[(i + rot) % n]);
-}
-
-/**
- * A drum row from euclid(): the n-step cycle repeats across the loop, so an
- * n that does not divide 32 runs against the bar (a polymeter) and restarts
- * on every loop.
+ * A drum row from euclid(): the n-step cycle, started `rot` steps in like
+ * Strudel's euclidRot, repeats across the loop, so an n that does not divide
+ * 32 runs against the bar (a polymeter) and restarts on every loop.
  */
 export function euclidSteps(k, n, rot = 0) {
-  const cycle = euclid(k, n, rot);
+  const cycle = euclid(k, n, -rot);
   const steps = Array.from({ length: LOOP_STEPS }, (_, s) => (cycle[s % n] ? HIT : OFF));
   return { steps, mods: Array(LOOP_STEPS).fill(null) };
 }
 
 /* ------------------------------------------------------- improvisation -- */
 
-// Small seeded PRNG (mulberry32) so tests can pin an improvisation.
-export function seeded(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // Improvisation style of a variant: its layer, except pitched percussion.
-export const styleOf = (id) => (id.startsWith("perc.") ? "perc" : id.split(".")[0]);
-
-const pick = (list, rng) => list[Math.floor(rng() * list.length)];
+export const styleOf = (id) => (id.startsWith("perc.") ? "perc" : layerOfVariant(id));
 
 /**
  * A new 2-bar part over `rows` (the editor's scale rows, highest first).

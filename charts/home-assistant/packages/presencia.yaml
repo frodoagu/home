@@ -15,9 +15,8 @@
 #
 # Fede's phone is found by its reserved IP (charts/pihole/values.yaml
 # `celu-fede`), which holds while it joins with its device MAC. Irupé's
-# randomizes its MAC, so it's found by the hostname it sends over DHCP. Pi-hole's
-# login is off, so the API needs no password; HA and Pi-hole are both
-# hostNetwork on the Pi.
+# randomizes its MAC, so it's found by the hostname it sends over DHCP
+# (custom_templates/pihole.jinja reads the answer).
 #
 # A phone whose VPN tunnel stays on at home sends its DNS through the wg-easy
 # pod, so Pi-hole stops seeing it. Its tunnel's last handshake counts as a
@@ -35,9 +34,7 @@ rest:
         device_class: timestamp
         icon: mdi:cellphone-wireless
         # No query in Pi-hole's 24 h window renders the epoch: away.
-        value_template: &ultima >-
-          {%- set q = value_json.queries | default([]) %}
-          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+        value_template: &ultima "{% from 'pihole.jinja' import ultima_consulta %}{{ ultima_consulta(value_json) }}"
   - resource: http://192.168.0.100:8080/api/queries?client_name=S22-de-Irupe.lan&length=1
     scan_interval: 60
     timeout: 10

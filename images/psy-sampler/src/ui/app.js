@@ -29,7 +29,7 @@
 // (the mix, and every stem apart for a DAW) drive recorder.js, which outlives
 // remounts like the engine.
 import { CLOUDS, CLOUD_IDS, LMSTUDIO_URL, cleanEndpoint, cleanKey, isCloud, loadPrefs, savePrefs } from "../ai.js";
-import { SAMPLE_TEMPLATES, layerById } from "../catalog.js";
+import { SAMPLE_TEMPLATES, layerById, layerOfVariant } from "../catalog.js";
 import { KEYS, keyShift, scaleRows } from "../audio/music.js";
 import { baseOf, defOf, defaultData, eventsAt, isCopy, positionAt, sampleDefaults } from "../audio/patterns.js";
 import { BAR_STEPS, BPM_MAX, BPM_MIN, LOOP_STEPS, stepDuration } from "../audio/timing.js";
@@ -98,7 +98,6 @@ import {
   improvise,
   newPart,
   reversePart,
-  seeded,
   silenced,
   styleOf,
   varyNotes,
@@ -109,6 +108,7 @@ import {
   withRoll,
   writePart,
 } from "../editing.js";
+import { seeded } from "../random.js";
 import { DICTS, LANGS, detectLang, lang, langPath, setLang, t } from "../i18n/index.js";
 import { langSwitch } from "./langSwitch.js";
 import {
@@ -342,7 +342,7 @@ export function mountApp(root, engine, opts = {}) {
   const factoryLabel = (id) => tx.variants[baseOf(id)][0];
   const labelOf = (id) => ws.names[id] ?? (isCopy(id) ? tx.tile.copyName(factoryLabel(id)) : factoryLabel(id));
   const detailOf = (id) => (isCopy(id) ? tx.tile.copyDetail(factoryLabel(id)) : tx.variants[id][1]);
-  const layerOf = (id) => layerById(id.split(".")[0]);
+  const layerOf = (id) => layerById(layerOfVariant(id));
   const snapById = (id) => ws.snapshots.find((s) => s.id === id);
   const improvOf = (id) => ws.improv[id] ?? IMPROV_DEFAULT;
   const owned = (id) => id in ws.variants && !ws.auto.includes(id);

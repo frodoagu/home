@@ -28,9 +28,9 @@ template:
         event: start
     action:
       - variables:
-          # Minutes since noon (custom_templates/curva.jinja): 23:30 is 690.
+          # Minutes since noon (custom_templates/luces.jinja): 23:30 is 690.
           curva: >-
-            {%- from 'curva.jinja' import curva, sol %}
+            {%- from 'luces.jinja' import curva, sol %}
             {%- set amanecer = sol('next_rising') | int %}
             {%- set ocaso = sol('next_setting') | int %}
             {%- set p = [[ocaso, 6500], [ocaso + 120, 4000], [690, 2700], [amanecer, 2700], [amanecer + 60, 6500]] %}
@@ -80,12 +80,9 @@ automation:
       # An HA start restores the lamp as `unavailable` before the wiz
       # integration loads it, so it comes back through here too.
       - if: >-
-          {%- set arranque = trigger.id == 'corriente'
-                and trigger.from_state.attributes.restored is defined
-                and now() - trigger.from_state.last_changed <= timedelta(minutes=1) %}
-          {%- set simulacion = is_state('input_boolean.simulacion_presencia_ausencia', 'on')
-                and is_state('input_boolean.simulacion_presencia_pausa', 'off') %}
-          {{- trigger.id == 'corriente' and not (arranque and simulacion) }}
+          {%- from 'luces.jinja' import arranque, simulando %}
+          {{- trigger.id == 'corriente'
+              and not (arranque(trigger.from_state) | bool and simulando() | bool) }}
         then:
           - action: light.turn_on
             continue_on_error: true

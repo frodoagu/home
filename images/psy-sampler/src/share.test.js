@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { seeded } from "./editing.js";
+import { seeded } from "./random.js";
 import { importSnapshots, normalize } from "./workspace.js";
 import {
   SOUNDS_MAX,

@@ -804,17 +804,29 @@ one place that names where notifications go:
 Both run in `parallel` mode, so two alerts at once don't drop one. The caller
 renders the message, so it can use the automation's own variables.
 
-## Lamp curves (`custom_templates/curva.jinja`)
+## Shared Jinja (`custom_templates/`)
+
+Jinja that more than one package needs lives in
+[`custom_templates/`](../charts/home-assistant/custom_templates/), which the
+chart mounts read-only at `/config/custom_templates`. A package imports a macro
+with `{% from 'luces.jinja' import curva, sol %}`. Macros return text, so pipe
+the result through `| int`, `| float` or `| bool`. The files share a ConfigMap
+template with the packages, so changing one rolls HA as well.
+
+| File | Macros | Used by |
+| --- | --- | --- |
+| `luces.jinja` | `minutos`, `sol`, `curva` (a lamp's daily curve), `brillo_de` (a lamp's brightness in %), `simulando` (the presence simulation is driving the lamps), `arranque` (an `unavailable` → `on` that is HA starting, not power coming back) | the lamp packages, `simulacion_presencia.yaml` |
+| `aires.jinja` | `nombres`, `estados`: how the AC pushes name the units and what they hold | `climate.yaml` |
+| `pihole.jinja` | `ultima_consulta`: a client's last DNS query from Pi-hole's API | `presencia.yaml`, `computadoras.yaml`, `velador_dormitorio.yaml` |
+| `wireguard.jinja` | `handshake_en_casa` | `presencia.yaml` |
+
+### Lamp curves
 
 The bathroom, wall-switch and living-room lamps each follow a curve over the
-day: brightness or white in straight lines between points in time. The shared
-part is [`custom_templates/curva.jinja`](../charts/home-assistant/custom_templates/curva.jinja),
-which the chart mounts read-only at `/config/custom_templates`. It has three
-macros: `minutos` (minutes since noon), `sol` (a `sun.sun` time in those minutes)
-and `curva` (the value now). Each package imports them with
-`{% from 'curva.jinja' import curva, sol %}` and keeps only its own points.
-Macros return text, so pipe the result through `| int` or `| float`. The file
-shares a ConfigMap template with the packages, so changing it rolls HA as well.
+day: brightness or white in straight lines between points in time.
+`luces.jinja` has the shared part: `minutos` (minutes since noon), `sol` (a
+`sun.sun` time in those minutes) and `curva` (the value now). Each package keeps
+only its own points.
 
 ## Sensor health alerts (`salud.yaml`)
 

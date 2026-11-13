@@ -248,7 +248,7 @@ script:
                 - conditions:
                     - condition: template
                       value_template: >-
-                        {{ states(repeat.item) not in ['unavailable', 'unknown']
+                        {{ has_value(repeat.item)
                            and state_attr(repeat.item, 'temperature') is not none }}
                   sequence:
                     - action: climate.set_temperature
@@ -268,32 +268,36 @@ script:
           entity_id: group.aires
     mode: single
 
-  # One button for the whole house: the "on" side reads
-  # `sensor.aires_modo_estacional` instead of asking which season it is.
+  # The seasonal toggles (whole house, kitchen + living, bedrooms) share one
+  # sequence (`&alternar`) and differ in `aires`; the kids' unit goes along
+  # with Fede's bedroom. The "on" side reads `sensor.aires_modo_estacional`
+  # instead of asking which season it is, and blasts every unit of the zone
+  # even if one is already on: every IR send carries the whole frame, so it
+  # re-asserts mode+setpoint instead of toggling.
   aires_toggle_estacional:
     alias: Aires - Toggle todos (según la estación)
     icon: mdi:sun-snowflake-variant
     variables:
-      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
-    sequence:
+      aires: [climate.aire_living, climate.aire_cocina, climate.aire_dormitorio]
+    sequence: &alternar
       - variables:
-          aires: >-
-            {{ ['climate.aire_living', 'climate.aire_cocina', 'climate.aire_dormitorio']
-               + (['climate.aire_chicos'] if chicos else []) }}
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
-                     | list | count == aires | count }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id: group.aires
-        default:
+          piezas: "{{ 'climate.aire_dormitorio' in aires }}"
+          prender: >-
+            {{ aires + (['climate.aire_chicos'] if piezas
+                        and not is_state('binary_sensor.chicos_en_casa', 'off') else []) }}
+      - if:
+          - condition: template
+            value_template: >-
+              {{ prender | reject('is_state', ['off', 'unavailable', 'unknown'])
+                 | list | count == prender | count }}
+        then:
+          - action: climate.turn_off
+            target:
+              entity_id: "{{ aires + (['climate.aire_chicos'] if piezas else []) }}"
+        else:
           - action: script.aires_prender
             data:
-              aires: "{{ aires }}"
+              aires: "{{ prender }}"
     mode: single
 
   # Every unit (the kids' only while they're home) to dry. Not a toggle: the
@@ -310,56 +314,20 @@ script:
                + (['climate.aire_chicos'] if not is_state('binary_sensor.chicos_en_casa', 'off') else []) }}
     mode: single
 
-  # The seasonal toggle scoped to half the house: the day zone (kitchen + living)
-  # and the bedrooms. Off only when every unit of the zone is on. The "on" side
-  # blasts all of them even if one is already on: every IR send carries the
-  # whole frame, so it re-asserts mode+setpoint instead of toggling.
   aires_cocina_living_toggle:
     alias: Aires - Toggle cocina + living (según la estación)
     icon: mdi:sofa
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {% set aires = ['climate.aire_cocina', 'climate.aire_living'] %}
-                  {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
-                     | list | count == aires | count }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id:
-                    - climate.aire_cocina
-                    - climate.aire_living
-        default:
-          - action: script.aires_prender
-            data:
-              aires: [climate.aire_cocina, climate.aire_living]
+    variables:
+      aires: [climate.aire_cocina, climate.aire_living]
+    sequence: *alternar
     mode: single
 
   aires_zona_noche_toggle:
     alias: Aires - Toggle piezas (según la estación)
     icon: mdi:bed-double
     variables:
-      chicos: "{{ not is_state('binary_sensor.chicos_en_casa', 'off') }}"
-    sequence:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: >-
-                  {% set aires = ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) %}
-                  {{ aires | map('states') | reject('in', ['off', 'unavailable', 'unknown'])
-                     | list | count == aires | count }}
-            sequence:
-              - action: climate.turn_off
-                target:
-                  entity_id:
-                    - climate.aire_dormitorio
-                    - climate.aire_chicos
-        default:
-          - action: script.aires_prender
-            data:
-              aires: "{{ ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) }}"
+      aires: [climate.aire_dormitorio]
+    sequence: *alternar
     mode: single
 
   # Bedrooms to sleep (`aires_piezas_dormir`), the rest off.
@@ -379,9 +347,8 @@ script:
 
   # Fede's bedroom (and so the kids', while they're home) as the only units on:
   # off only when they are ALL on and kitchen and living are off (in any mode),
-  # otherwise them to sleep (`aires_piezas_dormir`) and the rest off. The off frame goes to
-  # the rest even when HA has them off, so a unit started from its remote is
-  # caught too.
+  # otherwise `aires_modo_dormir`. Its off frame goes to the rest even when HA
+  # has them off, so a unit started from its remote is caught too.
   aires_solo_dormitorio_toggle:
     alias: Aires - Toggle solo dormitorio (según la estación)
     icon: mdi:bed-king
@@ -406,10 +373,7 @@ script:
                     - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
-          - action: climate.turn_off
-            target:
-              entity_id: "{{ otros + ([] if chicos else ['climate.aire_chicos']) }}"
-          - action: script.aires_piezas_dormir
+          - action: script.aires_modo_dormir
     mode: single
 
   # ±1 °C on every unit that is ON, each clamped to its own min/max (they differ:
@@ -700,9 +664,9 @@ automation:
         data:
           titulo: Aires
           mensaje: >-
+            {% from 'aires.jinja' import nombres %}
             Afuera llegó a {{ states('sensor.temperatura_exterior') }} °C: apagué
-            {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
-            | map('lower') | join(', ') }}, que estaban en calor.
+            {{ nombres(aires) }}, que estaban en calor.
           extras: *aires_push
     mode: single
 
@@ -825,10 +789,10 @@ automation:
         data:
           titulo: Aires
           mensaje: >-
+            {% from 'aires.jinja' import nombres %}
             Afuera hace {{ states('sensor.temperatura_exterior') }} °C y el living
             está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
-            prendí {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
-            | map('lower') | join(', ') }} en frío 25 °C.
+            prendí {{ nombres(aires) }} en frío 25 °C.
           extras: *aires_push
     mode: single
 
@@ -897,10 +861,11 @@ automation:
         data:
           titulo: Aires
           mensaje: >-
+            {% from 'aires.jinja' import nombres %}
             Afuera hace {{ exterior }} °C y adentro
             {% for z in frescas %}{{ states(z.termometro) | float | round(1) }} °C
             ({{ state_attr(z.termometro, 'friendly_name') | lower }}){{ ', ' if not loop.last }}{% endfor %}.
-            Apagué {{ apagar | map('state_attr', 'friendly_name') | join(', ') }}.
+            Apagué {{ nombres(apagar) }}.
             Abrí las ventanas.
           extras: *aires_push
     mode: queued
@@ -964,12 +929,11 @@ automation:
         data:
           titulo: Aires
           mensaje: >-
-            {% set modos = {'heat': 'calor', 'cool': 'frío'} %}
+            {% from 'aires.jinja' import estados %}
             Llegaste:
             {% for t in planes | map(attribute='termometro') | unique %}{{ state_attr(t, 'friendly_name') | lower }}
             a {{ states(t) | float | round(1) }} °C{{ ', ' if not loop.last }}{% endfor %}.
-            Prendí {% for p in planes %}{{ state_attr(p.aire, 'friendly_name') | replace('Aire ', '') | lower }}
-            en {{ modos[p.modo] }} {{ '%g' | format(state_attr(p.aire, 'temperature') | float(0)) }} °C{{ ', ' if not loop.last }}{% endfor %}.
+            Prendí {{ estados(planes | map(attribute='aire') | list) }}.
           extras: *aires_push
     mode: single
 
@@ -1011,8 +975,8 @@ automation:
             data:
               titulo: Aires
               mensaje: >-
-                No queda nadie en casa: apagué {{ prendidos | map('state_attr', 'friendly_name')
-                | map('replace', 'Aire ', '') | map('lower') | join(', ') }}.
+                {% from 'aires.jinja' import nombres %}
+                No queda nadie en casa: apagué {{ nombres(prendidos) }}.
               extras: *aires_push
     mode: single
 
@@ -1046,16 +1010,13 @@ automation:
         data:
           titulo: Aires
           mensaje: >-
-            {% set modos = {'heat': 'calor', 'cool': 'frío', 'dry': 'seco',
-                            'fan_only': 'ventilador', 'heat_cool': 'auto'} %}
+            {% from 'aires.jinja' import nombres, estados %}
             {% set aires = expand('group.aires') | map(attribute='entity_id') | sort %}
             {% set prendidos = aires | reject('is_state', ['off', 'unavailable', 'unknown']) | list %}
-            {% set apagados = aires | reject('in', prendidos) | map('state_attr', 'friendly_name')
-                              | map('replace', 'Aire ', '') | list %}
+            {% set apagados = aires | reject('in', prendidos) | list %}
             {% if prendidos %}
-            Prendidos: {% for a in prendidos %}{{ state_attr(a, 'friendly_name') | replace('Aire ', '') }}
-            ({{ modos.get(states(a), states(a)) }} {{ state_attr(a, 'temperature') }} °C){{ ', ' if not loop.last }}{% endfor %}.
-            {{ 'Apagados: ' ~ apagados | join(', ') ~ '.' if apagados }}
+            Prendidos: {{ estados(prendidos) }}.
+            {{ 'Apagados: ' ~ nombres(apagados) ~ '.' if apagados }}
             {% else %}
             Quedaron todos apagados.
             {% endif %}

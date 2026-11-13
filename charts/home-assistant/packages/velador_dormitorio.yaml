@@ -53,8 +53,7 @@ command_line:
         - zona_b
 
 rest:
-  # The `presencia.yaml` approach: Pi-hole's login is off and both are
-  # hostNetwork on the Pi. No query in Pi-hole's 24 h window renders the epoch.
+  # The `presencia.yaml` approach (custom_templates/pihole.jinja).
   - resource: http://192.168.0.100:8080/api/queries?client_name=velador-dormitorio.lan&length=1
     scan_interval: 15
     timeout: 10
@@ -63,9 +62,7 @@ rest:
         unique_id: velador_dormitorio_ultima_consulta_dns
         device_class: timestamp
         icon: mdi:restart
-        value_template: >-
-          {%- set q = value_json.queries | default([]) %}
-          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+        value_template: "{% from 'pihole.jinja' import ultima_consulta %}{{ ultima_consulta(value_json) }}"
 
 shell_command:
   # `pilot` is the setPilot params, as JSON or as a mapping. A template in the
@@ -183,8 +180,8 @@ template:
             {%- set actual = this.attributes.actual | default(none) %}
             {{- actual if pilotos is not none and pilotos != actual else this.attributes.anterior | default(none) }}
 
-# The two zones are identical apart from the index and the attribute they read,
-# so both lights share these blocks through YAML anchors.
+# The two zones are identical apart from the index and the attribute they read
+# (`variables`), so the second one merges the first one's blocks (`&zona`).
   - light:
       - name: "Velador dormitorio arriba"
         unique_id: lampara_dormitorio_zona_a
@@ -228,64 +225,65 @@ template:
             33: Diwali
             34: Blanco
             35: Alarma
-        availability: &availability >-
-          {{ state_attr('sensor.velador_dormitorio_zonas', attr) is mapping }}
-        state: &state >-
-          {{ (state_attr('sensor.velador_dormitorio_zonas', attr) or {}).get('state', false) }}
-        level: &level >-
-          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
-          {{ ((z.dimming | default(100) | int) * 255 / 100) | round(0) | int }}
-        rgb: &rgb >-
-          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
-          {{ (z.r, z.g, z.b) if z.r is defined and z.temp is not defined else none }}
-        temperature: &temperature >-
-          {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
-          {{ (1000000 / z.temp) | round(0) | int if z.temp is defined else none }}
-        effect_list: &effect_list "{{ escenas.values() | list }}"
-        effect: &effect >-
-          {%- set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
-          {%- set id = z.sceneId | default(0) | int %}
-          {{- escenas.get(id, escenas.get(id | string)) }}
-        # Mireds: 6500 K .. 2200 K.
-        min_mireds: &min_mireds "154"
-        max_mireds: &max_mireds "455"
-        turn_on: &turn_on
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: true
-        turn_off: &turn_off
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: false
-        set_level: &set_level
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: true
-              brillo: "{{ brightness_pct }}"
-        set_rgb: &set_rgb
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: true
-              brillo: "{{ brightness_pct | default(none) }}"
-              rgb: "{{ [r, g, b] }}"
-        set_temperature: &set_temperature
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: true
-              brillo: "{{ brightness_pct | default(none) }}"
-              kelvin: "{{ color_temp_kelvin }}"
-        set_effect: &set_effect
-          - action: script.velador_dormitorio_zona
-            data:
-              zona: "{{ zona }}"
-              encender: true
-              escena: >-
-                {% for id, nombre in escenas.items() if nombre == effect %}{{ id }}{% endfor %}
+        <<: &zona
+          availability: >-
+            {{ state_attr('sensor.velador_dormitorio_zonas', attr) is mapping }}
+          state: >-
+            {{ (state_attr('sensor.velador_dormitorio_zonas', attr) or {}).get('state', false) }}
+          level: >-
+            {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
+            {{ ((z.dimming | default(100) | int) * 255 / 100) | round(0) | int }}
+          rgb: >-
+            {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
+            {{ (z.r, z.g, z.b) if z.r is defined and z.temp is not defined else none }}
+          temperature: >-
+            {% set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
+            {{ (1000000 / z.temp) | round(0) | int if z.temp is defined else none }}
+          effect_list: "{{ escenas.values() | list }}"
+          effect: >-
+            {%- set z = state_attr('sensor.velador_dormitorio_zonas', attr) or {} %}
+            {%- set id = z.sceneId | default(0) | int %}
+            {{- escenas.get(id, escenas.get(id | string)) }}
+          # Mireds: 6500 K .. 2200 K.
+          min_mireds: "154"
+          max_mireds: "455"
+          turn_on:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: true
+          turn_off:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: false
+          set_level:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: true
+                brillo: "{{ brightness_pct }}"
+          set_rgb:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: true
+                brillo: "{{ brightness_pct | default(none) }}"
+                rgb: "{{ [r, g, b] }}"
+          set_temperature:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: true
+                brillo: "{{ brightness_pct | default(none) }}"
+                kelvin: "{{ color_temp_kelvin }}"
+          set_effect:
+            - action: script.velador_dormitorio_zona
+              data:
+                zona: "{{ zona }}"
+                encender: true
+                escena: >-
+                  {% for id, nombre in escenas.items() if nombre == effect %}{{ id }}{% endfor %}
 
       - name: "Velador dormitorio abajo"
         unique_id: lampara_dormitorio_zona_b
@@ -293,21 +291,7 @@ template:
           zona: 2
           attr: zona_b
           escenas: *escenas
-        availability: *availability
-        state: *state
-        level: *level
-        rgb: *rgb
-        temperature: *temperature
-        effect_list: *effect_list
-        effect: *effect
-        min_mireds: *min_mireds
-        max_mireds: *max_mireds
-        turn_on: *turn_on
-        turn_off: *turn_off
-        set_level: *set_level
-        set_rgb: *set_rgb
-        set_temperature: *set_temperature
-        set_effect: *set_effect
+        <<: *zona
 
 # One tile for the whole lamp; its more-info dialog lists both zones. Lands as
 # light.velador_dormitorio_2 (the wiz entity holds the plain id) and is renamed

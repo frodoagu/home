@@ -1,0 +1,54 @@
+{#- Shared by the lamp packages: the daily curves (luces_bano, luces_llave,
+    luces_salon) and reading a lamp's state. Import with
+    {% from 'luces.jinja' import curva, sol, minutos, brillo_de, simulando, arranque %}
+    Macros return text: pipe the result through `| int`, `| float` or `| bool`.
+    Curve times are minutes since noon, so the night is one stretch: 21:00 is
+    540, 23:30 is 690, 02:00 is 840. -#}
+
+{%- macro minutos(t) -%}
+{{ (t.hour * 60 + t.minute - 720) % 1440 }}
+{%- endmacro -%}
+
+{#- A sun.sun time (`next_rising`, `next_setting`) plus `extra` minutes. It is
+    today's or tomorrow's, a minute or two apart, so only its time of day is
+    used. -#}
+{%- macro sol(attr, extra=0) -%}
+{%- set t = state_attr('sun.sun', attr) | as_datetime | as_local -%}
+{{ (t.hour * 60 + t.minute + extra - 720) % 1440 }}
+{%- endmacro -%}
+
+{#- Column `col` of curve `p` at minute `m` (now by default): rows are
+    [minute, value, ...] in ascending minutes, joined by straight lines; before
+    the first row it holds the first, after the last it holds the last. Pass
+    `m` when reading several columns, so they all come from the same minute. -#}
+{%- macro curva(p, col=1, m=none) -%}
+{%- set m = m if m is not none else minutos(now()) | int -%}
+{%- set ns = namespace(a=p[0], b=p[0], f=0) -%}
+{%- for i in range(p | count - 1) if p[i][0] <= m -%}
+{%- set ns.a = p[i] -%}
+{%- set ns.b = p[i + 1] -%}
+{%- set ns.f = [(m - ns.a[0]) / (ns.b[0] - ns.a[0]) if ns.b[0] > ns.a[0] else 1, 1] | min -%}
+{%- endfor -%}
+{{ ns.a[col] + (ns.b[col] - ns.a[col]) * ns.f }}
+{%- endmacro -%}
+
+{#- A lamp's brightness in %, as light.turn_on's `brightness_pct` sets it; 0
+    when off. The 0-255 round trip can land 1-2 % away from what was sent. -#}
+{%- macro brillo_de(e) -%}
+{{ (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int }}
+{%- endmacro -%}
+
+{#- Whether the presence simulation (simulacion_presencia.yaml) is driving
+    the lamps: an absence under way and not paused. -#}
+{%- macro simulando() -%}
+{{ is_state('input_boolean.simulacion_presencia_ausencia', 'on')
+   and is_state('input_boolean.simulacion_presencia_pausa', 'off') }}
+{%- endmacro -%}
+
+{#- Whether a lamp's `unavailable` -> `on` (`desde`, the trigger's from_state)
+    is HA starting rather than power coming back: a start restores each lamp
+    as `unavailable` before the wiz integration loads it. -#}
+{%- macro arranque(desde) -%}
+{{ desde.attributes.restored is defined
+   and now() - desde.last_changed <= timedelta(minutes=1) }}
+{%- endmacro -%}

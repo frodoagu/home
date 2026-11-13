@@ -1,5 +1,6 @@
 // Which loop variants are on. `active` maps lane key -> variant id. Pure: the
 // UI owns the state, the engine only receives the lanes derived from it.
+import { layerOfVariant } from "./catalog.js";
 
 /**
  * Lane a variant plays on. Exclusive layers (kick, bass) have one lane, so a
@@ -10,7 +11,7 @@
  */
 export const laneKey = (layer, variantId) => (layer.exclusive ? layer.id : variantId);
 
-const inLayer = (id, layerId) => id.split(".")[0] === layerId;
+const inLayer = (id, layerId) => layerOfVariant(id) === layerId;
 
 /** Whether `variantId` plays on any lane of `active`. */
 export const isOn = (active, variantId) => Object.values(active).includes(variantId);

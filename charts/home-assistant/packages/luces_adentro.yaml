@@ -111,10 +111,10 @@ automation:
         {{- [[100 - 90 * avance, 10] | max, 100] | min | round(0) | int }}
       # 1-2 % of slack for the 0-255 round trip.
       bajar: >-
+        {%- from 'luces.jinja' import brillo_de %}
         {%- set ns = namespace(lista=[]) %}
         {%- for e in lamparas if is_state(e, 'on') %}
-        {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-        {%- if brillo + 1 < pct <= tope + 2 %}
+        {%- if brillo + 1 < brillo_de(e) | int <= tope + 2 %}
         {%- set ns.lista = ns.lista + [e] %}
         {%- endif %}
         {%- endfor %}
