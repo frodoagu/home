@@ -16,9 +16,9 @@ on:
       - images/psy-sync/**
       - charts/psy-sampler/**
       - .github/workflows/psy-sampler-preview.yml
+      - .github/workflows/build-image.yml
 
 env:
-  IMAGE: ghcr.io/frodoagu/psy-sampler
   LABEL: psy-preview
 
 jobs:
@@ -32,93 +32,42 @@ jobs:
     concurrency:
       group: psy-sampler-preview-${{ github.event.pull_request.number }}
       cancel-in-progress: true
-    runs-on: ubuntu-26.04
+    uses: ./.github/workflows/build-image.yml
     permissions:
       contents: read # to checkout the repo
       packages: write # to push to GHCR
+    with:
+      image: ghcr.io/frodoagu/psy-sampler
+      context: ./images/psy-sampler
+      # The PR's own commit, not GitHub's merge with main: the preview renders
+      # the chart from the PR branch, so the image matches it. Argo CD's
+      # head_short_sha is the first 8 characters.
+      ref: ${{ github.event.pull_request.head.sha }}
+      tags: pr-${{ github.event.pull_request.number }}-{sha8}
+      title: 🎛️ PR preview
+      note: >-
+        Preview: https://pr-${{ github.event.pull_request.number }}-psy.agu.com.ar.
+        Argo CD picks the new tag up within the ApplicationSet's poll (3 min).
+
+  label:
+    name: Label the PR
+    needs: build
+    if: >-
+      needs.build.outputs.digest != '' &&
+      !contains(github.event.pull_request.labels.*.name, 'psy-preview')
+    runs-on: ubuntu-26.04
+    permissions:
       pull-requests: write # to label and comment on the PR
       issues: write # to create the label the first time
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR: ${{ github.event.pull_request.number }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       HOST: pr-${{ github.event.pull_request.number }}-psy.agu.com.ar
     steps:
-      - name: 🔎 Tag and label state
-        id: check
-        env:
-          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'psy-preview') }}
-        run: |
-          # Argo CD's head_short_sha is the first 8 characters.
-          echo "tag=pr-$PR-${HEAD_SHA::8}" >> "$GITHUB_OUTPUT"
-          echo "labelled=$LABELLED" >> "$GITHUB_OUTPUT"
-
-      - name: ⬇️ Checkout
-        uses: actions/checkout@v7
-        with:
-          # The PR's own commit, not GitHub's merge with main: the preview
-          # renders the chart from the PR branch, so the image matches it.
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: 🧰 Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          image: mirror.gcr.io/tonistiigi/binfmt:latest
-
-      - name: 🐳 Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
-          # Docker Hub through Google's mirror, as in psy-sampler-image.yml.
-          buildkitd-config-inline: |
-            [registry."docker.io"]
-              mirrors = ["mirror.gcr.io"]
-
-      - name: 🔑 Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏗️ Build & push image
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: ./images/psy-sampler
-          platforms: linux/arm64
-          push: true
-          tags: ${{ env.IMAGE }}:${{ steps.check.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: 🏷️ Label the PR
-        if: steps.check.outputs.labelled != 'true'
         run: |
           gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color 7057ff \
             --description "psy-sampler preview at pr-<n>-psy.agu.com.ar (added by CI)" 2>/dev/null || true
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" -f "labels[]=$LABEL" > /dev/null
           gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body \
             "🎛️ Preview: https://$HOST (Google sign-in, no cloud save). It follows every push and goes away when this PR closes."
-
-      - name: 📦 Preview summary
-        if: always()
-        env:
-          TAG: ${{ steps.check.outputs.tag }}
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          {
-            echo "## 🎛️ PR preview"
-            echo ""
-            if [ -n "$DIGEST" ]; then
-              echo "| Field | Value |"
-              echo "| --- | --- |"
-              echo "| Image | \`${IMAGE}:${TAG}\` |"
-              echo "| Digest | \`${DIGEST}\` |"
-              echo "| Preview | https://${HOST} |"
-              echo ""
-              echo "Argo CD picks the new tag up within the ApplicationSet's poll (3 min)."
-            else
-              echo "⚠️ The build did not complete."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"

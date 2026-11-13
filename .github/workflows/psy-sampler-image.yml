@@ -11,84 +11,20 @@ on:
     paths:
       - "images/psy-sampler/**"
       - ".github/workflows/psy-sampler-image.yml"
+      - ".github/workflows/build-image.yml"
   workflow_dispatch:
-
-env:
-  IMAGE: ghcr.io/frodoagu/psy-sampler
 
 jobs:
   build:
-    name: Build & push arm64 image
-    runs-on: ubuntu-26.04
+    uses: ./.github/workflows/build-image.yml
     permissions:
-      contents: read # to checkout the (private) repo
+      contents: read # to checkout the repo
       packages: write # to push to GHCR
-    steps:
-      - name: ⬇️ Checkout
-        uses: actions/checkout@v7
-
-      - name: 🏷️ Compute image tag
-        id: tag
-        run: echo "sha=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-
-      - name: 🧰 Set up QEMU
-        # Needed to cross-build the arm64 image on amd64 runners (the k3s node
-        # is a Raspberry Pi / arm64).
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          image: mirror.gcr.io/tonistiigi/binfmt:latest
-
-      - name: 🐳 Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
-          # FROM node/nginx/debian (and the dockerfile frontend) resolve
-          # through Google's Docker Hub mirror, like QEMU and BuildKit above:
-          # Docker Hub throttles and times out on GitHub's runners (429s,
-          # auth timeouts, 500s), with or without a login. Docker Hub is only
-          # the fallback.
-          buildkitd-config-inline: |
-            [registry."docker.io"]
-              mirrors = ["mirror.gcr.io"]
-
-      - name: 🔑 Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏗️ Build & push image
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: ./images/psy-sampler
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.tag.outputs.sha }}
-            ${{ env.IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: 📦 Image summary
-        if: always()
-        run: |
-          {
-            echo "## 🎛️ Published image"
-            echo ""
-            if [ -n "${{ steps.build.outputs.digest }}" ]; then
-              echo "✅ Image built (\`linux/arm64\`) and pushed to GHCR."
-              echo ""
-              echo "| Field | Value |"
-              echo "| --- | --- |"
-              echo "| Repository | \`${IMAGE}\` |"
-              echo "| Tags | \`${{ steps.tag.outputs.sha }}\`, \`latest\` |"
-              echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
-              echo "| Commit | \`${GITHUB_SHA::12}\` |"
-              echo ""
-              echo "Argo CD Image Updater will detect the new \`latest\` digest and pin it into \`charts/psy-sampler/values.yaml\` for the rollout."
-            else
-              echo "⚠️ The build did not complete."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+    with:
+      image: ghcr.io/frodoagu/psy-sampler
+      context: ./images/psy-sampler
+      tags: |
+        sha-{sha}
+        latest
+      title: 🎛️ Published image
+      note: "Argo CD Image Updater will detect the new `latest` digest and pin it into `charts/psy-sampler/values.yaml` for the rollout."
