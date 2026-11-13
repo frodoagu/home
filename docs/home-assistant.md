@@ -517,7 +517,7 @@ except the scheduled shutdown below, which turns all four off.
   repeat a failed condition aborts the whole script instead of skipping the item.
 
 `sensor.aires_modo_estacional` is a trigger-based template sensor in the same
-package that resolves to `heat` or `cool`, with memory: below **20 °C** outside
+package that resolves to `heat` or `cool`, with memory: below **22 °C** outside
 it is `heat`, at **26 °C** or more `cool`, and in between it is `cool` when the
 hottest hour of the next 12 (`weather.get_forecasts`, hourly) reaches **28 °C**,
 otherwise it keeps what it was (`this.state`). It re-evaluates every 15 minutes,

@@ -38,7 +38,7 @@ climate:
     controller_data: remote.broadlink_chicos
 
 # Mode the seasonal buttons pick: cool or heat, with memory.
-#   - below 20 °C outside: heat.
+#   - below 22 °C outside: heat.
 #   - 26 °C or more: cool.
 #   - in between: cool if the hottest hour of the next 12 reaches 28 °C (a warm
 #     day that starts cool), otherwise whatever it was.
@@ -79,7 +79,7 @@ template:
           {% set antes = this.state if this is defined and this.state in ['cool', 'heat']
                          else ('cool' if t >= 26 else 'heat') %}
           {% if t >= 26 %}cool
-          {% elif t < 20 %}heat
+          {% elif t < 22 %}heat
           {% elif maxima >= 28 %}cool
           {% else %}{{ antes }}
           {% endif %}
