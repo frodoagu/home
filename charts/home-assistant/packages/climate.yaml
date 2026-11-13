@@ -86,7 +86,8 @@ group:
 # (`aires_prender`, `aires_piezas_dormir`) are hidden so Google doesn't list them.
 #
 # Setpoints live in `aires_prender` and nowhere else: heat is 21 in the living
-# areas and the kids' room, 20 in Fede's bedroom; cool is 25 and dry 24 everywhere.
+# areas and the kids' room, 20 in Fede's bedroom; cool is 25 and dry 24 everywhere,
+# except that sleeping (`aires_piezas_dormir`) cools Fede's bedroom to 23.
 # Turning on sets mode and temperature in ONE `climate.set_temperature` call:
 # every IR send carries the whole frame, so a single blast leaves the unit in
 # the wanted state.
@@ -105,7 +106,8 @@ group:
 script:
   # Turns `aires` on at their setpoint for `modo` (heat/cool/dry; the seasonal one
   # by default). One call per unit: the bedroom's heat setpoint differs. With
-  # `mantener`, a unit already in `modo` keeps its own setpoint (re-sent).
+  # `mantener`, a unit already in `modo` keeps its own setpoint (re-sent). `frio`
+  # replaces the cool setpoint for every unit of the call.
   aires_prender:
     alias: Aires - Prender a su temperatura
     icon: mdi:air-conditioner
@@ -126,6 +128,12 @@ script:
         description: Si un aire ya está en ese modo, conserva su temperatura.
         selector:
           boolean:
+      frio:
+        description: Temperatura en frío; sin nada, la de siempre (25).
+        selector:
+          number:
+            min: 16
+            max: 30
     sequence:
       - variables:
           modo: >-
@@ -146,12 +154,12 @@ script:
                   {%- if mantener | default(false) and is_state(repeat.item, modo) and propia is not none %}
                   {{- propia }}
                   {%- else %}
-                  {{- 25 if modo == 'cool' else 24 if modo == 'dry' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
+                  {{- (frio | default(25)) if modo == 'cool' else 24 if modo == 'dry' else 20 if repeat.item == 'climate.aire_dormitorio' else 21 }}
                   {%- endif %}
     mode: parallel
 
   # Fede's bedroom (and the kids', while they're home) on at the seasonal
-  # setpoint and the slowest fan each unit declares (`level1` on the 5140, `low`
+  # setpoint (cool 23 in his bedroom, 25 in the kids') and the slowest fan each unit declares (`level1` on the 5140, `low`
   # on the 3340). The delay keeps the fan frame from stepping on the
   # temperature frame on the same blaster.
   aires_piezas_dormir:
@@ -162,7 +170,13 @@ script:
     sequence:
       - action: script.aires_prender
         data:
-          aires: "{{ ['climate.aire_dormitorio'] + (['climate.aire_chicos'] if chicos else []) }}"
+          aires: [climate.aire_dormitorio]
+          frio: 23
+      - if: "{{ chicos }}"
+        then:
+          - action: script.aires_prender
+            data:
+              aires: [climate.aire_chicos]
       - delay: "00:00:01"
       - action: climate.set_fan_mode
         target:

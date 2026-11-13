@@ -366,8 +366,8 @@ views:
 
         {%- set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}
 
-        {%- set m = ''frío 25°'' if frio else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos
-        else ''calor 20°'') -%}
+        {%- set m = (''frío (23° el dormitorio, 25° chicos)'' if con_chicos else ''frío 23°'') if frio
+        else (''calor (20° el dormitorio, 21° chicos)'' if con_chicos else ''calor 20°'') -%}
 
         {%- set piezas = ''las dos piezas'' if con_chicos else ''el dormitorio'' -%}
 

@@ -453,10 +453,12 @@ Google Home:
 Setpoints throughout: heat is **21 °C** in the living areas and the kids' room
 and **20 °C** in Fede's bedroom (a degree cooler for sleeping), cool is
 **25 °C** and dry **24 °C** everywhere. They live in one place, `script.aires_prender` (`aires`, optional
-`modo`: heat, cool or dry; the seasonal mode by default), which sends each unit its own
-`climate.set_temperature`; every script and automation that turns units on at
+`modo`: heat, cool or dry; the seasonal mode by default; `frio`, a cool setpoint
+for the whole call), which sends each unit its own `climate.set_temperature`; every script and automation that turns units on at
 "their" temperature calls it. `script.aires_piezas_dormir` puts the bedrooms on
-it at the slowest fan, for `aires_modo_dormir` and `aires_solo_dormitorio_toggle`.
+it at the slowest fan, for `aires_modo_dormir` and `aires_solo_dormitorio_toggle`;
+that is the one place cool is not 25: Fede's bedroom gets **23 °C** (the kids' unit
+keeps 25).
 Both are hidden in the entity registry so Google Home doesn't list them as
 scenes. `group.aires` holds the four units for actions and templates (triggers
 still list them, since a trigger takes no template).
@@ -498,7 +500,7 @@ except the scheduled shutdown below, which turns all four off.
   frame. SmartIR builds every frame from the entity's whole state (mode, fan,
   swing, setpoint), so a `set_temperature` with the current mode and setpoint
   resends all of it.
-- `aires_modo_dormir` — bedrooms at the seasonal setpoint on the slowest fan each
+- `aires_modo_dormir` — bedrooms at the seasonal setpoint (cool 23 °C in Fede's) on the slowest fan each
   unit declares (`level1` on the 5140, `low` on the 3340), the rest off (the
   kids' unit too while they're out). The fan frame is sent a second after
   the temperature frame so the two IR blasts don't step on each other.
