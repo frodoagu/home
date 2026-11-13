@@ -797,7 +797,9 @@ automation:
       Prende cocina, living y dormitorio (y el de los chicos si están según el
       calendario) en frío 25 cuando afuera pasa los 30 °C y adentro el living
       ya pasó los 24 °C, sólo si hay alguien en casa (el celular de Fede o el
-      de Irupé en Pi-hole).
+      de Irupé en Pi-hole). Sólo toca los que están apagados: uno ya prendido
+      conserva su modo y su temperatura, y si no queda ninguno apagado no hace
+      nada.
     trigger:
       - platform: numeric_state
         entity_id: sensor.temperatura_exterior
@@ -812,8 +814,11 @@ automation:
     action:
       - variables:
           aires: >-
-            {{ ['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
-               + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
+            {{ (['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
+                + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []))
+               | select('is_state', 'off') | list }}
+      - condition: template
+        value_template: "{{ aires | count > 0 }}"
       - action: script.aires_prender
         data:
           aires: "{{ aires }}"

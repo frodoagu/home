@@ -607,6 +607,8 @@ app (same times, thresholds and guards; the Google Home exports were in
   range is what keeps it from firing in summer.
 - `aires_frio_dia_caluroso` — kitchen + living + bedroom (+ kids) to **cool 25 °C** when
   it's over 30 °C outside and over 24 °C in the living room, if someone's home.
+  Only units that are off: one already on keeps its mode and setpoint, and with none
+  off it does nothing.
 
 **"+ kids" means while [`binary_sensor.chicos_en_casa`](#kids-calendar) is
 `on`.** Every automation that switches Fede's bedroom, on or off, switches the
