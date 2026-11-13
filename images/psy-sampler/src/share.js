@@ -1,5 +1,5 @@
 // Seeds and share links. A seed is a short string; hashSeed() turns it into
-// the 32-bit state of the PRNG (editing.js seeded) behind the autopilot, so
+// the 32-bit state of the PRNG (random.js seeded) behind the autopilot, so
 // the same seed plays the same track anywhere. A share link carries the seed,
 // the style, the BPM and the key in the URL fragment, plus the user's own sounds (a
 // deflated preset), since the track is only the same with the same sounds

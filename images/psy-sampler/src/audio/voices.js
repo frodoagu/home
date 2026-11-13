@@ -6,6 +6,7 @@
 //
 // Events carry the variant's editable params (params.js), so every value
 // below that has a default in the destructuring is a slider somewhere.
+import { seeded } from "../random.js";
 import { LOBE, lorenz } from "./chaos.js";
 import { centsToRatio } from "./music.js";
 
@@ -965,17 +966,6 @@ export function choirBuffer(ctx) {
   return buf;
 }
 
-// mulberry32: the grains' scatter, seeded per note so a replay sounds the same.
-function prng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let x = Math.imul(a ^ (a >>> 15), 1 | a);
-    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 // A Hann window as 8 lines: a grain fades in and out with no edge to click.
 const HANN = Array.from({ length: 9 }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / 8));
 function hann(param, t, len, peak) {
@@ -1001,7 +991,8 @@ export function grains(ctx, out, t, ev, stepDur) {
   const rate = ev.freq / SAMPLE_ROOT;
   const buf = choirBuffer(ctx);
   const span = Math.max(0, buf.duration - len * rate * 1.01);
-  const rand = prng(Math.round(ev.freq * 100) ^ Math.round(t * 1000));
+  // The grains' scatter, seeded per note so a replay sounds the same.
+  const rand = seeded(Math.round(ev.freq * 100) ^ Math.round(t * 1000));
   const lp = filter(ctx, "lowpass", cut(5000, ev));
   lp.connect(out);
   const peak = 0.6 * vel(ev);

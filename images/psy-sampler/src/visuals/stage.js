@@ -18,6 +18,7 @@
 //   { kind: "fx", id, time, end }             a one-shot FX
 //   { kind: "stop", time }                    the loop stops
 //   { kind: "levels", low, mid, high }        what the speakers get now, 0..1
+import { layerOfVariant } from "../catalog.js";
 
 export const IDLE_BPM = 140;
 const LAYERS = ["kick", "bass", "perc", "lead", "pad", "glitch", "classic", "fx"];
@@ -29,7 +30,7 @@ const LEVEL_TAU = 60; // ms: smoothing of the levels
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 
 /** The layers a lane set plays: "kick.a~2" -> "kick". */
-export const layersOf = (variants) => new Set(variants.map((v) => String(v).split(".")[0]));
+export const layersOf = (variants) => new Set(variants.map((v) => layerOfVariant(String(v))));
 
 /** How busy a mix is, 0..1, from the layers playing and the level heard. */
 export function energyOf(layers, level = 0) {

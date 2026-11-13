@@ -66,6 +66,7 @@ import { LAYERS, layerById, layerOfVariant } from "./catalog.js";
 import { LEVEL } from "./audio/params.js";
 import { HP_OPEN, LP_OPEN } from "./audio/insert.js";
 import { baseOf } from "./audio/patterns.js";
+import { pick } from "./random.js";
 import { laneKey } from "./selection.js";
 
 export const SECTIONS = {
@@ -372,7 +373,6 @@ export const PHRASE_LOOPS = 4;
 const LOOP_LAYERS = LAYERS.filter((l) => !l.oneShot && !l.manual);
 const byHand = (active) =>
   Object.fromEntries(Object.entries(active).filter(([, id]) => layerById(layerOfVariant(id))?.manual));
-const pick = (list, rng) => list[Math.floor(rng() * list.length)];
 // The section after `section`: one draw, like pick(), whatever its odds, so
 // odds only change the seeds that land on them.
 function nextOf(section, rng) {

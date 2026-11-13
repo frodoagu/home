@@ -23,6 +23,7 @@
 //
 // Also here: the DJ filter on the master bus, one bipolar knob.
 
+import { seeded } from "../random.js";
 import { LOBE, lorenz } from "./chaos.js";
 
 export const FILTER_TYPES = ["off", "lowpass", "highpass", "bandpass", "vowel"];
@@ -181,13 +182,8 @@ const NOISE_CYCLES = 16;
 const noiseTables = new WeakMap(); // ctx -> { random, smooth, chaos }
 
 export function noiseValues(seed = 0x9e3779b9) {
-  let a = seed >>> 0;
-  return Array.from({ length: NOISE_POINTS * NOISE_CYCLES }, () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), a | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-  });
+  const rng = seeded(seed);
+  return Array.from({ length: NOISE_POINTS * NOISE_CYCLES }, () => rng() * 2 - 1);
 }
 
 // The chaos LFO reads the Lorenz attractor's x, one lobe (LOBE time units) a

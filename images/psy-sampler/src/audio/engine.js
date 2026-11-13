@@ -59,6 +59,7 @@ import {
   SAFETY,
   TICK_MS,
 } from "./timing.js";
+import { layerOfVariant } from "../catalog.js";
 import { DJ_Q, INSERT_DEFAULT, buildInsert, djCutoffs, kindOf } from "./insert.js";
 import { trimOf } from "./loudness.js";
 import { buildMaster } from "./master.js";
@@ -131,7 +132,6 @@ const BRAKE_MAX = 24;
 const BRAKE_HOLD = 0.7;
 const BRAKE_POINTS = 64;
 
-const layerOf = (variant) => variant.split(".")[0];
 
 // Synthetic room: stereo noise with a cubic decay.
 function impulse(ctx, seconds) {
@@ -336,11 +336,11 @@ export function createEngine({
   const volumeOf = (layer) => volumes.get(layer) ?? 1;
   // The layer's level, the sound's own by ear (loudness.js), its layer fader and its volume.
   const laneLevel = (key, variant) =>
-    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOf(variant)]) *
+    (key === "bgKick" ? BG_KICK_LEVEL : LAYER_LEVEL[layerOfVariant(variant)]) *
     trimOf(variant, dataOf(variant)) *
-    volumeOf(layerOf(variant)) *
+    volumeOf(layerOfVariant(variant)) *
     dataOf(variant).level;
-  const shotLevel = (id) => LAYER_LEVEL[layerOf(id)] * trimOf(id, dataOf(id)) * volumeOf(layerOf(id)) * dataOf(id).level;
+  const shotLevel = (id) => LAYER_LEVEL[layerOfVariant(id)] * trimOf(id, dataOf(id)) * volumeOf(layerOfVariant(id)) * dataOf(id).level;
   // What the speakers get: a solo silences everything else. Renders skip it.
   const heard = (id, level) => (solo === null || solo === id ? level : 0);
   const liveLane = (key, variant) => heard(variant, laneLevel(key, variant));
@@ -399,7 +399,7 @@ export function createEngine({
     }
     lane.entered = true;
     if (count && listeners.size) {
-      emit({ kind: "hit", layer: layerOf(lane.variant), variant: lane.variant, time: first, accent, count, level: lane.level });
+      emit({ kind: "hit", layer: layerOfVariant(lane.variant), variant: lane.variant, time: first, accent, count, level: lane.level });
     }
   }
 
@@ -434,7 +434,7 @@ export function createEngine({
 
   const openGain = (level, layer) => connectGain(ctx, { stems, bus, side }, level, layer);
   const duckOf = (variant) =>
-    layerOf(variant) === "kick" ? 0 : Math.max(dataOf(variant).duck ?? 0, pump[layerOf(variant)] ?? 0);
+    layerOfVariant(variant) === "kick" ? 0 : Math.max(dataOf(variant).duck ?? 0, pump[layerOfVariant(variant)] ?? 0);
 
   // Gain + input + insert, the insert's LFO starting at `at`.
   const openVoice = (level, layer, insert, at) =>
@@ -442,7 +442,7 @@ export function createEngine({
 
   function openLane(key, variant, backfill, at) {
     const level = liveLane(key, variant);
-    const lane = { variant, level, ...openVoice(level, layerOf(variant), dataOf(variant).insert, at), entered: false };
+    const lane = { variant, level, ...openVoice(level, layerOfVariant(variant), dataOf(variant).insert, at), entered: false };
     duckWith(ctx, lane, side, duckOf(variant));
     // Steps inside the lookahead window were queued before this lane existed.
     // Backfill them so the new variant enters on the very next step instead of
@@ -676,7 +676,7 @@ export function createEngine({
     volumes.set(layer, value);
     if (!ctx) return;
     for (const [key, lane] of lanes) {
-      if (layerOf(lane.variant) !== layer) continue;
+      if (layerOfVariant(lane.variant) !== layer) continue;
       lane.level = liveLane(key, lane.variant);
       moveGain(lane, lane.level, 0.02);
     }
@@ -862,7 +862,7 @@ export function createEngine({
     ensureContext();
     const ev = auditionEvent(id, dataOf(id), note);
     if (!ev) return;
-    const layer = layerOf(id);
+    const layer = layerOfVariant(id);
     const t = ctx.currentTime + SAFETY;
     const shot = openVoice(shotLevel(id), layer, dataOf(id).insert, t);
     shot.chain.trigger(t);
@@ -940,7 +940,7 @@ export function createEngine({
     } else {
       for (const [key, variant] of Object.entries(desired)) {
         const d = dataOf(variant);
-        const { input, chain: insert } = into(laneLevel(key, variant), layerOf(variant), d.insert, duckOf(variant));
+        const { input, chain: insert } = into(laneLevel(key, variant), layerOfVariant(variant), d.insert, duckOf(variant));
         const nudge = (d.nudge ?? 0) / 1000;
         // The kept pass starts on loop 0, so mods sound as on the first loop after ▶.
         for (let i = 0; i < 2 * span; i++) {

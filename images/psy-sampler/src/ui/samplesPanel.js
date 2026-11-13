@@ -9,6 +9,7 @@
 // A recording waits to be heard, dressed with effects (audio/takeFx.js) and
 // named before it goes up the same way.
 import { LAYERS } from "../catalog.js";
+import { hz, pct } from "../audio/params.js";
 import { FX_DRIVES, FX_FILTERS, FX_PRESETS, FX_RANGES, isDry, presetFx, renderFxOffThread, sanitizeFx } from "../audio/takeFx.js";
 import { encodeWav } from "../audio/wav.js";
 import { ACCEPT, FORMATS } from "../import/formats.js";
@@ -45,8 +46,6 @@ const METER_FLOOR_DB = -60;
 
 // The take's effects, in the panel's groups: a slider spec per number
 // (dom.js slider), or "filter" / "drive" / "reverse" for the other controls.
-const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
-const pct = (v) => `${Math.round(v * 100)} %`;
 const FX_GROUPS = {
   voice: [
     { key: "pitch", step: 1, fmt: (v) => `${v > 0 ? "+" : ""}${v} st` },

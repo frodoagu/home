@@ -4,9 +4,10 @@
 // id, so a seed always gives the same kick and the same bass synth, whatever
 // order the sounds come in. FX lengths stay: they time the transitions.
 import { INSERT_PARAMS, SYNTHS } from "./audio/params.js";
+import { layerOfVariant } from "./catalog.js";
 import { DRIVE_TYPES, LFO_SHAPES } from "./audio/insert.js";
 import { defOf, defaultData, paramSpecs } from "./audio/patterns.js";
-import { seeded } from "./editing.js";
+import { seeded } from "./random.js";
 import { hashSeed } from "./share.js";
 
 const SPREAD = 0.2; // of each slider's range, either way
@@ -51,7 +52,6 @@ const LOW_END = 0.6;
 const PHASER_PER = 0.25;
 const LFO_PER = 0.3;
 
-const layerOf = (id) => id.split(".")[0];
 const twentieth = (v) => Math.round(v * 20) / 20; // the insert sliders' 0.05 steps
 
 function nudge(v, p, units) {
@@ -67,7 +67,7 @@ export function synthsFor(id) {
 }
 
 /** May `macro` move `id`? */
-export const moves = (id, macro) => macro !== "motion" || !STILL.includes(layerOf(id));
+export const moves = (id, macro) => macro !== "motion" || !STILL.includes(layerOfVariant(id));
 
 // The ✨ AI's level high (planner.js LEVELS) also builds each sound's insert
 // and echo, from named choices mapped onto values here: "" (or 0) leaves the
@@ -108,10 +108,10 @@ const CUTOFF = INSERT_PARAMS.find((p) => p.key === "cutoff");
 
 /** May the AI set the tweak `key` of `id` to `value`? */
 export function fits(id, key, value) {
-  const allowed = ALLOWED[layerOf(id)];
+  const allowed = ALLOWED[layerOfVariant(id)];
   if (allowed && !allowed.includes(key)) return false;
-  if (key === "filter" && layerOf(id) === "bass" && !BASS_FILTERS.includes(value)) return false;
-  if (key === "distortion" && DRIVES[layerOf(id)] && !DRIVES[layerOf(id)].includes(value)) return false;
+  if (key === "filter" && layerOfVariant(id) === "bass" && !BASS_FILTERS.includes(value)) return false;
+  if (key === "distortion" && DRIVES[layerOfVariant(id)] && !DRIVES[layerOfVariant(id)].includes(value)) return false;
   if (key === "echo" && defOf(id).kind !== "notes") return false;
   if (UNIT_TWEAKS.includes(key)) return Number.isInteger(value) && value !== 0 && Math.abs(value) <= MACRO_MAX;
   return Object.hasOwn(CHOICES, key) && CHOICES[key].includes(value);
@@ -163,7 +163,7 @@ function insertOf(id, macros) {
     else out.amount = twentieth(base.amount / 2);
   } else if (drive > 0 || picked) {
     if (base.drive === "off") out.drive = drive >= MACRO_MAX && fits(id, "distortion", "hard") ? "hard" : "soft";
-    const low = STILL.includes(layerOf(id)) ? LOW_END : 1;
+    const low = STILL.includes(layerOfVariant(id)) ? LOW_END : 1;
     out.amount = twentieth(AI_DRIVE[out.drive][drive] * low);
   }
   if (!moves(id, "motion") || !motion) return out;
