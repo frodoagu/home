@@ -37,10 +37,34 @@ climate:
     device_code: 3340
     controller_data: remote.broadlink_chicos
 
-# Mode the seasonal buttons pick. Outdoor temperature, falling back to the living
-# thermometer when the weather sensor is down.
+# Mode the seasonal buttons pick: cool or heat, with memory.
+#   - below 20 °C outside: heat.
+#   - 26 °C or more: cool.
+#   - in between: cool if the hottest hour of the next 12 reaches 28 °C (a warm
+#     day that starts cool), otherwise whatever it was.
+# The memory (`this.state`) keeps a mild night after a hot day on cool: the
+# instant reading alone flipped to heat at 04:09 and a "prender todo" at 07:50
+# heated at 25.3 °C, with 35 °C forecast. The outdoor temperature falls back to
+# the living thermometer when the weather sensor is down (and then there is no
+# forecast). Re-evaluated every 15 min, when HA starts and when the outdoor
+# reading changes; a trigger-based sensor restores its last state on restart.
 template:
-  - sensor:
+  - trigger:
+      - platform: time_pattern
+        minutes: "/15"
+      - platform: homeassistant
+        event: start
+      - platform: state
+        entity_id: sensor.temperatura_exterior
+    action:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.forecast_casa
+        data:
+          type: hourly
+        response_variable: pronostico
+    sensor:
       - name: "Aires modo estacional"
         unique_id: aires_modo_estacional
         icon: "{{ 'mdi:snowflake' if this.state == 'cool' else 'mdi:fire' }}"
@@ -48,7 +72,17 @@ template:
           {% set exterior = states('sensor.temperatura_exterior') | float(-999) %}
           {% set interior = states('sensor.atc_29a8_temperatura') | float(-999) %}
           {% set t = exterior if exterior > -900 else interior %}
-          {{ 'cool' if t >= 26 else 'heat' }}
+          {% set horas = (pronostico['weather.forecast_casa'].forecast
+                          if pronostico is defined and pronostico
+                             and 'weather.forecast_casa' in pronostico else [])[:12] %}
+          {% set maxima = (horas | map(attribute='temperature') | map('float', -999) | list + [-999]) | max %}
+          {% set antes = this.state if this is defined and this.state in ['cool', 'heat']
+                         else ('cool' if t >= 26 else 'heat') %}
+          {% if t >= 26 %}cool
+          {% elif t < 20 %}heat
+          {% elif maxima >= 28 %}cool
+          {% else %}{{ antes }}
+          {% endif %}
 
 # Scheduled shutdown. One timer backs both ways of asking for it — "in N hours"
 # starts it with that duration, "at HH:MM" converts the picked time into the

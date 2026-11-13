@@ -71,7 +71,10 @@ views:
 
         Calor o frío lo decide la temperatura de afuera: con 26° o más, frío;
 
-        abajo de eso, calor.
+        abajo de 20°, calor. En el medio, frío si en las próximas 12 horas se
+        llega a 28°;
+
+        si no, se queda como estaba.
 
 
         {% set con_chicos = not is_state(''binary_sensor.chicos_en_casa'', ''off'') -%}

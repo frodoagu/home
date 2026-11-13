@@ -516,9 +516,16 @@ except the scheduled shutdown below, which turns all four off.
   over the four entities, guarded with `if` and not a `condition` step — inside a
   repeat a failed condition aborts the whole script instead of skipping the item.
 
-`sensor.aires_modo_estacional` is a template sensor in the same package that
-resolves to `heat` or `cool`: the outdoor temperature against a 26 °C line,
-falling back to the living-room thermometer when the weather sensor is down.
+`sensor.aires_modo_estacional` is a trigger-based template sensor in the same
+package that resolves to `heat` or `cool`, with memory: below **20 °C** outside
+it is `heat`, at **26 °C** or more `cool`, and in between it is `cool` when the
+hottest hour of the next 12 (`weather.get_forecasts`, hourly) reaches **28 °C**,
+otherwise it keeps what it was (`this.state`). It re-evaluates every 15 minutes,
+on HA start and when the outdoor reading changes, and falls back to the
+living-room thermometer (with no forecast) when the weather sensor is down.
+The memory is the point: the instant reading alone flipped to `heat` at 04:09
+after a warm night (25.7 °C), and a "prender todo" at 07:50 heated at 25.3 °C
+with 35 °C forecast for that afternoon.
 
 **Scheduled shutdown.** "Turn everything off in N hours" and "turn everything off
 at HH:MM" are the same mechanism: a single `timer.aires_apagado`, which
