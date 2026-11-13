@@ -611,8 +611,9 @@ script:
 # from cutting the ACs while they're home.
 #
 # Every automation but the display ones reports what it did with a push
-# to Fede's phone, on the "Aires" Android channel. The push is the LAST step, so
-# a failed notify never keeps a unit from switching.
+# to Fede's phone, on the "Aires" Android channel. All share one `tag`, so each
+# push replaces the previous one and the last shows the current state. The push
+# is the LAST step, so a failed notify never keeps a unit from switching.
 # ────────────────────────────────────────────────────────────────────────────
 automation:
   - id: aires_calor_manana
@@ -663,9 +664,10 @@ automation:
           mensaje: >-
             El living está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
             prendí cocina y living en calor 21 °C.
-          extras:
+          extras: &aires_push
             channel: Aires
             notification_icon: mdi:air-conditioner
+            tag: aires
     mode: single
 
   - id: aires_apagar_templado
@@ -701,9 +703,7 @@ automation:
             Afuera llegó a {{ states('sensor.temperatura_exterior') }} °C: apagué
             {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
             | map('lower') | join(', ') }}, que estaban en calor.
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
+          extras: *aires_push
     mode: single
 
   - id: aires_apagado_programado
@@ -724,9 +724,7 @@ automation:
         data:
           titulo: Aires
           mensaje: "Terminó el apagado programado: apagué los cuatro aires."
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
+          extras: *aires_push
     mode: single
 
   - id: aires_display_medianoche
@@ -831,9 +829,7 @@ automation:
             está a {{ states('sensor.atc_29a8_temperatura') | float | round(1) }} °C:
             prendí {{ aires | map('state_attr', 'friendly_name') | map('replace', 'Aire ', '')
             | map('lower') | join(', ') }} en frío 25 °C.
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
+          extras: *aires_push
     mode: single
 
   # Each thermometer triggers its own zone; 09:00 (and a manual run, which has no
@@ -906,9 +902,7 @@ automation:
             ({{ state_attr(z.termometro, 'friendly_name') | lower }}){{ ', ' if not loop.last }}{% endfor %}.
             Apagué {{ apagar | map('state_attr', 'friendly_name') | join(', ') }}.
             Abrí las ventanas.
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
+          extras: *aires_push
     mode: queued
 
   # An arrival is the presence sensor's off -> on only, so the phone was gone
@@ -976,9 +970,7 @@ automation:
             a {{ states(t) | float | round(1) }} °C{{ ', ' if not loop.last }}{% endfor %}.
             Prendí {% for p in planes %}{{ state_attr(p.aire, 'friendly_name') | replace('Aire ', '') | lower }}
             en {{ modos[p.modo] }} {{ '%g' | format(state_attr(p.aire, 'temperature') | float(0)) }} °C{{ ', ' if not loop.last }}{% endfor %}.
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
+          extras: *aires_push
     mode: single
 
   # Fires when the house empties: neither Fede's nor Irupé's phone on Pi-hole
@@ -1021,9 +1013,7 @@ automation:
               mensaje: >-
                 No queda nadie en casa: apagué {{ prendidos | map('state_attr', 'friendly_name')
                 | map('replace', 'Aire ', '') | map('lower') | join(', ') }}.
-              extras:
-                channel: Aires
-                notification_icon: mdi:air-conditioner
+              extras: *aires_push
     mode: single
 
   # Reports every change Fede makes by hand, at home or away. A script run
@@ -1069,8 +1059,5 @@ automation:
             {% else %}
             Quedaron todos apagados.
             {% endif %}
-          extras:
-            channel: Aires
-            notification_icon: mdi:air-conditioner
-            tag: aires_afuera
+          extras: *aires_push
     mode: restart

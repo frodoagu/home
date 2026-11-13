@@ -740,7 +740,8 @@ widget tap, a dashboard button, a thermostat card and a Google Home scene all
 carry the user who started them. Automations never carry a user, so their own
 pushes are not doubled. It runs in `restart` mode behind a 5 s delay, so a button
 that switches four units sends one push with the end state of all of them.
-`tag: aires_afuera` replaces the previous push instead of stacking.
+Every AC push carries `tag: aires` (one shared `&aires_push` anchor), so each one
+replaces the previous push instead of stacking: the last notification is the current state.
 
 Notes that matter when editing them:
 
