@@ -347,9 +347,8 @@ script:
 
   # Fede's bedroom (and so the kids', while they're home) as the only units on:
   # off only when they are ALL on and kitchen and living are off (in any mode),
-  # otherwise them to sleep (`aires_piezas_dormir`) and the rest off. The off frame goes to
-  # the rest even when HA has them off, so a unit started from its remote is
-  # caught too.
+  # otherwise `aires_modo_dormir`. Its off frame goes to the rest even when HA
+  # has them off, so a unit started from its remote is caught too.
   aires_solo_dormitorio_toggle:
     alias: Aires - Toggle solo dormitorio (según la estación)
     icon: mdi:bed-king
@@ -374,10 +373,7 @@ script:
                     - climate.aire_dormitorio
                     - climate.aire_chicos
         default:
-          - action: climate.turn_off
-            target:
-              entity_id: "{{ otros + ([] if chicos else ['climate.aire_chicos']) }}"
-          - action: script.aires_piezas_dormir
+          - action: script.aires_modo_dormir
     mode: single
 
   # ±1 °C on every unit that is ON, each clamped to its own min/max (they differ:
