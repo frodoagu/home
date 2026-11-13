@@ -28,9 +28,9 @@ template:
         event: start
     action:
       - variables:
-          # Minutes since noon (custom_templates/curva.jinja): 23:30 is 690.
+          # Minutes since noon (custom_templates/luces.jinja): 23:30 is 690.
           curva: >-
-            {%- from 'curva.jinja' import curva, sol %}
+            {%- from 'luces.jinja' import curva, sol %}
             {%- set amanecer = sol('next_rising') | int %}
             {%- set p = [[sol('next_setting', 10) | int, 100], [690, 10], [amanecer, 10], [amanecer + 60, 100]] %}
             {{- curva(p) | float | round(0) | int }}
@@ -74,29 +74,27 @@ automation:
             {{ ['light.lampara_oficina', 'light.lampara_dormitorio', 'light.lampara_escalera']
                + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           brillo: "{{ states('sensor.brillo_segun_la_hora') | int }}"
-          simulacion: >-
-            {{- is_state('input_boolean.simulacion_presencia_ausencia', 'on')
-                and is_state('input_boolean.simulacion_presencia_pausa', 'off') }}
+          simulacion: "{% from 'luces.jinja' import simulando %}{{ simulando() | bool }}"
           # An HA start restores each lamp as `unavailable` before the wiz
           # integration loads it, so a lamp that is on comes back through here
           # too and gets the curve, except while the presence simulation runs
           # its own ramp.
           arranque: >-
-            {{- trigger.id == 'prendida'
-                and trigger.from_state.attributes.restored is defined
-                and now() - trigger.from_state.last_changed <= timedelta(minutes=1) }}
+            {%- from 'luces.jinja' import arranque %}
+            {{- trigger.id == 'prendida' and arranque(trigger.from_state) | bool }}
           encendida: >-
             {{- trigger.id == 'prendida' and trigger.entity_id in lamparas
                 and not (arranque and simulacion) }}
           # The lamps still where the curve was before this step; 1-2 % of
           # slack for the 0-255 round trip.
           siguen: >-
+            {%- from 'luces.jinja' import brillo_de %}
             {%- set ns = namespace(lista=[]) %}
             {%- if trigger.id == 'curva' and not simulacion and trigger.from_state is not none
                    and is_number(trigger.from_state.state) %}
             {%- for e in lamparas if is_state(e, 'on') %}
-            {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-            {%- if (pct - trigger.from_state.state | int) | abs <= 2 and pct != brillo %}
+            {%- set ahora = brillo_de(e) | int %}
+            {%- if (ahora - trigger.from_state.state | int) | abs <= 2 and ahora != brillo %}
             {%- set ns.lista = ns.lista + [e] %}
             {%- endif %}
             {%- endfor %}

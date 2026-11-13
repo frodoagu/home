@@ -292,11 +292,11 @@ automation:
                 # only those already on for the ramp, leaving out any already
                 # there (1 % of slack for the 0-255 round trip).
                 destino: >-
+                  {%- from 'luces.jinja' import brillo_de %}
                   {%- set ns = namespace(lista=[]) %}
                   {%- for e in lamparas %}
                   {%- set prendida = is_state(e, 'on') %}
-                  {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-                  {%- set listo = prendida and (pct - brillo) | abs <= 1
+                  {%- set listo = prendida and (brillo_de(e) | int - brillo) | abs <= 1
                         and (state_attr(e, 'color_temp_kelvin') | int(0) - kelvin) | abs <= 50 %}
                   {%- if (prendida or trigger.id != 'rampa') and not listo %}
                   {%- set ns.lista = ns.lista + [e] %}

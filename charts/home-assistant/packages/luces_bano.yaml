@@ -31,9 +31,9 @@ template:
         event: start
     action:
       - variables:
-          # Minutes since noon (custom_templates/curva.jinja): 21:00 is 540.
+          # Minutes since noon (custom_templates/luces.jinja): 21:00 is 540.
           curva: >-
-            {%- from 'curva.jinja' import curva, sol, minutos %}
+            {%- from 'luces.jinja' import curva, sol, minutos %}
             {%- set amanecer = sol('next_rising') | int %}
             {%- set p = [[540, 100, 6500], [570, 100, 5250], [600, 90, 4000], [660, 70, 4000], [720, 40, 4000],
                          [780, 10, 4000], [840, 10, 2200], [amanecer, 10, 2200], [amanecer + 60, 100, 6500]] %}
@@ -88,9 +88,10 @@ automation:
           # Still where the curve was before this step: same brightness (1-2 %
           # of slack for the 0-255 round trip) and same colour.
           sigue: >-
+            {%- from 'luces.jinja' import brillo_de %}
             {%- set antes = trigger.from_state if trigger.id == 'curva' else none %}
             {%- set l = states.light.lampara_bano %}
-            {%- set pct = (l.attributes.brightness | int(0) * 100 / 255) | round(0) | int %}
+            {%- set pct = brillo_de('light.lampara_bano') | int %}
             {{- antes is not none and is_number(antes.state)
                 and (pct - antes.state | int) | abs <= 2
                 and (l.attributes.color_mode == 'rgbw' if antes.attributes.ambar

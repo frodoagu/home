@@ -14,9 +14,7 @@ rest:
         unique_id: pc_fede_ultima_consulta_dns
         device_class: timestamp
         icon: mdi:desktop-tower
-        value_template: &ultima >-
-          {%- set q = value_json.queries | default([]) %}
-          {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
+        value_template: &ultima "{% from 'pihole.jinja' import ultima_consulta %}{{ ultima_consulta(value_json) }}"
   - resource: http://192.168.0.100:8080/api/queries?client_name=pc-noah.lan&length=1
     scan_interval: 60
     timeout: 10
@@ -46,39 +44,38 @@ rest:
         value_template: *ultima
 
 template:
+  # On = a query in the last 5 min. Each one only names its sensor
+  # (`consulta`); the rest is shared (`&prendida`).
   - binary_sensor:
       - name: PC Fede prendida
         unique_id: pc_fede_prendida
         default_entity_id: binary_sensor.pc_fede_prendida
-        device_class: power
-        state: >-
-          {%- set t = states('sensor.pc_fede_ultima_consulta_dns') | as_datetime(none) %}
-          {{- t is not none and now() - t < timedelta(minutes=5) }}
-        availability: "{{ has_value('sensor.pc_fede_ultima_consulta_dns') }}"
+        variables:
+          consulta: sensor.pc_fede_ultima_consulta_dns
+        <<: &prendida
+          device_class: power
+          state: >-
+            {%- set t = states(consulta) | as_datetime(none) %}
+            {{- t is not none and now() - t < timedelta(minutes=5) }}
+          availability: "{{ has_value(consulta) }}"
 
       - name: PC Noah prendida
         unique_id: pc_noah_prendida
         default_entity_id: binary_sensor.pc_noah_prendida
-        device_class: power
-        state: >-
-          {%- set t = states('sensor.pc_noah_ultima_consulta_dns') | as_datetime(none) %}
-          {{- t is not none and now() - t < timedelta(minutes=5) }}
-        availability: "{{ has_value('sensor.pc_noah_ultima_consulta_dns') }}"
+        variables:
+          consulta: sensor.pc_noah_ultima_consulta_dns
+        <<: *prendida
 
       - name: PC Juli prendida
         unique_id: pc_juli_prendida
         default_entity_id: binary_sensor.pc_juli_prendida
-        device_class: power
-        state: >-
-          {%- set t = states('sensor.pc_juli_ultima_consulta_dns') | as_datetime(none) %}
-          {{- t is not none and now() - t < timedelta(minutes=5) }}
-        availability: "{{ has_value('sensor.pc_juli_ultima_consulta_dns') }}"
+        variables:
+          consulta: sensor.pc_juli_ultima_consulta_dns
+        <<: *prendida
 
       - name: Think prendida
         unique_id: think_prendida
         default_entity_id: binary_sensor.think_prendida
-        device_class: power
-        state: >-
-          {%- set t = states('sensor.think_ultima_consulta_dns') | as_datetime(none) %}
-          {{- t is not none and now() - t < timedelta(minutes=5) }}
-        availability: "{{ has_value('sensor.think_ultima_consulta_dns') }}"
+        variables:
+          consulta: sensor.think_ultima_consulta_dns
+        <<: *prendida

@@ -61,12 +61,14 @@ command_line:
         - RecipeId
         - CheckUpState
 
+# Everything below reads `sensor.lavasecarropas_datos`'s attributes and is
+# unavailable while it is (`&datos`).
 template:
   - sensor:
       - name: "Lavasecarropas estado"
         unique_id: lavasecarropas_estado
         icon: mdi:washing-machine
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: &datos "{{ has_value('sensor.lavasecarropas_datos') }}"
         state: >-
           {% set m = state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) %}
           {{ {1: 'En reposo', 2: 'En marcha', 3: 'En pausa',
@@ -76,7 +78,7 @@ template:
       - name: "Lavasecarropas fase"
         unique_id: lavasecarropas_fase
         icon: mdi:water-sync
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set p = state_attr('sensor.lavasecarropas_datos', 'PrPh') | int(-1) %}
           {{ {0: 'Parado', 1: 'Pre-lavado', 2: 'Lavando', 3: 'Aclarado',
@@ -96,7 +98,7 @@ template:
         state_class: measurement
         icon: mdi:timer-sand
         availability: >-
-          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.lavasecarropas_datos')
              and state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(65535) != 65535 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0) }}"
 
@@ -107,7 +109,7 @@ template:
         device_class: timestamp
         icon: mdi:clock-end
         availability: >-
-          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.lavasecarropas_datos')
              and state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 2 }}
         state: >-
           {{ (now() + timedelta(minutes = state_attr('sensor.lavasecarropas_datos', 'RemTime') | int(0))).isoformat() }}
@@ -120,7 +122,7 @@ template:
         state_class: measurement
         icon: mdi:thermometer-water
         availability: >-
-          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.lavasecarropas_datos')
              and state_attr('sensor.lavasecarropas_datos', 'Temp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Temp') | int(0) }}"
 
@@ -132,7 +134,7 @@ template:
         state_class: measurement
         icon: mdi:rotate-3d-variant
         availability: >-
-          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.lavasecarropas_datos')
              and state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(255) != 255 }}
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'SpinSp') | int(0) * 100 }}"
 
@@ -150,7 +152,7 @@ template:
       - name: "Lavasecarropas programa"
         unique_id: lavasecarropas_programa
         icon: mdi:playlist-music
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set p = state_attr('sensor.lavasecarropas_datos', 'Pr') | int(-1) %}
           {% set nombres = {
@@ -181,7 +183,7 @@ template:
         unique_id: lavasecarropas_nivel_suciedad
         icon: mdi:liquid-spot
         availability: >-
-          {{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.lavasecarropas_datos')
              and state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(255) != 255 }}
         state: >-
           {% set n = state_attr('sensor.lavasecarropas_datos', 'SLevel') | int(-1) %}
@@ -194,7 +196,7 @@ template:
       - name: "Lavasecarropas nivel de secado"
         unique_id: lavasecarropas_nivel_secado
         icon: mdi:tumble-dryer
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set d = state_attr('sensor.lavasecarropas_datos', 'DryT') | int(-1) %}
           {{ {0: 'Sin secado', 1: 'Secado para planchar', 2: 'Secado para colgar',
@@ -204,7 +206,7 @@ template:
       - name: "Lavasecarropas inicio diferido"
         unique_id: lavasecarropas_inicio_diferido
         icon: mdi:clock-start
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set d = state_attr('sensor.lavasecarropas_datos', 'DelVal') | int(255) %}
           {{ 'Sin programar' if d == 255 else d }}
@@ -213,7 +215,7 @@ template:
       - name: "Lavasecarropas error"
         unique_id: lavasecarropas_error
         icon: mdi:alert-circle-outline
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set e = state_attr('sensor.lavasecarropas_datos', 'Err') | int(255) %}
           {{ 'Sin error' if e == 255 else e }}
@@ -221,7 +223,7 @@ template:
       - name: "Lavasecarropas opciones activas"
         unique_id: lavasecarropas_opciones_activas
         icon: mdi:tune-variant
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {% set ns = namespace(activas = []) %}
           {% for n in range(1, 9) %}
@@ -236,20 +238,20 @@ template:
         unique_id: lavasecarropas_en_marcha
         device_class: running
         icon: mdi:washing-machine
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 2 }}"
 
       # MachMd 7 and 8 are both "Finished" in the integration.
       - name: "Lavasecarropas ciclo terminado"
         unique_id: lavasecarropas_ciclo_terminado
         icon: mdi:check-circle-outline
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) in [7, 8] }}"
 
       - name: "Lavasecarropas problema"
         unique_id: lavasecarropas_problema
         device_class: problem
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: >-
           {{ state_attr('sensor.lavasecarropas_datos', 'MachMd') | int(-1) == 6
              or state_attr('sensor.lavasecarropas_datos', 'Err') | int(255) != 255 }}
@@ -257,7 +259,7 @@ template:
       - name: "Lavasecarropas vapor"
         unique_id: lavasecarropas_vapor
         icon: mdi:kettle-steam
-        availability: "{{ states('sensor.lavasecarropas_datos') not in ['unknown', 'unavailable'] }}"
+        availability: *datos
         state: "{{ state_attr('sensor.lavasecarropas_datos', 'Steam') | int(0) != 0 }}"
 
 # The alert fires on a state TRANSITION, never on the remaining time: that
@@ -290,7 +292,7 @@ automation:
           # hence the guard.
           mensaje: >-
             {% set prog = states('sensor.lavasecarropas_programa') %}
-            Termino el ciclo{{ ' (' ~ prog ~ ')' if prog not in ['unknown', 'unavailable'] else '' }}.
+            Termino el ciclo{{ ' (' ~ prog ~ ')' if has_value('sensor.lavasecarropas_programa') else '' }}.
             Hay que sacar la ropa.
           extras:
             channel: Lavasecarropas

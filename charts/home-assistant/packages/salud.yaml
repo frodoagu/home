@@ -131,7 +131,7 @@ automation:
     condition:
       - condition: template
         value_template: >-
-          {{ states('sensor.backup_last_successful_automatic_backup') not in ['unknown', 'unavailable']
+          {{ has_value('sensor.backup_last_successful_automatic_backup')
              and (now() - as_datetime(states('sensor.backup_last_successful_automatic_backup'))).total_seconds() > 172800 }}
     action:
       - action: script.avisar_telegram
