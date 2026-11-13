@@ -19,6 +19,9 @@ jobs:
       contents: read # to checkout the repo
     defaults:
       run:
+        # bash (unlike the default shell) runs with pipefail, so `| tee` keeps
+        # a failing build or test run failing.
+        shell: bash
         working-directory: ${{ inputs.dir }}
     steps:
       - name: ⬇️ Checkout
