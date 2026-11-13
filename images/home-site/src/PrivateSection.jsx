@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { ArrowUpRight, Lock, LogOut, ShieldAlert } from "lucide-react";
+import { Lock, LogOut, ShieldAlert } from "lucide-react";
 import { useAuth } from "./auth/AuthProvider";
 import { getCategoryLabel, privateLinks } from "./apps/registry";
-import { localizeText, useLanguage } from "./i18n/LanguageProvider";
+import AppGrid from "./components/AppGrid";
+import { useLanguage } from "./i18n/LanguageProvider";
 
 // The private half of the landing: external links to other self-hosted
 // services, revealed only after a Google sign-in with an allowed email.
@@ -73,11 +74,7 @@ export default function PrivateSection({ active }) {
       ) : !authorized ? (
         <NotAuthorized />
       ) : visible.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((link) => (
-            <LinkCard key={link.slug} link={link} />
-          ))}
-        </div>
+        <AppGrid apps={visible} />
       ) : (
         <p className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-5 py-8 text-center text-sm text-slate-500">
           {txt.empty} <span className="text-slate-300">{getCategoryLabel(active, language)}</span>.
@@ -176,46 +173,5 @@ function NotAuthorized() {
         </p>
       </div>
     </div>
-  );
-}
-
-function LinkCard({ link }) {
-  const { language } = useLanguage();
-  const { icon: Icon, accent } = link;
-  return (
-    <a
-      href={link.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group relative flex flex-col rounded-xl border border-slate-800 bg-slate-900 p-5
-                 transition-colors hover:border-slate-600 hover:bg-slate-800/60"
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <div
-          className="rounded-lg border border-slate-800 bg-slate-950 p-2"
-          style={{ color: accent }}
-        >
-          <Icon size={20} />
-        </div>
-        <ArrowUpRight
-          size={18}
-          className="text-slate-600 transition-colors group-hover:text-slate-300"
-        />
-      </div>
-      <h3 className="text-base font-semibold text-slate-100">{localizeText(link.title, language)}</h3>
-      <p className="mt-1 flex-1 text-sm text-slate-400">{localizeText(link.description, language)}</p>
-      {localizeText(link.tag, language) && (
-        <span
-          className="mt-3 self-start rounded-full px-2 py-0.5 text-[10px] font-medium"
-          style={{
-            color: accent,
-            backgroundColor: accent + "14",
-            border: `1px solid ${accent}33`,
-          }}
-        >
-          {localizeText(link.tag, language)}
-        </span>
-      )}
-    </a>
   );
 }
