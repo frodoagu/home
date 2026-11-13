@@ -20,6 +20,7 @@
 // Both scale the lane, under the layer's level and over the sound's own
 // volume (`level`, which the autopilot rides). A user's sample replaces the
 // voice, so it skips both.
+import { dbToGain } from "./music.js";
 import { baseOf, defOf } from "./patterns.js";
 
 export const SYNTH_DB = {
@@ -128,11 +129,9 @@ export const DB = {
   "fx.tapeStop": -7.2,
 };
 
-const linear = (db = 0) => 10 ** (db / 20);
-
 /** The gain `id` plays at, as `data` (its live data) has it: 1 for a sample. */
 export function trimOf(id, data) {
   if (data.sample) return 1;
-  const synth = defOf(id).kind === "notes" ? linear(SYNTH_DB[data.synth]) : 1;
-  return linear(DB[baseOf(id)]) * synth;
+  const synth = defOf(id).kind === "notes" ? dbToGain(SYNTH_DB[data.synth]) : 1;
+  return dbToGain(DB[baseOf(id)]) * synth;
 }

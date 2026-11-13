@@ -24,6 +24,7 @@
 // Web Audio compressors add an automatic makeup gain, from their threshold,
 // knee and ratio alone; the gain after each one takes it back, so `drive` is
 // the chain's whole gain below the thresholds.
+import { dbToGain } from "./music.js";
 
 const BUTTERWORTH_DB = -3.0103; // Q 1/√2, as a lowpass or highpass reads it (dB)
 const BUTTERWORTH = Math.SQRT1_2; // as an allpass reads it (linear)
@@ -47,7 +48,6 @@ const CEILING_DB = -1;
 const CEILING_KNEE_DB = -1.8; // the ceiling's curve is an identity up to here
 const CEILING_POINTS = 4097;
 
-const gainOf = (db) => 10 ** (db / 20);
 
 function gain(ctx, value = 1) {
   const g = ctx.createGain();
@@ -126,16 +126,16 @@ function bands(ctx, input, output) {
   [lowPhase, midOut, highOut].forEach((last, i) => {
     const { trim, attack, release } = BANDS[i];
     last
-      .connect(gain(ctx, gainOf(trim)))
+      .connect(gain(ctx, dbToGain(trim)))
       .connect(compressor(ctx, { ...BAND_COMP, attack, release }))
-      .connect(gain(ctx, gainOf(-trim - BAND_MAKEUP_DB)))
+      .connect(gain(ctx, dbToGain(-trim - BAND_MAKEUP_DB)))
       .connect(output);
   });
 }
 
 // Identity up to the knee, then a tanh bend that tops out at the ceiling.
 // Past ±1 a waveshaper holds its curve's ends: nothing gets through above it.
-export function ceilingCurve(points = CEILING_POINTS, knee = gainOf(CEILING_KNEE_DB), top = gainOf(CEILING_DB)) {
+export function ceilingCurve(points = CEILING_POINTS, knee = dbToGain(CEILING_KNEE_DB), top = dbToGain(CEILING_DB)) {
   const room = top - knee;
   return Float32Array.from({ length: points }, (_, i) => {
     const x = (2 * i) / (points - 1) - 1;
@@ -155,7 +155,7 @@ export function buildMaster(ctx) {
   input.connect(subIn);
   const mono = gain(ctx);
   monoBass(ctx, subOut, mono);
-  const drive = gain(ctx, gainOf(DRIVE_DB));
+  const drive = gain(ctx, dbToGain(DRIVE_DB));
   bands(ctx, mono, drive);
   const ceiling = ctx.createWaveShaper();
   ceiling.curve = ceilingCurve();
@@ -163,7 +163,7 @@ export function buildMaster(ctx) {
   const output = gain(ctx);
   drive
     .connect(compressor(ctx, LIMITER))
-    .connect(gain(ctx, gainOf(-LIMITER_MAKEUP_DB)))
+    .connect(gain(ctx, dbToGain(-LIMITER_MAKEUP_DB)))
     .connect(ceiling)
     .connect(output);
   return { input, output };

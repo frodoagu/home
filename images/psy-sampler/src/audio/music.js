@@ -3,6 +3,8 @@
 export const midiToFreq = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
 export const centsToRatio = (cents) => 2 ** (cents / 1200);
+// A missing level is 0 dB.
+export const dbToGain = (db = 0) => 10 ** (db / 20);
 
 // MIDI numbers for the notes the default patterns use. A1 = 55 Hz.
 export const NOTE = {
