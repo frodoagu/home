@@ -1073,6 +1073,13 @@ Gotchas:
   stale cached JS — it's not actually a config problem.
 - Lovelace resources are read at startup in storage mode, so a new resource needs an
   HA restart to load.
+- The circlepad renders in its own shadow DOM, so the card's `styles` can't restyle
+  it (a `.circlepad` rule there matches nothing): its look goes in the pad's own
+  `styles`. The card also hands the pad's config to its center button, so those
+  rules land in both shadow roots. A `:host` rule there would give the center
+  button the pad's size. The card appends `!important` to every user declaration,
+  which is how they beat its built-in CSS (a 340px pad, black ring, and an OK
+  button painted the same grey as its icon).
 
 > Fresh-PVC recovery: re-download the JS into `/config/www/` and re-add the
 > resource, then restart and hard-refresh. The dashboard itself comes back from
