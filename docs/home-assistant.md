@@ -1080,6 +1080,14 @@ Gotchas:
   button the pad's size. The card appends `!important` to every user declaration,
   which is how they beat its built-in CSS (a 340px pad, black ring, and an OK
   button painted the same grey as its icon).
+- **HA 2026.11 dropped `md-ripple`**, and v4.11.3 still renders one in every
+  button (card 4.12.5 moved to `ha-ripple`). Undefined, it becomes an in-flow flex
+  item at `height: 100%` and pushes each button's icon to the top. The 24px
+  buttons don't show it because their icon fills them, but the pad's arrows land
+  half a button up and to the left. The pad's `remote-button::part(ripple)
+  { position: absolute }` takes it out of the flow. Upgrading the card fixes it
+  too, but 4.12 reworked how actions with no target get autofilled, and every
+  button here relies on that, so test the buttons after an upgrade.
 
 > Fresh-PVC recovery: re-download the JS into `/config/www/` and re-add the
 > resource, then restart and hard-refresh. The dashboard itself comes back from

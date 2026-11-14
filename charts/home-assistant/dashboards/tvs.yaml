@@ -44,10 +44,10 @@ views:
       styles: ':host { --icon-color: #ff5252; }'
     - type: circlepad
       name: circlepad
-      label: OK
       # The pad has its own shadow DOM, out of reach of the card's `styles`.
       # The card hands this config to the center button too, so these rules
-      # land in both and must not use `:host`.
+      # land in both and must not use `:host`. The ripple rule keeps the
+      # arrows centred: see docs/home-assistant.md, "IR remote dashboard".
       styles: |
         .circlepad {
           width: 210px;
@@ -55,14 +55,13 @@ views:
           outline: none;
           --icon-size: 32px;
           --icon-color: var(--primary-text-color);
-          --label-color: var(--primary-text-color);
         }
         #center::part(button) {
           background: rgba(127, 127, 127, 0.3);
           outline: none;
         }
-        .label {
-          font-size: 16px;
+        remote-button::part(ripple) {
+          position: absolute;
         }
       tap_action:
         action: perform-action
