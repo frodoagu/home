@@ -1,0 +1,106 @@
+# HA package: a lamp's colour lasts until the next morning. At 07:00 every lamp
+# that is off goes back to its white without turning on, so a colour or WiZ
+# scene from the night before doesn't come back the next time it's switched on.
+# One on at 07:00 keeps its colour and goes back to white when it's turned off.
+# Only the colour: the brightness stays as it was.
+#
+# A WiZ lamp that is off takes a setPilot with `state: false`: it stores the
+# white and stays off. light.turn_off can't carry a colour, so this talks to
+# the lamps over their local UDP API. A lamp off at the wall is out of reach;
+# luces_llave.yaml and luces_salon.yaml give it its white when the power comes
+# back. See docs/home-assistant.md#colours-back-to-white.
+
+shell_command:
+  # setPilot to one WiZ lamp (also velador_dormitorio.yaml). `pilot` is the
+  # params, as JSON or as a mapping. A template in the command makes HA exec it
+  # without a shell, splitting it with shlex, so the code stays inside double
+  # quotes and the arguments inside single quotes.
+  wiz_enviar: |-
+    python3 -c "
+    import json, socket, sys
+    m = json.dumps({'id': 1, 'method': 'setPilot', 'params': json.loads(sys.argv[2])}).encode()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(1)
+    for _ in range(3):
+        s.sendto(m, (sys.argv[1], 38899))
+        try:
+            if (json.loads(s.recv(2048)).get('result') or {}).get('success'):
+                sys.exit(0)
+        except Exception:
+            pass
+    sys.exit(1)
+    " '{{ host }}' '{{ pilot if pilot is string else pilot | to_json }}'
+
+automation:
+  - id: luces_colores
+    alias: Luces - Volver al blanco a las 7
+    description: >-
+      Todos los días a las 7 vuelve al blanco las lámparas apagadas que quedaron
+      en un color o una escena, sin prenderlas, así la próxima vez se prenden en
+      blanco. Una prendida a las 7 sigue con su color y vuelve al blanco cuando
+      se apaga. No toca el brillo.
+    trigger:
+      - platform: time
+        at: "07:00:00"
+        id: siete
+      - platform: state
+        entity_id:
+          - light.velador_dormitorio_zona_a
+          - light.velador_dormitorio_zona_b
+          - light.velador_oficina
+          - light.lampara_oficina
+          - light.lampara_dormitorio
+          - light.lampara_escalera
+          - light.lampara_salon
+          - light.lampara_bano
+        from: "on"
+        to: "off"
+        id: apagada
+    variables:
+      # The bedroom table lamp's zones are setPilot's `devices` 1 and 2.
+      destinos:
+        light.velador_dormitorio_zona_a: { host: velador-dormitorio.lan, devices: 1 }
+        light.velador_dormitorio_zona_b: { host: velador-dormitorio.lan, devices: 2 }
+        light.velador_oficina: { host: velador-oficina.lan }
+        light.lampara_oficina: { host: lampara-oficina.lan }
+        light.lampara_dormitorio: { host: lampara-dormitorio.lan }
+        light.lampara_escalera: { host: lampara-escalera.lan }
+        light.lampara_salon: { host: lampara-salon.lan }
+        light.lampara_bano: { host: lampara-bano.lan }
+      # PC on (or unknown): the office table lamp's violet is luces_adentro.yaml's.
+      lamparas: >-
+        {{ destinos | list if is_state('binary_sensor.pc_fede_prendida', 'off')
+           else destinos | reject('eq', 'light.velador_oficina') | list }}
+      # Warm white, or the lamp's own white for the hour.
+      blancos:
+        light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(2700) }}"
+        light.lampara_bano: "{{ state_attr('sensor.lampara_bano_brillo', 'kelvin') | int(2700) }}"
+      siete: >-
+        {{ (today_at('07:00') - timedelta(days=0 if now() >= today_at('07:00') else 1)).isoformat() }}
+      # At 07:00 the lamps that are off. On a turn-off, that lamp if it showed a
+      # colour or a scene and had been on since before the last 07:00 (an HA
+      # start counts as a turn-on).
+      volver: >-
+        {%- if trigger.id == 'siete' %}
+        {{- lamparas | select('is_state', 'off') | list }}
+        {%- else %}
+        {%- set antes = trigger.from_state %}
+        {%- set blanco = antes.attributes.color_mode == 'color_temp' and antes.attributes.effect in [none, 'off'] %}
+        {{- [trigger.entity_id] if trigger.entity_id in lamparas and not blanco
+            and antes.last_changed < siete | as_datetime else [] }}
+        {%- endif %}
+    condition:
+      - "{{ volver | count > 0 }}"
+    action:
+      - repeat:
+          for_each: "{{ volver }}"
+          sequence:
+            - action: shell_command.wiz_enviar
+              continue_on_error: true
+              data:
+                host: "{{ destinos[repeat.item].host }}"
+                pilot: >-
+                  {%- set d = destinos[repeat.item] %}
+                  {%- set p = {'state': false, 'temp': blancos.get(repeat.item, 2700) | int} %}
+                  {{- (dict(p, devices=d.devices) if d.devices is defined else p) | to_json }}
+    mode: queued

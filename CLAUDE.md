@@ -458,6 +458,12 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   Never trigger on that occupancy entity: an off from HA or the app leaves it
   `on`, so it can't fire again until the sensor's timeout. See
   docs/home-assistant.md#bathroom-light.
+- **home-assistant — a WiZ lamp can change colour while OFF.** A UDP `setPilot`
+  with `"state": false` next to a `temp` stores the white and the lamp stays
+  off (`getPilot` reads it back; Squire per zone and RGBW Tunable, tested).
+  `light.turn_off` can't carry a colour, so `packages/luces_colores.yaml` resets
+  last night's colours at 07:00 through `shell_command.wiz_enviar` (shared with
+  `velador_dormitorio.yaml`). See docs/home-assistant.md#colours-back-to-white.
 - **HA packages are NOT Helm-templated** (`.Files.Get` raw in
   `configmap-packages.yaml`), so no Helm value can be injected into one. A secret
   could only reach a package as an **env var** read back with HA's `!env_var` tag,

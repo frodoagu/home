@@ -48,7 +48,7 @@ How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
   (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lavarropas.yaml`,
-  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `luces_llave.yaml`, `luces_salon.yaml`,
+  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `luces_colores.yaml`, `luces_llave.yaml`, `luces_salon.yaml`,
   `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`, `tv.yaml`, `velador_dormitorio.yaml`,
   `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
@@ -1214,7 +1214,7 @@ builds two lights on top of it:
   `_zona_b` (*Velador dormitorio abajo*) are template lights. They read
   state, brightness, RGB and colour temperature from those attributes, and their
   actions call `script.velador_dormitorio_zona`. That script sends a `setPilot`
-  through `shell_command.velador_dormitorio_enviar` and refreshes the sensor
+  through `shell_command.wiz_enviar` (luces_colores.yaml) and refreshes the sensor
   right away.
 - If the lamp doesn't answer, both lights go `unavailable`. They don't keep a
   stale state.
@@ -1608,6 +1608,42 @@ The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
   takes it from there.
 - A new lamp on a wall switch joins by its entity in both `lamparas` and the
   `prendida` trigger.
+
+## Colours back to white
+
+A colour or a WiZ scene picked for a party lasts until the next morning.
+[`packages/luces_colores.yaml`](../charts/home-assistant/packages/luces_colores.yaml)
+(`automation.luces_volver_al_blanco_a_las_7`) puts the WiZ lamps back to their
+white **without turning them on**, so the next turn-on (Google, the app, HA)
+comes up in white instead of last night's colour:
+
+| When | Lamps | White |
+|---|---|---|
+| 07:00 | Every one that is **off** | Warm white (2700 K); the living room and the bathroom their own curve's white for that moment |
+| A lamp turns off | That one, if it showed a colour or a scene and had been **on since before the last 07:00** | Same |
+
+So a lamp still on at 07:00 keeps its colour until it's turned off, and a
+colour picked during the day stays until the next 07:00. Only the colour
+changes: brightness is left as it was.
+
+- **How an off lamp changes colour.** A WiZ lamp that gets a `setPilot` with
+  `"state": false` next to a `temp` stores that white and stays off; `getPilot`
+  reads it back while it's off. Tested on the Squire (per zone, `devices` 1 and
+  2) and the RGBW Tunable (2026-11-15). `light.turn_off` can't carry a colour,
+  so this goes over UDP through `shell_command.wiz_enviar` (host + pilot), the
+  same command the [bedroom table lamp](#bedroom-table-lamp-wiz-squire) uses.
+- **Lamps:** both zones of the bedroom table lamp, the office table lamp, the
+  office, bedroom and stairs wall-switch lamps, the living room and the
+  bathroom. The office table lamp is left out while PC-Fede isn't `off`: its
+  violet is the [PC's](#office-table-lamp-while-pc-fede-is-on), not a party.
+- **Off at the wall is out of reach** (`unavailable`), and needs nothing: back
+  on, the [wall-switch lamps](#wall-switch-lamps) and the
+  [living room](#living-room-lamp) get their white anyway.
+- **An HA start counts as a turn-on**: it restores each lamp through
+  `unavailable`, so a coloured lamp on since before 07:00 that is turned off
+  after a restart keeps its colour until the next 07:00.
+- A new WiZ lamp joins with its entity in `destinos` (host, and `devices` for
+  a zone) and in the turn-off trigger.
 
 ## Kids calendar
 

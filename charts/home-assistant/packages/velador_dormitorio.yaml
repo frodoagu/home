@@ -67,26 +67,7 @@ rest:
           {%- set q = value_json.queries | default([]) %}
           {{- ((q[0].time if q else 0) | as_datetime).isoformat() }}
 
-shell_command:
-  # `pilot` is the setPilot params, as JSON or as a mapping. A template in the
-  # command makes HA exec it without a shell, splitting it with shlex, so the
-  # code stays inside double quotes and the JSON inside single quotes.
-  velador_dormitorio_enviar: |-
-    python3 -c "
-    import json, socket, sys
-    m = json.dumps({'id': 1, 'method': 'setPilot', 'params': json.loads(sys.argv[1])}).encode()
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(1)
-    for _ in range(3):
-        s.sendto(m, ('velador-dormitorio.lan', 38899))
-        try:
-            if (json.loads(s.recv(2048)).get('result') or {}).get('success'):
-                sys.exit(0)
-        except Exception:
-            pass
-    sys.exit(1)
-    " '{{ pilot if pilot is string else pilot | to_json }}'
-
+# Commands go out through `shell_command.wiz_enviar` (luces_colores.yaml).
 script:
   velador_dormitorio_zona:
     alias: Velador dormitorio - Enviar a una zona
@@ -123,9 +104,10 @@ script:
         selector:
           number: { min: 1, max: 35 }
     sequence:
-      - action: shell_command.velador_dormitorio_enviar
+      - action: shell_command.wiz_enviar
         continue_on_error: true
         data:
+          host: velador-dormitorio.lan
           # WiZ ignores dimming below 10.
           pilot: >-
             {%- set p = {'devices': zona | int, 'state': encender | bool} %}
@@ -354,9 +336,10 @@ automation:
           sequence:
             # A scene carries `sceneId`, a white `temp`, a colour `r`/`g`/`b`
             # (+ `c`/`w`); getPilot may report a stale `temp` next to a scene.
-            - action: shell_command.velador_dormitorio_enviar
+            - action: shell_command.wiz_enviar
               continue_on_error: true
               data:
+                host: velador-dormitorio.lan
                 pilot: >-
                   {%- set z = repeat.item %}
                   {%- set ns = namespace(p={'devices': z.devices, 'state': z.state}) %}
