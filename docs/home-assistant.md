@@ -48,7 +48,7 @@ How it works:
 
 - YAML files under [`charts/home-assistant/packages/`](../charts/home-assistant/packages/)
   (`chicos.yaml`, `climate.yaml`, `gas.yaml`, `lavarropas.yaml`,
-  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `luces_colores.yaml`, `luces_llave.yaml`, `luces_salon.yaml`,
+  `luces_adentro.yaml`, `luces_afuera.yaml`, `luces_bano.yaml`, `luces_colores.yaml`, `luces_llave.yaml`,
   `presencia.yaml`, `salud.yaml`, `simulacion_presencia.yaml`, `tv.yaml`, `velador_dormitorio.yaml`,
   `weather.yaml`) are globbed into a ConfigMap
   (`templates/configmap-packages.yaml`, same pattern as the monitoring dashboards)
@@ -806,8 +806,8 @@ renders the message, so it can use the automation's own variables.
 
 ## Lamp curves (`custom_templates/curva.jinja`)
 
-The bathroom, wall-switch and living-room lamps each follow a curve over the
-day: brightness or white in straight lines between points in time. The shared
+The bathroom and wall-switch lamps each follow a curve over the day:
+brightness (and the bathroom's white) in straight lines between points in time. The shared
 part is [`custom_templates/curva.jinja`](../charts/home-assistant/custom_templates/curva.jinja),
 which the chart mounts read-only at `/config/custom_templates`. It has three
 macros: `minutos` (minutes since noon), `sol` (a `sun.sun` time in those minutes)
@@ -818,7 +818,7 @@ Two more set how bright each lamp gets in the evening: `techo(e)` is a lamp's
 top (80 % for the living room, 100 % for the rest), and `nivel(e, brillo)`
 squeezes a level on the lamps' 100 % to 10 % line under that top (100 → 80,
 55 → 45, 10 → 10 for the living room). The [evening lamps](#evening-lamps), the
-living room's [power-cut path](#living-room-lamp) and the
+[wall-switch lamps](#wall-switch-lamps) and the
 [presence simulation](#presence-simulation) read them, so the 80 lives in one
 place.
 Macros return text, so pipe the result through `| int` or `| float`. The file
@@ -1403,16 +1403,17 @@ the living-room lamp while Fede is home
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | The lamps that are off come on at **100 %**, warm white (2700 K); the living room at **80 %** in [its own white](#living-room-lamp). One already on keeps its brightness and colour |
+| Sunset + 10 min | The lamps that are off come on at **100 %**, warm white (2700 K); the living room at **80 %**. One already on keeps its brightness and colour |
 | Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold (the living room's line runs 80 → 10, curva.jinja `nivel`) |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, in the same whites |
 | 01:30 | The four lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
 | PC-Fede goes off between 01:30 and dawn | The four lamps **off**: with the PC on at 01:30, the turn-off waits for it |
 
-The stairs lamp is a [wall-switch lamp](#wall-switch-lamps): this only reaches
-it while its switch is left on (off at the wall it's `unavailable`). The
-office and bedroom wall-switch lamps aren't part of it. The ramp is the same
-line as the wall-switch curve, so the two agree.
+The stairs and living-room lamps are [wall-switch lamps](#wall-switch-lamps):
+this only reaches them while their switch is left on (off at the wall they're
+`unavailable`). The office and bedroom wall-switch lamps aren't part of it. The
+ramp is the same line as the wall-switch curve (`nivel` for the living room), so
+the two agree.
 
 - **The ramp only lowers a lamp that is following it.** One dimmed by hand sits
   below the ramp; one turned up by hand sits above where the ramp was 30 min
@@ -1519,49 +1520,12 @@ recomputed every minute.
 - Amber has no blue channel at all; on a tunable-white lamp without RGB, HA
   turns it into its warmest colour temperature (2200 K on WiZ).
 
-## Living-room lamp
-
-The living room has a WiZ RGBW Tunable lamp (`light.lampara_salon`, reserved as
-`lampara-salon` → `192.168.0.63`).
-[`packages/luces_salon.yaml`](../charts/home-assistant/packages/luces_salon.yaml)
-moves its white with the sun, in straight lines:
-
-| From | To | Colour |
-|---|---|---|
-| Sunrise | Sunrise + 1 h | 2700 K up to 6500 K |
-| Sunrise + 1 h | Sunset | 6500 K (cool) |
-| Sunset | Sunset + 2 h | 6500 K down to 4000 K (neutral) |
-| Sunset + 2 h | 23:30 | 4000 K down to 2700 K (warm) |
-| 23:30 | Sunrise | 2700 K |
-
-The curve is `sensor.lampara_salon_blanco`, recomputed every minute in 50 K
-steps.
-
-- **Colour temperature only.** The lamp takes the curve when it comes on and on
-  HA start, and follows it while it's on. It never turns the lamp on or off and
-  never touches its brightness. The [evening lamps](#evening-lamps) turn it on
-  straight into the curve's white, so it doesn't flash warm first.
-- **It follows the curve only while the lamp is still on it** (±50 K of where
-  the curve was). A white picked by hand stays until the next turn-on.
-- **A colour or a WiZ scene is left alone**: it only acts while the lamp's
-  `color_mode` is `color_temp` with no effect. Back to white from the app, it
-  picks the curve up at the next turn-on.
-- **Except after a power cut or an HA start.** The lamp is a table lamp on a
-  wall switch, and back from `unavailable` it boots in its last state. Then it
-  gets the curve's white and the [wall-switch lamps'](#wall-switch-lamps)
-  brightness for the hour (`sensor.brillo_segun_la_hora`, the evening ramp's
-  line) squeezed under its 80 % top (`nivel`, [Lamp curves](#lamp-curves-custom_templatescurvajinja)),
-  whatever it was showing. An HA start restores it as `unavailable` too,
-  so it gets the same, except while the presence simulation runs.
-- Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
-  of day (today's or tomorrow's, a minute or two apart).
-
 ## Wall-switch lamps
 
 The office and the bedroom each have a WiZ RGBW Tunable on a **plain wall
-switch**, and so do the stairs to the kids' room and the office table lamp
-(*Velador oficina*, also one of the [evening lamps](#evening-lamps); while
-PC-Fede is on it is violet and this curve leaves it alone):
+switch**, and so do the stairs to the kids' room, the living room and the office
+table lamp (*Velador oficina*, also one of the [evening lamps](#evening-lamps);
+while PC-Fede is on it is violet and this curve leaves it alone):
 
 | Lamp | Entity | Reservation |
 |---|---|---|
@@ -1569,6 +1533,7 @@ PC-Fede is on it is violet and this curve leaves it alone):
 | *Velador oficina* | `light.velador_oficina` | `velador-oficina` → `192.168.0.61` |
 | *Lámpara dormitorio* | `light.lampara_dormitorio` | `lampara-dormitorio` → `192.168.0.65` |
 | *Lámpara escalera* | `light.lampara_escalera` | `lampara-escalera` → `192.168.0.66` |
+| *Lámpara salón* | `light.lampara_salon` | `lampara-salon` → `192.168.0.63` |
 
 Off at the wall means no power: HA sees the lamp go `unavailable`, and switched
 back on it boots in its last state.
@@ -1583,7 +1548,10 @@ straight lines:
 | Sunset + 10 min | 23:30 | 100 % down to 10 % |
 | 23:30 | Sunrise | 10 % |
 
-The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
+The curve is `sensor.brillo_segun_la_hora`, recomputed every minute. The living
+room tops out at **80 %**: it gets the same line squeezed under that top
+(`nivel`, [Lamp curves](#lamp-curves-custom_templatescurvajinja)), 80 % by day
+down to 10 % at 23:30.
 
 - **Switched on at the wall** (`unavailable` → `on`), a lamp goes to the curve's
   level in warm white at once. It boots in its last state first, so it shows
@@ -1596,14 +1564,18 @@ The curve is `sensor.brillo_segun_la_hora`, recomputed every minute.
   `unavailable`, so each one that is on gets the curve's level as soon as the
   wiz integration loads it, a level set by hand included. Not while the
   presence simulation runs (below).
+- **A colour or a scene from the app stays** while the lamp is on: only the
+  brightness follows the curve. It goes back to warm white at the next
+  turn-on at the wall, or at 07:00 ([Colours back to white](#colours-back-to-white)).
 - **HA sees it back within a second.** A lamp off at the wall leaves its wiz
   config entry in `setup_retry`, whose backoff grows to 10 min, but at boot the
   lamp asks Pi-hole for `ntp.wiz.world` and HA picks it up at once: the office
   table lamp booted at 23:46:59 and was `on` in HA at 23:47:00 (2026-10-28).
 - **Not while the [presence simulation](#presence-simulation) runs** (absence
   recorded, not paused): the curve isn't followed then, since the simulation
-  dims the stairs lamp on its own ramp (10 % at 23:00, not 23:30) and the two
-  would pull it back and forth where the lines cross. A turn-on at the wall
+  dims the stairs and living-room lamps on its own ramps (the stairs 10 % at
+  23:00, not 23:30; the living room 30 % at 22:30) and the two
+  would pull them back and forth where the lines cross. A turn-on at the wall
   still gets the curve (an HA start doesn't); the simulation's next 5-min tick
   takes it from there.
 - A new lamp on a wall switch joins by its entity in both `lamparas` and the
@@ -1619,7 +1591,7 @@ comes up in white instead of last night's colour:
 
 | When | Lamps | White |
 |---|---|---|
-| 07:00 | Every one that is **off** | Warm white (2700 K); the living room and the bathroom their own curve's white for that moment |
+| 07:00 | Every one that is **off** | Warm white (2700 K); the bathroom its curve's white for that moment |
 | A lamp turns off | That one, if it showed a colour or a scene and had been **on since before the last 07:00** | Same |
 
 So a lamp still on at 07:00 keeps its colour until it's turned off, and a
@@ -1637,8 +1609,7 @@ changes: brightness is left as it was.
   bathroom. The office table lamp is left out while PC-Fede isn't `off`: its
   violet is the [PC's](#office-table-lamp-while-pc-fede-is-on), not a party.
 - **Off at the wall is out of reach** (`unavailable`), and needs nothing: back
-  on, the [wall-switch lamps](#wall-switch-lamps) and the
-  [living room](#living-room-lamp) get their white anyway.
+  on, the [wall-switch lamps](#wall-switch-lamps) get their white anyway.
 - **An HA start counts as a turn-on**: it restores each lamp through
   `unavailable`, so a coloured lamp on since before 07:00 that is turned off
   after a restart keeps its colour until the next 07:00.

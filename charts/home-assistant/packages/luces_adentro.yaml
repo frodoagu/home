@@ -1,7 +1,7 @@
 # HA package: the indoor lamps' evening while Fede is home. 10 min after sunset
 # the bedroom and office table lamps, the stairs lamp to the kids' room and the
-# living-room lamp come on at 100 % in warm white (the living room at 80 % in its
-# own white, luces_salon.yaml), those already on staying as they are, and
+# living-room lamp come on at 100 % in warm white (the living room at 80 %),
+# those already on staying as they are, and
 # dim in a straight line to 10 % at 23:30, where they stay until 01:30, when
 # they go off while anyone is home (an empty house keeps the simulation's off time).
 # With PC-Fede on, they go off when it does, if that's before dawn.
@@ -28,9 +28,9 @@
 # switched off by hand stays off. `binary_sensor.pc_fede_prendida` lives in
 # computadoras.yaml.
 #
-# The stairs lamp hangs off a wall switch (luces_llave.yaml): off at the wall,
-# it's `unavailable` and nothing here reaches it. Its ramp is the same line as
-# that package's curve, so the two agree while it's on.
+# The stairs and living-room lamps hang off wall switches (luces_llave.yaml):
+# off at the wall they're `unavailable` and nothing here reaches them. Their
+# ramp is the same line as that package's curve, so the two agree while on.
 
 automation:
   - id: luces_adentro
@@ -38,7 +38,7 @@ automation:
     description: >-
       Con Fede en casa, prende los veladores del dormitorio y la oficina,
       la lámpara de la escalera de los chicos y la del salón 10 min después del atardecer al 100 % en
-      blanco cálido (el salón al 80 % en su propio blanco), sin tocar las que ya
+      blanco cálido (el salón al 80 %), sin tocar las que ya
       estaban prendidas, y las baja en línea recta
       hasta 10 % a las 23:30. Si llega en ese horario, prende las que están
       apagadas al nivel que corresponde. No baja una lámpara que alguien movió
@@ -82,10 +82,6 @@ automation:
         {{ ['light.velador_dormitorio_grupo', 'light.lampara_escalera', 'light.lampara_salon']
            + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
       kelvin: 2700
-      # The living room comes on in its own white, so it doesn't flash warm
-      # before luces_salon.yaml repaints it.
-      blancos:
-        light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(kelvin) }}"
       color_pc: [7, 0, 255, 0]
       # `next_setting` is today's or tomorrow's sunset, a minute or two
       # apart, so only its time of day is used.
@@ -183,7 +179,7 @@ automation:
                         entity_id: "{{ repeat.item }}"
                       data:
                         brightness_pct: "{% from 'curva.jinja' import techo %}{{ techo(repeat.item) }}"
-                        color_temp_kelvin: "{{ blancos.get(repeat.item, kelvin) }}"
+                        color_temp_kelvin: "{{ kelvin }}"
           - conditions: "{{ trigger.id == 'llegada' and dentro and apagadas | count > 0 }}"
             sequence:
               - repeat:
@@ -195,7 +191,7 @@ automation:
                         entity_id: "{{ repeat.item }}"
                       data:
                         brightness_pct: "{% from 'curva.jinja' import nivel %}{{ nivel(repeat.item, brillo) }}"
-                        color_temp_kelvin: "{{ blancos.get(repeat.item, kelvin) }}"
+                        color_temp_kelvin: "{{ kelvin }}"
           - conditions: "{{ trigger.id == 'rampa' }}"
             sequence:
               - repeat:

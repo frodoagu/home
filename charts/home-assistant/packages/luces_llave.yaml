@@ -1,6 +1,7 @@
 # HA package: the lamps on a plain wall switch (office lamp and table lamp,
-# bedroom, the stairs to the kids' room), their brightness by the hour, always
-# in warm white (2700 K). Off at the wall means no power: HA sees them go
+# bedroom, the stairs to the kids' room, living room), their brightness by the
+# hour, always in warm white (2700 K). The living room tops out at 80 %
+# (curva.jinja `nivel`). Off at the wall means no power: HA sees them go
 # `unavailable`, and switched back on they boot in their last state. While
 # PC-Fede is on the office table lamp is luces_adentro.yaml's (violet), not
 # this curve's.
@@ -17,7 +18,7 @@
 # curve was, so a level set by hand stays until the next time it's switched on
 # at the wall (or HA restarts). While the presence simulation runs
 # (simulacion_presencia.yaml) the curve isn't followed: the simulation dims the
-# stairs lamp on its own ramp, which ends earlier.
+# stairs and living-room lamps on its own ramps, which end earlier.
 # See docs/home-assistant.md#wall-switch-lamps.
 
 template:
@@ -46,12 +47,13 @@ automation:
   - id: luces_llave
     alias: Lámparas de llave - Brillo según la hora
     description: >-
-      Al prender con la llave la lámpara de la oficina, la del dormitorio o la
-      de la escalera de los chicos la pone en blanco cálido al brillo que
-      corresponde a la hora, y mientras está prendida lo va siguiendo: 100 %
-      de día, baja en línea recta hasta 10 % entre el atardecer y las 23:30,
-      queda en 10 % hasta el amanecer y sube a 100 % en la hora siguiente. Si
-      alguien le cambia el brillo, lo deja hasta la próxima vez que se prenda.
+      Al prender con la llave la lámpara de la oficina, la del dormitorio, la
+      de la escalera de los chicos o la del salón la pone en blanco cálido al
+      brillo que corresponde a la hora, y mientras está prendida lo va
+      siguiendo: 100 % de día (el salón 80 %), baja en línea recta hasta 10 %
+      entre el atardecer y las 23:30, queda en 10 % hasta el amanecer y sube
+      en la hora siguiente. Si alguien le cambia el brillo, lo deja hasta la
+      próxima vez que se prenda.
     trigger:
       - platform: state
         entity_id:
@@ -59,6 +61,7 @@ automation:
           - light.velador_oficina
           - light.lampara_dormitorio
           - light.lampara_escalera
+          - light.lampara_salon
         from: unavailable
         to: "on"
         id: prendida
@@ -71,7 +74,7 @@ automation:
       - variables:
           # PC on (or unknown): the office table lamp is violet, luces_adentro.yaml's.
           lamparas: >-
-            {{ ['light.lampara_oficina', 'light.lampara_dormitorio', 'light.lampara_escalera']
+            {{ ['light.lampara_oficina', 'light.lampara_dormitorio', 'light.lampara_escalera', 'light.lampara_salon']
                + (['light.velador_oficina'] if is_state('binary_sensor.pc_fede_prendida', 'off') else []) }}
           brillo: "{{ states('sensor.brillo_segun_la_hora') | int }}"
           simulacion: >-
@@ -88,15 +91,16 @@ automation:
           encendida: >-
             {{- trigger.id == 'prendida' and trigger.entity_id in lamparas
                 and not (arranque and simulacion) }}
-          # The lamps still where the curve was before this step; 1-2 % of
-          # slack for the 0-255 round trip.
+          # The lamps still where the curve was before this step, each on its
+          # own (`nivel`); 1-2 % of slack for the 0-255 round trip.
           siguen: >-
+            {%- from 'curva.jinja' import nivel %}
             {%- set ns = namespace(lista=[]) %}
             {%- if trigger.id == 'curva' and not simulacion and trigger.from_state is not none
                    and is_number(trigger.from_state.state) %}
             {%- for e in lamparas if is_state(e, 'on') %}
             {%- set pct = (state_attr(e, 'brightness') | int(0) * 100 / 255) | round(0) | int %}
-            {%- if (pct - trigger.from_state.state | int) | abs <= 2 and pct != brillo %}
+            {%- if (pct - nivel(e, trigger.from_state.state | int) | int) | abs <= 2 and pct != nivel(e, brillo) | int %}
             {%- set ns.lista = ns.lista + [e] %}
             {%- endif %}
             {%- endfor %}
@@ -110,14 +114,17 @@ automation:
                 target:
                   entity_id: "{{ trigger.entity_id }}"
                 data:
-                  brightness_pct: "{{ brillo }}"
+                  brightness_pct: "{% from 'curva.jinja' import nivel %}{{ nivel(trigger.entity_id, brillo) }}"
                   color_temp_kelvin: 2700
           - conditions: "{{ siguen | count > 0 }}"
             sequence:
-              - action: light.turn_on
-                continue_on_error: true
-                target:
-                  entity_id: "{{ siguen }}"
-                data:
-                  brightness_pct: "{{ brillo }}"
+              - repeat:
+                  for_each: "{{ siguen }}"
+                  sequence:
+                    - action: light.turn_on
+                      continue_on_error: true
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: "{% from 'curva.jinja' import nivel %}{{ nivel(repeat.item, brillo) }}"
     mode: queued

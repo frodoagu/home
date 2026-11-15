@@ -1,6 +1,6 @@
 {#- Daily curves for the lamps (luces_adentro, luces_bano, luces_llave,
-    luces_salon, simulacion_presencia). Times are minutes since noon, so the
-    night is one stretch: 21:00 is 540, 23:30 is 690, 02:00 is 840. Import with
+    simulacion_presencia). Times are minutes since noon, so the night is one
+    stretch: 21:00 is 540, 23:30 is 690, 02:00 is 840. Import with
     {% from 'curva.jinja' import curva, sol, minutos, techo, nivel %}
     Macros return text: pipe the result through `| int` or `| float`. -#}
 

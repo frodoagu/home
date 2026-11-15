@@ -7,8 +7,8 @@
 # A WiZ lamp that is off takes a setPilot with `state: false`: it stores the
 # white and stays off. light.turn_off can't carry a colour, so this talks to
 # the lamps over their local UDP API. A lamp off at the wall is out of reach;
-# luces_llave.yaml and luces_salon.yaml give it its white when the power comes
-# back. See docs/home-assistant.md#colours-back-to-white.
+# luces_llave.yaml gives it its white when the power comes back.
+# See docs/home-assistant.md#colours-back-to-white.
 
 shell_command:
   # setPilot to one WiZ lamp (also velador_dormitorio.yaml). `pilot` is the
@@ -71,9 +71,8 @@ automation:
       lamparas: >-
         {{ destinos | list if is_state('binary_sensor.pc_fede_prendida', 'off')
            else destinos | reject('eq', 'light.velador_oficina') | list }}
-      # Warm white, or the lamp's own white for the hour.
+      # Warm white, or the bathroom's white for the hour.
       blancos:
-        light.lampara_salon: "{{ states('sensor.lampara_salon_blanco') | int(2700) }}"
         light.lampara_bano: "{{ state_attr('sensor.lampara_bano_brillo', 'kelvin') | int(2700) }}"
       siete: >-
         {{ (today_at('07:00') - timedelta(days=0 if now() >= today_at('07:00') else 1)).isoformat() }}
