@@ -1,8 +1,20 @@
-{#- Daily curves for the lamps (luces_bano, luces_llave, luces_salon). Times are
-    minutes since noon, so the night is one stretch: 21:00 is 540, 23:30 is
-    690, 02:00 is 840. Import with
-    {% from 'curva.jinja' import curva, sol, minutos %}
+{#- Daily curves for the lamps (luces_adentro, luces_bano, luces_llave,
+    luces_salon, simulacion_presencia). Times are minutes since noon, so the
+    night is one stretch: 21:00 is 540, 23:30 is 690, 02:00 is 840. Import with
+    {% from 'curva.jinja' import curva, sol, minutos, techo, nivel %}
     Macros return text: pipe the result through `| int` or `| float`. -#}
+
+{#- A lamp's top brightness (%) in the evening: the living room's is 80. -#}
+{%- macro techo(e) -%}
+{{ {'light.lampara_salon': 80}.get(e, 100) }}
+{%- endmacro -%}
+
+{#- Where `brillo` on the lamps' 100 % to 10 % line falls for lamp `e`: the same
+    line squeezed under the lamp's `techo`. -#}
+{%- macro nivel(e, brillo) -%}
+{%- set m = techo(e) | int -%}
+{{ (10 + (brillo | float - 10) * (m - 10) / 90) | round(0) | int }}
+{%- endmacro -%}
 
 {%- macro minutos(t) -%}
 {{ (t.hour * 60 + t.minute - 720) % 1440 }}

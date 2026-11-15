@@ -15,7 +15,8 @@
 # Except after a power cut or an HA start: the lamp also hangs off a wall
 # switch, and back from `unavailable` it boots in its last state. Then it gets
 # the white and the lamps' brightness for the hour (`sensor.brillo_segun_la_hora`,
-# luces_llave.yaml, the same line as the evening ramp), whatever it was showing.
+# luces_llave.yaml, the same line as the evening ramp) squeezed under its 80 %
+# top (curva.jinja `nivel`), whatever it was showing.
 # An HA start restores it as `unavailable` too, so it gets the same, except
 # while the presence simulation (which drives this lamp) runs.
 # See docs/home-assistant.md#living-room-lamp.
@@ -92,7 +93,9 @@ automation:
             target:
               entity_id: light.lampara_salon
             data:
-              brightness_pct: "{{ states('sensor.brillo_segun_la_hora') | int(100) }}"
+              brightness_pct: >-
+                {%- from 'curva.jinja' import nivel %}
+                {{- nivel('light.lampara_salon', states('sensor.brillo_segun_la_hora') | int(100)) }}
               color_temp_kelvin: "{{ states('sensor.lampara_salon_blanco') | int }}"
           - stop: Back from a power cut or an HA start.
       - condition: template

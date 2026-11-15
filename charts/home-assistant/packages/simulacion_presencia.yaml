@@ -32,7 +32,7 @@
 #
 # The bedroom and office table lamps and the stairs lamp move together, in warm white (2700 K), dimming
 # from 100 % when they come on down to 10 % at 23:00, where they stay until they
-# go off. The living room has its own: 3000 K, 100 % down to 30 % at 22:30, then
+# go off. The living room has its own: 3000 K, 80 % down to 30 % at 22:30, then
 # held until it goes off around 23:00. Every 5 min the ramp re-dims the lamps
 # that are on; one switched off remotely holds until the next on time. Nothing
 # else re-applies the schedule.
@@ -181,7 +181,7 @@ automation:
       Con la casa vacía prende y apaga las lámparas del dormitorio, la oficina,
       la escalera y el salón a los horarios de los sensores "Simulación presencia", que
       cambian cada noche. Dormitorio, oficina y escalera van en blanco cálido y bajan de
-      100 % al prender a 10 % a las 23:00; el salón va en 3000 K, baja a 30 %
+      100 % al prender a 10 % a las 23:00; el salón va en 3000 K, baja de 80 % a 30 %
       a las 22:30 y se apaga cerca de las 23:00. Al vaciarse la casa, al sacar la pausa y al arrancar HA las deja
       como tendrían que estar a esa hora.
     trigger:
@@ -242,7 +242,8 @@ automation:
       # One pass per group of lamps, each with its own pair of schedule
       # sensors (`sensor.simulacion_presencia_<id>_prender` / `_apagar`, whose
       # time triggers carry the ids `<id>_prender` / `<id>_apagar`) and its
-      # own ramp: 100 % at the on time down to `piso` at `fin`, then held.
+      # own ramp: its lamps' top (curva.jinja `techo`) at the on time down to
+      # `piso` at `fin`, then held.
       - repeat:
           for_each:
             - id: lampara
@@ -278,16 +279,18 @@ automation:
                   {{- 'on' if desde <= now() < hasta else 'off' }}
                   {%- elif trigger.id == 'rampa' and desde and hasta and desde <= now() < hasta %}on
                   {%- endif %}
-                # 100 % at tonight's on time down to `piso` at `fin`, in a
+                # The top at tonight's on time down to `piso` at `fin`, in a
                 # straight line, then held. WiZ's floor is 10 %.
                 brillo: >-
+                  {%- from 'curva.jinja' import techo %}
+                  {%- set m = techo(lamparas | first) | int %}
                   {%- set desde = states(prender) | as_datetime(none) %}
                   {%- set piso = repeat.item.piso %}
                   {%- if desde %}
                   {%- set fin = (desde | as_local).replace(hour=repeat.item.fin[0], minute=repeat.item.fin[1], second=0, microsecond=0) %}
                   {%- set avance = (now() - desde).total_seconds() / (fin - desde).total_seconds() %}
-                  {{- [[100 - (100 - piso) * avance, piso] | max, 100] | min | round(0) | int }}
-                  {%- else %}100{%- endif %}
+                  {{- [[m - (m - piso) * avance, piso] | max, m] | min | round(0) | int }}
+                  {%- else %}{{ m }}{%- endif %}
                 # The lamps to send the colour and `brillo` to: all of them, or
                 # only those already on for the ramp, leaving out any already
                 # there (1 % of slack for the 0-255 round trip).

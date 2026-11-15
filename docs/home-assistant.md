@@ -813,6 +813,14 @@ which the chart mounts read-only at `/config/custom_templates`. It has three
 macros: `minutos` (minutes since noon), `sol` (a `sun.sun` time in those minutes)
 and `curva` (the value now). Each package imports them with
 `{% from 'curva.jinja' import curva, sol %}` and keeps only its own points.
+
+Two more set how bright each lamp gets in the evening: `techo(e)` is a lamp's
+top (80 % for the living room, 100 % for the rest), and `nivel(e, brillo)`
+squeezes a level on the lamps' 100 % to 10 % line under that top (100 → 80,
+55 → 45, 10 → 10 for the living room). The [evening lamps](#evening-lamps), the
+living room's [power-cut path](#living-room-lamp) and the
+[presence simulation](#presence-simulation) read them, so the 80 lives in one
+place.
 Macros return text, so pipe the result through `| int` or `| float`. The file
 shares a ConfigMap template with the packages, so changing it rolls HA as well.
 
@@ -1395,8 +1403,8 @@ the living-room lamp while Fede is home
 
 | Trigger | Effect |
 |---|---|
-| Sunset + 10 min | The lamps that are off come on at **100 %**, warm white (2700 K); the living room in [its own white](#living-room-lamp). One already on keeps its brightness and colour |
-| Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold |
+| Sunset + 10 min | The lamps that are off come on at **100 %**, warm white (2700 K); the living room at **80 %** in [its own white](#living-room-lamp). One already on keeps its brightness and colour |
+| Every 5 min until 23:30 | Ramp: lamps following it go down in a straight line to **10 % at 23:30**, then hold (the living room's line runs 80 → 10, curva.jinja `nivel`) |
 | Fede gets home inside that window | Lamps that are off come on at the ramp's current level, in the same whites |
 | 01:30 | The four lamps **off** while anyone is home, Fede or not (own automation, `luces_adentro_apagar`) |
 | PC-Fede goes off between 01:30 and dawn | The four lamps **off**: with the PC on at 01:30, the turn-off waits for it |
@@ -1542,7 +1550,8 @@ steps.
   wall switch, and back from `unavailable` it boots in its last state. Then it
   gets the curve's white and the [wall-switch lamps'](#wall-switch-lamps)
   brightness for the hour (`sensor.brillo_segun_la_hora`, the evening ramp's
-  line), whatever it was showing. An HA start restores it as `unavailable` too,
+  line) squeezed under its 80 % top (`nivel`, [Lamp curves](#lamp-curves-custom_templatescurvajinja)),
+  whatever it was showing. An HA start restores it as `unavailable` too,
   so it gets the same, except while the presence simulation runs.
 - Sunrise and sunset come from `sun.sun`'s `next_rising` / `next_setting` time
   of day (today's or tomorrow's, a minute or two apart).
@@ -1700,7 +1709,7 @@ only while an absence is recorded, `binary_sensor.casa_ocupada` is `off` and the
 falls in a straight line from 100 % at tonight's on time to 10 % at 23:00
 (WiZ's floor), then holds at 10 % until they go off. **The living room has its
 own night**, so the house doesn't change all at once: on a little earlier,
-3000 K, from 100 % down to **30 % at 22:30**, held there until it goes off
+3000 K, from 80 % (its `techo`) down to **30 % at 22:30**, held there until it goes off
 around 23:00. Each group is one pass of a `repeat` in the automation, with its
 own pair of sensors, colour temperature and ramp end. A turn-on, a reconcile or the ramp sends a
 lamp the brightness for that moment, so a lamp turned on by a reconcile at 22:00
