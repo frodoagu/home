@@ -13,7 +13,7 @@ image:
   pullPolicy: IfNotPresent
   # Pin to an explicit version (keep Chart.yaml appVersion in sync). Avoid
   # floating tags like "latest".
-  tag: "2026.10.1"
+  tag: "2026.11.0"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -271,6 +271,14 @@ dhcp:
     # Home Assistant's presence reads this phone's DNS queries by this IP
     # (charts/home-assistant/packages/presencia.yaml).
     - { mac: "28:12:d0:99:e5:e1", ip: "192.168.0.80", name: "celu-fede" }      # motorola edge 70
+
+# Daily adlist refresh, on top of the image's own weekly run (Sundays 03:27).
+# The lists themselves live in gravity.db, not here
+# (docs/pihole.md#adlists-gravitydb).
+gravityUpdate:
+  enabled: true
+  schedule: "0 7 * * *"
+  image: curlimages/curl:8.23.0
 
 # Resource requests/limits – tuned small for the RPi.
 resources:

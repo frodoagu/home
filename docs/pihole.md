@@ -369,6 +369,38 @@ State (config, gravity DB, FTL query DB) persists in a 2Gi `local-path` PVC at
 `/etc/pihole`. Image is pinned in `values.yaml` (`pihole/pihole`, keep `Chart.yaml`
 `appVersion` in sync).
 
+## Adlists (gravity.db)
+
+The blocklists are Pi-hole state on the PVC, added in the UI (**Lists** under Group
+Management) or with `POST /api/lists?type=block`. A fresh `/etc/pihole` starts
+without them, so this table is the record:
+
+| List | Address (Adblock format) | Groups |
+|---|---|---|
+| HaGeZi Multi PRO | `https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt` | Default |
+| HaGeZi TIF medium | `https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt` | Default |
+
+PRO is HaGeZi's recommended tier: ads, trackers, telemetry and some badware,
+with few false positives. PRO++ breaks more (affiliate links, some apps), and
+other general lists (OISD, StevenBlack) mostly overlap it. TIF (Threat
+Intelligence Feeds) is the malware/phishing/scam add-on HaGeZi pairs with any
+tier; medium keeps the most important feeds (~350k domains, against 1.46M for
+the full list).
+
+**Updates.** Lists only change when gravity runs. The image's cron runs
+`pihole updateGravity` weekly (Sundays 03:27), and the chart's
+`<fullname>-gravity` CronJob (`gravityUpdate.*`) runs it daily at 07:00 through
+`POST /api/action/gravity`. HaGeZi builds the GitHub copy once a day at 11:00
+UTC (08:00 here), so each run picks up the previous day's build. A download
+error keeps that list's previous copy, so a run only fails when
+gravity itself does. The Job calls the Service with `Host: pihole.agu.com.ar`,
+because FTL 401s any other name. Run it by hand:
+
+```bash
+kubectl -n pihole create job gravity-now --from=cronjob/pihole-gravity
+kubectl -n pihole logs -f job/gravity-now
+```
+
 ## Blocked domains (git-tracked, not gravity.db)
 
 Pi-hole's own adlists and regex live in `gravity.db` on the PVC — not in git, so a
