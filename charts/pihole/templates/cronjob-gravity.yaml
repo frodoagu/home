@@ -24,8 +24,11 @@ spec:
             app.kubernetes.io/instance: {{ .Release.Name }}
         spec:
           restartPolicy: Never
+          # The image names its user (curl_user) instead of a UID, so runAsNonRoot
+          # needs the number to verify it.
           securityContext:
             runAsNonRoot: true
+            runAsUser: 100
           containers:
             - name: gravity
               image: {{ .Values.gravityUpdate.image }}
