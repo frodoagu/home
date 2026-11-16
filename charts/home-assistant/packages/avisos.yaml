@@ -1,6 +1,6 @@
 # HA package: where notifications go, named once. Telegram carries the alerts
-# (gas, sensor health); the phone gets the companion-app pushes (ACs,
-# washer-dryer). Callers render their own message, so it can use their
+# (gas, sensor health, the kids' PCs left on); the phone gets the companion-app
+# pushes (ACs, washer-dryer). Callers render their own message, so it can use their
 # variables. `parallel` so two alerts at once don't drop one.
 # See docs/home-assistant.md#notifications.
 script:

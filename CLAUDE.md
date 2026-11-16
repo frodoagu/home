@@ -445,7 +445,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   left on at home also counts (`custom_templates/wireguard.jinja`: last handshake
   of the phone's tunnel IP while its endpoint is the LAN or the home public IP).
   The kids'
-  calendar (`packages/chicos.yaml`) is a condition only; a marked day is a NIGHT
+  calendar (`packages/chicos.yaml`) is never a presence trigger (only the
+  kids'-PCs Telegram alert fires on it); a marked day is a NIGHT
   (home 18:00 that day → 13:50 the next), not a day. See
   docs/home-assistant.md#presence.
 - **home-assistant — the WiZ motion sensor only exists through a lamp, and only

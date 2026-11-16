@@ -785,14 +785,24 @@ few days, while its DHCP hostname `think` stays put. `unavailable` until the
 first poll and while Pi-hole is down.
 
 PC Fede drives the office table lamp ([below](#office-table-lamp-while-pc-fede-is-on));
-the other three only feed the hours in Grafana.
+all four feed the hours in Grafana.
+
+**Kids' PCs left on.** `computadoras_chicos_prendidas` sends a Telegram message
+when the kids leave for their mother's with PC Noah or PC Juli still on. Leaving
+is [`binary_sensor.chicos_en_casa`](#kids-calendar) going `on` → `off` while
+`binary_sensor.chicos_noche` is `off`: the 13:50 after the last marked night of
+a block. A 13:50 inside a block has the kids back at 18:00, so it sends nothing.
+It checks 10 min after they leave, which covers the sensors' 5 min lag, so a PC
+shut down on the way out isn't reported. A PC that reads `unavailable` (Pi-hole
+down) counts as off.
 
 ## Notifications
 
 [`packages/avisos.yaml`](../charts/home-assistant/packages/avisos.yaml) is the
 one place that names where notifications go:
 
-- `script.avisar_telegram` (`mensaje`): the alerts (gas, sensor health), through
+- `script.avisar_telegram` (`mensaje`): the alerts (gas, sensor health, the
+  [kids' PCs left on](#computers)), through
   `notify.afuera_telegram_gateway_fede_a`. That entity id is assembled by
   Telegram (bot name + chat name); if the bot is re-created, check it in HA and
   change it here.
@@ -1658,7 +1668,9 @@ day ends at 13:50.
   [automation](#automatic-schedule-migrated-from-google-home) (sensor `on`).
   Otherwise nothing turns it on and no automation turns it off, but a button's
   off frame and the scheduled shutdown still reach it.
-  [`aires_se_van`](#turn-off-when-the-house-empties) needs it `off`.
+  [`aires_se_van`](#turn-off-when-the-house-empties) needs it `off`. The one
+  trigger on it is the [kids' PCs left on](#computers) alert, which fires when
+  it goes `off` with no night marked for tonight.
 
 ## Presence simulation
 

@@ -2,7 +2,8 @@
 # On, each queries every 1-2 min; off, never, so on = a query in the last
 # 5 min. Looked up by client NAME: the Think randomizes its MAC, so its IP
 # changes but its DHCP hostname doesn't. PC-Fede drives the office lamp
-# (luces_adentro.yaml); all four feed the hours in Grafana.
+# (luces_adentro.yaml), the kids' two alert on Telegram when they stay on after
+# the kids leave for their mother's, and all four feed the hours in Grafana.
 # See docs/home-assistant.md#computers.
 
 rest:
@@ -82,3 +83,39 @@ template:
           {%- set t = states('sensor.think_ultima_consulta_dns') | as_datetime(none) %}
           {{- t is not none and now() - t < timedelta(minutes=5) }}
         availability: "{{ has_value('sensor.think_ultima_consulta_dns') }}"
+
+# The kids leaving for their mother's is `chicos_en_casa` going off with no
+# night marked for tonight; the 13:50 departures in the middle of a block come
+# back at 18:00 and say nothing. The 10 min wait covers the sensors' 5 min lag,
+# so a PC shut down on the way out doesn't count.
+automation:
+  - id: computadoras_chicos_prendidas
+    alias: Computadoras - Los chicos dejaron una PC prendida
+    description: >-
+      Cuando los chicos se van a lo de la madre (dejan de estar en casa y esta
+      noche no duermen acá), avisa por Telegram si quedó prendida la PC de Noah
+      o la de Juli.
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.chicos_en_casa
+        from: "on"
+        to: "off"
+        for: "00:10:00"
+    condition:
+      - condition: state
+        entity_id: binary_sensor.chicos_noche
+        state: "off"
+    action:
+      - variables:
+          prendidas: >-
+            {{ [('Noah', 'binary_sensor.pc_noah_prendida'), ('Juli', 'binary_sensor.pc_juli_prendida')]
+               | selectattr(1, 'is_state', 'on') | map(attribute=0) | list }}
+      - condition: template
+        value_template: "{{ prendidas | count > 0 }}"
+      - action: script.avisar_telegram
+        data:
+          mensaje: >-
+            Los chicos se fueron a lo de la madre y
+            {{ 'dejaron prendida la PC de ' ~ prendidas[0] if prendidas | count == 1
+               else 'dejaron prendidas las PCs de ' ~ prendidas | join(' y ') }}.
+    mode: single
