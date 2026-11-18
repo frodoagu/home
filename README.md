@@ -417,6 +417,7 @@ gh api -X POST /repos/frodoagu/home/hooks \
   -f config[url]=https://argocd.agu.com.ar/api/webhook \
   -f config[content_type]=json \
   -f config[secret]="$(kubectl -n argocd get secret argocd-webhook-github -o jsonpath='{.data.secret}' | base64 -d)"
+kubectl -n argocd rollout restart deploy/argocd-server   # see the argocd gotcha in CLAUDE.md
 ```
 
 ## Repository layout

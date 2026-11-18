@@ -262,6 +262,14 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   in untouched pods and controllers lose their leader lease. The fix is
   host-side, `serialize-image-pulls=true` in `/etc/rancher/k3s/config.yaml`
   (README step 3), not in git.
+- **argocd — the webhook's `$argocd-webhook-github:secret` resolves only at
+  argocd-server start.** When the referenced Secret shows up while the server
+  runs (the sync that adds it, a fresh cluster, a re-seal), the webhook handler
+  keys the HMAC on the literal `$argocd-webhook-github:secret` text, which is
+  in git, so anyone can sign. `kubectl -n argocd rollout restart
+  deploy/argocd-server` after it appears. Check: an unsigned POST to
+  `/api/webhook` gets 400 and a GitHub ping (`gh api -X POST
+  repos/frodoagu/home/hooks/<id>/pings`) gets 200.
 - **monitoring — the `VMRule` sits OutOfSync forever without `ignoreDifferences`.**
   The VMRule CRD schema defaults `record` (and `alert`) to `""`, so the API
   server stamps `record: ""` onto every alerting rule and the live object cannot
