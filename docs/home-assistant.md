@@ -429,7 +429,7 @@ doesn't even blink). Two fixes:
 the one the scripts send, is one of them), and 27 carry the setpoint or the fan
 shifted by one (heat `level2`/`auto` 22-30 °C, cool `level1`/`swing` 17-24 °C,
 ...). The other 1309 decode to exactly the Mitsubishi112 layout in the
-[display table](#display-off-at-midnight), so the `smartir-codes` init container runs
+[display table](#display-off-at-night), so the `smartir-codes` init container runs
 [`smartir/5140.py`](../charts/home-assistant/smartir/5140.py) before HA starts and
 rewrites every heat/cool/dry entry of
 `custom_components/smartir/codes/climate/5140.json` from that layout, with the
@@ -518,14 +518,16 @@ except the scheduled shutdown below, which turns all four off.
 
 `sensor.aires_modo_estacional` is a trigger-based template sensor in the same
 package that resolves to `heat` or `cool`, with memory: below **22 °C** outside
-it is `heat`, at **26 °C** or more `cool`, and in between it is `cool` when the
-hottest hour of the next 12 (`weather.get_forecasts`, hourly) reaches **28 °C**,
-otherwise it keeps what it was (`this.state`). It re-evaluates every 15 minutes,
+*and* in the living room it is `heat`, at **26 °C** or more outside `cool`, and
+otherwise it is `cool` when the hottest hour of the next 12 (`weather.get_forecasts`,
+hourly) reaches **28 °C**, otherwise it keeps what it was (`this.state`). It re-evaluates every 15 minutes,
 on HA start and when the outdoor reading changes, and falls back to the
 living-room thermometer (with no forecast) when the weather sensor is down.
 The memory is the point: the instant reading alone flipped to `heat` at 04:09
 after a warm night (25.7 °C), and a "prender todo" at 07:50 heated at 25.3 °C
-with 35 °C forecast for that afternoon.
+with 35 °C forecast for that afternoon. The living-room check keeps a warm house
+on `cool` through a mild night: 21.9 °C outside at 23:00, with the house at 23 °C,
+would otherwise flip it, and *Modo dormir* would heat the bedroom.
 
 **Scheduled shutdown.** "Turn everything off in N hours" and "turn everything off
 at HH:MM" are the same mechanism: a single `timer.aires_apagado`, which
@@ -596,15 +598,16 @@ the tallest one and short sections leave a hole.
 
 ### Automatic schedule (migrated from Google Home)
 
-Three of the package's `automation:`s are migrated 1:1 from the Google Home
-app (same times, thresholds and guards; the Google Home exports were in
-`google-home/`, removed once migrated):
+Three of the package's `automation:`s are migrated from the Google Home
+app (same times, thresholds and guards, plus the days-off rule below; the Google
+Home exports were in `google-home/`, removed once migrated):
 
 - `aires_calor_manana` — kitchen + living to **heat 21 °C** at 08:00 on
   weekdays / 09:00 on weekends, if someone's home and the living room is ≤ 17 °C.
 - `aires_apagar_templado` — kitchen + living + bedroom (+ kids) **off** once it hits 19 °C outside, but
   only while the living AC is in `heat`. Checking the mode instead of a date
-  range is what keeps it from firing in summer.
+  range is what keeps it from firing in summer. On days off the bedroom (+ kids)
+  stays on.
 - `aires_frio_dia_caluroso` — kitchen + living + bedroom (+ kids) to **cool 25 °C** when
   it's over 30 °C outside and over 24 °C in the living room, if someone's home.
   Only units that are off: one already on keeps its mode and setpoint, and with none
@@ -617,6 +620,20 @@ unit, so whoever uses the room drives it by hand and nothing overrides them; an
 unavailable calendar counts as out here. The exception is
 `aires_apagado_programado`: a shutdown set by hand turns all four off. Their
 coming home or leaving switches nothing by itself.
+
+**Days off leave the bedrooms on.** On weekends and national holidays the
+weather turn-offs, `aires_apagar_templado` and `aires_apagar_frio_afuera_fresco`,
+drop Fede's bedroom and the kids' unit from their list, so a sleep-in isn't cut
+at 09:00. The house emptying (`aires_se_van`) and a scheduled shutdown still turn
+them off.
+
+The calendar is HA's `workday` integration, which is config-flow only, so it
+lives in `/config/.storage` and git can't create it: Settings > Devices &
+services > Add > Workday, country **Argentina**, no province, the defaults
+(Mon-Fri, excluding Sat, Sun and holidays). That yields
+`binary_sensor.workday_sensor_ar`, `on` on working days; it knows each year's
+moved holidays and *puentes*. The packages test `not is_state(…, 'on')`, so a
+missing or unavailable sensor counts as a day off and turns nothing off.
 
 ### Cool off when it's cooler outside
 
@@ -631,6 +648,8 @@ read the bedroom one (the kids' room and the kitchen have none of their own).
   update of the outdoor sensor can fire both zones at once.
 - **Night window 23:00–09:00.** Nothing fires inside it, and a crossing there is
   not seen again, so a 09:00 trigger checks both zones.
+- **Days off: kitchen + living only.** The bedroom zone has no units on Saturdays
+  , Sundays and holidays ([above](#automatic-schedule-migrated-from-google-home)).
 - **A dead thermometer turns nothing off**, and neither does a missing outdoor
   reading.
 - **While a unit cools, "indoor" is roughly its setpoint**, so in practice the
@@ -674,19 +693,19 @@ them out, when that room may be someone else's. The kids leaving at 13:50
 changes nothing, and an unavailable sensor turns nothing off. The off frame goes
 to all three whatever HA assumes; the push lists only the units HA had on.
 
-### Display off at midnight
+### Display off at night
 
-`aires_display_medianoche` darkens the display of every unit HA assumes is on
-at 00:00, so it doesn't light the room at night. Both automations call
+`aires_display_noche` darkens the display of every unit HA assumes is on
+at 23:00, so it doesn't light the room at night. Both automations call
 `script.aires_display_apagar`, which holds the frames (SmartIR has no display
 command) and sends them with `remote.send_command` (`b64:`) to the units in its
 `aires` field, or to every unit that is on. On every unit the display is a
-**toggle**: a display already dark at midnight lights up, and any later command
+**toggle**: a display already dark at 23:00 lights up, and any later command
 from HA lights it again (confirmed on the bedroom unit). Because the script is in
 the `script` domain it also shows up in Google Home as a scene.
 
 Since a command lights it again, `aires_display_reapagar` darkens it once more
-from **00:00 to 08:00**: when HA turns a unit on or changes its mode, setpoint,
+from **23:00 to 08:00**: when HA turns a unit on or changes its mode, setpoint,
 fan or swing, that unit's display goes dark **30 s after the last change**. Each
 change starts a run that waits (`wait_template`, 30 s timeout) for the unit to
 leave the state that fired it; if it does, that run ends and the newer one

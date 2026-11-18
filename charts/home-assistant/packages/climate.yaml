@@ -38,13 +38,14 @@ climate:
     controller_data: remote.broadlink_chicos
 
 # Mode the seasonal buttons pick: cool or heat, with memory.
-#   - below 22 °C outside: heat.
-#   - 26 °C or more: cool.
-#   - in between: cool if the hottest hour of the next 12 reaches 28 °C (a warm
+#   - below 22 °C outside and in the living: heat.
+#   - 26 °C or more outside: cool.
+#   - otherwise: cool if the hottest hour of the next 12 reaches 28 °C (a warm
 #     day that starts cool), otherwise whatever it was.
 # The memory (`this.state`) keeps a mild night after a hot day on cool: the
 # instant reading alone flipped to heat at 04:09 and a "prender todo" at 07:50
-# heated at 25.3 °C, with 35 °C forecast. The outdoor temperature falls back to
+# heated at 25.3 °C, with 35 °C forecast. A house still at 22 °C or more needs
+# no heat, so 21.9 °C outside does not flip it. The outdoor temperature falls back to
 # the living thermometer when the weather sensor is down (and then there is no
 # forecast). Re-evaluated every 15 min, when HA starts and when the outdoor
 # reading changes; a trigger-based sensor restores its last state on restart.
@@ -79,7 +80,7 @@ template:
           {% set antes = this.state if this is defined and this.state in ['cool', 'heat']
                          else ('cool' if t >= 26 else 'heat') %}
           {% if t >= 26 %}cool
-          {% elif t < 22 %}heat
+          {% elif t < 22 and interior < 22 %}heat
           {% elif maxima >= 28 %}cool
           {% else %}{{ antes }}
           {% endif %}
@@ -610,6 +611,11 @@ script:
 # coming home or leaving switches nothing by itself; it also keeps aires_se_van
 # from cutting the ACs while they're home.
 #
+# On non-working days (weekends and national holidays, the `workday`
+# integration's binary_sensor.workday_sensor_ar, UI-only) the weather turn-offs
+# (aires_apagar_templado, aires_apagar_frio_afuera_fresco) leave both bedrooms
+# on; an unavailable sensor counts as a day off.
+#
 # Every automation but the display ones reports what it did with a push
 # to Fede's phone, on the "Aires" Android channel. All share one `tag`, so each
 # push replaces the previous one and the last shows the current state. The push
@@ -676,7 +682,8 @@ automation:
       Apaga cocina, living y dormitorio (y el de los chicos si están según el
       calendario) cuando la temperatura exterior llega a 19 °C, pero sólo si
       están calefaccionando. Mirar el modo en vez de un rango de fechas es lo
-      que evita que toque los equipos en verano, cuando están en frío.
+      que evita que toque los equipos en verano, cuando están en frío. Los
+      fines de semana y feriados no apaga las piezas.
     trigger:
       # Google's `greaterThanOrEqualTo: 19C`. A template trigger and not
       # `numeric_state: above: 19`, because `above` is strict and `met` reports
@@ -691,8 +698,10 @@ automation:
     action:
       - variables:
           aires: >-
-            {{ ['climate.aire_cocina', 'climate.aire_living', 'climate.aire_dormitorio']
-               + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
+            {{ ['climate.aire_cocina', 'climate.aire_living']
+               + ((['climate.aire_dormitorio']
+                   + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []))
+                  if is_state('binary_sensor.workday_sensor_ar', 'on') else []) }}
       - action: climate.turn_off
         target:
           entity_id: "{{ aires }}"
@@ -727,20 +736,20 @@ automation:
           extras: *aires_push
     mode: single
 
-  - id: aires_display_medianoche
-    alias: Aires - Apagar el display a la medianoche
+  - id: aires_display_noche
+    alias: Aires - Apagar el display a las 23
     description: >-
-      A las 00:00 apaga la luz del display de los aires que están prendidos,
+      A las 23:00 apaga la luz del display de los aires que están prendidos,
       para que no molesten de noche. El comando del display es un toggle: si
       ya estaba apagado, se prende.
     trigger:
       - platform: time
-        at: "00:00:00"
+        at: "23:00:00"
     action:
       - action: script.aires_display_apagar
     mode: single
 
-  # Any command from HA lights a display again, so from 00:00 to 08:00 a change
+  # Any command from HA lights a display again, so from 23:00 to 08:00 a change
   # of mode, setpoint, fan or swing darkens that unit's display 30 s after the
   # LAST change: each run waits for the unit to diverge from the state that
   # fired it, and gives way to the run that change starts. Only what HA sets is
@@ -749,7 +758,7 @@ automation:
   - id: aires_display_reapagar
     alias: Aires - Volver a apagar el display de noche
     description: >-
-      Entre las 00:00 y las 08:00, si se prende un aire o se le cambia el modo,
+      Entre las 23:00 y las 08:00, si se prende un aire o se le cambia el modo,
       la temperatura, el ventilador o el swing desde HA, a los 30 segundos del
       último cambio le vuelve a apagar el display.
     trigger:
@@ -760,7 +769,7 @@ automation:
           - climate.aire_dormitorio
     condition:
       - condition: time
-        after: "00:00:00"
+        after: "23:00:00"
         before: "08:00:00"
       - condition: template
         value_template: >-
@@ -842,7 +851,8 @@ automation:
       o menos que adentro. Cocina y living miran el termómetro del living;
       dormitorio, el del dormitorio, y con él el de los chicos si están según el
       calendario. No actúa entre las 23 y las 9, y a
-      las 9 revisa las dos zonas. Si falta un termómetro no apaga nada.
+      las 9 revisa las dos zonas. Los fines de semana y feriados no apaga las
+      piezas. Si falta un termómetro no apaga nada.
     trigger:
       - platform: template
         value_template: >-
@@ -870,8 +880,9 @@ automation:
             - id: piezas
               termometro: sensor.dormitorio_atc_b6d2_temperatura
               aires: >-
-                {{ ['climate.aire_dormitorio']
-                   + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []) }}
+                {{ (['climate.aire_dormitorio']
+                    + (['climate.aire_chicos'] if is_state('binary_sensor.chicos_en_casa', 'on') else []))
+                   if is_state('binary_sensor.workday_sensor_ar', 'on') else [] }}
           exterior: "{{ states('sensor.temperatura_exterior') }}"
           # Zones where it is as cool or cooler outside AND something is in cool.
           frescas: >-
