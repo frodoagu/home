@@ -10,7 +10,7 @@ metadata:
     {{- include "victoria-logs.labels" . | nindent 4 }}
 spec:
   redirectRegex:
-    regex: "^https?://[^/]+/?$"
+    regex: "^https?://[^/]+/?(\\?.*)?$"
     replacement: "https://{{ .Values.ingress.host }}/select/vmui/"
 ---
 # Traefik IngressRoute for the VictoriaLogs UI, gated by the google-auth
@@ -28,22 +28,17 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Bare root → vmui. More specific than the catch-all below, so Traefik prefers
-    # it for "/". The redirect runs before auth (no need to gate a redirect).
-    - match: Host(`{{ .Values.ingress.host }}`) && Path(`/`)
+    # The root redirect sits on this route, ahead of auth, instead of on a
+    # route of its own: whatever its regex doesn't match still meets
+    # google-auth, never VictoriaLogs directly.
+    - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       middlewares:
         - name: {{ include "victoria-logs.fullname" . }}-root-redirect
-      services:
-        - name: victoria-logs
-          port: 9428
-    - match: Host(`{{ .Values.ingress.host }}`)
-      kind: Rule
       {{- if .Values.googleAuth.enabled }}
-      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
-      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
-      # sign-in redirect.
-      middlewares:
+        # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+        # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+        # sign-in redirect.
         - name: google-auth-signin
         - name: google-auth
       {{- end }}

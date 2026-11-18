@@ -9,7 +9,7 @@ metadata:
     {{- include "pihole.labels" . | nindent 4 }}
 spec:
   redirectRegex:
-    regex: "^https?://[^/]+/?$"
+    regex: "^https?://[^/]+/?(\\?.*)?$"
     replacement: "https://{{ .Values.ingress.host }}/admin/"
 ---
 # Traefik IngressRoute for the Pi-hole web UI, gated by the google-auth
@@ -24,23 +24,17 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Bare root → /admin/. This route is more specific than the catch-all below,
-    # so Traefik prefers it for "/". The redirect runs before auth (no need to
-    # gate a redirect), so the root never reaches Pi-hole's 403.
-    - match: Host(`{{ .Values.ingress.host }}`) && Path(`/`)
+    # The root redirect sits on this route, ahead of auth, instead of on a
+    # route of its own: whatever its regex doesn't match still meets
+    # google-auth, never Pi-hole directly.
+    - match: Host(`{{ .Values.ingress.host }}`)
       kind: Rule
       middlewares:
         - name: {{ include "pihole.fullname" . }}-root-redirect
-      services:
-        - name: {{ include "pihole.fullname" . }}
-          port: {{ .Values.service.port }}
-    - match: Host(`{{ .Values.ingress.host }}`)
-      kind: Rule
       {{- if .Values.googleAuth.enabled }}
-      # Order matters: the errors middleware (google-auth-signin) must be OUTER so
-      # it wraps the forwardAuth (google-auth) and can convert its 401 into a
-      # sign-in redirect. Reversed, the raw 401 reaches the browser.
-      middlewares:
+        # Order matters: the errors middleware (google-auth-signin) must be OUTER so
+        # it wraps the forwardAuth (google-auth) and can convert its 401 into a
+        # sign-in redirect. Reversed, the raw 401 reaches the browser.
         - name: google-auth-signin
         - name: google-auth
       {{- end }}
