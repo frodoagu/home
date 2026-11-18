@@ -1,0 +1,19 @@
+# GitHub signs every push webhook to /api/webhook with this secret; the same
+# value is the hook's secret on GitHub. Referenced from argocd-secret as
+# $argocd-webhook-github:secret (charts/argocd/values.yaml), which needs the
+# part-of label below.
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: argocd-webhook-github
+  namespace: argocd
+spec:
+  encryptedData:
+    secret: AgAwkzX3xKP5rb/Tyxw/+nod1YJCEWGJS4h2ZrlXVhvFxBh6YSmMT4zBfx0GgH548m0SOn4fW/xUy9Q20MixI2gY9uMMWaxHjLyPVjqjcqey7xOwe4eL2kyRNYSGGwPVPsiWpamku5yqA6ZJDPyveEaHL5DdAFWd0pM6xTRuWAkVAtHCv+8DMxC2GyfkaZHMfn1TvdgyCqZ3LZND7536j1Zi2rB4Youi3dy8QryBrMuI8/1iyJPjHzyrVBgkD6rpVhg/22HMFCrsOh/bApGKkoP/aytQNbRZHVu4YSwJI+DD/5sIIHTPn8sjzERH7AdOO4L7OHNFcwaspuBPW7CcaIM3Ic5JSfN90c5jmZs9D+oDnRCAFdOP5o5KFgD3h3Jc9aNN5L+WqIdUCMhSZ4C9r0xQ8OR+loZdkZ3nKZX7dAOz5R7KOHD8RTNWHhwPjB27p8QDyp3c+X0ZR6LPigWvuM9di8ENbEBp4RrIphevQJPMRLSzXcLxvadqNqkQfTA6bOYepbVRIaVdZ355Yvp7wTpMAKwh5TNALE5fyfoxWWxsLgSs0R49o6bmGauEyavY397JUnPQEs+UVYeenOoLCR57QrZQXp1cU2J15eEFNvxfy808qBrmkSqivA/+wTQsh39lbyZs4GYvO2x2kdwVj/VVbsSBDkw+GcE4xh8K23FAxZVks3Qrp00eNhJfg4GoC+VLUKCr1le9FZKDhgS9kATVkVBGeh+WS6v6qnHxgq711RuJmVsJrvOaec95mKLE2d6OqHXrRFAZKjvFklNjdgXH
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: argocd
+      name: argocd-webhook-github
+      namespace: argocd

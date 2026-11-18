@@ -33,9 +33,18 @@ argo-cd:
     params:
       server.insecure: true
 
+    # -- GitHub signs each push webhook with this secret, and /api/webhook drops
+    # any delivery whose HMAC doesn't match, so nobody else can trigger refresh
+    # storms on the Pi. A `$secret:key` reference to the
+    # templates/argocd-webhook-github-sealed.yaml SealedSecret keeps the value
+    # out of git; GitHub's hook carries the same value (README step 6).
+    secret:
+      githubSecret: "$argocd-webhook-github:secret"
+
     # -- Google sign-in via the bundled Dex (OIDC). ArgoCD's own login page gains
     # a "Log in via Google" button; the argocd CLI keeps working (`argocd login
-    # argocd.agu.com.ar --sso`) and the GitHub /api/webhook stays unauthenticated.
+    # argocd.agu.com.ar --sso`) and the GitHub /api/webhook stays outside SSO (it
+    # checks GitHub's HMAC instead, see configs.secret).
     # `url` is required so Dex builds the correct callback. The clientID/secret
     # are pulled from the out-of-band `argocd-google-oidc` secret (labelled
     # app.kubernetes.io/part-of: argocd so ArgoCD resolves the $-references); see

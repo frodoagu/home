@@ -22,6 +22,7 @@ see [.gitignore](../.gitignore).
 | `traefik-dashboard-auth` | `kube-system` | Traefik dashboard (basic auth fallback) | htpasswd `users` for HTTP basic auth |
 | `oauth2-proxy-secrets` | `oauth2-proxy` | oauth2-proxy | Google OAuth `client-id`, `client-secret`, and 32-byte `cookie-secret` |
 | `argocd-google-oidc` | `argocd` | ArgoCD Dex (Google login) | Google OAuth `clientId` / `clientSecret`; must carry label `app.kubernetes.io/part-of: argocd` |
+| `argocd-webhook-github` | `argocd` | ArgoCD `/api/webhook` (HMAC check of GitHub pushes) | Random hex under key `secret`, also set as the GitHub hook's secret; must carry label `app.kubernetes.io/part-of: argocd` |
 | `cloudflare-ddns-token` | `cloudflare-ddns` | cloudflare-ddns | Cloudflare API token under key `CLOUDFLARE_API_TOKEN` |
 | `ghcr-creds` | `agu-spa` **and** `argocd` | kubelet pull (agu-spa) + Argo CD Image Updater registry reads (argocd) | GHCR `docker-registry` creds — classic PAT with `read:packages` |
 | `git-creds` | `argocd` | Argo CD Image Updater git write-back (HTTPS push) | GitHub classic PAT with `repo`, under keys `username` / `password` |
@@ -193,6 +194,7 @@ beside the chart that consumes them:
 | `traefik-dashboard-auth` (kube-system) | `charts/traefik-config/templates/traefik-dashboard-auth-sealed.yaml` |
 | `oauth2-proxy-secrets` (oauth2-proxy) | `charts/oauth2-proxy/templates/oauth2-proxy-secrets-sealed.yaml` |
 | `argocd-google-oidc` (argocd) | `charts/argocd/templates/argocd-google-oidc-sealed.yaml` |
+| `argocd-webhook-github` (argocd) | `charts/argocd/templates/argocd-webhook-github-sealed.yaml` |
 | `git-creds` (argocd) | `charts/argocd-image-updater/templates/git-creds-sealed.yaml` |
 | `ghcr-creds` (argocd) | `charts/argocd-image-updater/templates/ghcr-creds-sealed.yaml` |
 | `ghcr-creds` (agu-spa) | `charts/agu-spa/templates/ghcr-creds-sealed.yaml` |

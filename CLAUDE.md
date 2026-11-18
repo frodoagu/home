@@ -194,7 +194,8 @@ kubeconfig           Cluster kubeconfig (gitignored secrets live out-of-band).
   The v1.x Image Updater controller only reconciles `ImageUpdater` CRs — NOT
   Application annotations.
 - **Instant sync**: a GitHub push webhook → `argocd.agu.com.ar/api/webhook`
-  refreshes apps on push (no secret configured); otherwise ArgoCD polls ~3 min.
+  refreshes apps on push, HMAC-checked against the sealed `argocd-webhook-github`
+  secret; otherwise ArgoCD polls ~3 min.
 - **Releases**: every change lands via **squash-merge of a Conventional-Commit
   PR title** (`pr-lint.yml` enforces it). On push to `main`, `release.yml`
   derives the next semver tag (`feat:`→minor, `fix:`→patch, `BREAKING CHANGE`→major)

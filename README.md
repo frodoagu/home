@@ -406,20 +406,18 @@ domain/repo, edit the `repoURL` in `apps/*.yaml` and the values below:
 ### 6 – Instant sync (optional Git webhook)
 
 By default ArgoCD polls git every ~3 min. To deploy on push instead, point a
-GitHub webhook at the ArgoCD server (already exposed at `argocd.agu.com.ar`):
+GitHub webhook at the ArgoCD server (already exposed at `argocd.agu.com.ar`).
+GitHub signs each delivery and ArgoCD drops any whose HMAC doesn't match the
+`argocd-webhook-github` SealedSecret (`charts/argocd`), so the hook carries that
+same secret, read back from the cluster:
 
 ```bash
 gh api -X POST /repos/frodoagu/home/hooks \
   -f name=web -F active=true -f 'events[]=push' \
   -f config[url]=https://argocd.agu.com.ar/api/webhook \
-  -f config[content_type]=json
+  -f config[content_type]=json \
+  -f config[secret]="$(kubectl -n argocd get secret argocd-webhook-github -o jsonpath='{.data.secret}' | base64 -d)"
 ```
-
-No shared secret is configured — ArgoCD accepts the push event and refreshes the
-affected apps immediately. An unauthenticated POST can only trigger a harmless
-re-check (which ArgoCD does on its timer anyway). To require HMAC verification,
-set `webhook.github.secret` in `argocd-secret` and add the same secret to the
-webhook config (`-f config[secret]=...`).
 
 ## Repository layout
 
